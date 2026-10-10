@@ -502,11 +502,22 @@ void R_SetupProjection( void ) {
 	zNear	= r_znear->value;
 	zFar	= tr.viewParms.zFar;
 
-	ymax = zNear * tan( tr.refdef.fov_y * M_PI / 360.0f );
-	ymin = -ymax;
+	if ( tr.refdef.vrProjection )
+	{
+		// OpenJK VR: the headset's (asymmetric) per-eye frustum
+		xmin = zNear * tr.refdef.vrTanLeft;
+		xmax = zNear * tr.refdef.vrTanRight;
+		ymin = zNear * tr.refdef.vrTanDown;
+		ymax = zNear * tr.refdef.vrTanUp;
+	}
+	else
+	{
+		ymax = zNear * tan( tr.refdef.fov_y * M_PI / 360.0f );
+		ymin = -ymax;
 
-	xmax = zNear * tan( tr.refdef.fov_x * M_PI / 360.0f );
-	xmin = -xmax;
+		xmax = zNear * tan( tr.refdef.fov_x * M_PI / 360.0f );
+		xmin = -xmax;
+	}
 
 	width = xmax - xmin;
 	height = ymax - ymin;

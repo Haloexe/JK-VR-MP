@@ -32,7 +32,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define CLIENT_WINDOW_TITLE "OpenJK (MP)"
 #define CLIENT_CONSOLE_TITLE "OpenJK Console (MP)"
 #define HOMEPATH_NAME_UNIX "openjk"
+#ifdef OPENJK_VR
+#define HOMEPATH_NAME_WIN "OpenJK-VR"	// keep VR settings apart from regular OpenJK
+#else
 #define HOMEPATH_NAME_WIN "OpenJK"
+#endif
 #define HOMEPATH_NAME_MACOSX HOMEPATH_NAME_WIN
 
 #define	BASEGAME "base"

@@ -394,6 +394,81 @@ to handle mirrors,
 */
 void RE_RenderWorldEffects(void);
 void RE_RenderAutoMap(void);
+/*
+@@@@@@@@@@@@@@@@@@@@@
+OpenJK VR helpers
+@@@@@@@@@@@@@@@@@@@@@
+*/
+
+// Heading of a view axis; well defined even looking straight up/down.
+// Must match VR_AxisYaw in client/cl_vr.cpp.
+static float R_VR_AxisYaw( const vec3_t axis[3] ) {
+	const float hx = axis[2][2] * axis[0][0] - axis[0][2] * axis[2][0];
+	const float hy = axis[2][2] * axis[0][1] - axis[0][2] * axis[2][1];
+	return RAD2DEG( atan2f( hy, hx ) );
+}
+
+static void R_VR_RotateYaw( const vec3_t in, float c, float s, vec3_t out ) {
+	out[0] = in[0] * c - in[1] * s;
+	out[1] = in[0] * s + in[1] * c;
+	out[2] = in[2];
+}
+
+// Replace the game's camera with the headset eye: the game decides where the
+// camera is and which way the body faces, the headset decides how the head
+// is oriented and where each eye sits.
+static void R_VR_ApplyEye( const vrRenderState_t *vrs, trRefdef_t *rd ) {
+	const int eye = vrs->eye;
+
+	const float gameYaw = R_VR_AxisYaw( rd->viewaxis );
+	const float d = DEG2RAD( gameYaw - vrs->referenceYaw );
+	const float c = cosf( d ), s = sinf( d );
+
+	for ( int i = 0; i < 3; i++ ) {
+		R_VR_RotateYaw( vrs->eyeAxis[eye][i], c, s, rd->viewaxis[i] );
+	}
+
+	vec3_t ofs;
+	R_VR_RotateYaw( vrs->eyeOrigin[eye], c, s, ofs );
+	VectorMA( rd->vieworg, vrs->worldScale, ofs, rd->vieworg );
+
+	// Scopes and binoculars narrow the fov: magnify the eye image instead.
+	float zoom = 1.0f;
+	if ( vrs->zoomed && rd->fov_x > 1.0f && rd->fov_x < vrs->normalFov ) {
+		zoom = tanf( DEG2RAD( vrs->normalFov * 0.5f ) ) / tanf( DEG2RAD( rd->fov_x * 0.5f ) );
+		if ( zoom < 1.0f ) zoom = 1.0f;
+		if ( zoom > 20.0f ) zoom = 20.0f;
+	}
+
+	rd->vrProjection = qtrue;
+	rd->vrTanLeft = vrs->tanLeft[eye] / zoom;
+	rd->vrTanRight = vrs->tanRight[eye] / zoom;
+	rd->vrTanUp = vrs->tanUp[eye] / zoom;
+	rd->vrTanDown = vrs->tanDown[eye] / zoom;
+
+	// Symmetric fov that contains the eye frustum, for culling.
+	rd->fov_x = 2.0f * RAD2DEG( atanf( Q_max( fabsf( rd->vrTanLeft ), fabsf( rd->vrTanRight ) ) ) );
+	rd->fov_y = 2.0f * RAD2DEG( atanf( Q_max( fabsf( rd->vrTanUp ), fabsf( rd->vrTanDown ) ) ) );
+
+	// The world always fills the whole eye buffer.
+	rd->x = 0;
+	rd->y = 0;
+	rd->width = glConfig.vidWidth;
+	rd->height = glConfig.vidHeight;
+}
+
+// 3D models drawn as part of the HUD follow the 2D layer into the HUD rect.
+static void R_VR_MapHudRect( const vrRenderState_t *vrs, trRefdef_t *rd ) {
+	const int eye = vrs->eye;
+	const float sx = (float)vrs->hudW[eye] / (float)glConfig.vidWidth;
+	const float sy = (float)vrs->hudH[eye] / (float)glConfig.vidHeight;
+
+	rd->x = vrs->hudX[eye] + (int)( rd->x * sx );
+	rd->y = vrs->hudY[eye] + (int)( rd->y * sy );
+	rd->width = Q_max( 1, (int)( rd->width * sx ) );
+	rd->height = Q_max( 1, (int)( rd->height * sy ) );
+}
+
 void RE_RenderScene( const refdef_t *fd ) {
 	viewParms_t		parms;
 	int				startTime;
@@ -427,6 +502,18 @@ void RE_RenderScene( const refdef_t *fd ) {
 	VectorCopy( fd->viewaxis[0], tr.refdef.viewaxis[0] );
 	VectorCopy( fd->viewaxis[1], tr.refdef.viewaxis[1] );
 	VectorCopy( fd->viewaxis[2], tr.refdef.viewaxis[2] );
+
+	tr.refdef.vrProjection = qfalse;
+	{
+		const vrRenderState_t *vrs = R_VRState();
+		if ( vrs && !vrs->screenLayer ) {
+			if ( fd->rdflags & RDF_NOWORLDMODEL ) {
+				R_VR_MapHudRect( vrs, &tr.refdef );
+			} else {
+				R_VR_ApplyEye( vrs, &tr.refdef );
+			}
+		}
+	}
 
 	tr.refdef.time = fd->time;
 	tr.refdef.frametime = fd->time - lastTime;
@@ -537,11 +624,13 @@ void RE_RenderScene( const refdef_t *fd ) {
 	parms.fovX = tr.refdef.fov_x;
 	parms.fovY = tr.refdef.fov_y;
 
-	VectorCopy( fd->vieworg, parms.ori.origin );
-	VectorCopy( fd->viewaxis[0], parms.ori.axis[0] );
-	VectorCopy( fd->viewaxis[1], parms.ori.axis[1] );
-	VectorCopy( fd->viewaxis[2], parms.ori.axis[2] );
+	// (tr.refdef, not fd: VR may have moved/rotated the camera to the eye)
+	VectorCopy( tr.refdef.vieworg, parms.ori.origin );
+	VectorCopy( tr.refdef.viewaxis[0], parms.ori.axis[0] );
+	VectorCopy( tr.refdef.viewaxis[1], parms.ori.axis[1] );
+	VectorCopy( tr.refdef.viewaxis[2], parms.ori.axis[2] );
 
+	// PVS stays at the game's eye so leaning never pokes through walls
 	VectorCopy( fd->vieworg, parms.pvsOrigin );
 
 	R_RenderView( &parms );

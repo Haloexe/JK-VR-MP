@@ -137,6 +137,13 @@ GLimp_Minimize
 Minimize the game so that user is back at the desktop
 ===============
 */
+#ifdef OPENJK_VR
+// client/cl_vr.cpp
+qboolean VR_WantSession( void );
+qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight );
+void VR_DestroySession( void );
+#endif
+
 void GLimp_Minimize(void)
 {
 	SDL_MinimizeWindow( screen );
@@ -755,6 +762,17 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 	r_ext_multisample	= Cvar_Get( "r_ext_multisample",	"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
 	Cvar_Get( "r_availableModes", "", CVAR_ROM );
 
+#ifdef OPENJK_VR
+	// The desktop window only mirrors the headset view, and a multisampled
+	// window can't receive the mirror blit: create this window without MSAA
+	// (the player's r_ext_multisample setting itself is left alone).
+	const qboolean wantVR = (qboolean)( windowDesc->vrCapable && VR_WantSession() );
+	const int savedMultisample = r_ext_multisample->integer;
+	if ( wantVR ) {
+		r_ext_multisample->integer = 0;
+	}
+#endif
+
 	// Create the window and set up the context
 	if(!GLimp_StartDriverAndSetMode( glConfig, windowDesc, r_mode->integer,
 										(qboolean)r_fullscreen->integer, (qboolean)r_noborder->integer ))
@@ -771,8 +789,34 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 		}
 	}
 
+#ifdef OPENJK_VR
+	r_ext_multisample->integer = savedMultisample;
+#endif
+
 	glConfig->deviceSupportsGamma =
 		(qboolean)(!r_ignorehwgamma->integer && SDL_SetWindowBrightness( screen, 1.0f ) >= 0);
+
+#ifdef OPENJK_VR
+	{
+		// The OpenGL context exists now: hook it up to the headset. If that
+		// works the renderer draws at eye-buffer resolution and the window
+		// becomes a mirror of the left eye.
+		int eyeWidth, eyeHeight;
+		if ( wantVR && VR_CreateSession( &eyeWidth, &eyeHeight ) )
+		{
+			glConfig->vidWidth = eyeWidth;
+			glConfig->vidHeight = eyeHeight;
+			// Each eye is its own frame; quad-buffered stereo isn't used.
+			glConfig->stereoEnabled = qfalse;
+			// Hardware gamma only affects the monitor, never the headset, so
+			// let the renderer bake brightness into the textures instead.
+			glConfig->deviceSupportsGamma = qfalse;
+			// The headset paces the frame rate (xrWaitFrame); the desktop
+			// mirror must never block on the monitor's vsync.
+			SDL_GL_SetSwapInterval( 0 );
+		}
+	}
+#endif
 
 	// This depends on SDL_INIT_VIDEO, hence having it here
 	IN_Init( screen );
@@ -813,6 +857,11 @@ void WIN_Shutdown( void )
 	Cmd_RemoveCommand("minimize");
 
 	IN_Shutdown();
+
+#ifdef OPENJK_VR
+	// swapchains belong to this OpenGL context
+	VR_DestroySession();
+#endif
 
 	if ( opengl_context ) {
 		SDL_GL_DeleteContext( opengl_context );

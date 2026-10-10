@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_scrn.c -- master for refresh, status bar, console, chat, notify, etc
 
 #include "client.h"
+#include "cl_vr.h"
 #include "cl_uiapi.h"
 
 extern console_t con;
@@ -508,6 +509,14 @@ void SCR_UpdateScreen( void ) {
 	// that case.
 	if( cls.uiStarted || com_dedicated->integer )
 	{
+#ifdef OPENJK_VR
+		// a VR headset is in use: render both eyes and submit to OpenXR
+		if ( VR_UpdateScreen() ) {
+			recursive = 0;
+			return;
+		}
+#endif
+
 		// if running in stereo, we need to draw the frame twice
 		if ( cls.glconfig.stereoEnabled ) {
 			SCR_DrawScreenField( STEREO_LEFT );

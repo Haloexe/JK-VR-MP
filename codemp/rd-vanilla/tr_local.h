@@ -564,7 +564,29 @@ typedef struct trRefdef_s {
 
 	int			numDrawSurfs;
 	struct drawSurf_s	*drawSurfs;
+
+	// OpenJK VR: asymmetric per-eye projection (tangents of the half angles)
+	qboolean	vrProjection;
+	float		vrTanLeft, vrTanRight, vrTanUp, vrTanDown;
 } trRefdef_t;
+
+// OpenJK VR: non-NULL only while the engine renders into a headset eye buffer
+static inline const vrRenderState_t *R_VRState( void ) {
+	if ( !ri.VR_GetRenderState ) {
+		return NULL;
+	}
+	const vrRenderState_t *vrs = ri.VR_GetRenderState();
+	return ( vrs && vrs->active ) ? vrs : NULL;
+}
+
+// OpenJK VR: the engine has bound its own framebuffer (no glDrawBuffer, no present)
+static inline qboolean R_VROffscreen( void ) {
+	if ( !ri.VR_GetRenderState ) {
+		return qfalse;
+	}
+	const vrRenderState_t *vrs = ri.VR_GetRenderState();
+	return ( vrs && ( vrs->active || vrs->offscreen ) ) ? qtrue : qfalse;
+}
 
 
 //=================================================================================

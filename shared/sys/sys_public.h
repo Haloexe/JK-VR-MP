@@ -195,6 +195,9 @@ typedef struct windowDesc_s
 		glProfile_t profile;
 		uint32_t contextFlags;
 	} gl;
+
+	// OpenJK VR: the renderer can draw for a VR headset (rd-vanilla MP)
+	qboolean vrCapable;
 } windowDesc_t;
 
 typedef struct glconfig_s glconfig_t;

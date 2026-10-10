@@ -1187,8 +1187,20 @@ void	RB_SetGL2D (void) {
 	backEnd.projection2D = qtrue;
 
 	// set 2D virtual screen size
-	qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
-	qglScissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	const vrRenderState_t *vrs = R_VRState();
+	if ( vrs && !vrs->screenLayer )
+	{
+		// OpenJK VR: the HUD lives on a 4:3 plane in front of the player
+		const int eye = vrs->eye;
+		const int y = glConfig.vidHeight - ( vrs->hudY[eye] + vrs->hudH[eye] );
+		qglViewport( vrs->hudX[eye], y, vrs->hudW[eye], vrs->hudH[eye] );
+		qglScissor( vrs->hudX[eye], y, vrs->hudW[eye], vrs->hudH[eye] );
+	}
+	else
+	{
+		qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+		qglScissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	}
 	qglMatrixMode(GL_PROJECTION);
     qglLoadIdentity ();
 	qglOrtho (0, 640, 480, 0, 0, 1);
@@ -1710,7 +1722,11 @@ const void	*RB_DrawBuffer( const void *data ) {
 
 	cmd = (const drawBufferCommand_t *)data;
 
-	qglDrawBuffer( cmd->buffer );
+	// OpenJK VR: the engine has bound the eye framebuffer object; GL_BACK
+	// is not a valid draw buffer for it.
+	if ( !R_VROffscreen() ) {
+		qglDrawBuffer( cmd->buffer );
+	}
 
 	// clear screen for debugging
 	if (tr.world && tr.world->globalFog != -1)
@@ -1828,6 +1844,9 @@ static void RB_GammaCorrectRender()
 	qglPushAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
 
 	RB_SetGL2D();
+	// full-screen pass (in VR the 2D viewport is only the HUD rectangle)
+	qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
+	qglScissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 
 	// All this fixed-function texture type enabling/disabling is ludicrous :(
 	qglEnable(GL_TEXTURE_RECTANGLE_ARB);
@@ -1919,7 +1938,11 @@ const void	*RB_SwapBuffers( const void *data ) {
 
     GLimp_LogComment( "***************** RB_SwapBuffers *****************\n\n\n" );
 
-    ri.WIN_Present(&window);
+	// OpenJK VR: the engine submits to the headset and updates the desktop
+	// mirror itself, once per frame rather than once per eye.
+	if ( !R_VROffscreen() ) {
+		ri.WIN_Present(&window);
+	}
 
 	backEnd.projection2D = qfalse;
 

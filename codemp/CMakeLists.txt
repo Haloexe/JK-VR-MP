@@ -355,6 +355,15 @@ if(BuildMPEngine)
 	set(MPEngineFiles ${MPEngineAndDedFiles})
 	set(MPEngineDefines ${MPSharedDefines})
 
+	# OpenJK VR: OpenXR headset support in the MP client (Windows, OpenGL)
+	if(BuildMPVR AND WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+		set(MPEngineDefines ${MPEngineDefines} "OPENJK_VR")
+		set(MPEngineIncludeDirectories ${MPEngineIncludeDirectories} ${OpenJKLibDir}/openxr/include)
+		# The OpenXR loader DLL is loaded at runtime (no import library needed)
+		set(MPEngineLibraries ${MPEngineLibraries} "opengl32")
+		install(FILES "${OpenJKLibDir}/openxr/bin/x64/libopenxr_loader.dll" DESTINATION "${JKAInstallDir}")
+	endif()
+
 	#    Dependencies
 
 	if (NOT WIN32)
@@ -439,6 +448,8 @@ if(BuildMPEngine)
 		"${MPDir}/client/cl_parse.cpp"
 		"${MPDir}/client/cl_scrn.cpp"
 		"${MPDir}/client/cl_ui.cpp"
+		"${MPDir}/client/cl_vr.cpp"
+		"${MPDir}/client/cl_vr.h"
 		"${MPDir}/client/cl_uiapi.cpp"
 		"${MPDir}/client/cl_uiapi.h"
 		"${MPDir}/client/FXExport.cpp"

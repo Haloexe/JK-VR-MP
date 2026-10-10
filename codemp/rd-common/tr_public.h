@@ -29,8 +29,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../qcommon/MiniHeap.h"
 #include "../qcommon/qcommon.h"
 #include "../ghoul2/ghoul2_shared.h"
+#include "../rd-common/tr_vr.h"
 
-#define	REF_API_VERSION 9
+// OpenJK VR: refimport_t gained VR_GetRenderState, so a VR renderer must not
+// be paired with a stock engine (or vice versa).
+#define	REF_API_VERSION 1009
 
 //
 // these are the functions exported by the refresh module
@@ -346,6 +349,9 @@ typedef struct refimport_s {
 	// Persistent data store
 	bool			(*PD_Store)							( const char *name, const void *data, size_t size );
 	const void *	(*PD_Load)							( const char *name, size_t *size );
+
+	// OpenJK VR: per-eye render state (NULL in non-VR engines)
+	const vrRenderState_t *(*VR_GetRenderState)			( void );
 } refimport_t;
 
 // this is the only function actually exported at the linker level

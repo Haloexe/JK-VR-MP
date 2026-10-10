@@ -439,7 +439,8 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 			Com_Error( ERR_FATAL, "RE_BeginFrame: Stereo is enabled, but stereoFrame was %i", stereoFrame );
 		}
 	} else {
-		if ( stereoFrame != STEREO_CENTER ) {
+		// OpenJK VR renders each eye as its own frame into an offscreen buffer
+		if ( stereoFrame != STEREO_CENTER && !R_VROffscreen() ) {
 			Com_Error( ERR_FATAL, "RE_BeginFrame: Stereo is disabled, but stereoFrame was %i", stereoFrame );
 		}
 //		if ( !Q_stricmp( r_drawBuffer->string, "GL_FRONT" ) ) {

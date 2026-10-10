@@ -29,6 +29,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "qcommon/game_version.h"
 #include "../server/NPCNav/navigator.h"
 #include "../shared/sys/sys_local.h"
+
+#ifdef OPENJK_VR
+qboolean VR_IsPacingFrames( void );	// client/cl_vr.cpp
+#endif
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -1533,6 +1537,13 @@ void Com_Frame( void ) {
 					minMsec = 1000 / com_maxfps->integer;
 				else
 					minMsec = 1;
+
+#ifdef OPENJK_VR
+				// The headset paces the frames (xrWaitFrame); any extra
+				// limit here would make it miss frames.
+				if ( VR_IsPacingFrames() )
+					minMsec = 1;
+#endif
 
 				timeVal = com_frameTime - lastTime;
 				bias += timeVal - minMsec;

@@ -35,6 +35,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cl_cgameapi.h"
 #include "cl_uiapi.h"
 #include "cl_lan.h"
+#include "cl_vr.h"
 #include "snd_local.h"
 #include "sys/sys_loadlib.h"
 
@@ -2241,6 +2242,12 @@ void CL_Frame ( int msec ) {
 	// drop the connection
 	CL_CheckTimeout();
 
+#ifdef OPENJK_VR
+	// wait for the headset's next frame and sample the head pose, so the
+	// usercmd built below aims where the player is looking right now
+	VR_BeginFrame();
+#endif
+
 	// send intentions now
 	CL_SendCmd();
 
@@ -2528,6 +2535,11 @@ void CL_InitRef( void ) {
 
 	ri.PD_Store = PD_Store;
 	ri.PD_Load = PD_Load;
+#ifdef OPENJK_VR
+	ri.VR_GetRenderState = VR_GetRenderState;
+#else
+	ri.VR_GetRenderState = NULL;
+#endif
 
 	ret = GetRefAPI( REF_API_VERSION, &ri );
 
@@ -2735,6 +2747,10 @@ void CL_Init( void ) {
 
 	CL_InitInput ();
 
+#ifdef OPENJK_VR
+	VR_Init();
+#endif
+
 	//
 	// register our variables
 	//
@@ -2940,6 +2956,10 @@ void CL_Shutdown( void ) {
 
 	S_Shutdown();
 	//CL_ShutdownUI();
+
+#ifdef OPENJK_VR
+	VR_Shutdown();
+#endif
 
 	Cmd_RemoveCommand ("cmd");
 	Cmd_RemoveCommand ("configstrings");

@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl.input.c  -- builds an intended movement command to send to the server
 
 #include "client.h"
+#include "cl_vr.h"
 #include "cl_cgameapi.h"
 #include "cl_uiapi.h"
 #ifndef _WIN32
@@ -1358,6 +1359,11 @@ usercmd_t CL_CreateCmd( void ) {
 	} else if ( oldAngles[PITCH] - cl.viewangles[PITCH] > 90 ) {
 		cl.viewangles[PITCH] = oldAngles[PITCH] - 90;
 	}
+
+#ifdef OPENJK_VR
+	// fold the headset orientation into the view angles (head-aim)
+	VR_ApplyHeadAim();
+#endif
 
 	// store out the final values
 	CL_FinishMove( &cmd );
