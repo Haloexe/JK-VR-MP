@@ -66,10 +66,11 @@ On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up).
 Settings and downloads live in Documents\My Games\OpenJK-VR, separate from
 regular OpenJK.
 
-Comfort tip: with the lightsaber out, multiplayer switches to a third-person
-camera. Typing "cg_fpls 1" in the console keeps a first-person view instead
-(put it in base\autoexec.cfg inside Documents\My Games\OpenJK-VR to make it
-stick). Third person works too, but first person is usually more comfortable.
+Camera: guns and force powers are first person. The game itself switches
+to a third-person camera (behind your character) with the lightsaber or
+fists out, while knocked down, in vehicles, on emplaced guns and when dead.
+Head tracking still works there: you look around from the third-person
+camera. "cg_thirdPerson 1" gives third person all the time.
 
 
 KNOWN LIMITATIONS (milestone 1)
