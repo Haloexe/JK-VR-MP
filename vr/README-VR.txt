@@ -92,6 +92,7 @@ SETTINGS (console cvars, saved automatically)
   vr_deadzone 0.2        thumbstick deadzone
   cg_vrAimDot 1          the floating crosshair (cg_vrAimDotSize to resize)
   cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
+  cg_vrWorldGun 1        0 = hold the old first-person gun models instead
   vr_gunPitch 0          tilt the gun (and its aim) in your hand, + = up
 
 On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up).

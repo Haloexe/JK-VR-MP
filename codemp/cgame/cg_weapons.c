@@ -505,7 +505,7 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	int i, j;
 
 	cg_vrHeld.ready = qfalse;
-	if ( !vr || !CG_VR_HandAim() || !g2 || !wi->weaponModel ) {
+	if ( !vr || !cg_vrWorldGun.integer || !CG_VR_HandAim() || !g2 || !wi->weaponModel ) {
 		return;
 	}
 	flashBolt = cg_vrHeldFlashBolt[weaponNum];
