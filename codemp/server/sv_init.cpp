@@ -604,6 +604,10 @@ Ghoul2 Insert End
 	sv.restartedServerId = sv.serverId; // I suppose the init here is just to be safe
 	Cvar_Set( "sv_serverid", va("%i", sv.serverId ) );
 
+	// OpenJK VR: the saber pose protocol this server reads (a server we were
+	// connected to before may have set our copy of it through its systeminfo)
+	Cvar_Set( "sv_vrx", va( "%i", VR_POSE_PROTOCOL ) );
+
 	time( &sv.realMapTimeStarted );
 	sv.demosPruned = qfalse;
 
@@ -1007,6 +1011,16 @@ void SV_Init (void) {
 	sv_autoDemoMaxMaps = Cvar_Get( "sv_autoDemoMaxMaps", "0", CVAR_ARCHIVE_ND );
 
 	sv_legacyFixes = Cvar_Get( "sv_legacyFixes", "1", CVAR_ARCHIVE );
+
+	// OpenJK VR: clients may send the saber pose in their hands with every
+	// usercmd (clc_moveVR); the game module decides what to do with it
+	sv_vrx = Cvar_Get( "sv_vrx", va( "%i", VR_POSE_PROTOCOL ), CVAR_SYSTEMINFO | CVAR_ROM, "OpenJK VR saber pose protocol this server reads" );
+	Cvar_Set( "sv_vrx", va( "%i", VR_POSE_PROTOCOL ) );
+	// The game module only calls gameImport_t.ext when this engine says it
+	// has it. (Not in the systeminfo, unlike sv_vrx: a client never picks it
+	// up from a server, so a stock engine never has it.)
+	Cvar_Get( "vr_engine", VR_ENGINE_TAG, CVAR_ROM, "OpenJK VR engine interface version" );
+	Cvar_Set( "vr_engine", VR_ENGINE_TAG );
 
 	sv_banFile = Cvar_Get( "sv_banFile", "serverbans.dat", CVAR_ARCHIVE, "File to use to store bans and exceptions" );
 

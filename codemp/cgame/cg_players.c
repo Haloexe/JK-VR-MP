@@ -6101,6 +6101,11 @@ void CG_AddSaberBlade( centity_t *cent, centity_t *scent, refEntity_t *saber, in
 	BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, org_);
 	BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, axis_[0]);
 
+	if ( !fromSaber && !dontDraw )
+	{ //OpenJK VR: a blade in your VR hand goes to the server, which fights with it
+		CG_VR_SaberBlade( cent, saberNum, bladeNum, org_, axis_[0], saberLen );
+	}
+
 	if (!fromSaber && saberEnt && !cent->currentState.saberInFlight)
 	{
 		VectorCopy(org_, saberEnt->currentState.pos.trBase);
@@ -6213,6 +6218,8 @@ void CG_AddSaberBlade( centity_t *cent, centity_t *scent, refEntity_t *saber, in
 				{
 					trDir[1] = 1;
 				}
+
+				CG_VR_SaberWallFeel( cent, saberNum );	// OpenJK VR: your blade grinds the wall
 
 				if ( (client->saber[saberNum].saberFlags2&SFL2_NO_WALL_MARKS) )
 				{//don't actually draw the marks/impact effects

@@ -14,21 +14,26 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "cg_local.h"
 
-// Returns the engine's VR state, or NULL when not playing in a headset.
-const vrClientState_t *CG_VR( void ) {
+// Whether the engine is the OpenJK VR engine this cgame was built for: only
+// then do the VR members of trap->ext exist at all.
+qboolean CG_VR_Engine( void ) {
 	static qboolean checked = qfalse;
 	static qboolean supported = qfalse;
-	const vrClientState_t *vr;
 
 	if ( !checked ) {
 		char tag[64];
-		// Check the engine tag first: only an OpenJK VR engine has the
-		// VR_GetClientState member at all.
 		trap->Cvar_VariableStringBuffer( "vr_engine", tag, sizeof( tag ) );
 		supported = ( !strcmp( tag, VR_ENGINE_TAG ) && trap->ext.VR_GetClientState ) ? qtrue : qfalse;
 		checked = qtrue;
 	}
-	if ( !supported ) {
+	return supported;
+}
+
+// Returns the engine's VR state, or NULL when not playing in a headset.
+const vrClientState_t *CG_VR( void ) {
+	const vrClientState_t *vr;
+
+	if ( !CG_VR_Engine() ) {
 		return NULL;
 	}
 

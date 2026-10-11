@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #pragma once
 
 #include "qcommon/q_shared.h"
+#include "qcommon/vr_public.h"	// OpenJK VR
 
 #define Q3_INFINITE			16777216
 
@@ -1093,6 +1094,13 @@ typedef struct gameImport_s {
 	void		(*G2API_CleanEntAttachments)			( void );
 	qboolean	(*G2API_OverrideServer)					( void *serverInstance );
 	void		(*G2API_GetSurfaceName)					( void *ghoul2, int surfNumber, int modelIndex, char *fillBuf );
+
+	struct {
+		// OpenJK VR: only valid when the cvar "sv_vrx" equals VR_POSE_PROTOCOL.
+		// The saber pose that came with the usercmd being thought right now
+		// (call from ClientThink); qfalse if there is none.
+		qboolean	(*VR_GetUserPose)						( int clientNum, vrUserPose_t *pose );
+	} ext;
 } gameImport_t;
 
 typedef struct gameExport_s {

@@ -727,6 +727,11 @@ typedef struct cgameImport_s {
 		// OpenJK VR: a rigid transform in model space on top of a bone's final
 		// transform (NULL removes it)
 		qboolean		(*VR_G2SetBoneTransform)				( void *ghoul2, int modelIndex, const char *boneName, const mdxaBone_t *matrix );
+		// OpenJK VR: where the saber blades in your hands are (sent to the
+		// server with every usercmd; NULL or valid == qfalse: none)
+		void			(*VR_SetUserPose)						( const vrUserPose_t *pose );
+		// OpenJK VR: a short buzz in one hand (VR_HAND_LEFT / VR_HAND_RIGHT)
+		void			(*VR_Haptic)							( int hand, float seconds, float amplitude );
 	} ext;
 } cgameImport_t;
 

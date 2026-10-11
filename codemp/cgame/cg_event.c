@@ -2146,6 +2146,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_SABER_HIT:
 		DEBUGNAME("EV_SABER_HIT");
+		CG_VR_SaberEventFeel( event, es );	// OpenJK VR
 		{
 			int hitPersonFxID = cgs.effects.mSaberBloodSparks;
 			int hitPersonSmallFxID = cgs.effects.mSaberBloodSparksSmall;
@@ -2286,6 +2287,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_SABER_BLOCK:
 		DEBUGNAME("EV_SABER_BLOCK");
+		CG_VR_SaberEventFeel( event, es );	// OpenJK VR
 		{
 			if (es->eventParm)
 			{ //saber block

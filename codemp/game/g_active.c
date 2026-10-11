@@ -3565,6 +3565,14 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 		ent->client->pers.cmd = *ucmd;
 	}
 
+	// OpenJK VR: the pose of the sabers in a VR player's hands that came
+	// with this command (before it moves the player: the pose is relative
+	// to where the player was when it was rendered)
+	if ( clientNum < MAX_CLIENTS && !ucmd )
+	{
+		G_VRSaberUsercmd( ent, &ent->client->pers.cmd );
+	}
+
 /* 	This was moved to clientthink_real, but since its sort of a risky change i left it here for
     now as a more concrete reference - BSD
 

@@ -252,7 +252,12 @@ enum clc_ops_e {
 	clc_move,				// [[usercmd_t]
 	clc_moveNoDelta,		// [[usercmd_t]
 	clc_clientCommand,		// [string] message
-	clc_EOF
+	clc_EOF,
+
+	// OpenJK VR, only to servers whose systeminfo has sv_vrx: like clc_move
+	// and clc_moveNoDelta, with a saber pose after each usercmd (vr_net.h)
+	clc_moveVR,
+	clc_moveNoDeltaVR
 };
 
 /*

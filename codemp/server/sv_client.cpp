@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #include "server/sv_gameapi.h"
+#include "qcommon/vr_net.h"
 
 static void SV_CloseDownload( client_t *cl );
 
@@ -1335,12 +1336,13 @@ On very fast clients, there may be multiple usercmd packed into
 each of the backup packets.
 ==================
 */
-static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
+static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta, qboolean vrPoses ) {
 	int			i, key;
 	int			cmdCount;
 	usercmd_t	nullcmd;
 	usercmd_t	cmds[MAX_PACKET_USERCMDS];
 	usercmd_t	*cmd, *oldcmd;
+	vrUserPose_t	poses[MAX_PACKET_USERCMDS];	// OpenJK VR: saber pose that came with each cmd
 
 	if ( delta ) {
 		cl->deltaMessage = cl->messageAcknowledge;
@@ -1372,6 +1374,11 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 	for ( i = 0 ; i < cmdCount ; i++ ) {
 		cmd = &cmds[i];
 		MSG_ReadDeltaUsercmdKey( msg, key, oldcmd, cmd );
+		if ( vrPoses ) {
+			VR_ReadUserPose( msg, &poses[i] );
+		} else {
+			poses[i].valid = qfalse;
+		}
 		if ( sv_legacyFixes->integer ) {
 			// block "charge jump" and other nonsense
 			if ( cmd->forcesel == FP_LEVITATION || cmd->forcesel >= NUM_FORCE_POWERS ) {
@@ -1436,8 +1443,10 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		if ( cmds[i].serverTime <= cl->lastUsercmd.serverTime ) {
 			continue;
 		}
+		cl->vrPose = poses[i];	// the game reads it during this think (ext.VR_GetUserPose)
 		SV_ClientThink (cl, &cmds[ i ]);
 	}
+	cl->vrPose.valid = qfalse;	// never handed out with a later, pose-less think
 }
 
 
@@ -1538,9 +1547,13 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 
 	// read the usercmd_t
 	if ( c == clc_move ) {
-		SV_UserMove( cl, msg, qtrue );
+		SV_UserMove( cl, msg, qtrue, qfalse );
 	} else if ( c == clc_moveNoDelta ) {
-		SV_UserMove( cl, msg, qfalse );
+		SV_UserMove( cl, msg, qfalse, qfalse );
+	} else if ( c == clc_moveVR && sv_vrx->integer == VR_POSE_PROTOCOL ) {
+		SV_UserMove( cl, msg, qtrue, qtrue );
+	} else if ( c == clc_moveNoDeltaVR && sv_vrx->integer == VR_POSE_PROTOCOL ) {
+		SV_UserMove( cl, msg, qfalse, qtrue );
 	} else if ( c != clc_EOF ) {
 		Com_Printf( "WARNING: bad command byte for client %i\n", cl - svs.clients );
 	}

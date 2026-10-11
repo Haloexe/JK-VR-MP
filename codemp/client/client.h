@@ -132,6 +132,9 @@ typedef struct clientActive_s {
 	usercmd_t	cmds[CMD_BACKUP];	// each mesage will send several old cmds
 	int			cmdNumber;			// incremented each frame, because multiple
 									// frames may need to be packed into a single packet
+#ifdef OPENJK_VR
+	vrUserPose_t	vrCmdPoses[CMD_BACKUP];	// saber pose sent along with each of cmds[]
+#endif
 
 	outPacket_t	outPackets[PACKET_BACKUP];	// information about each packet we have sent out
 
@@ -194,6 +197,10 @@ typedef struct clientConnection_s {
 
 	int			challenge;					// from the server to use for connecting
 	int			checksumFeed;				// from the server for checksum calculations
+
+#ifdef OPENJK_VR
+	qboolean	vrPoseExt;					// the server reads a saber pose after each usercmd (sv_vrx)
+#endif
 
 	// these are our reliable messages that go to the server
 	int			reliableSequence;

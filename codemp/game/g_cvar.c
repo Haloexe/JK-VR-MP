@@ -59,6 +59,10 @@ static void CVU_FixWeaponAttackAnim(void) {
 	UpdateLegacyFixesConfigstring(LEGACYFIX_WEAPONATTACKANIM, g_fixWeaponAttackAnim.integer);
 }
 
+static void CVU_VRSaber(void) {
+	G_VRSaberPublish();	// OpenJK VR: the serverinfo "vrSaber" follows it
+}
+
 //
 // Cvar table
 //

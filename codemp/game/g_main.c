@@ -295,6 +295,9 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	//Load sabers.cfg data
 	WP_SaberLoadParms();
 
+	// OpenJK VR: physical lightsaber
+	G_VRSaberInit();
+
 	NPC_InitGame();
 
 	TIMER_Clear();

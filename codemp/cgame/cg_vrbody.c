@@ -156,7 +156,25 @@ static struct {
 	int			lastBest;
 	int			nextCheck;
 	int			badChecks;
+
+	// the VR body drawn this frame (CG_VR_BodyPose)
+	centity_t	*bodyCent;
+	int			bodyTime;
+
+	// the hands put on the controllers (CG_VRB_SolveArm)
+	int			armTime[2];			// cg.time they last were
+	vec3_t		armGrip[2];			// world: the controller grip the hand holds then
 } vrb;
+
+// Physical lightsaber: the blades in your hands this frame, reported to the
+// engine (which sends them to the server with every usercmd)
+static struct {
+	int				time;			// cg.time they were collected for
+	vrUserPose_t	pose;			// offsets from the camera, world axes
+	vec3_t			base[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// world, to feel clashes
+	vec3_t			tip[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
+	int				wallFeelTime;
+} vrbSaber;
 
 static void CG_VRB_Init( void ) {
 	if ( !vrb.init ) {
@@ -560,7 +578,8 @@ when, and which way the body faces
 =============================================================================
 */
 
-qboolean CG_VR_BodyActive( centity_t *cent ) {
+// Whether this is you, drawn as your VR body (apart from tumbling, below).
+static qboolean CG_VRB_BodyUsable( centity_t *cent ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
 	const qboolean saber = ( cent->currentState.weapon == WP_SABER ) ? qtrue : qfalse;
 
@@ -587,10 +606,48 @@ qboolean CG_VR_BodyActive( centity_t *cent ) {
 		cent->currentState.m_iVehicleNum || cent->currentState.weapon == WP_EMPLACED_GUN ) {
 		return qfalse;	// the game's own posing wins
 	}
+	return qtrue;
+}
+
+qboolean CG_VR_BodyActive( centity_t *cent ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+
+	if ( !CG_VRB_BodyUsable( cent ) ) {
+		return qfalse;
+	}
 	if ( BG_FlippingAnim( ps->legsAnim ) || BG_InSpecialJump( ps->legsAnim ) ||
 		BG_InRoll( (playerState_t *)ps, ps->legsAnim ) ) {
 		// flips, wall runs, rolls: the whole body tumbles; it would swing
 		// around your eyes, so it is left out for that moment
+		return qfalse;
+	}
+	return qtrue;
+}
+
+extern qboolean BG_SabersOff( playerState_t *ps );
+
+// A lit saber in your VR hands. Then the server fights with the blades you
+// hold and the trigger doesn't swing, also while a flip or roll animates
+// the body for a moment (the blades are missing from the report then).
+static qboolean CG_VRB_SaberHands( void ) {
+	playerState_t *ps = &cg.predictedPlayerState;
+
+	if ( !cg.snap || !cg_vrSaber.integer || !cg_vrBodyArms.integer ) {
+		return qfalse;
+	}
+	if ( ps->weapon != WP_SABER || ps->stats[STAT_HEALTH] <= 0 || ps->pm_type == PM_DEAD ) {
+		return qfalse;
+	}
+	if ( ps->clientNum < 0 || ps->clientNum >= MAX_CLIENTS || !CG_VRB_BodyUsable( &cg_entities[ps->clientNum] ) ) {
+		return qfalse;
+	}
+	if ( BG_SabersOff( ps ) ) {
+		return qfalse;	// the trigger lights it
+	}
+	if ( ps->saberInFlight && ( !cgs.clientinfo[ps->clientNum].saber[1].model[0] || !ps->saberEntityNum ||
+		ps->saberHolstered ) ) {
+		// thrown or knocked away (the trigger calls it back), and no second
+		// saber lit in hand
 		return qfalse;
 	}
 	return qtrue;
@@ -981,6 +1038,10 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		CG_VRB_TurnWrist( cent, h, D, Wt );
 	}
 
+	if ( commit ) {
+		vrb.armTime[h] = cg.time;
+		VectorCopy( gripO, vrb.armGrip[h] );
+	}
 	res->solved = qtrue;
 	res->exact = ( sinA > 0.3f ) ? qtrue : qfalse;
 	VectorCopy( E, res->elbow );
@@ -1223,6 +1284,8 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		return;
 	}
 	yaw = CG_VRB_BodyYaw( vr );
+	vrb.bodyCent = cent;
+	vrb.bodyTime = cg.time;
 
 	// your eyes are the camera: no head in the way
 	if ( CG_VRB_HeadSurface( cent->ghoul2, vrb.headSurf, sizeof( vrb.headSurf ) ) ) {
@@ -1319,13 +1382,175 @@ void CG_VR_BodyArms( centity_t *cent ) {
 }
 
 // After the frame's scene is built: the entity's real position back (next
-// frame's events and sounds use it).
+// frame's events and sounds use it), and the blades in your hands to the
+// engine.
 void CG_VR_BodyEndFrame( void ) {
+	const vrClientState_t *vr = CG_VR();
+
 	if ( vrb.shiftedEnt ) {
 		VectorSubtract( vrb.shiftedEnt->lerpOrigin, vrb.shift, vrb.shiftedEnt->lerpOrigin );
 		vrb.shiftedEnt = NULL;
 		VectorClear( vrb.shift );
 	}
+
+	if ( CG_VR_Engine() && trap->ext.VR_SetUserPose ) {
+		if ( vr && CG_VRB_SaberHands() ) {
+			vrUserPose_t *p = &vrbSaber.pose;
+			vec3_t eye;
+			int s;
+
+			if ( vrbSaber.time != cg.time ) {
+				// no blade in your hands drawn this frame (a flip, a lost hand)
+				memset( p, 0, sizeof( *p ) );
+			}
+			p->valid = qtrue;
+			p->trackYaw = AngleNormalize180( VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw );
+
+			// the camera you see your hands from is the eye point of the
+			// player state this frame is drawn for, plus its smoothing
+			VectorCopy( cg.predictedPlayerState.origin, eye );
+			eye[2] += cg.predictedPlayerState.viewheight;
+			VectorSubtract( cg.refdef.vieworg, eye, p->viewOffset );
+
+			// the hands holding the sabers (saber 1 right, saber 2 left)
+			for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+				const int h = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+				if ( p->bladeMask[s] ) {
+					VectorSubtract( vrb.armGrip[h], cg.refdef.vieworg, p->grip[s] );
+				}
+			}
+			trap->ext.VR_SetUserPose( p );
+		} else {
+			vrbSaber.pose.valid = qfalse;
+			trap->ext.VR_SetUserPose( NULL );
+		}
+	}
+}
+
+/*
+================================================================================
+
+Physical lightsaber
+
+================================================================================
+*/
+
+// A blade drawn in your VR body's hand (CG_AddSaberBlade): where it is goes
+// to the server, which fights with it (when it knows how, g_vrSaber).
+void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length ) {
+	vrBladePose_t *bp;
+
+	if ( cent != vrb.bodyCent || vrb.bodyTime != cg.time || length <= 0.0f ) {
+		return;	// not your VR body (or not drawn as one this frame)
+	}
+	if ( saberNum < 0 || saberNum >= VR_POSE_MAX_SABERS || bladeNum < 0 || bladeNum >= VR_POSE_MAX_BLADES ) {
+		return;
+	}
+	if ( vrb.armTime[saberNum == 1 ? VR_HAND_LEFT : VR_HAND_RIGHT] != cg.time ) {
+		return;	// that hand isn't on its controller this frame (the animation holds the saber)
+	}
+	if ( vrbSaber.time != cg.time ) {
+		memset( &vrbSaber.pose, 0, sizeof( vrbSaber.pose ) );
+		vrbSaber.time = cg.time;
+	}
+
+	// relative to the camera you see it from
+	bp = &vrbSaber.pose.blade[saberNum][bladeNum];
+	VectorSubtract( base, cg.refdef.vieworg, bp->base );
+	VectorCopy( dir, bp->dir );
+	if ( !( VectorNormalize( bp->dir ) > 0.5f ) ) {
+		return;
+	}
+	vrbSaber.pose.bladeMask[saberNum] |= 1 << bladeNum;
+
+	VectorCopy( base, vrbSaber.base[saberNum][bladeNum] );
+	VectorMA( base, length, bp->dir, vrbSaber.tip[saberNum][bladeNum] );
+}
+
+// The hand holding the blade closest to point, if one is within dist.
+static int CG_VRB_SaberHandNear( const vec3_t point, float dist ) {
+	int s, b, hand = -1;
+	float best = dist;
+
+	if ( vrbSaber.pose.valid && cg.time - vrbSaber.time >= 0 && cg.time - vrbSaber.time < 300 ) {
+		for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+			for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+				vec3_t seg, rel, closest;
+				float len, f, d;
+				if ( !( vrbSaber.pose.bladeMask[s] & ( 1 << b ) ) ) {
+					continue;
+				}
+				VectorSubtract( vrbSaber.tip[s][b], vrbSaber.base[s][b], seg );
+				VectorSubtract( point, vrbSaber.base[s][b], rel );
+				len = DotProduct( seg, seg );
+				f = ( len > 0.0f ) ? Com_Clamp( 0.0f, 1.0f, DotProduct( rel, seg ) / len ) : 0.0f;
+				VectorMA( vrbSaber.base[s][b], f, seg, closest );
+				d = Distance( point, closest );
+				if ( d < best ) {
+					best = d;
+					hand = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+				}
+			}
+		}
+	}
+	return hand;
+}
+
+// How hard a saber hit feels, from its event (WP_SaberDoHit: 1 = 20 damage
+// or more, 2 = 5 or more, 3 = less, like a burn; 0 = not flesh).
+static float CG_VRB_HitStrength( int eventParm ) {
+	switch ( eventParm ) {
+	case 1:		return 1.0f;
+	case 2:		return 0.7f;
+	case 3:		return 0.35f;
+	default:	return 0.5f;
+	}
+}
+
+// Feel what your saber does: cutting, clashing, being cut.
+void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
+	if ( !CG_VR() || !trap->ext.VR_Haptic ) {
+		return;
+	}
+	if ( event == EV_SABER_HIT ) {
+		if ( es->otherEntityNum2 == cg.clientNum && es->otherEntityNum != ENTITYNUM_NONE ) {
+			// your blade cut something
+			trap->ext.VR_Haptic( es->weapon == 1 ? VR_HAND_LEFT : VR_HAND_RIGHT, 0.05f, 0.8f * CG_VRB_HitStrength( es->eventParm ) );
+		} else if ( es->otherEntityNum == cg.clientNum ) {
+			// you were cut
+			const float a = 0.6f * CG_VRB_HitStrength( es->eventParm );
+			trap->ext.VR_Haptic( VR_HAND_LEFT, 0.12f, a );
+			trap->ext.VR_Haptic( VR_HAND_RIGHT, 0.12f, a );
+		}
+	} else if ( event == EV_SABER_BLOCK && es->eventParm ) {
+		// sabers clashed: hard in the hand whose blade it was. A clash of your
+		// blade names you and the saber (it arrives a moment after the hit,
+		// so the blade may have moved on a little; other events that don't
+		// name anyone say 0, so it has to be near your blade too). Someone
+		// else's saber hitting yours is placed where it met your saber's
+		// box, close to the blade.
+		int hand;
+		if ( es->otherEntityNum2 == cg.clientNum && CG_VRB_SaberHandNear( es->origin, 64.0f ) >= 0 ) {
+			hand = ( es->weapon == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+		} else {
+			hand = CG_VRB_SaberHandNear( es->origin, 32.0f );
+		}
+		if ( hand >= 0 ) {
+			trap->ext.VR_Haptic( hand, 0.08f, 1.0f );
+		}
+	}
+}
+
+// Your blade is in a wall (CG_AddSaberBlade's sparks): a grinding buzz.
+void CG_VR_SaberWallFeel( centity_t *cent, int saberNum ) {
+	if ( cent != vrb.bodyCent || vrb.bodyTime != cg.time || !CG_VR() || !trap->ext.VR_Haptic ) {
+		return;
+	}
+	if ( cg.time - vrbSaber.wallFeelTime >= 0 && cg.time - vrbSaber.wallFeelTime < 60 ) {
+		return;
+	}
+	vrbSaber.wallFeelTime = cg.time;
+	trap->ext.VR_Haptic( saberNum == 1 ? VR_HAND_LEFT : VR_HAND_RIGHT, 0.03f, 0.35f );
 }
 
 // Undoes CG_VR_BodyPose on a model (third person, death, leaving VR...).

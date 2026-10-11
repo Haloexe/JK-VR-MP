@@ -2423,6 +2423,10 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	ent->s.number = clientNum;
 	ent->classname = "connecting";
 
+	if ( firstTime ) {
+		G_VRSaberClientReset( clientNum );	// OpenJK VR
+	}
+
 	trap->GetUserinfo( clientNum, userinfo, sizeof( userinfo ) );
 
 	value = Info_ValueForKey( userinfo, "ja_guid" );

@@ -440,6 +440,11 @@ void CL_SystemInfoChanged( void ) {
 	// in some cases, outdated cp commands might get sent with this new serverId
 	cl.serverId = atoi( Info_ValueForKey( systemInfo, "sv_serverid" ) );
 
+#ifdef OPENJK_VR
+	// the server reads saber poses along with the usercmds (clc_moveVR)
+	clc.vrPoseExt = (qboolean)( atoi( Info_ValueForKey( systemInfo, "sv_vrx" ) ) == VR_POSE_PROTOCOL );
+#endif
+
 	// don't set any vars when playing a demo
 	if ( clc.demoplaying ) {
 		return;

@@ -190,6 +190,10 @@ typedef struct client_s {
 	qboolean		csUpdated[MAX_CONFIGSTRINGS];
 
 	demoInfo_t		demo;
+
+	// OpenJK VR: saber pose that came with the usercmd being thought right now
+	// (clc_moveVR), handed to the game through ext.VR_GetUserPose
+	vrUserPose_t	vrPose;
 } client_t;
 
 //=============================================================================
@@ -272,6 +276,7 @@ extern	cvar_t	*sv_autoDemo;
 extern	cvar_t	*sv_autoDemoBots;
 extern	cvar_t	*sv_autoDemoMaxMaps;
 extern	cvar_t	*sv_legacyFixes;
+extern	cvar_t	*sv_vrx;
 extern	cvar_t	*sv_banFile;
 extern	cvar_t	*sv_maxOOBRate;
 extern	cvar_t	*sv_maxOOBRateIP;

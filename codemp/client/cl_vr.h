@@ -66,6 +66,15 @@ const vrClientState_t *VR_GetClientState( void );
 // Read by the renderer through refimport_t.
 const vrRenderState_t *VR_GetRenderState( void );
 
+// Physical lightsaber: the cgame reports where the blades in your hands are
+// (cgameImport_t.ext.VR_SetUserPose), and every new usercmd takes the latest
+// report along to the server (from CL_CreateNewCommands).
+void		VR_SetUserPose( const vrUserPose_t *pose );
+void		VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out );
+
+// A short buzz in one hand (cgameImport_t.ext.VR_Haptic).
+void		VR_Haptic( int hand, float seconds, float amplitude );
+
 #else // !OPENJK_VR
 
 static inline qboolean VR_IsRunning( void ) { return qfalse; }

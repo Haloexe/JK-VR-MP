@@ -19,7 +19,51 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-4"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform
+#define VR_ENGINE_TAG			"openjkvr-5"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+												// -5: ext.VR_SetUserPose, ext.VR_Haptic
+
+/*
+--------------------------------------------------------------------------------
+Physical lightsaber: where the blades you hold really are
+
+Every usercmd a VR client sends carries the pose of the saber blades in its
+hands, so the server can fight with them (to servers that put "sv_vrx" with
+VR_POSE_PROTOCOL in their systeminfo; see qcommon/vr_net.h). The server
+engine hands it to the game module through gameImport_t.ext.VR_GetUserPose.
+
+Positions are world-axis offsets from the camera the player sees the hands
+from (cgame refdef.vieworg). viewOffset says where that camera is: its offset
+from the eye point, which is the origin plus viewheight of the player state
+the pose was rendered with (on the server: before the Pmove of the command
+that carries it); it is only the camera's smoothing (crouching, stairs,
+prediction errors), so it is usually zero. Directions are world-axis unit
+vectors along the blades. trackYaw is the yaw that turns the player's real
+room (tracking space) into the world, so the server can tell real arm
+movement from snap/smooth turning, running and the camera's smoothing.
+
+valid means a lit saber is in the player's VR hands: the arm swings it and
+the attack button doesn't. Its blades can still be missing for a moment (a
+flip or roll animates the body, a hitch delayed the pose).
+--------------------------------------------------------------------------------
+*/
+#define VR_POSE_PROTOCOL		1
+#define VR_POSE_MAX_SABERS		2		// right hand, left hand
+#define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
+#define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
+
+typedef struct vrBladePose_s {
+	vec3_t			base;		// blade start (the muzzle point), offset from the camera
+	vec3_t			dir;		// unit vector along the blade
+} vrBladePose_t;
+
+typedef struct vrUserPose_s {
+	qboolean		valid;		// a lit saber is in the player's VR hands
+	float			trackYaw;	// world yaw minus tracking yaw (degrees)
+	vec3_t			viewOffset;	// camera minus eye point
+	int				bladeMask[VR_POSE_MAX_SABERS];	// blades with a pose (bit per blade)
+	vec3_t			grip[VR_POSE_MAX_SABERS];		// the hand holding the saber, offset from the camera
+	vrBladePose_t	blade[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
+} vrUserPose_t;
 
 enum {
 	VR_HAND_LEFT = 0,

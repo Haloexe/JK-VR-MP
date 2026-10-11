@@ -1462,6 +1462,11 @@ qboolean WP_SabersCheckLock( gentity_t *ent1, gentity_t *ent2 )
 	qboolean	ent1BlockingPlayer = qfalse;
 	qboolean	ent2BlockingPlayer = qfalse;
 
+	if ( G_VRSaberClient( ent1 ) || G_VRSaberClient( ent2 ) )
+	{ //OpenJK VR: the canned lock animations would tear the saber out of a VR hand
+		return qfalse;
+	}
+
 	if ( g_debugSaberLocks.integer )
 	{
 		WP_SabersCheckLock2( ent1, ent2, LOCK_RANDOM );
@@ -5902,9 +5907,17 @@ static QINLINE qboolean CheckThrownSaberDamaged(gentity_t *saberent, gentity_t *
 
 			if (tr.fraction == 1 || tr.entityNum == ent->s.number)
 			{ //Slice them
-				if (!saberOwner->client->ps.isJediMaster && WP_SaberCanBlock(ent, tr.endpos, 0, MOD_SABER, qfalse, 999))
+				const qboolean vrBlocker = G_VRSaberClient( ent );	//OpenJK VR: a VR player blocks only with a blade in the way
+				int vrSaberNum = 0;
+
+				if (!saberOwner->client->ps.isJediMaster &&
+					( vrBlocker ? G_VRSaberStopsThrown( ent, saberent->r.currentOrigin, tr.endpos, &vrSaberNum )
+						: WP_SaberCanBlock(ent, tr.endpos, 0, MOD_SABER, qfalse, 999) ))
 				{ //they blocked it
-					WP_SaberBlockNonRandom(ent, tr.endpos, qfalse);
+					if ( !vrBlocker )
+					{
+						WP_SaberBlockNonRandom(ent, tr.endpos, qfalse);
+					}
 
 					te = G_TempEntity( tr.endpos, EV_SABER_BLOCK );
 					VectorCopy(tr.endpos, te->s.origin);
@@ -5916,6 +5929,11 @@ static QINLINE qboolean CheckThrownSaberDamaged(gentity_t *saberent, gentity_t *
 					te->s.eventParm = 1;
 					te->s.weapon = 0;//saberNum
 					te->s.legsAnim = 0;//bladeNum
+					if ( vrBlocker )
+					{ //OpenJK VR: the blocking blade's saber (effects, and the blocker's hand feels it)
+						te->s.otherEntityNum2 = ent->s.number;
+						te->s.weapon = vrSaberNum;
+					}
 
 					if (saberCheckKnockdown_Thrown(saberent, saberOwner, &g_entities[tr.entityNum]))
 					{ //it was knocked out of the air
@@ -6633,6 +6651,11 @@ qboolean saberKnockOutOfHand(gentity_t *saberent, gentity_t *saberOwner, vec3_t 
 
 	if (!saberOwner->client->ps.saberEntityNum)
 	{ //already gone
+		return qfalse;
+	}
+
+	if ( G_VRSaberClient( saberOwner ) )
+	{ //OpenJK VR: not out of a VR hand (for now)
 		return qfalse;
 	}
 
@@ -8575,6 +8598,9 @@ nextStep:
 	BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, boltOrigin);
 	BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, boltAngles);
 
+	// OpenJK VR: a saber held in a VR player's hand is where the hand put it
+	G_VRSaberBlade( self, 0, 0, boltOrigin, boltAngles );
+
 	//immediately store these values so we don't have to recalculate this again
 	if (self->client->lastSaberStorageTime && (level.time - self->client->lastSaberStorageTime) < 200)
 	{ //alright
@@ -8832,6 +8858,8 @@ nextStep:
 			rBladeNum = 0;
 			while (rBladeNum < self->client->saber[rSaberNum].numBlades)
 			{
+				qboolean vrBlade = qfalse;	// OpenJK VR: held in a VR player's hand
+
 				//update muzzle data for the blade
 				VectorCopy(self->client->saber[rSaberNum].blade[rBladeNum].muzzlePoint, self->client->saber[rSaberNum].blade[rBladeNum].muzzlePointOld);
 				VectorCopy(self->client->saber[rSaberNum].blade[rBladeNum].muzzleDir, self->client->saber[rSaberNum].blade[rBladeNum].muzzleDirOld);
@@ -8892,13 +8920,21 @@ nextStep:
 					trap->G2API_GetBoltMatrix(self->ghoul2, rSaberNum+1, rBladeNum, &boltMatrix, properAngles, properOrigin, level.time, NULL, self->modelScale);
 					BG_GiveMeVectorFromMatrix(&boltMatrix, ORIGIN, self->client->saber[rSaberNum].blade[rBladeNum].muzzlePoint);
 					BG_GiveMeVectorFromMatrix(&boltMatrix, NEGATIVE_Y, self->client->saber[rSaberNum].blade[rBladeNum].muzzleDir);
+					// OpenJK VR: or where the player's hand holds it
+					vrBlade = G_VRSaberBlade( self, rSaberNum, rBladeNum,
+						self->client->saber[rSaberNum].blade[rBladeNum].muzzlePoint,
+						self->client->saber[rSaberNum].blade[rBladeNum].muzzleDir );
 					VectorCopy( self->client->saber[rSaberNum].blade[rBladeNum].muzzlePoint, boltOrigin );
 					VectorMA( boltOrigin, self->client->saber[rSaberNum].blade[rBladeNum].lengthMax, self->client->saber[rSaberNum].blade[rBladeNum].muzzleDir, end );
 				}
 
 				self->client->saber[rSaberNum].blade[rBladeNum].storageTime = level.time;
 
-				if (self->client->hasCurrentPosition && d_saberInterpolate.integer)
+				if ( vrBlade )
+				{ //OpenJK VR: the blade in the player's hand cuts as fast as it really moves
+					G_VRSaberSweep( self, rSaberNum, rBladeNum );
+				}
+				else if (self->client->hasCurrentPosition && d_saberInterpolate.integer)
 				{
 					if (self->client->ps.weaponTime <= 0)
 					{ //rww - 07/17/02 - don't bother doing the extra stuff unless actually attacking. This is in attempt to save CPU.
@@ -9083,6 +9119,11 @@ nextStep:
 		}
 
 		WP_SaberApplyDamage( self );
+
+		if ( mySaber && mySaber->inuse && !self->client->ps.saberInFlight && G_VRSaberActive( self ) )
+		{ //OpenJK VR: other sabers collide with where the VR blades are now
+			SetSaberBoxSize( mySaber );
+		}
 		//NOTE: doing one call like this after the 2 loops above is a bit cheaper, tempentity-wise... but won't use the correct saber and blade numbers...
 		//now actually go through and apply all the damage we did
 		//WP_SaberDoHit( self, 0, 0 );
@@ -9295,6 +9336,11 @@ int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolea
 		thrownSaber = qtrue;
 	}
 
+	if ( !projectile && G_VRSaberClient( self ) )
+	{ //OpenJK VR: what a VR player's blade doesn't physically stop isn't blocked
+		return 0;
+	}
+
 	if (BG_SaberInAttack(self->client->ps.saberMove))
 	{
 		return 0;
@@ -9487,4 +9533,39 @@ qboolean HasSetSaberOnly(void)
 	}
 
 	return qtrue;
+}
+
+/*
+================================================================================
+
+OpenJK VR: helpers for the physical lightsaber (g_vrsaber.c)
+
+================================================================================
+*/
+
+qboolean WP_VR_G2TraceCollide( trace_t *tr, vec3_t start, vec3_t end, vec3_t mins, vec3_t maxs ) {
+	return G_G2TraceCollide( tr, start, end, mins, maxs );
+}
+
+qboolean WP_VR_SaberAttacking( gentity_t *ent ) {
+	return ( ent && ent->client ) ? SaberAttacking( ent ) : qfalse;
+}
+
+// A blow too heavy to parry: the victim's guard is knocked aside.
+void WP_VR_BreakParry( gentity_t *victim, vec3_t point ) {
+	if ( !victim || !victim->client ) {
+		return;
+	}
+	WP_SaberBlockNonRandom( victim, point, qfalse );
+	victim->client->ps.saberMove = BG_BrokenParryForParry( G_GetParryForBlock( victim->client->ps.saberBlocked ) );
+	victim->client->ps.saberBlocked = BLOCKED_PARRY_BROKEN;
+}
+
+// An attack knocked away by a heavier blade.
+void WP_VR_KnockAttack( gentity_t *attacker ) {
+	if ( !attacker || !attacker->client ) {
+		return;
+	}
+	attacker->client->ps.saberMove = BG_BrokenParryForAttack( attacker->client->ps.saberMove );
+	attacker->client->ps.saberBlocked = BLOCKED_BOUNCE_MOVE;
 }

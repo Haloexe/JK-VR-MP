@@ -1358,6 +1358,18 @@ void G_RunClient			( gentity_t *ent );
 // g_team.c
 //
 qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
+
+// g_vrsaber.c (OpenJK VR: physical lightsaber for players holding it in VR)
+void		G_VRSaberInit( void );
+void		G_VRSaberClientReset( int clientNum );
+void		G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd );
+qboolean	G_VRSaberOn( void );
+void		G_VRSaberPublish( void );
+qboolean	G_VRSaberClient( gentity_t *ent );
+qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
+qboolean	G_VRSaberActive( gentity_t *ent );
+qboolean	G_VRSaberBlade( gentity_t *ent, int saberNum, int bladeNum, vec3_t base, vec3_t dir );
+void		G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //

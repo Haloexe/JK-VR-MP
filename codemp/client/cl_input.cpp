@@ -25,6 +25,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "client.h"
 #include "cl_vr.h"
+#ifdef OPENJK_VR
+#include "qcommon/vr_net.h"
+#endif
 #include "cl_cgameapi.h"
 #include "cl_uiapi.h"
 #ifndef _WIN32
@@ -1419,6 +1422,11 @@ void CL_CreateNewCommands( void ) {
 	cl.cmdNumber++;
 	cmdNum = cl.cmdNumber & CMD_MASK;
 	cl.cmds[cmdNum] = CL_CreateCmd();
+
+#ifdef OPENJK_VR
+	// where the sabers in your hands are, sent along with this command
+	VR_FillCmdPose( &cl.cmds[cmdNum], &cl.vrCmdPoses[cmdNum] );
+#endif
 }
 
 /*
@@ -1564,12 +1572,16 @@ void CL_WritePacket( void ) {
 		}
 
 		// begin a client move command
+		qboolean vrPoses = qfalse;
+#ifdef OPENJK_VR
+		vrPoses = clc.vrPoseExt;	// with the saber pose after each usercmd
+#endif
 		if ( cl_nodelta->integer || !cl.snap.valid
 			|| clc.demowaiting
 			|| clc.serverMessageSequence != cl.snap.messageNum ) {
-			MSG_WriteByte (&buf, clc_moveNoDelta);
+			MSG_WriteByte (&buf, vrPoses ? clc_moveNoDeltaVR : clc_moveNoDelta);
 		} else {
-			MSG_WriteByte (&buf, clc_move);
+			MSG_WriteByte (&buf, vrPoses ? clc_moveVR : clc_move);
 		}
 
 		// write the command count
@@ -1587,6 +1599,11 @@ void CL_WritePacket( void ) {
 			j = (cl.cmdNumber - count + i + 1) & CMD_MASK;
 			cmd = &cl.cmds[j];
 			MSG_WriteDeltaUsercmdKey (&buf, key, oldcmd, cmd);
+#ifdef OPENJK_VR
+			if ( vrPoses ) {
+				VR_WriteUserPose( &buf, &cl.vrCmdPoses[j] );
+			}
+#endif
 			oldcmd = cmd;
 		}
 

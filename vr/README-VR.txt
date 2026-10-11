@@ -14,15 +14,17 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     models included)
   * First-person lightsaber: the hilt in your hand, the blade where your
     controller points
+  * Physical saber combat in games you host (and on servers running this
+    build): your real blade cuts, blocks and clashes, harder the faster you
+    swing; saber styles are the blade's weight
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen; point at the
     menus with a controller and pull the trigger to click
   * The desktop window mirrors the left eye
 
-Not yet: other players seeing your arm movements, shots leaving the gun
-barrel and saber hits where your blade really is (all need the VR server
-mod), two-handed weapons.
+Not yet: other players seeing your arm movements and shots leaving the gun
+barrel (both need more server work), two-handed weapons.
 
 
 INSTALL / RUN
@@ -98,11 +100,44 @@ character's arm, the body leans in a little so the hand still gets there.
 LIGHTSABER: with the saber out you stay in first person. The hilt is in
 your right hand (a second saber in your left) and the blade points along
 your fist, the way you would hold a real hilt, so it follows every turn
-of your wrist. Attacks, blocks and Force powers work as usual; for now the
-game still decides hits from its own swing animations (the VR server mod
-will make your real blade count). During flips, cartwheels and rolls your
-body and blade are hidden for that moment. Fists, saber locks, knockdowns
-and vehicles still use the third-person camera.
+of your wrist. During flips, cartwheels and rolls your body and blade are
+hidden for that moment. Fists, saber locks, knockdowns and vehicles still
+use the third-person camera.
+
+SABER COMBAT in games you host (Create Game, bots included) and on any
+server running this build: your real blade is the weapon.
+  * Swing it. A hit's damage comes from how fast the blade moves where it
+    lands: a big arm swing or a stab cuts deep, a slow push or a blade just
+    resting on someone only singes, and flicking your wrist with your arm
+    still only grazes (running, turning, crouching or taking stairs with the
+    blade out doesn't cut either). The same blade cuts the same opponent
+    at most every 0.3 s. Walls stop your blade, even where your real hand
+    goes through them. The trigger lights the saber; it no longer starts the
+    game's canned swings - your arm swings.
+  * Block with it. Only what your blade physically stops is blocked, thrown
+    sabers included (no automatic blocks, saber locks or disarms while you
+    hold it). When blades meet they spark, your hand buzzes hard, and your
+    blade can't cut for a moment while it recovers - twice as long if
+    theirs was the heavier blow. A strong blow into an opponent's guard
+    breaks it; a weak one only makes them parry.
+  * Saber styles are the blade's weight (right stick click cycles them):
+      light  (fast style)    small quick swings cut, up to 40 damage,
+                             recovers quickly after a clash
+      medium (medium style)  up to 65 damage
+      heavy  (strong style)  needs big swings, up to 100 damage, breaks
+                             guards, recovers slowly
+    Dual sabers and the staff count as medium.
+  * You feel it: a buzz when your blade cuts (stronger for deeper cuts), a
+    hard knock when it clashes, a grind when it scrapes a wall, both hands
+    when you get cut.
+  * Cutting someone ends your spawn protection, like attacking always has.
+On normal servers the saber works the old way (the trigger swings).
+Servers fighting this way show "vrSaber 1" in their server info.
+Server settings: g_vrSaber (1; 0 = the old animated combat),
+g_vrSaberSpeedScale (1; higher = faster swings needed), g_vrSaberDamageScale
+(1), g_vrSaberDebug 1 (prints every cut's speed and damage, and every
+clash, to the console - handy for telling me what feels off), and the
+stock g_dismember 100 if you want limbs to come off.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw
@@ -182,8 +217,15 @@ KNOWN LIMITATIONS
     the gun pointed far to the side of where you walk, the legs may strafe.
   * If your real arm reaches much further than the character's, the hand
     stops at full stretch while the gun stays in your real hand.
-  * The lightsaber blade you see follows your hand, but hits and blocks
-    still come from the game's swing animations on normal servers.
+  * On normal servers saber hits and blocks still come from the game's
+    swing animations; your real blade only counts on servers running this
+    build.
+  * Saber combat: blaster bolts are still deflected automatically; no
+    saber locks or disarming while you hold the saber in VR; when another
+    blade stops yours you feel it, but the blade you see doesn't stop yet;
+    other players see your character's animated saber, not your arms;
+    during flips and rolls the animation holds your saber for a moment;
+    custom sabers with more than two blades only fight with the first two.
   * Two-handed weapons are held in the right hand only (for now).
   * Mirrors show your character without a head (it is hidden for your view).
   * Typing in menus (names, server addresses) and chat need the keyboard
@@ -206,8 +248,11 @@ HOW IT WORKS (for modders)
 --------------------------
 VR lives in the engine (openjk.x86_64.exe), the renderer
 (rd-vanilla_x86_64.dll) and the client game module (base\cgamex86_64.dll,
-for the gun in your hand and your body). The server side is stock OpenJK,
-which is why it works on ordinary servers. Source files:
+for the gun in your hand and your body). It works on ordinary servers.
+Servers running this build (base\jampgamex86_64.dll and the engine) also
+fight with the VR player's real blades: the client sends the blade poses
+with every usercmd (clc_moveVR, only to servers whose systeminfo has
+sv_vrx), and the game module sweeps them for cuts and clashes. Source files:
 
   codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim,
                                controllers, menu pointer
@@ -216,7 +261,10 @@ which is why it works on ordinary servers. Source files:
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement
   codemp/rd-vanilla/tr_main.cpp    asymmetric per-eye projection
   codemp/cgame/cg_vr.c         hands, aim dot
-  codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK
+  codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK; the
+                               blade poses sent to the server, haptics
+  codemp/qcommon/vr_net.h      blade poses on the wire
+  codemp/game/g_vrsaber.c      physical saber combat on the server
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
 

@@ -1735,6 +1735,19 @@ static void SV_G2API_CleanEntAttachments( void ) {
 	re->G2API_CleanEntAttachments();
 }
 
+// OpenJK VR: the saber pose that came with the usercmd being thought
+static qboolean SV_VR_GetUserPose( int clientNum, vrUserPose_t *pose ) {
+	if ( !pose ) {
+		return qfalse;
+	}
+	if ( clientNum < 0 || clientNum >= sv_maxclients->integer || !svs.clients || !svs.clients[clientNum].vrPose.valid ) {
+		Com_Memset( pose, 0, sizeof( *pose ) );
+		return qfalse;
+	}
+	*pose = svs.clients[clientNum].vrPose;
+	return qtrue;
+}
+
 static qboolean SV_G2API_OverrideServer( void *serverInstance ) {
 	CGhoul2Info_v &g2 = *((CGhoul2Info_v *)serverInstance);
 	return re->G2API_OverrideServerWithClientData( g2, 0 );
@@ -3118,6 +3131,8 @@ void SV_BindGame( void ) {
 		gi.G2API_CleanEntAttachments			= SV_G2API_CleanEntAttachments;
 		gi.G2API_OverrideServer					= SV_G2API_OverrideServer;
 		gi.G2API_GetSurfaceName					= SV_G2API_GetSurfaceName;
+
+		gi.ext.VR_GetUserPose					= SV_VR_GetUserPose;
 
 		GetGameAPI = (GetGameAPI_t)gvm->GetModuleAPI;
 		ret = GetGameAPI( GAME_API_VERSION, &gi );

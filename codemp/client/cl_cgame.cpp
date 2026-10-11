@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_cgame.c  -- client system interaction with client game
 #include "client.h"
 #include "cl_cgameapi.h"
+#include "cl_vr.h"
 #include "botlib/botlib.h"
 #include "FXExport.h"
 #include "FxUtil.h"
@@ -500,6 +501,10 @@ void CL_ShutdownCGame( void ) {
 	cls.cgameStarted = qfalse;
 
 	CL_UnbindCGame();
+
+#ifdef OPENJK_VR
+	VR_SetUserPose( NULL );	// (the saber pose that cgame reported)
+#endif
 }
 
 /*
@@ -527,6 +532,10 @@ void CL_InitCGame( void ) {
 
 	// load the dll
 	CL_BindCGame();
+
+#ifdef OPENJK_VR
+	VR_SetUserPose( NULL );	// nothing reported by this cgame yet
+#endif
 
 	cls.state = CA_LOADING;
 
