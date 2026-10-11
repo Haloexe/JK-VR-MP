@@ -25,6 +25,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "client/client.h"
 #include "sys/sys_local.h"
 
+#ifdef OPENJK_VR
+qboolean VR_IsActive( void );	// client/cl_vr.cpp
+static qboolean soundPausedUnfocused;	// the window lost focus and that paused the sound
+#endif
+
 static cvar_t *in_keyboardDebug     = NULL;
 
 static SDL_Joystick *stick = NULL;
@@ -926,6 +931,13 @@ static void IN_ProcessEvents( void )
 					case SDL_WINDOWEVENT_FOCUS_LOST:
 					{
 						Cvar_SetValue( "com_unfocused", 1 );
+#ifdef OPENJK_VR
+						// in a headset the window is only a mirror: whether it
+						// has focus doesn't matter, the sound keeps playing
+						if ( VR_IsActive() )
+							break;
+						soundPausedUnfocused = qtrue;
+#endif
 						SNDDMA_Activate( qfalse );
 						break;
 					}
@@ -933,6 +945,11 @@ static void IN_ProcessEvents( void )
 					case SDL_WINDOWEVENT_FOCUS_GAINED:
 					{
 						Cvar_SetValue( "com_unfocused", 0 );
+#ifdef OPENJK_VR
+						if ( !soundPausedUnfocused )
+							break;	// (resuming would only clear the sound buffer)
+						soundPausedUnfocused = qfalse;
+#endif
 						SNDDMA_Activate( qtrue );
 						break;
 					}

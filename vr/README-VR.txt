@@ -16,7 +16,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     controller points
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
-  * Menus, console and loading screens on a floating screen
+  * Menus, console and loading screens on a floating screen; point at the
+    menus with a controller and pull the trigger to click
   * The desktop window mirrors the left eye
 
 Not yet: other players seeing your arm movements, shots leaving the gun
@@ -41,7 +42,8 @@ saves and configs) are not touched. To uninstall, delete the folder.
    (SteamVR: Settings > OpenXR > Set SteamVR as OpenXR Runtime).
    Windows Mixed Reality's own runtime has no OpenGL support: use SteamVR.
 2. Double-click "Launch OpenJK VR.bat".
-3. Click the game window once so it has keyboard/mouse focus.
+3. To use the keyboard as well, click the game window once so it has
+   focus (the controllers work without it).
 
 If no headset is found the game starts in normal desktop mode.
 
@@ -59,7 +61,23 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Left grip            use the selected Force power
   A / B                jump / crouch
   X / Y                previous / next Force power
-  Left menu button     game menu (use the mouse in menus for now)
+  Left menu button     game menu (press again to close it)
+
+IN THE MENUS point a controller at the menu screen: the mouse cursor goes
+where it points.
+  Trigger              click (either hand; the hand that pulls its
+                       trigger becomes the pointer)
+  Trigger held         drag sliders and scroll bars
+  Either stick up/down scroll the list under the cursor, or step through
+                       the setting under it (hold to keep going)
+  B                    back (like Escape)
+  Left menu button     close the menu / back
+Each click gives a small buzz in your hand. The keyboard and mouse keep
+working alongside. Typing (your name, a server address, chat) still needs
+the keyboard. In Controls, the triggers, B and pushing a stick up or down
+are busy clicking, going back and scrolling, so to put a command on one of
+those use the console (see the AUX key names below); the other buttons
+(grips, A, X, Y, stick clicks) can be bound right there.
 
 With a gun out you aim with your right hand: the gun is in your hand (the
 complete third-person model, so it looks right from every angle) and a
@@ -168,7 +186,8 @@ KNOWN LIMITATIONS
     still come from the game's swing animations on normal servers.
   * Two-handed weapons are held in the right hand only (for now).
   * Mirrors show your character without a head (it is hidden for your view).
-  * Menus need the mouse (no laser pointer yet).
+  * Typing in menus (names, server addresses) and chat need the keyboard
+    (no on-screen keyboard yet).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
   * Things near the edge of your view can pop in (the game culls with its
@@ -190,7 +209,8 @@ VR lives in the engine (openjk.x86_64.exe), the renderer
 for the gun in your hand and your body). The server side is stock OpenJK,
 which is why it works on ordinary servers. Source files:
 
-  codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim
+  codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim,
+                               controllers, menu pointer
   codemp/qcommon/vr_public.h   state the engine shares with the cgame
   codemp/rd-common/tr_vr.h     state shared with the renderer
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement

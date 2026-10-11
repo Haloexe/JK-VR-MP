@@ -1540,9 +1540,11 @@ void Com_Frame( void ) {
 
 #ifdef OPENJK_VR
 				// The headset paces the frames (xrWaitFrame); any extra
-				// limit here would make it miss frames.
+				// limit here would make it miss frames. (Only a floor of
+				// 250 fps, far above any headset, in case a runtime ever
+				// stopped blocking in xrWaitFrame.)
 				if ( VR_IsPacingFrames() )
-					minMsec = 1;
+					minMsec = 4;
 #endif
 
 				timeVal = com_frameTime - lastTime;

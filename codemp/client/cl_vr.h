@@ -38,9 +38,16 @@ qboolean	VR_IsRunning( void );
 // engine's own frame limiter must stay out of the way.
 qboolean	VR_IsPacingFrames( void );
 
-// Waits for the headset's next frame and samples the head pose. Cheap to
-// call more than once per frame (only the first call per frame waits).
+// Waits for the headset's next frame, samples the head pose and controllers,
+// and puts the menu cursor where a controller points. Called at the top of
+// CL_Frame, outside any module.
 void		VR_BeginFrame( void );
+
+// Reports every relative move of the UI module's cursor (UIVM_MouseEvent),
+// so the engine knows where that cursor is.
+void		VR_UICursorMoved( int dx, int dy );
+// Called right after a UI module initialised: puts its cursor in a known spot.
+void		VR_UIStarted( void );
 
 // Renders and submits a complete VR frame. Returns qfalse if the frame must
 // be drawn the normal desktop way instead (no session / headset idle).

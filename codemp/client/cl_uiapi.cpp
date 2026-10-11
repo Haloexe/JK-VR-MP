@@ -28,6 +28,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "snd_ambient.h"
 #include "FXExport.h"
 #include "FxUtil.h"
+#include "cl_uiapi.h"
+#include "cl_vr.h"
 
 extern IHeapAllocator *G2VertSpaceClient;
 extern botlib_export_t *botlib_export;
@@ -43,11 +45,17 @@ static vm_t *uivm; // ui vm, valid for legacy and new api
 void UIVM_Init( qboolean inGameLoad ) {
 	if ( uivm->isLegacy ) {
 		VM_Call( uivm, UI_INIT, inGameLoad );
-		return;
 	}
-	VMSwap v( uivm );
+	else {
+		VMSwap v( uivm );
 
-	uie->Init( inGameLoad );
+		uie->Init( inGameLoad );
+	}
+
+#ifdef OPENJK_VR
+	// sync the engine's copy of the cursor (VR controllers point at the menu)
+	VR_UIStarted();
+#endif
 }
 
 void UIVM_Shutdown( void ) {
@@ -73,6 +81,9 @@ void UIVM_KeyEvent( int key, qboolean down ) {
 }
 
 void UIVM_MouseEvent( int dx, int dy ) {
+#ifdef OPENJK_VR
+	VR_UICursorMoved( dx, dy );
+#endif
 	if ( uivm->isLegacy ) {
 		VM_Call( uivm, UI_MOUSE_EVENT, dx, dy );
 		return;

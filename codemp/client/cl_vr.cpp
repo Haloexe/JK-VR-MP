@@ -109,7 +109,8 @@ OpenXR entry points
 	X( xrSyncActions ) \
 	X( xrGetActionStateBoolean ) \
 	X( xrGetActionStateFloat ) \
-	X( xrGetActionStateVector2f )
+	X( xrGetActionStateVector2f ) \
+	X( xrApplyHapticFeedback )
 
 static HMODULE						xrLoaderLib;
 static PFN_xrGetInstanceProcAddr	xrGetInstanceProcAddr;
@@ -282,7 +283,10 @@ enum {
 	VR_KEY_STICK_R,			// AUX25
 	VR_KEY_STICK_R_UP,		// AUX26
 	VR_KEY_STICK_R_DOWN,	// AUX27
-	VR_NUM_KEYS
+	VR_NUM_KEYS,
+
+	VR_BUTTON_MENU = VR_NUM_KEYS,	// always Escape, not bindable
+	VR_NUM_BUTTONS
 };
 
 static const char *vrDefaultBinds[VR_NUM_KEYS] = {
@@ -379,16 +383,39 @@ typedef struct vrState_s {
 	XrAction				actGripPose, actAimPose, actMove, actTurn;
 	XrAction				actTrigger, actSqueeze, actStickClick;
 	XrAction				actA, actB, actX, actY, actMenu;
+	XrAction				actHaptic;
 	XrSpace					gripSpace[2], aimSpace[2];
 	XrPosef					gripPose[2], aimPose[2];
 	qboolean				handValid[2];
+	int						handTrackTime[2];	// last time each hand was tracked (ms)
 	float					moveX, moveY;	// left stick
 	float					turnX, turnY;	// right stick
 	qboolean				turnLatched;	// snap turn fired, waiting for the stick to recentre
 	qboolean				weapLatched;	// stick-up/down weapon switch fired
 	float					pendingTurn;	// degrees to add to the body yaw this frame
-	qboolean				keyDown[VR_NUM_KEYS];
-	qboolean				menuDown;
+	qboolean				keyDown[VR_NUM_BUTTONS];
+	int						keySent[VR_NUM_BUTTONS];	// key each held button sent when pressed (0 = none)
+	qboolean				keyBlocked[VR_NUM_BUTTONS];	// held through a focus loss: ignored until let go
+	qboolean				topOfFrame;		// this poll runs at the top of CL_Frame (not nested)
+
+	// menu pointer: a controller points at the menu screen like a mouse
+	qboolean				pointerMode;	// the menu screen is up and takes the pointer
+	qboolean				pointerHit;		// the pointing controller is on the screen
+	qboolean				pointerLeft;	// the left hand points (the last to pull its trigger)
+	int						pointerLastHand;
+	float					pointerX, pointerY;		// on the screen, in menu units (640x480)
+	qboolean				pointerFresh;	// polled this frame, not yet applied
+	qboolean				pointerForce;	// move the cursor even if the controller is still
+	int						pointerSentX, pointerSentY;	// where the cursor was last put
+	qboolean				pullArmed[2];	// trigger at rest: the next rise is a pull
+	qboolean				pulling[2];		// trigger on its way from rest to a click...
+	int						pullStart[2];	// ...since (ms)
+	qboolean				pressing;		// a trigger crosses the click point this poll
+	int						uiCursorX, uiCursorY;	// the UI module's own cursor, mirrored
+	int						scrollDir;		// a stick held up (+1) or down (-1) in the menu
+	int						scrollTime;		// next mouse wheel repeat (ms)
+	int						scrollStepTime;	// last wheel step (ms)
+	qboolean				scrollLatched;	// a stick already pushed when the menu came up
 
 	// aim source this frame: head, or the right hand (ranged weapons)
 	qboolean				aimFromHand;
@@ -842,6 +869,7 @@ typedef struct vrBinding_s {
 } vrBinding_t;
 
 #define VR_BOTH_HANDS(act, sub) { &act, "/user/hand/left/input/" sub }, { &act, "/user/hand/right/input/" sub }
+#define VR_BOTH_HAPTICS(act) { &act, "/user/hand/left/output/haptic" }, { &act, "/user/hand/right/output/haptic" }
 
 static void VR_SuggestBindings( const char *profile, const vrBinding_t *bindings, int count ) {
 	XrActionSuggestedBinding sb[32];
@@ -898,9 +926,11 @@ static void VR_CreateInput( void ) {
 	vr.actX				= VR_CreateAction( "button_x",		"X",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
 	vr.actY				= VR_CreateAction( "button_y",		"Y",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
 	vr.actMenu			= VR_CreateAction( "menu",			"Menu",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+	vr.actHaptic		= VR_CreateAction( "haptic",		"Vibration",		XR_ACTION_TYPE_VIBRATION_OUTPUT, qtrue );
 
 	// Meta Quest (1/2/3/Pro) Touch and Touch Plus controllers
 	const vrBinding_t touch[] = {
+		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
 		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
 		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
@@ -918,6 +948,7 @@ static void VR_CreateInput( void ) {
 
 	// Valve Index
 	const vrBinding_t index[] = {
+		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
 		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
 		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
@@ -935,6 +966,7 @@ static void VR_CreateInput( void ) {
 
 	// HTC Vive wands
 	const vrBinding_t vive[] = {
+		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
 		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
 		{ &vr.actMove, "/user/hand/left/input/trackpad" },
@@ -949,6 +981,7 @@ static void VR_CreateInput( void ) {
 
 	// Windows Mixed Reality
 	const vrBinding_t wmr[] = {
+		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
 		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
 		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
@@ -965,6 +998,7 @@ static void VR_CreateInput( void ) {
 
 	// Fallback for anything else
 	const vrBinding_t simple[] = {
+		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
 		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
 		VR_BOTH_HANDS( vr.actTrigger, "select/click" ),
@@ -983,6 +1017,7 @@ static void VR_DestroyInput( void ) {
 	vr.actGripPose = vr.actAimPose = vr.actMove = vr.actTurn = XR_NULL_HANDLE;
 	vr.actTrigger = vr.actSqueeze = vr.actStickClick = XR_NULL_HANDLE;
 	vr.actA = vr.actB = vr.actX = vr.actY = vr.actMenu = XR_NULL_HANDLE;
+	vr.actHaptic = XR_NULL_HANDLE;
 	vr.inputReady = qfalse;
 }
 
@@ -1035,12 +1070,99 @@ static void VR_DestroyInputSpaces( void ) {
 	vr.inputAttached = qfalse;
 }
 
+// A short buzz in one hand.
+static void VR_Pulse( int hand, float seconds, float amplitude ) {
+	if ( !vr.inputAttached || vr.actHaptic == XR_NULL_HANDLE ) {
+		return;
+	}
+	XrHapticActionInfo hai;
+	memset( &hai, 0, sizeof( hai ) );
+	hai.type = XR_TYPE_HAPTIC_ACTION_INFO;
+	hai.action = vr.actHaptic;
+	hai.subactionPath = vr.handPath[hand];
+	XrHapticVibration vib;
+	memset( &vib, 0, sizeof( vib ) );
+	vib.type = XR_TYPE_HAPTIC_VIBRATION;
+	vib.duration = (XrDuration)( seconds * 1.0e9f );
+	vib.frequency = XR_FREQUENCY_UNSPECIFIED;
+	vib.amplitude = amplitude;
+	xrApplyHapticFeedback( vr.session, &hai, (const XrHapticBaseHeader *)&vib );
+}
+
+// A controller trigger is holding the menu's mouse button down (a click, or
+// dragging a slider or scroll bar).
+static qboolean VR_Clicking( void ) {
+	for ( int k = 0; k < VR_NUM_BUTTONS; k++ ) {
+		if ( vr.keySent[k] == A_MOUSE1 ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// The key a controller button sends when pressed: its own bindable key, or
+// while the menu screen is up, what the mouse/keyboard would do there.
+// 0 = nothing.
+static int VR_ButtonKeyCode( int key ) {
+	if ( key == VR_BUTTON_MENU ) {
+		return A_ESCAPE;	// opens/closes the menu like on the desktop
+	}
+	if ( !vr.pointerMode ) {
+		return VR_FIRST_KEY + key;
+	}
+	if ( key == VR_KEY_TRIGGER_R || key == VR_KEY_TRIGGER_L ) {
+		// click where the controller points (pointing past the screen clicks nothing)
+		return vr.pointerHit ? A_MOUSE1 : 0;
+	}
+	if ( VR_Clicking() ) {
+		return 0;	// any other key would end the drag under the held trigger
+	}
+	if ( key == VR_KEY_B ) {
+		// back, like Escape (but not on the engine's download prompt, where
+		// Escape disconnects)
+		return cls.cursorActive ? 0 : A_ESCAPE;
+	}
+	return VR_FIRST_KEY + key;	// the rest stay bindable in the Controls menu
+}
+
 static void VR_SetKey( int key, qboolean down ) {
+	if ( vr.keyBlocked[key] ) {
+		// held through a focus loss: only letting go counts
+		if ( !down ) {
+			vr.keyBlocked[key] = qfalse;
+		}
+		return;
+	}
 	if ( vr.keyDown[key] == down ) {
 		return;
 	}
 	vr.keyDown[key] = down;
-	VR_QueueKey( VR_FIRST_KEY + key, down );
+
+	if ( !down ) {
+		// the release goes wherever the press went, even if the menu
+		// opened or closed in between
+		if ( vr.keySent[key] ) {
+			VR_QueueKey( vr.keySent[key], qfalse );
+			vr.keySent[key] = 0;
+		}
+		return;
+	}
+
+	int code = VR_ButtonKeyCode( key );
+	for ( int k = 0; k < VR_NUM_BUTTONS && code; k++ ) {
+		if ( k != key && vr.keySent[k] == code ) {
+			code = 0;	// another held button already sent it (both triggers clicking)
+		}
+	}
+	vr.keySent[key] = code;
+	if ( !code ) {
+		return;
+	}
+	VR_QueueKey( code, qtrue );
+	if ( code == A_MOUSE1 ) {
+		vr.pointerForce = qtrue;	// click exactly where it points, even if the mouse moved
+		VR_Pulse( vr.pointerLastHand, 0.02f, 0.5f );
+	}
 }
 
 static void VR_TapKey( int key ) {
@@ -1049,16 +1171,277 @@ static void VR_TapKey( int key ) {
 }
 
 // Lets go of every held controller button (focus lost, session ended).
+// Whatever is still held when input comes back is not a new press.
 static void VR_ReleaseAllKeys( void ) {
-	for ( int k = 0; k < VR_NUM_KEYS; k++ ) {
-		VR_SetKey( k, qfalse );
-	}
-	if ( vr.menuDown ) {
-		vr.menuDown = qfalse;
-		VR_QueueKey( A_ESCAPE, qfalse );
+	for ( int k = 0; k < VR_NUM_BUTTONS; k++ ) {
+		if ( vr.keyDown[k] ) {
+			VR_SetKey( k, qfalse );
+			vr.keyBlocked[k] = qtrue;
+		}
 	}
 	vr.moveX = vr.moveY = vr.turnX = vr.turnY = 0.0f;
-	vr.turnLatched = vr.weapLatched = qfalse;
+	// snap turns, weapon switches and menu scrolling wait for their stick to recentre
+	vr.turnLatched = vr.weapLatched = vr.scrollLatched = qtrue;
+	vr.pointerHit = qfalse;
+	vr.pressing = qfalse;
+	for ( int h = 0; h < 2; h++ ) {
+		vr.pullArmed[h] = vr.pulling[h] = qfalse;
+	}
+	vr.scrollDir = 0;
+}
+
+/*
+================================================================================
+
+Menu pointer
+
+While the menu screen is up, the controller that last pulled its trigger
+points at it like a mouse: the trigger clicks, B goes back, either stick
+scrolls. The UI module only knows relative mouse moves, so the engine keeps
+a copy of its cursor (VR_UICursorMoved) and moves it by the difference.
+
+================================================================================
+*/
+
+static qboolean VR_UseScreenLayer( void );
+
+// The UI module's cursor moves only by relative mouse moves, clamped to the
+// 640x480 menu like UI_MouseEvent does. Every move goes through
+// UIVM_MouseEvent, which reports it here.
+void VR_UICursorMoved( int dx, int dy ) {
+	vr.uiCursorX = Com_Clampi( 0, SCREEN_WIDTH, vr.uiCursorX + dx );
+	vr.uiCursorY = Com_Clampi( 0, SCREEN_HEIGHT, vr.uiCursorY + dy );
+}
+
+// Whether a controller drives the menu cursor right now: a menu (or the
+// engine's download prompt) is on the menu screen, and the console isn't.
+static qboolean VR_MenuPointerWanted( void ) {
+	if ( !vr.lastScreenLayer || !VR_UseScreenLayer() ) {
+		return qfalse;	// no menu screen (or it hasn't been placed yet)
+	}
+	const int catcher = Key_GetCatcher();
+	if ( catcher & KEYCATCH_CONSOLE ) {
+		return qfalse;
+	}
+	if ( cls.cursorActive ) {
+		return qtrue;
+	}
+	return ( cls.uiStarted && ( catcher & KEYCATCH_UI ) ) ? qtrue : qfalse;
+}
+
+// Where a hand's pointing ray meets the menu screen, in menu units (0..640,
+// 0..480 from the top left). The screen is the quad VR_EndFrame submits;
+// both poses are in the local space.
+static qboolean VR_PointerHit( int hand, float *x, float *y ) {
+	static const float fwd[3] = { 0.0f, 0.0f, -1.0f };
+	static const float ex[3] = { 1.0f, 0.0f, 0.0f };
+	static const float ey[3] = { 0.0f, 1.0f, 0.0f };
+	static const float ez[3] = { 0.0f, 0.0f, 1.0f };
+	const XrPosef *aim = &vr.aimPose[hand];
+	const XrPosef *quad = &vr.quadPose;
+	float dir[3], right[3], up[3], normal[3];
+
+	VR_XrRotate( &aim->orientation, fwd, dir );
+	VR_XrRotate( &quad->orientation, ex, right );
+	VR_XrRotate( &quad->orientation, ey, up );
+	VR_XrRotate( &quad->orientation, ez, normal );	// the screen's visible side faces +Z
+
+	const float toQuad[3] = {
+		quad->position.x - aim->position.x,
+		quad->position.y - aim->position.y,
+		quad->position.z - aim->position.z
+	};
+	const float facing = DotProduct( dir, normal );
+	if ( facing > -0.01f ) {
+		return qfalse;	// pointing away from the screen, or along it
+	}
+	const float t = DotProduct( toQuad, normal ) / facing;
+	if ( t <= 0.0f ) {
+		return qfalse;	// the screen is behind the hand
+	}
+	const float rel[3] = {	// hit point relative to the screen's centre
+		dir[0] * t - toQuad[0],
+		dir[1] * t - toQuad[1],
+		dir[2] * t - toQuad[2]
+	};
+	const float h = Com_Clamp( 0.2f, 20.0f, vr_menuHeight->value );	// as VR_EndFrame sizes it
+	const float u = DotProduct( rel, right ) / ( h * ( 4.0f / 3.0f ) ) + 0.5f;
+	const float v = 0.5f - DotProduct( rel, up ) / h;
+	const float margin = 0.04f;	// just past the edge still reaches the buttons along it
+	if ( u < -margin || u > 1.0f + margin || v < -margin || v > 1.0f + margin ) {
+		return qfalse;
+	}
+	*x = Com_Clamp( 0.0f, (float)SCREEN_WIDTH, u * SCREEN_WIDTH );
+	*y = Com_Clamp( 0.0f, (float)SCREEN_HEIGHT, v * SCREEN_HEIGHT );
+	return qtrue;
+}
+
+// A trigger that crosses this clicks (VR_AnalogKey).
+#define VR_TRIGGER_PRESS	0.6f
+
+// Where the menu cursor goes this frame. Runs before the buttons are read,
+// which click where it points.
+static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
+	const qboolean wasOnScreen = (qboolean)( vr.pointerMode && vr.pointerHit );
+	if ( wanted && !vr.pointerMode ) {
+		vr.scrollLatched = qtrue;	// a stick already pushed (walking) doesn't scroll
+	}
+	vr.pointerMode = wanted;
+	vr.pointerHit = qfalse;
+	vr.pointerFresh = qtrue;
+	vr.pressing = qfalse;
+	if ( !vr.pointerMode ) {
+		for ( int h = 0; h < 2; h++ ) {
+			vr.pullArmed[h] = vr.pulling[h] = qfalse;
+		}
+		return;
+	}
+
+	// Pulling a trigger tips the controller a little, so from the moment a
+	// pull starts (a rise from rest) until it clicks, at most 300 ms, the
+	// cursor holds still.
+	const int now = Sys_Milliseconds();
+	qboolean pull[2];
+	for ( int h = 0; h < 2; h++ ) {
+		const int key = ( h == VR_HAND_LEFT ) ? VR_KEY_TRIGGER_L : VR_KEY_TRIGGER_R;
+		const qboolean up = (qboolean)( !vr.keyDown[key] && !vr.keyBlocked[key] );
+		pull[h] = (qboolean)( up && trigger[h] > VR_TRIGGER_PRESS );	// clicks this poll
+		if ( !up ) {
+			vr.pullArmed[h] = vr.pulling[h] = qfalse;
+		} else if ( trigger[h] < 0.15f ) {
+			vr.pullArmed[h] = qtrue;
+			vr.pulling[h] = qfalse;
+		} else if ( vr.pullArmed[h] ) {
+			vr.pullArmed[h] = qfalse;
+			vr.pulling[h] = qtrue;
+			vr.pullStart[h] = now;
+		}
+	}
+	vr.pressing = (qboolean)( pull[VR_HAND_LEFT] || pull[VR_HAND_RIGHT] );
+
+	// Pulling a trigger hands the pointer to that hand, unless the other
+	// hand is busy clicking (dragging a slider). Both at once: no change.
+	if ( pull[VR_HAND_LEFT] && !pull[VR_HAND_RIGHT] && vr.keySent[VR_KEY_TRIGGER_R] != A_MOUSE1 ) {
+		vr.pointerLeft = qtrue;
+	} else if ( pull[VR_HAND_RIGHT] && !pull[VR_HAND_LEFT] && vr.keySent[VR_KEY_TRIGGER_L] != A_MOUSE1 ) {
+		vr.pointerLeft = qfalse;
+	}
+
+	// The pointing hand; a short tracking dropout just holds the cursor
+	// rather than jumping to wherever the other hand happens to point.
+	int hand = vr.pointerLeft ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	if ( !vr.handValid[hand] ) {
+		const int other = ( hand == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+		if ( now - vr.handTrackTime[hand] < 500 || !vr.handValid[other] ) {
+			return;
+		}
+		hand = other;
+	}
+	const qboolean hold = (qboolean)( vr.pulling[hand] && now - vr.pullStart[hand] < 300 );
+
+	float x, y;
+	if ( !VR_PointerHit( hand, &x, &y ) ) {
+		return;
+	}
+	vr.pointerHit = qtrue;
+	if ( !wasOnScreen || hand != vr.pointerLastHand ) {
+		vr.pointerX = x;	// (re)starts pointing: jump there
+		vr.pointerY = y;
+		vr.pointerForce = qtrue;
+	} else if ( !hold ) {
+		// steady the cursor: hand tremor is smoothed away, real moves aren't
+		const float dx = x - vr.pointerX, dy = y - vr.pointerY;
+		const float follow = Com_Clamp( 0.25f, 1.0f, sqrtf( dx * dx + dy * dy ) / 8.0f );
+		vr.pointerX += dx * follow;
+		vr.pointerY += dy * follow;
+	}
+	vr.pointerLastHand = hand;
+}
+
+// Puts the menu cursor where the controller points. Called at the top of the
+// client frame (never from inside a module), after the poll that aimed it.
+static void VR_ApplyMenuPointer( void ) {
+	if ( !vr.pointerFresh ) {
+		return;	// nothing was polled this frame
+	}
+	vr.pointerFresh = qfalse;
+	if ( !vr.pointerMode || !vr.pointerHit ) {
+		return;
+	}
+	const int x = (int)( vr.pointerX + 0.5f );
+	const int y = (int)( vr.pointerY + 0.5f );
+	if ( x == vr.pointerSentX && y == vr.pointerSentY && !vr.pointerForce ) {
+		return;	// the controller is still: leave the cursor to the mouse
+	}
+	vr.pointerSentX = x;
+	vr.pointerSentY = y;
+	vr.pointerForce = qfalse;
+
+	if ( cls.cursorActive ) {
+		// the engine's own prompt (downloads) keeps an absolute cursor
+		cls.cursorX = x;
+		cls.cursorY = y;
+		return;
+	}
+	const int catcher = Key_GetCatcher();
+	if ( !cls.uiStarted || !( catcher & KEYCATCH_UI ) || ( catcher & KEYCATCH_CONSOLE ) ) {
+		return;
+	}
+	const int dx = x - vr.uiCursorX, dy = y - vr.uiCursorY;
+	if ( dx || dy ) {
+		UIVM_MouseEvent( dx, dy );	// VR_UICursorMoved follows it
+	}
+}
+
+// A stick held up or down in the menu turns the mouse wheel: one step, a
+// pause, then repeating. (stickX/Y: whichever stick is pushed further.)
+static void VR_MenuScroll( float stickX, float stickY, int hand ) {
+	const float ax = fabsf( stickX ), ay = fabsf( stickY );
+	if ( vr.scrollLatched ) {
+		// pushed before the menu came up: wait for it to come back first
+		if ( ay < 0.3f ) {
+			vr.scrollLatched = qfalse;
+		}
+		vr.scrollDir = 0;
+		return;
+	}
+
+	int dir = vr.scrollDir;
+	if ( ay < 0.4f || ay < ax * ( vr.scrollDir ? 0.6f : 1.0f ) ) {
+		dir = 0;	// centred, or pushed sideways (with some slack once scrolling)
+	} else if ( ay > 0.6f ) {
+		dir = ( stickY > 0.0f ) ? 1 : -1;
+	}
+	if ( VR_Clicking() || vr.pressing ) {
+		dir = 0;	// a wheel step would end the drag under the held trigger, or
+					// scroll the list just before this poll's click lands
+	}
+
+	const int now = Sys_Milliseconds();
+	if ( dir != vr.scrollDir ) {
+		vr.scrollDir = dir;
+		if ( !dir || now - vr.scrollStepTime < 100 ) {
+			return;
+		}
+		vr.scrollTime = now + 400;	// one step, then a pause before it repeats
+	} else if ( !dir || now - vr.scrollTime < 0 ) {
+		return;
+	} else {
+		vr.scrollTime = now + 100;
+	}
+	vr.scrollStepTime = now;
+
+	const int key = ( dir > 0 ) ? A_MWHEELUP : A_MWHEELDOWN;
+	VR_QueueKey( key, qtrue );
+	VR_QueueKey( key, qfalse );
+	VR_Pulse( hand, 0.01f, 0.25f );
+}
+
+// A UI module (re)started: park its cursor in the top left corner, so the
+// engine's copy (VR_UICursorMoved) starts out where the UI's cursor is.
+void VR_UIStarted( void ) {
+	UIVM_MouseEvent( -SCREEN_WIDTH * 4, -SCREEN_HEIGHT * 4 );
+	vr.pointerForce = qtrue;	// and put it back where the controller points
 }
 
 static void VR_SetDefaultBinds( void ) {
@@ -1142,7 +1525,7 @@ static void VR_GetVec2( XrAction action, float *x, float *y ) {
 
 // Analog trigger/grip to a button, with hysteresis so it doesn't chatter.
 static void VR_AnalogKey( int key, float value ) {
-	VR_SetKey( key, (qboolean)( value > 0.6f || ( vr.keyDown[key] && value > 0.4f ) ) );
+	VR_SetKey( key, (qboolean)( value > VR_TRIGGER_PRESS || ( vr.keyDown[key] && value > 0.4f ) ) );
 }
 
 static qboolean VR_GameOwnsView( void );
@@ -1183,6 +1566,7 @@ static void VR_PollInput( void ) {
 		if ( vr.handValid[h] ) {
 			vr.gripPose[h] = grip.pose;
 			vr.aimPose[h] = aim.pose;
+			vr.handTrackTime[h] = Sys_Milliseconds();
 		}
 	}
 
@@ -1190,9 +1574,34 @@ static void VR_PollInput( void ) {
 	VR_GetVec2( vr.actMove, &vr.moveX, &vr.moveY );
 	VR_GetVec2( vr.actTurn, &vr.turnX, &vr.turnY );
 
-	// buttons -> bindable keys
-	VR_AnalogKey( VR_KEY_TRIGGER_R, VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_RIGHT] ) );
-	VR_AnalogKey( VR_KEY_TRIGGER_L, VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_LEFT] ) );
+	float trigger[2];
+	trigger[VR_HAND_LEFT] = VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_LEFT] );
+	trigger[VR_HAND_RIGHT] = VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_RIGHT] );
+
+	// The menu screen takes the pointer: buttons click where the controller
+	// points, and only a poll at the top of the frame puts the cursor there
+	// before its clicks arrive (VR_ApplyMenuPointer). A nested poll (frame
+	// started late, inside SCR_UpdateScreen) leaves the buttons for the next.
+	const qboolean menuPointer = VR_MenuPointerWanted();
+	if ( menuPointer && !vr.topOfFrame ) {
+		return;
+	}
+	VR_UpdateMenuPointer( trigger, menuPointer );
+
+	// In the menu either stick scrolls. That goes before the buttons: a click
+	// can close the menu, and whatever this poll sends after it reaches the game.
+	if ( vr.pointerMode ) {
+		const qboolean right = (qboolean)( fabsf( vr.turnY ) >= fabsf( vr.moveY ) );
+		VR_MenuScroll( right ? vr.turnX : vr.moveX, right ? vr.turnY : vr.moveY,
+			right ? VR_HAND_RIGHT : VR_HAND_LEFT );
+		vr.weapLatched = qtrue;	// a stick still held as the menu closes doesn't switch weapons
+	} else {
+		vr.scrollDir = 0;
+	}
+
+	// buttons -> bindable keys (in the menu, see VR_ButtonKeyCode)
+	VR_AnalogKey( VR_KEY_TRIGGER_R, trigger[VR_HAND_RIGHT] );
+	VR_AnalogKey( VR_KEY_TRIGGER_L, trigger[VR_HAND_LEFT] );
 	VR_AnalogKey( VR_KEY_GRIP_R, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_RIGHT] ) );
 	VR_AnalogKey( VR_KEY_GRIP_L, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_LEFT] ) );
 	VR_SetKey( VR_KEY_A, VR_GetBool( vr.actA, XR_NULL_PATH ) );
@@ -1201,26 +1610,23 @@ static void VR_PollInput( void ) {
 	VR_SetKey( VR_KEY_Y, VR_GetBool( vr.actY, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_STICK_L, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_LEFT] ) );
 	VR_SetKey( VR_KEY_STICK_R, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_RIGHT] ) );
+	VR_SetKey( VR_BUTTON_MENU, VR_GetBool( vr.actMenu, XR_NULL_PATH ) );	// Escape
 
-	// menu button = Escape (opens/closes the menu like on the desktop)
-	const qboolean menu = VR_GetBool( vr.actMenu, XR_NULL_PATH );
-	if ( menu != vr.menuDown ) {
-		vr.menuDown = menu;
-		VR_QueueKey( A_ESCAPE, menu );
-	}
-
-	// right stick: left/right turns, up/down switches weapon
+	// right stick: left/right turns, up/down switches weapon (in the menu
+	// it scrolls instead, and turning is dropped by VR_ApplyHeadAim)
 	if ( VR_GameOwnsView() ) {
 		vr.pendingTurn = 0.0f;	// e.g. paused: don't pile up turns
 	}
 	const float ax = fabsf( vr.turnX ), ay = fabsf( vr.turnY );
-	if ( ay > ax && ay > 0.7f ) {
-		if ( !vr.weapLatched ) {
-			VR_TapKey( vr.turnY > 0.0f ? VR_KEY_STICK_R_UP : VR_KEY_STICK_R_DOWN );
-			vr.weapLatched = qtrue;
+	if ( !vr.pointerMode ) {
+		if ( ay > ax && ay > 0.7f ) {
+			if ( !vr.weapLatched ) {
+				VR_TapKey( vr.turnY > 0.0f ? VR_KEY_STICK_R_UP : VR_KEY_STICK_R_DOWN );
+				vr.weapLatched = qtrue;
+			}
+		} else if ( ay < 0.3f ) {
+			vr.weapLatched = qfalse;
 		}
-	} else if ( ay < 0.3f ) {
-		vr.weapLatched = qfalse;
 	}
 
 	const int now = Sys_Milliseconds();
@@ -1824,12 +2230,17 @@ static void VR_UpdateTracking( void ) {
 	VectorCopy( headAxis[2], vrClient.headAxis[2] );
 }
 
-void VR_BeginFrame( void ) {
+// topOfFrame: called by VR_BeginFrame at the top of CL_Frame, not from
+// VR_UpdateScreen (which may run nested inside a module).
+static void VR_StartFrame( qboolean topOfFrame ) {
 	if ( vr.frameBegun ) {
-		vr.paced = qfalse;	// last frame never reached SCR_UpdateScreen
-		return;
+		if ( topOfFrame ) {
+			vr.paced = qfalse;	// last frame never reached SCR_UpdateScreen
+		}
+		return;	// (from VR_UpdateScreen: already begun at the top of this frame)
 	}
 	vr.paced = qfalse;
+	vr.topOfFrame = topOfFrame;
 
 	VR_PollEvents();	// only between frames
 	if ( vr.session == XR_NULL_HANDLE || !vr.running ) {
@@ -1860,6 +2271,14 @@ void VR_BeginFrame( void ) {
 	vr.frameBegun = qtrue;
 
 	VR_UpdateTracking();
+}
+
+// Called at the top of CL_Frame. VR_UpdateScreen starts the frame itself if
+// this didn't, but may run inside a module (loading screens), so only this
+// one moves the menu cursor.
+void VR_BeginFrame( void ) {
+	VR_StartFrame( qtrue );
+	VR_ApplyMenuPointer();
 }
 
 /*
@@ -2128,7 +2547,7 @@ qboolean VR_UpdateScreen( void ) {
 		return qtrue;	// nested SCR_UpdateScreen from inside a frame: skip it
 	}
 
-	VR_BeginFrame();
+	VR_StartFrame( qfalse );
 
 	const qboolean inXrFrame = vr.frameBegun;
 	const qboolean drawVR = ( inXrFrame && vr.frameState.shouldRender ) ? qtrue : qfalse;
@@ -2303,6 +2722,8 @@ qboolean VR_IsRunning( void ) { return qfalse; }
 qboolean VR_IsPacingFrames( void ) { return qfalse; }
 qboolean VR_WantSession( void ) { return qfalse; }
 void VR_BeginFrame( void ) {}
+void VR_UICursorMoved( int dx, int dy ) {}
+void VR_UIStarted( void ) {}
 qboolean VR_UpdateScreen( void ) { return qfalse; }
 void VR_ApplyHeadAim( void ) {}
 void VR_AddMovement( usercmd_t *cmd ) {}
