@@ -417,6 +417,129 @@ The main player will have this called for BOTH cases, so effects like light and
 sound should only be done on the world model case.
 =============
 */
+
+/*
+==============================================================================
+
+OpenJK VR: the weapon held in your right hand
+
+The first-person view models are only built to be seen from one angle in
+front of the camera (missing faces, odd proportions). In VR the gun can be
+seen from any side, so we draw the complete third-person (world) model
+instead: it's real-sized and its origin is the grip. The barrel direction is
+read from the model's own "*flash" bolt, so every weapon lines up with the
+aim without per-weapon tuning.
+
+==============================================================================
+*/
+
+static struct {
+	qboolean	ready;			// a world model is in the hand this frame
+	vec3_t		flashOrigin;
+	matrix3_t	flashAxis;
+} cg_vrHeld;
+
+static void CG_VR_AxisToAngles( matrix3_t a, vec3_t angles ) {
+	const float len = sqrtf( a[0][0] * a[0][0] + a[0][1] * a[0][1] );
+	angles[PITCH] = RAD2DEG( atan2f( -a[0][2], len ) );
+	angles[YAW] = RAD2DEG( atan2f( a[0][1], a[0][0] ) );
+	angles[ROLL] = RAD2DEG( atan2f( a[1][2], a[2][2] ) );
+}
+
+static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
+	const vrClientState_t *vr = CG_VR();
+	weaponInfo_t *wi = &cg_weapons[weaponNum];
+	void *g2 = CG_G2WeaponInstance( cent, weaponNum );
+	vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	vec3_t gripLocal, aimLocal[3], grip, aim[3];
+	vec3_t fl = { 1.0f, 0.0f, 0.0f }, ul, ll;
+	vec3_t angles, origin;
+	matrix3_t model;
+	mdxaBone_t bolt;
+	refEntity_t ent;
+	float d;
+	int i, j;
+
+	cg_vrHeld.ready = qfalse;
+	if ( !vr || !CG_VR_HandAim() || !g2 || !trap->G2_HaveWeGhoul2Models( g2 ) || !wi->weaponModel ) {
+		return;
+	}
+
+	// barrel direction in the model's own frame: the muzzle bolt's +X at rest
+	if ( trap->G2API_GetBoltMatrix( g2, 0, 0, &bolt, zero, zero, cg.time, cgs.gameModels, zero ) ) {
+		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_X, fl );
+		if ( VectorNormalize( fl ) < 0.5f ) {
+			VectorSet( fl, 1.0f, 0.0f, 0.0f );
+		}
+	}
+	// model "up": world-up made perpendicular to the barrel; "left" completes it
+	VectorSet( ul, 0.0f, 0.0f, 1.0f );
+	VectorMA( ul, -DotProduct( ul, fl ), fl, ul );
+	if ( VectorNormalize( ul ) < 0.1f ) {
+		VectorSet( ul, -fl[2], 0.0f, fl[0] );	// barrel pointing straight up/down
+		VectorNormalize( ul );
+	}
+	CrossProduct( ul, fl, ll );
+
+	// controller pose in the world
+	VectorCopy( vr->gripOrigin[VR_HAND_RIGHT], gripLocal );
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( vr->aimAxis[VR_HAND_RIGHT][i], aimLocal[i] );
+	}
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gripLocal, aimLocal, grip, aim );
+
+	// rotate the model so barrel -> aim forward, up -> aim up
+	for ( i = 0; i < 3; i++ ) {
+		for ( j = 0; j < 3; j++ ) {
+			model[i][j] = aim[0][j] * fl[i] + aim[1][j] * ll[i] + aim[2][j] * ul[i];
+		}
+	}
+	CG_VR_AxisToAngles( model, angles );
+
+	// the model's origin is its grip; player-tunable nudge on top
+	VectorCopy( grip, origin );
+	VectorMA( origin, cg_vrGunX.value, aim[0], origin );
+	VectorMA( origin, cg_vrGunY.value, aim[1], origin );
+	VectorMA( origin, cg_vrGunZ.value, aim[2], origin );
+
+	memset( &ent, 0, sizeof( ent ) );
+	ent.reType = RT_MODEL;
+	ent.hModel = wi->weaponModel;
+	ent.ghoul2 = g2;
+	ent.radius = 64.0f;
+	VectorCopy( angles, ent.angles );
+	AnglesToAxis( angles, ent.axis );
+	VectorCopy( origin, ent.origin );
+	VectorCopy( origin, ent.oldorigin );
+	VectorCopy( grip, ent.lightingOrigin );
+	ent.renderfx = RF_FIRST_PERSON;
+	CG_AddWeaponWithPowerups( &ent, cent->currentState.powerups );
+
+	// muzzle, for flashes and charge effects
+	if ( trap->G2API_GetBoltMatrix( g2, 0, 0, &bolt, angles, origin, cg.time, cgs.gameModels, zero ) ) {
+		BG_GiveMeVectorFromMatrix( &bolt, ORIGIN, cg_vrHeld.flashOrigin );
+		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_X, cg_vrHeld.flashAxis[0] );
+		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_Y, cg_vrHeld.flashAxis[1] );
+		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_Z, cg_vrHeld.flashAxis[2] );
+	} else {
+		// no bolt: put the flash a little ahead of the grip
+		d = 12.0f;
+		VectorMA( origin, d, aim[0], cg_vrHeld.flashOrigin );
+		AxisCopy( aim, cg_vrHeld.flashAxis );
+	}
+	cg_vrHeld.ready = qtrue;
+}
+
+// Muzzle flash placement: the held world model in VR, else the view model tag.
+static void CG_FirstPersonFlash( refEntity_t *flash, refEntity_t *gun ) {
+	if ( cg_vrHeld.ready ) {
+		VectorCopy( cg_vrHeld.flashOrigin, flash->origin );
+		AxisCopy( cg_vrHeld.flashAxis, flash->axis );
+	} else {
+		CG_PositionEntityOnTag( flash, gun, gun->hModel, "tag_flash" );
+	}
+}
+
 void CG_AddPlayerWeapon( refEntity_t *parent, playerState_t *ps, centity_t *cent, int team, vec3_t newAngles, qboolean thirdPerson ) {
 	refEntity_t	gun;
 	refEntity_t	barrel;
@@ -482,6 +605,8 @@ Ghoul2 Insert Start
 
 		CG_PositionEntityOnTag( &gun, parent, parent->hModel, "tag_weapon");
 
+		// OpenJK VR: the complete world model is already in the hand
+		if ( !( ps && cg_vrHeld.ready ) ) {
 		if (!CG_IsMindTricked(cent->currentState.trickedentindex,
 			cent->currentState.trickedentindex2,
 			cent->currentState.trickedentindex3,
@@ -568,13 +693,18 @@ Ghoul2 Insert Start
 				CG_AddWeaponWithPowerups( &barrel, cent->currentState.powerups );
 			}
 		}
+		} // OpenJK VR
 	}
 /*
 Ghoul2 Insert End
 */
 
 	memset (&flash, 0, sizeof(flash));
-	CG_PositionEntityOnTag( &flash, &gun, gun.hModel, "tag_flash");
+	if ( ps ) {
+		CG_FirstPersonFlash( &flash, &gun );
+	} else {
+		CG_PositionEntityOnTag( &flash, &gun, gun.hModel, "tag_flash");
+	}
 
 	VectorCopy(flash.origin, cg.lastFPFlashPoint);
 
@@ -707,7 +837,11 @@ Ghoul2 Insert End
 
 		if (!thirdPerson)
 		{
-			CG_PositionEntityOnTag( &flash, &gun, gun.hModel, "tag_flash");
+			if ( ps ) {
+				CG_FirstPersonFlash( &flash, &gun );
+			} else {
+				CG_PositionEntityOnTag( &flash, &gun, gun.hModel, "tag_flash");
+			}
 			VectorCopy(flash.origin, flashorigin);
 			VectorCopy(flash.axis[0], flashdir);
 		}
@@ -838,6 +972,9 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 	CG_RegisterWeapon( ps->weapon );
 	weapon = &cg_weapons[ ps->weapon ];
 
+	// OpenJK VR: the complete world model in your right hand
+	CG_VR_AddHeldWeapon( cent, ps->weapon );
+
 	memset (&hand, 0, sizeof(hand));
 
 	// set up gun position
@@ -900,8 +1037,9 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 	hand.hModel = weapon->handsModel;
 	hand.renderfx = RF_DEPTHHACK | RF_FIRST_PERSON;// | RF_MINLIGHT;
 
-	// OpenJK VR: the gun goes in your right hand instead of in front of the camera
-	if ( CG_VR_HandAim() ) {
+	// OpenJK VR: if the world model couldn't be used, move the view model to
+	// the hand instead
+	if ( CG_VR_HandAim() && !cg_vrHeld.ready ) {
 		CG_VR_PlaceWeaponInHand( &hand, angles );
 	}
 

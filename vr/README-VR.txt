@@ -53,7 +53,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   X / Y                previous / next Force power
   Left menu button     game menu (use the mouse in menus for now)
 
-With a gun out you aim with your right hand: the gun is in your hand and a
+With a gun out you aim with your right hand: the gun is in your hand (the
+complete third-person model, so it looks right from every angle) and a
 small crosshair floats where your shots will land. With the saber, fists or
 a scope you aim where you look. Keyboard and mouse still work; the mouse
 turns your body.
