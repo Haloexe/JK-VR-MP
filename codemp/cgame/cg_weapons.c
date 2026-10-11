@@ -801,6 +801,9 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		return;
 	}
 
+	// OpenJK VR: crosshair floating where the hand-held gun's shots land
+	CG_VR_AddAimDot();
+
 	// no gun if in third person view or a camera is active
 	//if ( cg.renderingThirdPerson || cg.cameraMode) {
 	if ( cg.renderingThirdPerson ) {
@@ -896,6 +899,11 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 
 	hand.hModel = weapon->handsModel;
 	hand.renderfx = RF_DEPTHHACK | RF_FIRST_PERSON;// | RF_MINLIGHT;
+
+	// OpenJK VR: the gun goes in your right hand instead of in front of the camera
+	if ( CG_VR_HandAim() ) {
+		CG_VR_PlaceWeaponInHand( &hand, angles );
+	}
 
 	// add everything onto the hand
 	CG_AddPlayerWeapon( &hand, ps, &cg_entities[cg.predictedPlayerState.clientNum], ps->persistant[PERS_TEAM], angles, qfalse );

@@ -50,6 +50,14 @@ General Public License version 2, like the rest of OpenJK.
 #include <openxr/openxr_platform.h>
 
 void SCR_DrawScreenField( stereoFrame_t stereoFrame );
+void Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr );
+
+// Controller buttons are queued as ordinary key events and handled at the
+// start of the next frame, like keyboard keys, so nothing re-enters the
+// cgame/ui while they are busy (e.g. during map loading).
+static void VR_QueueKey( int key, qboolean down ) {
+	Sys_QueEvent( Sys_Milliseconds(), SE_KEY, key, down, 0, NULL );
+}
 
 /*
 ================================================================================
@@ -90,7 +98,18 @@ OpenXR entry points
 	X( xrWaitFrame ) \
 	X( xrBeginFrame ) \
 	X( xrEndFrame ) \
-	X( xrGetOpenGLGraphicsRequirementsKHR )
+	X( xrGetOpenGLGraphicsRequirementsKHR ) \
+	X( xrStringToPath ) \
+	X( xrCreateActionSet ) \
+	X( xrDestroyActionSet ) \
+	X( xrCreateAction ) \
+	X( xrSuggestInteractionProfileBindings ) \
+	X( xrAttachSessionActionSets ) \
+	X( xrCreateActionSpace ) \
+	X( xrSyncActions ) \
+	X( xrGetActionStateBoolean ) \
+	X( xrGetActionStateFloat ) \
+	X( xrGetActionStateVector2f )
 
 static HMODULE						xrLoaderLib;
 static PFN_xrGetInstanceProcAddr	xrGetInstanceProcAddr;
@@ -160,6 +179,13 @@ static cvar_t *vr_menuDistance;
 static cvar_t *vr_menuHeight;
 static cvar_t *vr_headAim;
 static cvar_t *vr_mirror;
+static cvar_t *vr_handAim;
+static cvar_t *vr_turnMode;
+static cvar_t *vr_turnAngle;
+static cvar_t *vr_turnSpeed;
+static cvar_t *vr_moveDirection;
+static cvar_t *vr_deadzone;
+static cvar_t *vr_gunPitch;
 
 /*
 ================================================================================
@@ -240,6 +266,40 @@ State
 ================================================================================
 */
 
+// Controller buttons arrive as ordinary bindable keys AUX16..AUX27 (AUX0+
+// are used by extra mouse buttons), so players can rebind them like any key.
+#define VR_FIRST_KEY	( A_AUX0 + 16 )
+enum {
+	VR_KEY_TRIGGER_R,		// AUX16
+	VR_KEY_TRIGGER_L,		// AUX17
+	VR_KEY_GRIP_R,			// AUX18
+	VR_KEY_GRIP_L,			// AUX19
+	VR_KEY_A,				// AUX20
+	VR_KEY_B,				// AUX21
+	VR_KEY_X,				// AUX22
+	VR_KEY_Y,				// AUX23
+	VR_KEY_STICK_L,			// AUX24
+	VR_KEY_STICK_R,			// AUX25
+	VR_KEY_STICK_R_UP,		// AUX26
+	VR_KEY_STICK_R_DOWN,	// AUX27
+	VR_NUM_KEYS
+};
+
+static const char *vrDefaultBinds[VR_NUM_KEYS] = {
+	"+attack",				// right trigger
+	"+altattack",			// left trigger
+	"+use",					// right grip
+	"+useforce",			// left grip
+	"+moveup",				// A: jump
+	"+movedown",			// B: crouch
+	"forceprev",			// X
+	"forcenext",			// Y
+	"+speed",				// left stick click: walk
+	"saberAttackCycle",		// right stick click: saber style
+	"weapnext",				// right stick up
+	"weapprev",				// right stick down
+};
+
 // Private per-eye render target: the engine draws here, then the finished
 // image is copied into the swapchain.
 typedef struct vrTarget_s {
@@ -310,10 +370,38 @@ typedef struct vrState_s {
 	XrPosef					quadPose;
 
 	qboolean				inUpdateScreen;
+
+	// controllers
+	qboolean				inputReady;		// actions + bindings created (per instance)
+	qboolean				inputAttached;	// attached to the current session
+	XrActionSet				actionSet;
+	XrPath					handPath[2];
+	XrAction				actGripPose, actAimPose, actMove, actTurn;
+	XrAction				actTrigger, actSqueeze, actStickClick;
+	XrAction				actA, actB, actX, actY, actMenu;
+	XrSpace					gripSpace[2], aimSpace[2];
+	XrPosef					gripPose[2], aimPose[2];
+	qboolean				handValid[2];
+	float					moveX, moveY;	// left stick
+	float					turnX, turnY;	// right stick
+	qboolean				turnLatched;	// snap turn fired, waiting for the stick to recentre
+	qboolean				weapLatched;	// stick-up/down weapon switch fired
+	float					pendingTurn;	// degrees to add to the body yaw this frame
+	qboolean				keyDown[VR_NUM_KEYS];
+	qboolean				menuDown;
+
+	// aim source this frame: head, or the right hand (ranged weapons)
+	qboolean				aimFromHand;
+	float					handAimYaw, handAimPitch;
+	int						handSeenTime;	// last time the right hand was tracked (ms)
+	int						cgameQueryTime;	// last time the cgame read the VR state (cls.realtime)
+	int						lastPollTime;	// for smooth turning (ms)
+	float					lastRefYaw;		// referenceYaw of the previous usercmd
 } vrState_t;
 
 static vrState_t		vr;
 static vrRenderState_t	vrRender;
+static vrClientState_t	vrClient;
 
 static const char *VR_ResultString( XrResult res ) {
 	static char buf[XR_MAX_RESULT_STRING_SIZE];
@@ -366,12 +454,16 @@ static void VR_QuatToAxis( const XrQuaternionf *q, vec3_t axis[3] ) {
 	VR_XrRotate( q, up, t );	VR_XrToQuake( t, axis[2] );
 }
 
-// Heading that stays well defined when looking straight up or down.
-// Must match R_VR_AxisYaw in the renderer.
-static float VR_AxisYaw( vec3_t axis[3] ) {
-	const float hx = axis[2][2] * axis[0][0] - axis[0][2] * axis[2][0];
-	const float hy = axis[2][2] * axis[0][1] - axis[0][2] * axis[2][1];
-	return RAD2DEG( atan2f( hy, hx ) );
+// (VR_AxisYaw lives in qcommon/vr_public.h, shared with the renderer and cgame)
+
+// Heading of the forward axis, for hands: unlike VR_AxisYaw it doesn't flip
+// when the wrist rolls past 90 degrees. Keeps the previous heading when
+// pointing (almost) straight up or down.
+static float VR_ForwardYaw( vec3_t axis[3], float prev ) {
+	if ( fabsf( axis[0][2] ) > 0.99f ) {
+		return prev;
+	}
+	return RAD2DEG( atan2f( axis[0][1], axis[0][0] ) );
 }
 
 static XrPosef VR_IdentityPose( void ) {
@@ -411,7 +503,11 @@ static qboolean VR_HasExtension( const char *name ) {
 	return found;
 }
 
+static void VR_CreateInput( void );
+static void VR_DestroyInput( void );
+
 static void VR_DestroyInstance( void ) {
+	VR_DestroyInput();
 	if ( vr.instance != XR_NULL_HANDLE && xrDestroyInstance ) {
 		xrDestroyInstance( vr.instance );
 	}
@@ -507,6 +603,7 @@ static qboolean VR_CreateInstance( void ) {
 	vr.viewConfig[0].next = vr.viewConfig[1].next = NULL;
 	xrEnumerateViewConfigurationViews( vr.instance, vr.systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 2, &viewCount, vr.viewConfig );
 
+	VR_CreateInput();
 	return qtrue;
 }
 
@@ -700,6 +797,453 @@ static qboolean VR_CopyToSwapchain( int eye ) {
 	return ok;
 }
 
+
+/*
+================================================================================
+
+Controllers
+
+Actions and suggested bindings are created once per OpenXR instance (the spec
+forbids suggesting bindings after any session attached them), then attached
+to every session.
+
+================================================================================
+*/
+
+static XrPath VR_Path( const char *str ) {
+	XrPath p = XR_NULL_PATH;
+	if ( XR_FAILED( xrStringToPath( vr.instance, str, &p ) ) ) {
+		Com_Printf( S_COLOR_YELLOW "VR: bad OpenXR path %s\n", str );
+	}
+	return p;
+}
+
+static XrAction VR_CreateAction( const char *name, const char *localized, XrActionType type, qboolean perHand ) {
+	XrActionCreateInfo aci;
+	memset( &aci, 0, sizeof( aci ) );
+	aci.type = XR_TYPE_ACTION_CREATE_INFO;
+	aci.actionType = type;
+	Q_strncpyz( aci.actionName, name, sizeof( aci.actionName ) );
+	Q_strncpyz( aci.localizedActionName, localized, sizeof( aci.localizedActionName ) );
+	if ( perHand ) {
+		aci.countSubactionPaths = 2;
+		aci.subactionPaths = vr.handPath;
+	}
+	XrAction action = XR_NULL_HANDLE;
+	if ( !VR_Check( xrCreateAction( vr.actionSet, &aci, &action ), name ) ) {
+		return XR_NULL_HANDLE;
+	}
+	return action;
+}
+
+typedef struct vrBinding_s {
+	XrAction	*action;
+	const char	*path;
+} vrBinding_t;
+
+#define VR_BOTH_HANDS(act, sub) { &act, "/user/hand/left/input/" sub }, { &act, "/user/hand/right/input/" sub }
+
+static void VR_SuggestBindings( const char *profile, const vrBinding_t *bindings, int count ) {
+	XrActionSuggestedBinding sb[32];
+	int n = 0;
+	for ( int i = 0; i < count && n < (int)ARRAY_LEN( sb ); i++ ) {
+		if ( *bindings[i].action == XR_NULL_HANDLE ) {
+			continue;
+		}
+		sb[n].action = *bindings[i].action;
+		sb[n].binding = VR_Path( bindings[i].path );
+		n++;
+	}
+
+	XrInteractionProfileSuggestedBinding ipsb;
+	memset( &ipsb, 0, sizeof( ipsb ) );
+	ipsb.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING;
+	ipsb.interactionProfile = VR_Path( profile );
+	ipsb.countSuggestedBindings = n;
+	ipsb.suggestedBindings = sb;
+	XrResult res = xrSuggestInteractionProfileBindings( vr.instance, &ipsb );
+	if ( XR_FAILED( res ) ) {
+		Com_Printf( S_COLOR_YELLOW "VR: controller bindings for %s rejected: %s\n", profile, VR_ResultString( res ) );
+	}
+}
+
+static void VR_CreateInput( void ) {
+	if ( vr.inputReady ) {
+		return;
+	}
+
+	vr.handPath[VR_HAND_LEFT] = VR_Path( "/user/hand/left" );
+	vr.handPath[VR_HAND_RIGHT] = VR_Path( "/user/hand/right" );
+
+	XrActionSetCreateInfo asci;
+	memset( &asci, 0, sizeof( asci ) );
+	asci.type = XR_TYPE_ACTION_SET_CREATE_INFO;
+	Q_strncpyz( asci.actionSetName, "gameplay", sizeof( asci.actionSetName ) );
+	Q_strncpyz( asci.localizedActionSetName, "Gameplay", sizeof( asci.localizedActionSetName ) );
+	asci.priority = 0;
+	if ( !VR_Check( xrCreateActionSet( vr.instance, &asci, &vr.actionSet ), "xrCreateActionSet" ) ) {
+		vr.actionSet = XR_NULL_HANDLE;
+		return;
+	}
+
+	vr.actGripPose		= VR_CreateAction( "grip_pose",		"Hand grip pose",	XR_ACTION_TYPE_POSE_INPUT,		qtrue );
+	vr.actAimPose		= VR_CreateAction( "aim_pose",		"Hand aim pose",	XR_ACTION_TYPE_POSE_INPUT,		qtrue );
+	vr.actMove			= VR_CreateAction( "move",			"Move",				XR_ACTION_TYPE_VECTOR2F_INPUT,	qfalse );
+	vr.actTurn			= VR_CreateAction( "turn",			"Turn / switch weapon", XR_ACTION_TYPE_VECTOR2F_INPUT, qfalse );
+	vr.actTrigger		= VR_CreateAction( "trigger",		"Trigger",			XR_ACTION_TYPE_FLOAT_INPUT,		qtrue );
+	vr.actSqueeze		= VR_CreateAction( "squeeze",		"Grip",				XR_ACTION_TYPE_FLOAT_INPUT,		qtrue );
+	vr.actStickClick	= VR_CreateAction( "stick_click",	"Stick click",		XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
+	vr.actA				= VR_CreateAction( "button_a",		"A (jump)",			XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+	vr.actB				= VR_CreateAction( "button_b",		"B (crouch)",		XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+	vr.actX				= VR_CreateAction( "button_x",		"X",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+	vr.actY				= VR_CreateAction( "button_y",		"Y",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+	vr.actMenu			= VR_CreateAction( "menu",			"Menu",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
+
+	// Meta Quest (1/2/3/Pro) Touch and Touch Plus controllers
+	const vrBinding_t touch[] = {
+		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
+		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
+		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
+		{ &vr.actTurn, "/user/hand/right/input/thumbstick" },
+		VR_BOTH_HANDS( vr.actTrigger, "trigger/value" ),
+		VR_BOTH_HANDS( vr.actSqueeze, "squeeze/value" ),
+		VR_BOTH_HANDS( vr.actStickClick, "thumbstick/click" ),
+		{ &vr.actA, "/user/hand/right/input/a/click" },
+		{ &vr.actB, "/user/hand/right/input/b/click" },
+		{ &vr.actX, "/user/hand/left/input/x/click" },
+		{ &vr.actY, "/user/hand/left/input/y/click" },
+		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
+	};
+	VR_SuggestBindings( "/interaction_profiles/oculus/touch_controller", touch, ARRAY_LEN( touch ) );
+
+	// Valve Index
+	const vrBinding_t index[] = {
+		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
+		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
+		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
+		{ &vr.actTurn, "/user/hand/right/input/thumbstick" },
+		VR_BOTH_HANDS( vr.actTrigger, "trigger/value" ),
+		VR_BOTH_HANDS( vr.actSqueeze, "squeeze/value" ),
+		VR_BOTH_HANDS( vr.actStickClick, "thumbstick/click" ),
+		{ &vr.actA, "/user/hand/right/input/a/click" },
+		{ &vr.actB, "/user/hand/right/input/b/click" },
+		{ &vr.actX, "/user/hand/left/input/a/click" },
+		{ &vr.actY, "/user/hand/left/input/b/click" },
+		{ &vr.actMenu, "/user/hand/left/input/trackpad/force" },
+	};
+	VR_SuggestBindings( "/interaction_profiles/valve/index_controller", index, ARRAY_LEN( index ) );
+
+	// HTC Vive wands
+	const vrBinding_t vive[] = {
+		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
+		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
+		{ &vr.actMove, "/user/hand/left/input/trackpad" },
+		{ &vr.actTurn, "/user/hand/right/input/trackpad" },
+		VR_BOTH_HANDS( vr.actTrigger, "trigger/value" ),
+		VR_BOTH_HANDS( vr.actSqueeze, "squeeze/click" ),
+		VR_BOTH_HANDS( vr.actStickClick, "trackpad/click" ),
+		{ &vr.actA, "/user/hand/right/input/menu/click" },
+		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
+	};
+	VR_SuggestBindings( "/interaction_profiles/htc/vive_controller", vive, ARRAY_LEN( vive ) );
+
+	// Windows Mixed Reality
+	const vrBinding_t wmr[] = {
+		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
+		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
+		{ &vr.actMove, "/user/hand/left/input/thumbstick" },
+		{ &vr.actTurn, "/user/hand/right/input/thumbstick" },
+		VR_BOTH_HANDS( vr.actTrigger, "trigger/value" ),
+		VR_BOTH_HANDS( vr.actSqueeze, "squeeze/click" ),
+		VR_BOTH_HANDS( vr.actStickClick, "thumbstick/click" ),
+		{ &vr.actA, "/user/hand/right/input/trackpad/click" },
+		{ &vr.actB, "/user/hand/right/input/menu/click" },
+		{ &vr.actX, "/user/hand/left/input/trackpad/click" },
+		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
+	};
+	VR_SuggestBindings( "/interaction_profiles/microsoft/motion_controller", wmr, ARRAY_LEN( wmr ) );
+
+	// Fallback for anything else
+	const vrBinding_t simple[] = {
+		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
+		VR_BOTH_HANDS( vr.actAimPose, "aim/pose" ),
+		VR_BOTH_HANDS( vr.actTrigger, "select/click" ),
+		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
+	};
+	VR_SuggestBindings( "/interaction_profiles/khr/simple_controller", simple, ARRAY_LEN( simple ) );
+
+	vr.inputReady = qtrue;
+}
+
+static void VR_DestroyInput( void ) {
+	if ( vr.actionSet != XR_NULL_HANDLE && xrDestroyActionSet ) {
+		xrDestroyActionSet( vr.actionSet );	// also destroys its actions
+	}
+	vr.actionSet = XR_NULL_HANDLE;
+	vr.actGripPose = vr.actAimPose = vr.actMove = vr.actTurn = XR_NULL_HANDLE;
+	vr.actTrigger = vr.actSqueeze = vr.actStickClick = XR_NULL_HANDLE;
+	vr.actA = vr.actB = vr.actX = vr.actY = vr.actMenu = XR_NULL_HANDLE;
+	vr.inputReady = qfalse;
+}
+
+static void VR_AttachInput( void ) {
+	vr.inputAttached = qfalse;
+	if ( !vr.inputReady || vr.session == XR_NULL_HANDLE ) {
+		return;
+	}
+
+	XrSessionActionSetsAttachInfo ai;
+	memset( &ai, 0, sizeof( ai ) );
+	ai.type = XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO;
+	ai.countActionSets = 1;
+	ai.actionSets = &vr.actionSet;
+	if ( !VR_Check( xrAttachSessionActionSets( vr.session, &ai ), "xrAttachSessionActionSets" ) ) {
+		Com_Printf( S_COLOR_YELLOW "VR: controllers unavailable this session (restart the game)\n" );
+		return;
+	}
+
+	for ( int h = 0; h < 2; h++ ) {
+		XrActionSpaceCreateInfo asci;
+		memset( &asci, 0, sizeof( asci ) );
+		asci.type = XR_TYPE_ACTION_SPACE_CREATE_INFO;
+		asci.subactionPath = vr.handPath[h];
+		asci.poseInActionSpace = VR_IdentityPose();
+		asci.action = vr.actGripPose;
+		if ( !VR_Check( xrCreateActionSpace( vr.session, &asci, &vr.gripSpace[h] ), "xrCreateActionSpace(grip)" ) ) {
+			vr.gripSpace[h] = XR_NULL_HANDLE;
+		}
+		asci.action = vr.actAimPose;
+		if ( !VR_Check( xrCreateActionSpace( vr.session, &asci, &vr.aimSpace[h] ), "xrCreateActionSpace(aim)" ) ) {
+			vr.aimSpace[h] = XR_NULL_HANDLE;
+		}
+	}
+	vr.inputAttached = qtrue;
+}
+
+static void VR_DestroyInputSpaces( void ) {
+	for ( int h = 0; h < 2; h++ ) {
+		if ( vr.gripSpace[h] != XR_NULL_HANDLE ) {
+			xrDestroySpace( vr.gripSpace[h] );
+			vr.gripSpace[h] = XR_NULL_HANDLE;
+		}
+		if ( vr.aimSpace[h] != XR_NULL_HANDLE ) {
+			xrDestroySpace( vr.aimSpace[h] );
+			vr.aimSpace[h] = XR_NULL_HANDLE;
+		}
+		vr.handValid[h] = qfalse;
+	}
+	vr.inputAttached = qfalse;
+}
+
+static void VR_SetKey( int key, qboolean down ) {
+	if ( vr.keyDown[key] == down ) {
+		return;
+	}
+	vr.keyDown[key] = down;
+	VR_QueueKey( VR_FIRST_KEY + key, down );
+}
+
+static void VR_TapKey( int key ) {
+	VR_SetKey( key, qtrue );
+	VR_SetKey( key, qfalse );
+}
+
+// Lets go of every held controller button (focus lost, session ended).
+static void VR_ReleaseAllKeys( void ) {
+	for ( int k = 0; k < VR_NUM_KEYS; k++ ) {
+		VR_SetKey( k, qfalse );
+	}
+	if ( vr.menuDown ) {
+		vr.menuDown = qfalse;
+		VR_QueueKey( A_ESCAPE, qfalse );
+	}
+	vr.moveX = vr.moveY = vr.turnX = vr.turnY = 0.0f;
+	vr.turnLatched = vr.weapLatched = qfalse;
+}
+
+static void VR_SetDefaultBinds( void ) {
+	// Once per install, and only for keys the player hasn't bound, so their
+	// own binds (and deliberate unbinds) survive.
+	cvar_t *applied = Cvar_Get( "vr_bindsApplied", "0", CVAR_ARCHIVE );
+	if ( applied->integer >= 1 ) {
+		return;
+	}
+	for ( int k = 0; k < VR_NUM_KEYS; k++ ) {
+		const char *b = Key_GetBinding( VR_FIRST_KEY + k );
+		if ( !b || !b[0] ) {
+			Key_SetBinding( VR_FIRST_KEY + k, vrDefaultBinds[k] );
+		}
+	}
+	Cvar_Set( "vr_bindsApplied", "1" );
+}
+
+static float VR_GetFloat( XrAction action, XrPath sub ) {
+	if ( action == XR_NULL_HANDLE ) {
+		return 0.0f;
+	}
+	XrActionStateGetInfo gi;
+	memset( &gi, 0, sizeof( gi ) );
+	gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
+	gi.action = action;
+	gi.subactionPath = sub;
+	XrActionStateFloat st;
+	memset( &st, 0, sizeof( st ) );
+	st.type = XR_TYPE_ACTION_STATE_FLOAT;
+	if ( XR_FAILED( xrGetActionStateFloat( vr.session, &gi, &st ) ) || !st.isActive ) {
+		return 0.0f;
+	}
+	return st.currentState;
+}
+
+static qboolean VR_GetBool( XrAction action, XrPath sub ) {
+	if ( action == XR_NULL_HANDLE ) {
+		return qfalse;
+	}
+	XrActionStateGetInfo gi;
+	memset( &gi, 0, sizeof( gi ) );
+	gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
+	gi.action = action;
+	gi.subactionPath = sub;
+	XrActionStateBoolean st;
+	memset( &st, 0, sizeof( st ) );
+	st.type = XR_TYPE_ACTION_STATE_BOOLEAN;
+	if ( XR_FAILED( xrGetActionStateBoolean( vr.session, &gi, &st ) ) || !st.isActive ) {
+		return qfalse;
+	}
+	return st.currentState ? qtrue : qfalse;
+}
+
+static void VR_GetVec2( XrAction action, float *x, float *y ) {
+	*x = *y = 0.0f;
+	if ( action == XR_NULL_HANDLE ) {
+		return;
+	}
+	XrActionStateGetInfo gi;
+	memset( &gi, 0, sizeof( gi ) );
+	gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
+	gi.action = action;
+	XrActionStateVector2f st;
+	memset( &st, 0, sizeof( st ) );
+	st.type = XR_TYPE_ACTION_STATE_VECTOR2F;
+	if ( XR_FAILED( xrGetActionStateVector2f( vr.session, &gi, &st ) ) || !st.isActive ) {
+		return;
+	}
+
+	// radial deadzone, rescaled so movement starts smoothly at its edge
+	const float dz = Com_Clamp( 0.0f, 0.9f, vr_deadzone->value );
+	const float len = sqrtf( st.currentState.x * st.currentState.x + st.currentState.y * st.currentState.y );
+	if ( len <= dz ) {
+		return;
+	}
+	const float scale = Q_min( 1.0f, ( len - dz ) / ( 1.0f - dz ) ) / len;
+	*x = st.currentState.x * scale;
+	*y = st.currentState.y * scale;
+}
+
+// Analog trigger/grip to a button, with hysteresis so it doesn't chatter.
+static void VR_AnalogKey( int key, float value ) {
+	VR_SetKey( key, (qboolean)( value > 0.6f || ( vr.keyDown[key] && value > 0.4f ) ) );
+}
+
+static qboolean VR_GameOwnsView( void );
+
+static void VR_PollInput( void ) {
+	if ( !vr.inputAttached ) {
+		return;
+	}
+
+	XrActiveActionSet active;
+	active.actionSet = vr.actionSet;
+	active.subactionPath = XR_NULL_PATH;
+	XrActionsSyncInfo si;
+	memset( &si, 0, sizeof( si ) );
+	si.type = XR_TYPE_ACTIONS_SYNC_INFO;
+	si.countActiveActionSets = 1;
+	si.activeActionSets = &active;
+	if ( xrSyncActions( vr.session, &si ) != XR_SUCCESS ) {
+		// not focused (system menu open, headset off): drop all input
+		VR_ReleaseAllKeys();
+		vr.handValid[0] = vr.handValid[1] = qfalse;
+		return;
+	}
+
+	// hand poses
+	const XrTime t = vr.frameState.predictedDisplayTime;
+	for ( int h = 0; h < 2; h++ ) {
+		XrSpaceLocation grip, aim;
+		memset( &grip, 0, sizeof( grip ) );
+		memset( &aim, 0, sizeof( aim ) );
+		grip.type = aim.type = XR_TYPE_SPACE_LOCATION;
+		const XrSpaceLocationFlags need = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT;
+		vr.handValid[h] = (qboolean)(
+			vr.gripSpace[h] != XR_NULL_HANDLE && vr.aimSpace[h] != XR_NULL_HANDLE &&
+			XR_SUCCEEDED( xrLocateSpace( vr.gripSpace[h], vr.localSpace, t, &grip ) ) &&
+			XR_SUCCEEDED( xrLocateSpace( vr.aimSpace[h], vr.localSpace, t, &aim ) ) &&
+			( grip.locationFlags & need ) == need && ( aim.locationFlags & need ) == need );
+		if ( vr.handValid[h] ) {
+			vr.gripPose[h] = grip.pose;
+			vr.aimPose[h] = aim.pose;
+		}
+	}
+
+	// sticks
+	VR_GetVec2( vr.actMove, &vr.moveX, &vr.moveY );
+	VR_GetVec2( vr.actTurn, &vr.turnX, &vr.turnY );
+
+	// buttons -> bindable keys
+	VR_AnalogKey( VR_KEY_TRIGGER_R, VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_RIGHT] ) );
+	VR_AnalogKey( VR_KEY_TRIGGER_L, VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_LEFT] ) );
+	VR_AnalogKey( VR_KEY_GRIP_R, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_RIGHT] ) );
+	VR_AnalogKey( VR_KEY_GRIP_L, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_LEFT] ) );
+	VR_SetKey( VR_KEY_A, VR_GetBool( vr.actA, XR_NULL_PATH ) );
+	VR_SetKey( VR_KEY_B, VR_GetBool( vr.actB, XR_NULL_PATH ) );
+	VR_SetKey( VR_KEY_X, VR_GetBool( vr.actX, XR_NULL_PATH ) );
+	VR_SetKey( VR_KEY_Y, VR_GetBool( vr.actY, XR_NULL_PATH ) );
+	VR_SetKey( VR_KEY_STICK_L, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_LEFT] ) );
+	VR_SetKey( VR_KEY_STICK_R, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_RIGHT] ) );
+
+	// menu button = Escape (opens/closes the menu like on the desktop)
+	const qboolean menu = VR_GetBool( vr.actMenu, XR_NULL_PATH );
+	if ( menu != vr.menuDown ) {
+		vr.menuDown = menu;
+		VR_QueueKey( A_ESCAPE, menu );
+	}
+
+	// right stick: left/right turns, up/down switches weapon
+	if ( VR_GameOwnsView() ) {
+		vr.pendingTurn = 0.0f;	// e.g. paused: don't pile up turns
+	}
+	const float ax = fabsf( vr.turnX ), ay = fabsf( vr.turnY );
+	if ( ay > ax && ay > 0.7f ) {
+		if ( !vr.weapLatched ) {
+			VR_TapKey( vr.turnY > 0.0f ? VR_KEY_STICK_R_UP : VR_KEY_STICK_R_DOWN );
+			vr.weapLatched = qtrue;
+		}
+	} else if ( ay < 0.3f ) {
+		vr.weapLatched = qfalse;
+	}
+
+	const int now = Sys_Milliseconds();
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( now - vr.lastPollTime ) * 0.001f );
+	vr.lastPollTime = now;
+	if ( vr_turnMode->integer == 1 ) {
+		// smooth turn
+		if ( ax > ay ) {
+			vr.pendingTurn -= vr.turnX * vr_turnSpeed->value * dt;
+		}
+	} else {
+		// snap turn
+		if ( ax > ay && ax > 0.7f ) {
+			if ( !vr.turnLatched ) {
+				vr.pendingTurn -= ( vr.turnX > 0.0f ? 1.0f : -1.0f ) * Com_Clamp( 1.0f, 180.0f, vr_turnAngle->value );
+				vr.turnLatched = qtrue;
+			}
+		} else if ( ax < 0.3f ) {
+			vr.turnLatched = qfalse;
+		}
+	}
+}
+
 /*
 ================================================================================
 
@@ -722,6 +1266,9 @@ static void VR_DestroyXrSession( void ) {
 	}
 	vr.frameBegun = qfalse;
 	vr.frameWaited = qfalse;
+	VR_ReleaseAllKeys();
+	VR_DestroyInputSpaces();
+	memset( &vrClient, 0, sizeof( vrClient ) );
 	for ( int e = 0; e < 2; e++ ) {
 		VR_DestroySwapchain( &vr.swapchains[e] );
 	}
@@ -759,6 +1306,8 @@ static void VR_HandleSessionState( XrSessionState state ) {
 		vr.running = qfalse;
 		vr.focused = qfalse;
 		vr.frameWaited = qfalse;
+		VR_ReleaseAllKeys();
+		memset( &vrClient, 0, sizeof( vrClient ) );
 		xrEndSession( vr.session );
 		Com_Printf( "VR: session stopped (headset idle?) - showing the desktop view meanwhile\n" );
 		break;
@@ -961,6 +1510,9 @@ qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight ) {
 	vr.lastScreenLayer = qfalse;
 	vr.inUpdateScreen = qfalse;
 
+	VR_AttachInput();
+	VR_SetDefaultBinds();
+
 	*eyeWidth = w;
 	*eyeHeight = h;
 
@@ -1014,13 +1566,9 @@ static qboolean VR_UseScreenLayer( void ) {
 	return qfalse;
 }
 
-// Whether the head yaw is already part of the game's camera yaw (head-aim).
-// When it isn't (following someone, dead, intermission, demo playback,
-// paused, head-aim off) the head yaw is applied on top of the game's camera.
-static qboolean VR_ViewIsLocked( void ) {
-	if ( !vr_headAim->integer ) {
-		return qtrue;
-	}
+// Whether the game, not the player, steers the camera right now (following
+// someone, dead, intermission, demo playback, paused).
+static qboolean VR_GameOwnsView( void ) {
 	if ( cls.state != CA_ACTIVE || !cl.snap.valid || clc.demoplaying ) {
 		return qtrue;
 	}
@@ -1039,6 +1587,47 @@ static qboolean VR_ViewIsLocked( void ) {
 		return qtrue;
 	default:
 		return qfalse;
+	}
+}
+
+// Ranged weapons aim with the right hand; the saber, fists, scopes, vehicles
+// and emplaced guns keep aiming with the head.
+static qboolean VR_WantHandAim( void ) {
+	// a short tracking dropout doesn't flip the aim back to the head
+	if ( !vr_handAim->integer || Sys_Milliseconds() - vr.handSeenTime > 500 ) {
+		return qfalse;
+	}
+	// only with a cgame that draws the gun in the hand (it asks for the VR
+	// state every frame); a mod's own cgame would show a misleading view
+	if ( cls.realtime - vr.cgameQueryTime > 1000 ) {
+		return qfalse;
+	}
+	const playerState_t *ps = &cl.snap.ps;
+	if ( ps->zoomMode || ps->m_iVehicleNum || ps->emplacedIndex ) {
+		return qfalse;
+	}
+	// spectators and saber-only modes (duels, Jedi Master, true Jedi)
+	if ( ps->pm_type == PM_SPECTATOR || ps->persistant[PERS_TEAM] == TEAM_SPECTATOR ||
+		ps->duelInProgress || ps->isJediMaster || ps->trueJedi ) {
+		return qfalse;
+	}
+	// While a weapon switch is under way, follow the weapon being switched to
+	// (if the player owns it) so the aim changes without a ping of lag.
+	int weapon = ps->weapon;
+	const int wanted = cl.cgameUserCmdValue;
+	if ( ( ps->weaponstate == WEAPON_DROPPING || ps->weaponstate == WEAPON_RAISING ) &&
+		wanted > WP_NONE && wanted < WP_NUM_WEAPONS && ( ps->stats[STAT_WEAPONS] & ( 1 << wanted ) ) ) {
+		weapon = wanted;
+	}
+	switch ( weapon ) {
+	case WP_NONE:
+	case WP_SABER:
+	case WP_MELEE:
+	case WP_EMPLACED_GUN:
+	case WP_TURRET:
+		return qfalse;
+	default:
+		return ( weapon > WP_NONE && weapon < WP_NUM_WEAPONS ) ? qtrue : qfalse;
 	}
 }
 
@@ -1156,19 +1745,83 @@ static void VR_UpdateTracking( void ) {
 		VR_ComputeHudRect( e );
 	}
 
-	// Which tracking yaw lines up with the game's camera yaw
-	const qboolean locked = VR_ViewIsLocked();
+	// Controllers (buttons become key events, poses are sampled)
+	VR_PollInput();
+
+	// Hands in the same space as the eyes. A hand that briefly loses
+	// tracking keeps its last pose for a moment.
+	if ( vr.handValid[VR_HAND_RIGHT] ) {
+		vr.handSeenTime = Sys_Milliseconds();
+	}
+	for ( int h = 0; h < 2; h++ ) {
+		if ( !vr.handValid[h] ) {
+			if ( h == VR_HAND_LEFT || Sys_Milliseconds() - vr.handSeenTime > 500 ) {
+				vrClient.handValid[h] = qfalse;
+			}
+			continue;
+		}
+		vrClient.handValid[h] = qtrue;
+		const XrPosef *g = &vr.gripPose[h], *a = &vr.aimPose[h];
+		const float gp[3] = {
+			headOfs[0] * posScale + ( g->position.x - vr.headPose.position.x ),
+			headOfs[1] * posScale + ( g->position.y - vr.headPose.position.y ),
+			headOfs[2] * posScale + ( g->position.z - vr.headPose.position.z )
+		};
+		const float ap[3] = {
+			headOfs[0] * posScale + ( a->position.x - vr.headPose.position.x ),
+			headOfs[1] * posScale + ( a->position.y - vr.headPose.position.y ),
+			headOfs[2] * posScale + ( a->position.z - vr.headPose.position.z )
+		};
+		VR_XrToQuake( gp, vrClient.gripOrigin[h] );
+		VR_XrToQuake( ap, vrClient.aimOrigin[h] );
+		VR_QuatToAxis( &g->orientation, vrClient.gripAxis[h] );
+		VR_QuatToAxis( &a->orientation, vrClient.aimAxis[h] );
+	}
+	if ( vr.handValid[VR_HAND_RIGHT] ) {
+		// optional tilt of the gun (and its aim) in the hand; + = barrel up
+		const float tilt = vr_gunPitch->value;
+		if ( tilt != 0.0f ) {
+			vec3_t *ax = vrClient.aimAxis[VR_HAND_RIGHT];
+			vec3_t f, u;
+			RotatePointAroundVector( f, ax[1], ax[0], -tilt );
+			RotatePointAroundVector( u, ax[1], ax[2], -tilt );
+			VectorCopy( f, ax[0] );
+			VectorCopy( u, ax[2] );
+		}
+		vr.handAimYaw = VR_ForwardYaw( vrClient.aimAxis[VR_HAND_RIGHT], vr.handAimYaw );
+		vr.handAimPitch = RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, -vrClient.aimAxis[VR_HAND_RIGHT][0][2] ) ) );
+	}
+
+	// Who aims, and which tracking yaw lines up with the game camera's yaw:
+	//  - game owns the view (dead, spectating, ...): yaw frozen at that moment
+	//  - right hand aims (ranged weapon): the hand's yaw
+	//  - head aims: the head's yaw
+	//  - head-aim off (mouse aims): frozen, the head just looks around
+	const qboolean gameOwns = VR_GameOwnsView();
+	vr.aimFromHand = ( !gameOwns && VR_WantHandAim() ) ? qtrue : qfalse;
+	const qboolean locked = (qboolean)( gameOwns || ( !vr.aimFromHand && !vr_headAim->integer ) );
 	if ( locked && !vr.viewLocked ) {
-		vr.lockYaw = vr.headYaw;
+		vr.lockYaw = vrRender.referenceYaw;	// freeze where it was: no jump
 	}
 	vr.viewLocked = locked;
-	vrRender.referenceYaw = locked ? vr.lockYaw : vr.headYaw;
+	vrRender.referenceYaw = locked ? vr.lockYaw : ( vr.aimFromHand ? vr.handAimYaw : vr.headYaw );
 
 	vrRender.worldScale = Com_Clamp( 1.0f, 1000.0f, vr_worldScale->value );
 
 	const float fov = Cvar_VariableValue( "cg_fov" );
 	vrRender.normalFov = Com_Clamp( 1.0f, 130.0f, ( fov > 1.0f ) ? fov : 80.0f );
 	vrRender.zoomed = ( cls.state == CA_ACTIVE && cl.snap.valid && cl.snap.ps.zoomMode ) ? qtrue : qfalse;
+
+	// What the cgame needs to put the gun in your hand
+	vrClient.active = vr.poseValid;
+	vrClient.handAim = vr.aimFromHand;
+	vrClient.referenceYaw = vrRender.referenceYaw;
+	vrClient.worldScale = vrRender.worldScale;
+	const float hp[3] = { headOfs[0] * posScale, headOfs[1] * posScale, headOfs[2] * posScale };
+	VR_XrToQuake( hp, vrClient.headOrigin );
+	VectorCopy( headAxis[0], vrClient.headAxis[0] );
+	VectorCopy( headAxis[1], vrClient.headAxis[1] );
+	VectorCopy( headAxis[2], vrClient.headAxis[2] );
 }
 
 void VR_BeginFrame( void ) {
@@ -1180,6 +1833,7 @@ void VR_BeginFrame( void ) {
 
 	VR_PollEvents();	// only between frames
 	if ( vr.session == XR_NULL_HANDLE || !vr.running ) {
+		vrClient.active = qfalse;
 		return;
 	}
 
@@ -1219,28 +1873,71 @@ Head aim
 void VR_ApplyHeadAim( void ) {
 	if ( !VR_IsRunning() || !vr.poseValid ) {
 		vr.haveLastYaw = qfalse;
+		vr.pendingTurn = 0.0f;
 		return;
 	}
 
-	// Track yaw every frame so nothing jumps when leaving a menu.
+	// The game camera's yaw must change exactly as much as the reference yaw
+	// (the tracking yaw the renderer lines up with it), so the rendered view
+	// only ever moves with the head. This covers head-aim, hand-aim, switching
+	// between them, and leaving a locked view, without any jumps.
+	const float refYaw = vrRender.referenceYaw;
 	if ( !vr.haveLastYaw ) {
-		vr.lastAimYaw = vr.headYaw;
+		vr.lastRefYaw = refYaw;
 		vr.haveLastYaw = qtrue;
 	}
-	const float deltaYaw = AngleSubtract( vr.headYaw, vr.lastAimYaw );
-	vr.lastAimYaw = vr.headYaw;
+	const float deltaYaw = AngleSubtract( refYaw, vr.lastRefYaw );
+	vr.lastRefYaw = refYaw;
 
-	if ( !vr_headAim->integer || VR_UseScreenLayer() ) {
+	const float turn = Com_Clamp( -180.0f, 180.0f, vr.pendingTurn );
+	vr.pendingTurn = 0.0f;
+
+	if ( VR_UseScreenLayer() ) {
 		return;
 	}
 
-	// Mouse/keys keep turning the body; the head adds on top of that.
-	cl.viewangles[YAW] += deltaYaw;
+	// thumbstick turning rotates the body; the head/hand adds on top
+	cl.viewangles[YAW] += turn + deltaYaw;
 
-	// Pitch comes straight from the headset. Compensate the server's
-	// delta_angles so the in-game pitch equals the real head pitch.
-	const float pitch = Com_Clamp( -88.0f, 88.0f, vr.headPitch );
+	if ( vr.viewLocked ) {
+		return;	// the game (or the mouse) owns pitch
+	}
+
+	// Pitch comes straight from the head/hand. Compensate the server's
+	// delta_angles so the in-game pitch equals the real pitch.
+	const float srcPitch = vr.aimFromHand ? vr.handAimPitch : vr.headPitch;
+	const float pitch = Com_Clamp( -88.0f, 88.0f, srcPitch );
 	cl.viewangles[PITCH] = pitch - SHORT2ANGLE( cl.snap.ps.delta_angles[PITCH] );
+}
+
+void VR_AddMovement( usercmd_t *cmd ) {
+	if ( !VR_IsRunning() || !vr.inputAttached || VR_UseScreenLayer() || ( Key_GetCatcher() & KEYCATCH_MESSAGE ) ) {
+		return;
+	}
+	if ( vr.moveX == 0.0f && vr.moveY == 0.0f ) {
+		return;
+	}
+
+	// The stick moves relative to where you look (or where your left hand
+	// points); the usercmd is relative to the game camera's yaw.
+	float moveYaw = vr.headYaw;
+	if ( vr_moveDirection->integer == 1 && vr.handValid[VR_HAND_LEFT] ) {
+		moveYaw = VR_ForwardYaw( vrClient.aimAxis[VR_HAND_LEFT], vr.headYaw );
+	}
+	const float rel = DEG2RAD( AngleSubtract( moveYaw, vrRender.referenceYaw ) );
+	const float c = cosf( rel ), sn = sinf( rel );
+	const float fwd = vr.moveY * c + vr.moveX * sn;
+	const float right = -vr.moveY * sn + vr.moveX * c;
+
+	// walking (+speed with cl_run, or cl_run 0) caps the speed like the keys do
+	const float speed = ( cmd->buttons & BUTTON_WALKING ) ? 64.0f : 127.0f;
+	cmd->forwardmove = ClampChar( cmd->forwardmove + (int)( fwd * speed ) );
+	cmd->rightmove = ClampChar( cmd->rightmove + (int)( right * speed ) );
+}
+
+const vrClientState_t *VR_GetClientState( void ) {
+	vr.cgameQueryTime = cls.realtime;
+	return &vrClient;
 }
 
 const vrRenderState_t *VR_GetRenderState( void ) {
@@ -1435,6 +2132,9 @@ qboolean VR_UpdateScreen( void ) {
 
 	const qboolean inXrFrame = vr.frameBegun;
 	const qboolean drawVR = ( inXrFrame && vr.frameState.shouldRender ) ? qtrue : qfalse;
+	if ( !drawVR ) {
+		vrClient.active = qfalse;	// the cgame draws the plain desktop way
+	}
 	const qboolean screenLayer = VR_UseScreenLayer();
 	int layer = 0;
 
@@ -1443,6 +2143,9 @@ qboolean VR_UpdateScreen( void ) {
 			VR_PlaceMenuQuad();
 		}
 		vr.lastScreenLayer = screenLayer;
+	}
+	if ( screenLayer ) {
+		vrClient.active = qfalse;	// flat view under the menu: no gun-in-hand
 	}
 
 	vr.inUpdateScreen = qtrue;
@@ -1566,6 +2269,17 @@ void VR_Init( void ) {
 	vr_menuHeight		= Cvar_Get( "vr_menuHeight",		"2.2",	CVAR_ARCHIVE, "Height of the menu screen in metres" );
 	vr_headAim			= Cvar_Get( "vr_headAim",			"1",	CVAR_ARCHIVE, "Aim with your head; the mouse turns" );
 	vr_mirror			= Cvar_Get( "vr_mirror",			"1",	CVAR_ARCHIVE, "Show the left eye in the desktop window" );
+	vr_handAim			= Cvar_Get( "vr_handAim",			"1",	CVAR_ARCHIVE, "Aim guns with your right hand" );
+	vr_turnMode			= Cvar_Get( "vr_turnMode",			"0",	CVAR_ARCHIVE, "Right stick turning: 0 = snap, 1 = smooth" );
+	vr_turnAngle		= Cvar_Get( "vr_turnAngle",			"45",	CVAR_ARCHIVE, "Snap turn angle in degrees" );
+	vr_turnSpeed		= Cvar_Get( "vr_turnSpeed",			"180",	CVAR_ARCHIVE, "Smooth turn speed in degrees per second" );
+	vr_moveDirection	= Cvar_Get( "vr_moveDirection",		"0",	CVAR_ARCHIVE, "Left stick moves: 0 = where you look, 1 = where your left hand points" );
+	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );
+	vr_gunPitch			= Cvar_Get( "vr_gunPitch",			"0",	CVAR_ARCHIVE, "Tilt guns in your hand (degrees, + = barrel up); also tilts the aim" );
+
+	// tells a VR-aware cgame that trap->ext.VR_GetClientState exists
+	Cvar_Get( "vr_engine", VR_ENGINE_TAG, CVAR_ROM, "OpenJK VR engine interface version" );
+	Cvar_Set( "vr_engine", VR_ENGINE_TAG );
 
 	Cmd_AddCommand( "vr_recenter", VR_Recenter_f, "Re-centre the VR position and menu screen" );
 	Cmd_AddCommand( "vr_status", VR_Status_f, "Print VR runtime and headset status" );
@@ -1591,6 +2305,9 @@ qboolean VR_WantSession( void ) { return qfalse; }
 void VR_BeginFrame( void ) {}
 qboolean VR_UpdateScreen( void ) { return qfalse; }
 void VR_ApplyHeadAim( void ) {}
+void VR_AddMovement( usercmd_t *cmd ) {}
+static vrClientState_t vrClient;
+const vrClientState_t *VR_GetClientState( void ) { return &vrClient; }
 const vrRenderState_t *VR_GetRenderState( void ) { return &vrRender; }
 
 #endif // _WIN32

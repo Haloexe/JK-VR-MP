@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "client.h"
 #include "cl_cgameapi.h"
 #include "FxScheduler.h"
+#include "cl_vr.h"
 
 extern int		drawnFx;
 
@@ -88,7 +89,9 @@ bool CParticle::Cull(void)
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
 	// Check if it's behind the viewer
-	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0) // cg.cosHalfFOV * (len - mRadius) )
+	// (OpenJK VR: the headset may look away from the cgame camera, so the
+	// renderer's own frustum culling has to do)
+	if ( !VR_IsRunning() && (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0) // cg.cosHalfFOV * (len - mRadius) )
 	{
 		return true;
 	}
@@ -615,8 +618,9 @@ bool COrientedParticle::Cull(void)
 	// Get the direction to the view
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
-	// Check if it's behind the viewer
-	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
+	// Check if it's behind the viewer (not in VR: the headset may look away
+	// from the cgame camera)
+	if ( !VR_IsRunning() && (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
 	{
 		return true;
 	}
@@ -754,6 +758,11 @@ CLine::CLine(void)
 bool CLine::Cull( void )
 {
 	vec3_t	dir;
+
+	if ( VR_IsRunning() )
+	{
+		return false;	// OpenJK VR: only the renderer's (headset) frustum culls
+	}
 
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
@@ -1807,8 +1816,9 @@ bool CPoly::Cull(void)
 	// Get the direction to the view
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
-	// Check if it's behind the viewer
-	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
+	// Check if it's behind the viewer (not in VR: the headset may look away
+	// from the cgame camera)
+	if ( !VR_IsRunning() && (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
 	{
 		return true;
 	}
@@ -1992,6 +2002,11 @@ Bezier curve line
 bool CBezier::Cull( void )
 {
 	vec3_t	dir;
+
+	if ( VR_IsRunning() )
+	{
+		return false;	// OpenJK VR: only the renderer's (headset) frustum culls
+	}
 
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 

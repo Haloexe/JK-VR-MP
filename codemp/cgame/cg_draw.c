@@ -4923,6 +4923,11 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 		return;
 	}
 
+	if ( CG_VR_HandAim() )
+	{ // OpenJK VR: the gun is aimed with the hand; a 3D dot replaces this
+		return;
+	}
+
 	if (cg.snap->ps.fallingToDeath)
 	{
 		return;

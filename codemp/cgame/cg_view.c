@@ -2366,6 +2366,10 @@ qboolean CG_CullPoint( vec3_t pt ) {
 	int i;
 	plane_t *frust;
 
+	if ( CG_VR() ) {
+		return qfalse;	// OpenJK VR: the headset sees more than the cgame camera
+	}
+
 	// check against frustum planes
 	for ( i = 0 ; i < 4 ; i++ ) {
 		frust = &frustum[i];
@@ -2381,6 +2385,10 @@ qboolean CG_CullPoint( vec3_t pt ) {
 qboolean CG_CullPointAndRadius( const vec3_t pt, float radius ) {
 	int i;
 	plane_t *frust;
+
+	if ( CG_VR() ) {
+		return qfalse;	// OpenJK VR: the headset sees more than the cgame camera
+	}
 
 	// check against frustum planes
 	for ( i = 0 ; i < 4 ; i++ ) {
@@ -2698,7 +2706,16 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	}
 
 	// update audio positions
-	trap->S_Respatialize( cg.snap->ps.clientNum, cg.refdef.vieworg, cg.refdef.viewaxis, inwater );
+	{
+		// OpenJK VR: hear from where your head is, not where the camera/gun points
+		vec3_t vrOrg;
+		matrix3_t vrAxis;
+		if ( CG_VR_HeadPose( vrOrg, vrAxis ) ) {
+			trap->S_Respatialize( cg.snap->ps.clientNum, vrOrg, vrAxis, inwater );
+		} else {
+			trap->S_Respatialize( cg.snap->ps.clientNum, cg.refdef.vieworg, cg.refdef.viewaxis, inwater );
+		}
+	}
 
 	// make sure the lagometerSample and frame timing isn't done twice when in stereo
 	if ( stereoView != STEREO_RIGHT ) {

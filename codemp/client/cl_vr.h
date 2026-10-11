@@ -12,6 +12,7 @@ General Public License version 2, like the rest of OpenJK.
 #ifdef OPENJK_VR
 
 #include "rd-common/tr_vr.h"
+#include "qcommon/vr_public.h"
 
 // Cvars and console commands. Safe to call more than once.
 void		VR_Init( void );
@@ -45,11 +46,21 @@ void		VR_BeginFrame( void );
 // be drawn the normal desktop way instead (no session / headset idle).
 qboolean	VR_UpdateScreen( void );
 
-// Head-aim: folds the HMD orientation into cl.viewangles. Called from
-// CL_CreateCmd after mouse/keyboard input has been applied.
+// Aim: folds the head (or right hand, for guns) orientation and thumbstick
+// turning into cl.viewangles. Called from CL_CreateCmd after mouse/keyboard.
 void		VR_ApplyHeadAim( void );
+
+// Thumbstick movement, added to the usercmd in CL_CreateCmd.
+void		VR_AddMovement( usercmd_t *cmd );
+
+// Read by the cgame through cgameImport_t.ext.VR_GetClientState.
+const vrClientState_t *VR_GetClientState( void );
 
 // Read by the renderer through refimport_t.
 const vrRenderState_t *VR_GetRenderState( void );
+
+#else // !OPENJK_VR
+
+static inline qboolean VR_IsRunning( void ) { return qfalse; }
 
 #endif // OPENJK_VR

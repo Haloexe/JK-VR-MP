@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "snd_ambient.h"
 #include "FXExport.h"
 #include "FxUtil.h"
+#include "cl_vr.h"
 
 extern IHeapAllocator *G2VertSpaceClient;
 extern botlib_export_t *botlib_export;
@@ -1911,6 +1912,11 @@ void CL_BindCGame( void ) {
 		cgi.G2API_GetSurfaceName				= CL_G2API_GetSurfaceName;
 
 		cgi.ext.R_Font_StrLenPixels				= re->ext.Font_StrLenPixels;
+#ifdef OPENJK_VR
+		cgi.ext.VR_GetClientState				= VR_GetClientState;
+#else
+		cgi.ext.VR_GetClientState				= NULL;
+#endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;
 		ret = GetCGameAPI( CGAME_API_VERSION, &cgi );

@@ -25,6 +25,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #define	CGAME_API_VERSION		2
 
+#include "qcommon/vr_public.h"	// OpenJK VR
+
 #define	CMD_BACKUP			64
 #define	CMD_MASK			(CMD_BACKUP - 1)
 // allow a lot of command backups for very fast systems
@@ -716,6 +718,9 @@ typedef struct cgameImport_s {
 
 	struct {
 		float			(*R_Font_StrLenPixels)					( const char *text, const int iFontIndex, const float scale );
+
+		// OpenJK VR: only valid when the cvar "vr_engine" equals VR_ENGINE_TAG
+		const vrClientState_t *(*VR_GetClientState)				( void );
 	} ext;
 } cgameImport_t;
 

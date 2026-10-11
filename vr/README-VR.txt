@@ -2,17 +2,18 @@ OpenJK VR - Jedi Academy multiplayer in a VR headset
 =====================================================
 
 An OpenJK-based multiplayer client that renders Jedi Academy in stereo 3D
-on a PC VR headset (OpenXR), with head tracking. This is milestone 1:
+on a PC VR headset (OpenXR). Current state (milestone 2, step 1):
 
   * Stereo 3D with the headset's own field of view and lens geometry
   * Head tracking (rotation + limited positional movement)
-  * Head-aim: you aim where you look; the mouse turns your body
+  * VR controllers: thumbstick movement, snap/smooth turning, buttons
+  * Guns are held in and aimed with your right hand, with a 3D aim dot
+  * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen
   * The desktop window mirrors the left eye
 
-Not yet: motion controllers (hand-tracked guns / saber). Play with keyboard
-and mouse (or a gamepad) for now.
+Not yet: a visible body and arms (next step), motion-controlled saber.
 
 
 INSTALL / RUN
@@ -37,11 +38,32 @@ saves and configs) are not touched. To uninstall, delete the folder.
 If no headset is found the game starts in normal desktop mode.
 
 
-CONTROLS
+CONTROLS (Quest / Touch layout; other controllers are similar)
 --------
-Look around with your head; you aim where you look. The mouse turns your
-body left/right (mouse up/down does nothing in VR). Everything else is the
-normal Jedi Academy keyboard layout.
+  Left stick           move (in the direction you look)
+  Left stick click     walk (hold)
+  Right stick L/R      turn (snap 45 degrees; vr_turnMode 1 = smooth)
+  Right stick up/down  next / previous weapon
+  Right stick click    change saber style
+  Right trigger        attack
+  Left trigger         alternate attack
+  Right grip           use (doors, switches, pick-ups)
+  Left grip            use the selected Force power
+  A / B                jump / crouch
+  X / Y                previous / next Force power
+  Left menu button     game menu (use the mouse in menus for now)
+
+With a gun out you aim with your right hand: the gun is in your hand and a
+small crosshair floats where your shots will land. With the saber, fists or
+a scope you aim where you look. Keyboard and mouse still work; the mouse
+turns your body.
+
+The controller buttons are ordinary keys named AUX16-AUX27, so you can
+rebind them in the console, e.g.  bind AUX23 force_throw
+  AUX16 right trigger   AUX20 A   AUX24 left stick click
+  AUX17 left trigger    AUX21 B   AUX25 right stick click
+  AUX18 right grip      AUX22 X   AUX26 right stick up
+  AUX19 left grip       AUX23 Y   AUX27 right stick down
 
 Console (Shift+~) commands:
   vr_recenter        re-centre your position and the menu screen
@@ -61,6 +83,15 @@ SETTINGS (console cvars, saved automatically)
   vr_menuHeight 2.2      menu screen height (metres)
   vr_headAim 1           0 = aim with the mouse only; head just looks around
   vr_mirror 1            show the left eye in the desktop window
+  vr_handAim 1           0 = guns aim with your head too
+  vr_turnMode 0          0 = snap turn, 1 = smooth turn
+  vr_turnAngle 45        snap turn angle
+  vr_turnSpeed 180       smooth turn speed (degrees per second)
+  vr_moveDirection 0     1 = move where your left hand points
+  vr_deadzone 0.2        thumbstick deadzone
+  cg_vrAimDot 1          the floating crosshair (cg_vrAimDotSize to resize)
+  cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
+  vr_gunPitch 0          tilt the gun (and its aim) in your hand, + = up
 
 On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up).
 Settings and downloads live in Documents\My Games\OpenJK-VR, separate from
@@ -75,7 +106,10 @@ camera. "cg_thirdPerson 1" gives third person all the time.
 
 KNOWN LIMITATIONS (milestone 1)
 -------------------------------
-  * Keyboard/mouse only - no motion controllers yet.
+  * Shots on normal servers still start at your eye, not the gun barrel
+    (they go exactly where the aim dot shows). The VR server mod will fire
+    them from the gun.
+  * Menus need the mouse (no laser pointer yet).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
   * Things near the edge of your view can pop in (the game culls with its

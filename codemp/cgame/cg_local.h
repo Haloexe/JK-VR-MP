@@ -1872,6 +1872,13 @@ void CG_MissileHitWall(int weapon, int clientNum, vec3_t origin, vec3_t dir, imp
 void CG_MissileHitPlayer( int weapon, vec3_t origin, vec3_t dir, int entityNum, qboolean alt_fire);
 
 void CG_AddViewWeapon (playerState_t *ps);
+
+// cg_vr.c (OpenJK VR)
+const vrClientState_t *CG_VR( void );
+qboolean CG_VR_HandAim( void );
+qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis );
+void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles );
+void CG_VR_AddAimDot( void );
 void CG_AddPlayerWeapon( refEntity_t *parent, playerState_t *ps, centity_t *cent, int team, vec3_t newAngles, qboolean thirdPerson );
 void CG_DrawWeaponSelect( void );
 void CG_DrawIconBackground(void);

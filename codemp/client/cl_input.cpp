@@ -1353,6 +1353,11 @@ usercmd_t CL_CreateCmd( void ) {
 	// get basic movement from joystick
 	CL_JoystickMove( &cmd );
 
+#ifdef OPENJK_VR
+	// thumbstick movement from the VR controllers
+	VR_AddMovement( &cmd );
+#endif
+
 	// check to make sure the angles haven't wrapped
 	if ( cl.viewangles[PITCH] - oldAngles[PITCH] > 90 ) {
 		cl.viewangles[PITCH] = oldAngles[PITCH] + 90;
