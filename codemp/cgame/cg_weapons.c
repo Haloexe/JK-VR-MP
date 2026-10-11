@@ -439,6 +439,49 @@ static struct {
 	matrix3_t	flashAxis;
 } cg_vrHeld;
 
+// Our own copies of the weapon world models. The shared g2WeaponInstances
+// can't be drawn on their own: they are set up to be bolted to a player's
+// hand (G2API_SetBoltInfo), and the renderer skips a model whose parent is
+// missing.
+static void	*cg_vrHeldG2[MAX_WEAPONS];
+static int	cg_vrHeldFlashBolt[MAX_WEAPONS];
+static qboolean cg_vrHeldTried[MAX_WEAPONS];
+
+static void *CG_VR_HeldWeaponG2( int weaponNum ) {
+	gitem_t *item;
+
+	if ( weaponNum <= WP_NONE || weaponNum >= MAX_WEAPONS ) {
+		return NULL;
+	}
+	if ( !cg_vrHeldTried[weaponNum] ) {
+		cg_vrHeldTried[weaponNum] = qtrue;
+		cg_vrHeldFlashBolt[weaponNum] = -1;
+		item = BG_FindItemForWeapon( (weapon_t)weaponNum );
+		if ( item && item->world_model[0] && item->world_model[0][0] ) {
+			trap->G2API_InitGhoul2Model( &cg_vrHeldG2[weaponNum], item->world_model[0], 0, 0, 0, 0, 0 );
+			if ( cg_vrHeldG2[weaponNum] ) {
+				cg_vrHeldFlashBolt[weaponNum] = trap->G2API_AddBolt( cg_vrHeldG2[weaponNum], 0, "*flash" );
+			}
+		}
+	}
+	if ( !cg_vrHeldG2[weaponNum] || !trap->G2_HaveWeGhoul2Models( cg_vrHeldG2[weaponNum] ) ) {
+		return NULL;
+	}
+	return cg_vrHeldG2[weaponNum];
+}
+
+static void CG_VR_ShutdownHeldWeapons( void ) {
+	int i;
+	for ( i = 0; i < MAX_WEAPONS; i++ ) {
+		if ( cg_vrHeldG2[i] ) {
+			trap->G2API_CleanGhoul2Models( &cg_vrHeldG2[i] );
+		}
+		cg_vrHeldG2[i] = NULL;
+		cg_vrHeldTried[i] = qfalse;
+		cg_vrHeldFlashBolt[i] = -1;
+	}
+}
+
 static void CG_VR_AxisToAngles( matrix3_t a, vec3_t angles ) {
 	const float len = sqrtf( a[0][0] * a[0][0] + a[0][1] * a[0][1] );
 	angles[PITCH] = RAD2DEG( atan2f( -a[0][2], len ) );
@@ -449,7 +492,8 @@ static void CG_VR_AxisToAngles( matrix3_t a, vec3_t angles ) {
 static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	const vrClientState_t *vr = CG_VR();
 	weaponInfo_t *wi = &cg_weapons[weaponNum];
-	void *g2 = CG_G2WeaponInstance( cent, weaponNum );
+	void *g2 = CG_VR_HeldWeaponG2( weaponNum );
+	int flashBolt;
 	vec3_t zero = { 0.0f, 0.0f, 0.0f };
 	vec3_t gripLocal, aimLocal[3], grip, aim[3];
 	vec3_t fl = { 1.0f, 0.0f, 0.0f }, ul, ll;
@@ -461,12 +505,13 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	int i, j;
 
 	cg_vrHeld.ready = qfalse;
-	if ( !vr || !CG_VR_HandAim() || !g2 || !trap->G2_HaveWeGhoul2Models( g2 ) || !wi->weaponModel ) {
+	if ( !vr || !CG_VR_HandAim() || !g2 || !wi->weaponModel ) {
 		return;
 	}
+	flashBolt = cg_vrHeldFlashBolt[weaponNum];
 
 	// barrel direction in the model's own frame: the muzzle bolt's +X at rest
-	if ( trap->G2API_GetBoltMatrix( g2, 0, 0, &bolt, zero, zero, cg.time, cgs.gameModels, zero ) ) {
+	if ( flashBolt >= 0 && trap->G2API_GetBoltMatrix( g2, 0, flashBolt, &bolt, zero, zero, cg.time, cgs.gameModels, zero ) ) {
 		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_X, fl );
 		if ( VectorNormalize( fl ) < 0.5f ) {
 			VectorSet( fl, 1.0f, 0.0f, 0.0f );
@@ -516,7 +561,7 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	CG_AddWeaponWithPowerups( &ent, cent->currentState.powerups );
 
 	// muzzle, for flashes and charge effects
-	if ( trap->G2API_GetBoltMatrix( g2, 0, 0, &bolt, angles, origin, cg.time, cgs.gameModels, zero ) ) {
+	if ( flashBolt >= 0 && trap->G2API_GetBoltMatrix( g2, 0, flashBolt, &bolt, angles, origin, cg.time, cgs.gameModels, zero ) ) {
 		BG_GiveMeVectorFromMatrix( &bolt, ORIGIN, cg_vrHeld.flashOrigin );
 		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_X, cg_vrHeld.flashAxis[0] );
 		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_Y, cg_vrHeld.flashAxis[1] );
@@ -2518,6 +2563,7 @@ void CG_ShutDownG2Weapons(void)
 	{
 		trap->G2API_CleanGhoul2Models(&g2WeaponInstances[i]);
 	}
+	CG_VR_ShutdownHeldWeapons();
 }
 
 void *CG_G2WeaponInstance(centity_t *cent, int weapon)
