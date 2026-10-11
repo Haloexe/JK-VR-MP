@@ -110,23 +110,28 @@ server running this build: your real blade is the weapon.
     lands: a big arm swing or a stab cuts deep, a slow push or a blade just
     resting on someone only singes, and flicking your wrist with your arm
     still only grazes (running, turning, crouching or taking stairs with the
-    blade out doesn't cut either). The same blade cuts the same opponent
-    at most every 0.3 s. Walls stop your blade, even where your real hand
-    goes through them. The trigger lights the saber; it no longer starts the
+    blade out doesn't cut either). You cut the same opponent at most every
+    0.3 s, whichever blade it is: two sabers, or a staff's two ends, don't
+    double up. Walls stop your blade, even where your real hand goes
+    through them. The trigger lights the saber; it no longer starts the
     game's canned swings - your arm swings.
   * Block with it. Only what your blade physically stops is blocked, thrown
     sabers included (no automatic blocks, saber locks or disarms while you
-    hold it). When blades meet they spark, your hand buzzes hard, and your
-    blade can't cut for a moment while it recovers - twice as long if
-    theirs was the heavier blow. A strong blow into an opponent's guard
-    breaks it; a weak one only makes them parry.
+    hold it). When blades meet they spark, your hand buzzes hard, and the
+    swinging blade can't cut for a moment while it recovers. The stronger
+    blow wins: weight, plus one if the swing was at full speed. The loser
+    recovers twice as long (a bot's guard breaks, its swing is knocked
+    away), and a heavy blow that out-weighs a guard by two breaks it and
+    carries on through, cutting for half damage.
   * Saber styles are the blade's weight (right stick click cycles them):
       light  (fast style)    small quick swings cut, up to 40 damage,
                              recovers quickly after a clash
       medium (medium style)  up to 65 damage
       heavy  (strong style)  needs big swings, up to 100 damage, breaks
-                             guards, recovers slowly
-    Dual sabers and the staff count as medium.
+                             through guards, recovers slowly
+    Dual sabers are two medium blades, and the staff is medium too. With
+    dual sabers the right stick click switches the left one off instead;
+    the right one is then a light saber, as in the normal game.
   * You feel it: a buzz when your blade cuts (stronger for deeper cuts), a
     hard knock when it clashes, a grind when it scrapes a wall, both hands
     when you get cut.
@@ -134,10 +139,14 @@ server running this build: your real blade is the weapon.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
 Server settings: g_vrSaber (1; 0 = the old animated combat),
-g_vrSaberSpeedScale (1; higher = faster swings needed), g_vrSaberDamageScale
-(1), g_vrSaberDebug 1 (prints every cut's speed and damage, and every
-clash, to the console - handy for telling me what feels off), and the
-stock g_dismember 100 if you want limbs to come off.
+g_vrSaberLight / g_vrSaberMedium / g_vrSaberHeavy (each "cut-from
+full-damage-at max-damage recover": swing speeds in m/s, recovery after a
+clash in ms; defaults "1.8 5.3 40 150", "2.5 7.1 65 220", "3.2 8.8 100
+300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
+weight), g_vrSaberDamageScale (1), g_vrSaberDebug 1 (prints every cut's
+speed and damage, and how every clash ended, to the console - handy for
+telling me what feels off), and the stock g_dismember 100 if you want
+limbs to come off.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw

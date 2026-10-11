@@ -1361,6 +1361,7 @@ qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
 
 // g_vrsaber.c (OpenJK VR: physical lightsaber for players holding it in VR)
 void		G_VRSaberInit( void );
+void		G_VRSaberWeightsChanged( void );
 void		G_VRSaberClientReset( int clientNum );
 void		G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd );
 qboolean	G_VRSaberOn( void );

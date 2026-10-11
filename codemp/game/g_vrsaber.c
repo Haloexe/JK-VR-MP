@@ -16,9 +16,13 @@ fights with those blades instead of the animated ones:
 	of the wrist barely cuts). The saber's weight, picked by the saber style
 	(fast = light, medium, strong = heavy), sets how fast a cut has to be
 	and how hard it hits.
-  - A blade that meets another blade stops there: it does no damage until
-	it has recovered, and the other side gets the usual parry, bounce or
-	knock-away. Heavy, fast blows break parries.
+  - A blade that meets another blade stops there and can't cut until it has
+	recovered; the other side gets the usual parry, bounce or knock-away.
+	The stronger blow (weight, plus a full-speed swing) wins: the loser
+	recovers longer, and a heavy blow that out-weighs a guard by far breaks
+	it and carries on through, for half damage.
+  - Whichever blade it is (dual sabers, a staff's two ends), a player cuts
+	the same opponent at most once in VR_SABER_CUT_REPEAT ms.
   - Blocking is whatever your blade physically stops. Animated attackers
 	(bots, players without VR) collide with the VR blade through the stock
 	saber code, which sees the VR blade as that player's saber.
@@ -64,10 +68,12 @@ qboolean WP_SaberBladeUseSecondBladeStyle( saberInfo_t *saber, int bladeNum );
 #define VR_SABER_STEP		4.0f	// max blade travel per collision step (units)
 #define VR_SABER_MAX_STEPS	16		// collision steps from one pose to the next...
 #define VR_SABER_FRAME_STEPS 48		// ...and per blade per server frame
-#define VR_SABER_CUT_REPEAT	300		// ms before the same blade cuts the same victim again
+#define VR_SABER_CUT_REPEAT	300		// ms before any of a player's blades cuts the same victim again
+#define VR_SABER_CUTS		8		// victims remembered for that
+#define VR_SABER_THROUGH_MS	200		// a blow that broke a guard cuts for half damage this long
 #define VR_SABER_BURN		1		// damage of a blade just touching someone
 #define VR_SABER_ACTIVITY	8.0f	// moving a hand this far counts as activity (g_inactivity)
-#define VR_UNITS_PER_METRE	34.0f	// only for the debug prints
+#define VR_UNITS_PER_METRE	34.0f	// (default vr_worldScale) for the m/s in prints and the weight cvars
 
 typedef struct vrSaberSample_s {
 	int				time;			// usercmd serverTime (clamped like ClientThink_real does)
@@ -91,8 +97,12 @@ typedef struct vrSaberState_s {
 	int				recoverTime;		// after a clash the blades cut nothing until then
 	int				clashEnt;			// last clash (sparks are debounced)
 	int				clashTime;
-	int				lastVictim[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
-	int				lastHitTime[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
+	int				throughEnt;			// last guard a heavy blow broke through
+	int				throughTime;
+	struct {
+		int			ent;
+		int			time;				// level.time (0: unused)
+	}				cuts[VR_SABER_CUTS];	// recent cuts, by victim
 	qboolean		activitySet;
 	vec3_t			activity;			// where in the room a hand last moved to (g_inactivity)
 } vrSaberState_t;
@@ -111,26 +121,65 @@ typedef struct vrSaberWeight_s {
 	float		minSpeed;	// units/s where a swing starts to cut
 	float		fullSpeed;	// units/s for full damage
 	float		maxDamage;
-	int			recover;	// ms the blade can't cut after hitting another blade
+	int			recover;	// ms the blade can't cut after an even clash
 	int			strength;	// in clashes: 1 light .. 3 heavy (+1 for a full-speed swing)
 } vrSaberWeight_t;
 
-static const vrSaberWeight_t vrSaberWeights[3] = {
-	{ "light",	 60.0f,	180.0f,	 40.0f,	150, 1 },
-	{ "medium",	 85.0f,	240.0f,	 65.0f,	220, 2 },
-	{ "heavy",	110.0f,	300.0f,	100.0f,	300, 3 },
+enum { VRS_LIGHT, VRS_MEDIUM, VRS_HEAVY, VRS_NUM_WEIGHTS };
+
+// (the defaults of g_vrSaberLight / Medium / Heavy: 1.8 5.3 40 150 and so on)
+static const vrSaberWeight_t vrSaberDefaults[VRS_NUM_WEIGHTS] = {
+	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE,  40.0f, 150, 1 },
+	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
 };
+static vrSaberWeight_t vrSaberWeights[VRS_NUM_WEIGHTS] = {
+	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE,  40.0f, 150, 1 },
+	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
+};
+
+// The server's g_vrSaberLight / Medium / Heavy changed: "cut from (m/s)
+// full damage at (m/s) max damage recover (ms)", e.g. "2.5 7.1 65 220".
+void G_VRSaberWeightsChanged( void ) {
+	const vmCvar_t *cv[VRS_NUM_WEIGHTS] = { &g_vrSaberLight, &g_vrSaberMedium, &g_vrSaberHeavy };
+	int i;
+
+	for ( i = 0; i < VRS_NUM_WEIGHTS; i++ ) {
+		float cutFrom, fullAt, maxDamage;
+		int recover;
+
+		vrSaberWeights[i] = vrSaberDefaults[i];
+		if ( !cv[i]->string[0] ) {
+			continue;
+		}
+		if ( sscanf( cv[i]->string, "%f %f %f %d", &cutFrom, &fullAt, &maxDamage, &recover ) != 4 ||
+			!( cutFrom > 0.0f ) || !( fullAt > cutFrom ) || !( maxDamage >= 1.0f ) || recover < 0 || recover > 5000 ) {
+			Com_Printf( S_COLOR_YELLOW "VR saber: g_vrSaber%c%s should be \"cut-from-m/s full-at-m/s max-damage recover-ms\", "
+				"e.g. \"%.1f %.1f %.0f %d\"; using that\n", vrSaberDefaults[i].name[0] - 32, vrSaberDefaults[i].name + 1,
+				vrSaberDefaults[i].minSpeed / VR_UNITS_PER_METRE, vrSaberDefaults[i].fullSpeed / VR_UNITS_PER_METRE,
+				vrSaberDefaults[i].maxDamage, vrSaberDefaults[i].recover );
+			continue;
+		}
+		vrSaberWeights[i].minSpeed = cutFrom * VR_UNITS_PER_METRE;
+		vrSaberWeights[i].fullSpeed = fullAt * VR_UNITS_PER_METRE;
+		vrSaberWeights[i].maxDamage = maxDamage;
+		vrSaberWeights[i].recover = recover;
+	}
+}
 
 static const vrSaberWeight_t *VRS_Weight( const gclient_t *cl ) {
 	switch ( cl->ps.fd.saberAnimLevel ) {
 	case SS_FAST:
 	case SS_TAVION:
-		return &vrSaberWeights[0];
+		return &vrSaberWeights[VRS_LIGHT];
 	case SS_STRONG:
 	case SS_DESANN:
-		return &vrSaberWeights[2];
-	default:	// medium, dual, staff
-		return &vrSaberWeights[1];
+		return &vrSaberWeights[VRS_HEAVY];
+	case SS_DUAL:	// dual sabers: two medium blades
+	case SS_STAFF:
+	default:
+		return &vrSaberWeights[VRS_MEDIUM];
 	}
 }
 
@@ -678,19 +727,85 @@ static void VRS_Attacked( gentity_t *self ) {
 	self->client->invulnerableTimer = 0;
 }
 
-// What the other side does when our blade hits theirs with this strength.
-// Returns qtrue if theirs was the heavier blow (we reel back longer).
-static qboolean VRS_ClashReact( gentity_t *self, gentity_t *other, vec3_t point, int strength ) {
+typedef struct {
+	gentity_t	*ent;
+	int			saber, blade;
+	vec3_t		base, tip;
+	float		radius;
+} vrsOtherBlade_t;
+
+// How a clash ends for the blade that swung into the other one. Ours stops
+// and can't cut until it has recovered (unless it broke through); a VR
+// opponent's blade recovers too:
+//	           ours   theirs
+//	even        1x     1x
+//	won         1x     2x     (bots: their parry breaks, their swing is knocked away)
+//	lost        2x     1/2x
+//	through     -      2x     (heavy blows only: ours carries on, for half damage)
+typedef enum {
+	VRS_CLASH_EVEN,
+	VRS_CLASH_WON,
+	VRS_CLASH_LOST,
+	VRS_CLASH_THROUGH,
+	VRS_CLASH_HELD		// (both in VR) theirs was the faster blade: its owner's sweep decides
+} vrsClash_t;
+
+static const char *const vrsClashNames[] = { "even", "won", "lost", "broke through", "held" };
+
+// How fast another VR player's blade moves at a point on it.
+static float VRS_BladeSpeedAt( vrSaberState_t *ovs, const vrsOtherBlade_t *ob, const vec3_t point ) {
+	vec3_t dir, rel;
+	float len;
+
+	if ( ob->saber >= VR_POSE_MAX_SABERS || ob->blade >= VR_POSE_MAX_BLADES || !ovs->count ) {
+		return 0.0f;
+	}
+	VectorSubtract( ob->tip, ob->base, dir );
+	len = VectorNormalize( dir );
+	VectorSubtract( point, ob->base, rel );
+	return VRS_SwingSpeed( ovs, ob->saber, ob->blade, VRS_Sample( ovs, 0 )->time,
+		Com_Clamp( 0.0f, len, DotProduct( rel, dir ) ) );
+}
+
+// Our blade, swinging at this speed, hit the other blade: the stronger blow
+// wins (weight, plus one for a full-speed swing); a heavy blow two or more
+// stronger breaks the guard and goes on through.
+static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, vec3_t point, float speed ) {
+	gentity_t *other = ob->ent;
+	const vrSaberWeight_t *w = VRS_Weight( self->client );
 	const vrSaberWeight_t *ow = VRS_Weight( other->client );
+	const int strength = VRS_Strength( w, speed );
+	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] );
 	vrSaberState_t *ovs;
 
 	if ( G_VRSaberClient( other ) && ( ovs = VRS_State( other ) ) != NULL ) {
-		// both in VR: their blade bounces back too, less if ours was weaker
-		const int recover = ( strength >= ow->strength ) ? ow->recover : ow->recover / 2;
+		// both in VR, and both sweeps see this contact: the faster blade's
+		// owner decides, and their blade recovers the other way round
+		const float theirSpeed = VRS_BladeSpeedAt( ovs, ob, point );
+		const int theirs = VRS_Strength( ow, theirSpeed );
+		vrsClash_t result;
+		int recover;
+
+		if ( theirSpeed > speed ) {
+			return VRS_CLASH_HELD;
+		}
+		if ( heavy && strength >= theirs + 2 ) {
+			result = VRS_CLASH_THROUGH;
+			recover = 2 * ow->recover;
+		} else if ( strength > theirs ) {
+			result = VRS_CLASH_WON;
+			recover = 2 * ow->recover;
+		} else if ( strength == theirs ) {
+			result = VRS_CLASH_EVEN;
+			recover = ow->recover;
+		} else {
+			result = VRS_CLASH_LOST;
+			recover = ow->recover / 2;
+		}
 		if ( ovs->recoverTime < level.time + recover ) {
 			ovs->recoverTime = level.time + recover;
 		}
-		return qfalse;
+		return result;
 	}
 
 	{
@@ -700,64 +815,92 @@ static qboolean VRS_ClashReact( gentity_t *self, gentity_t *other, vec3_t point,
 		if ( attacking ) {
 			if ( strength > theirs ) {
 				WP_VR_KnockAttack( other );							// their swing is knocked away
-			} else if ( strength == theirs ) {
-				other->client->ps.saberBlocked = BLOCKED_ATK_BOUNCE;	// both bounce off
-			} else {
-				return qtrue;										// theirs was heavier: we reel
+				return ( heavy && strength >= theirs + 2 ) ? VRS_CLASH_THROUGH : VRS_CLASH_WON;
 			}
-		} else if ( strength >= theirs + 2 ) {
-			WP_VR_BreakParry( other, point );						// a heavy blow breaks their guard
-		} else {
-			WP_SaberBlockNonRandom( other, point, qfalse );			// they parry
+			if ( strength == theirs ) {
+				other->client->ps.saberBlocked = BLOCKED_ATK_BOUNCE;	// both bounce off
+				return VRS_CLASH_EVEN;
+			}
+			return VRS_CLASH_LOST;									// theirs was heavier: we reel
 		}
+		if ( strength >= theirs + 2 ) {
+			WP_VR_BreakParry( other, point );						// a heavy blow breaks their guard
+			return heavy ? VRS_CLASH_THROUGH : VRS_CLASH_WON;
+		}
+		WP_SaberBlockNonRandom( other, point, qfalse );				// they parry
+		return VRS_CLASH_EVEN;
 	}
-	return qfalse;
 }
 
-// Our blade met another blade at point: sparks, both react, ours stops.
-static void VRS_Clash( gentity_t *self, int s, int b, gentity_t *other, vec3_t point, const vec3_t moveDir, float speed ) {
+// Our blade met another blade at point: sparks, and the stronger blow wins.
+// Returns qtrue if ours carries on (it broke their guard), qfalse if it
+// stops there.
+static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t *ob, vec3_t point, const vec3_t moveDir, float speed ) {
+	gentity_t *other = ob->ent;
 	vrSaberState_t *vs = VRS_State( self );
 	const vrSaberWeight_t *w = VRS_Weight( self->client );
 	const qboolean swing = (qboolean)( speed >= w->minSpeed * VRS_SpeedScale() );
-	qboolean lost = qfalse;
+	const vrSaberState_t *ovs;
+	vrsClash_t result;
+	int recover = 0;
 
-	if ( vs->clashEnt != other->s.number || level.time - vs->clashTime >= 150 ) {
-		// a new clash (blades held together only spark now and then), unless
-		// the other VR player's sweep already reported it
-		const vrSaberState_t *ovs = G_VRSaberClient( other ) ? VRS_State( other ) : NULL;
-		if ( !ovs || ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
-			gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
-			VectorCopy( point, te->s.origin );
-			VectorScale( moveDir, -1.0f, te->s.angles );
-			if ( VectorCompare( te->s.angles, vec3_origin ) ) {
-				te->s.angles[2] = 1.0f;
-			}
-			te->s.eventParm = 1;
-			te->s.otherEntityNum2 = self->s.number;
-			te->s.weapon = s;
-			te->s.legsAnim = b;
-			WP_SaberBounceSound( self, s, b );
+	if ( vs->clashEnt == other->s.number && level.time - vs->clashTime < 150 ) {
+		// the same clash going on (blades held together only spark now and
+		// then); a blow that broke through keeps going
+		return (qboolean)( vs->throughEnt == other->s.number && level.time - vs->throughTime < VR_SABER_THROUGH_MS );
+	}
+
+	// sparks, unless the other VR player's sweep already reported this
+	ovs = G_VRSaberClient( other ) ? VRS_State( other ) : NULL;
+	if ( !ovs || ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
+		gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
+		VectorCopy( point, te->s.origin );
+		VectorScale( moveDir, -1.0f, te->s.angles );
+		if ( VectorCompare( te->s.angles, vec3_origin ) ) {
+			te->s.angles[2] = 1.0f;
 		}
+		te->s.eventParm = 1;
+		te->s.otherEntityNum2 = self->s.number;
+		te->s.weapon = s;
+		te->s.legsAnim = b;
+		WP_SaberBounceSound( self, s, b );
+	}
+	vs->clashEnt = other->s.number;
+	vs->clashTime = level.time;
 
-		vs->clashEnt = other->s.number;
-		vs->clashTime = level.time;
-
-		if ( swing ) {
-			lost = VRS_ClashReact( self, other, point, VRS_Strength( w, speed ) );
-			VRS_Attacked( self );
-		}
+	if ( !swing ) {
 		if ( g_vrSaberDebug.integer ) {
-			Com_Printf( "VR saber: %s's blade met %s's at %.1f m/s (%s)\n", self->client->pers.netname,
-				other->client ? other->client->pers.netname : "?", speed / VR_UNITS_PER_METRE,
-				swing ? ( lost ? "clash, lost" : "clash" ) : "touch" );
+			Com_Printf( "VR saber: %s's blade touched %s's\n", self->client->pers.netname,
+				other->client ? other->client->pers.netname : "?" );
 		}
+		return qfalse;
 	}
-	if ( swing ) {
-		const int recover = lost ? 2 * w->recover : w->recover;
-		if ( vs->recoverTime < level.time + recover ) {
-			vs->recoverTime = level.time + recover;
-		}
+
+	result = VRS_ClashReact( self, ob, point, speed );
+	VRS_Attacked( self );
+	switch ( result ) {
+	case VRS_CLASH_THROUGH:
+		vs->throughEnt = other->s.number;
+		vs->throughTime = level.time;
+		break;
+	case VRS_CLASH_WON:
+	case VRS_CLASH_EVEN:
+		recover = w->recover;
+		break;
+	case VRS_CLASH_LOST:
+		recover = 2 * w->recover;
+		break;
+	case VRS_CLASH_HELD:
+		break;	// (their sweep sets how long ours recovers)
 	}
+	if ( recover && vs->recoverTime < level.time + recover ) {
+		vs->recoverTime = level.time + recover;
+	}
+	if ( g_vrSaberDebug.integer ) {
+		Com_Printf( "VR saber: %s's %s blade met %s's at %.1f m/s: %s\n", self->client->pers.netname, w->name,
+			other->client ? other->client->pers.netname : "?", speed / VR_UNITS_PER_METRE, vrsClashNames[result] );
+	}
+	return (qboolean)( result == VRS_CLASH_THROUGH );
 }
 
 // A thrown saber reaching a VR player: blocked only if one of their blades
@@ -805,6 +948,34 @@ Blade against bodies
 --------------------------------------------------------------------------------
 */
 
+// Whether any of this player's blades cut that victim just now.
+static qboolean VRS_RecentlyCut( const vrSaberState_t *vs, int victim ) {
+	int i;
+
+	for ( i = 0; i < VR_SABER_CUTS; i++ ) {
+		if ( vs->cuts[i].time && vs->cuts[i].ent == victim && level.time - vs->cuts[i].time < VR_SABER_CUT_REPEAT ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+static void VRS_NoteCut( vrSaberState_t *vs, int victim ) {
+	int i, slot = 0;
+
+	for ( i = 0; i < VR_SABER_CUTS; i++ ) {
+		if ( vs->cuts[i].time && vs->cuts[i].ent == victim ) {
+			slot = i;	// (that victim's entry)
+			break;
+		}
+		if ( vs->cuts[i].time < vs->cuts[slot].time ) {
+			slot = i;	// (else the oldest, or an unused one)
+		}
+	}
+	vs->cuts[slot].ent = victim;
+	vs->cuts[slot].time = level.time;
+}
+
 static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t point, const vec3_t base, const vec3_t dir,
 	float length, float t, const vec3_t moveDir ) {
 	vrSaberState_t *vs = VRS_State( self );
@@ -851,8 +1022,8 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 		dmg = VR_SABER_BURN;
 	} else {
 		float frac;
-		if ( vs->lastVictim[s][b] == victim->s.number && level.time - vs->lastHitTime[s][b] < VR_SABER_CUT_REPEAT ) {
-			return;	// still the same cut
+		if ( VRS_RecentlyCut( vs, victim->s.number ) ) {
+			return;	// still the same cut, or the other blade just cut them
 		}
 		frac = Com_Clamp( 0.0f, 1.0f, ( speed - minSpeed ) / ( fullSpeed - minSpeed ) );
 		dmg = w->maxDamage * ( 0.25f + 0.75f * frac );
@@ -868,6 +1039,9 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 			( bgSiegeClasses[self->client->siegeClass].classflags & ( 1 << CFL_MORESABERDMG ) ) ) {
 			dmg *= 2.0f;
 		}
+		if ( vs->throughTime && level.time - vs->throughTime < VR_SABER_THROUGH_MS ) {
+			dmg *= 0.5f;	// the blow broke through a guard first
+		}
 		if ( !( dmg >= VR_SABER_BURN + 1 ) ) {
 			dmg = VR_SABER_BURN + 1;
 		}
@@ -875,12 +1049,15 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 		// servers with the old MP-style saber damage let jedi block automatically
 		if ( !d_saberSPStyleDamage.integer && victim->client && !G_VRSaberClient( victim ) &&
 			WP_SaberCanBlock( victim, point, 0, MOD_SABER, qfalse, VRS_Strength( w, speed ) ) ) {
-			VRS_Clash( self, s, b, victim, point, moveDir, speed );
+			vrsOtherBlade_t ob;
+			memset( &ob, 0, sizeof( ob ) );
+			ob.ent = victim;
+			ob.saber = ob.blade = VR_POSE_MAX_SABERS;	// (no blade of theirs to measure)
+			VRS_Clash( self, s, b, &ob, point, moveDir, speed );
 			return;
 		}
 
-		vs->lastVictim[s][b] = victim->s.number;
-		vs->lastHitTime[s][b] = level.time;
+		VRS_NoteCut( vs, victim->s.number );
 		VRS_Attacked( self );
 
 		if ( ( style2 ? saber->knockbackScale2 : saber->knockbackScale ) > 0.0f ) {
@@ -911,13 +1088,6 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 The sweep
 --------------------------------------------------------------------------------
 */
-
-typedef struct {
-	gentity_t	*ent;
-	int			saber, blade;
-	vec3_t		base, tip;
-	float		radius;
-} vrsOtherBlade_t;
 
 #define VRS_MAX_OTHER_BLADES 64
 
@@ -1019,7 +1189,7 @@ static qboolean VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSa
 		VectorSubtract( fullTip, prevFullTip, moveDir );
 		VectorNormalize( moveDir );
 
-		// another blade in the way stops this one
+		// another blade in the way stops this one (unless it breaks through)
 		for ( i = 0; i < numOthers; i++ ) {
 			if ( VRS_BladesMeet( prevBase, prevTip, base, tip, others[i].base, others[i].tip,
 				radius + others[i].radius, point ) ) {
@@ -1027,8 +1197,9 @@ static qboolean VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSa
 				float along;
 				VectorSubtract( point, base, rel );
 				along = Com_Clamp( 0.0f, length, DotProduct( rel, dir ) );
-				VRS_Clash( self, s, b, others[i].ent, point, moveDir, VRS_SwingSpeed( vs, s, b, t, along ) );
-				return qfalse;
+				if ( !VRS_Clash( self, s, b, &others[i], point, moveDir, VRS_SwingSpeed( vs, s, b, t, along ) ) ) {
+					return qfalse;	// stopped here
+				}
 			}
 		}
 
