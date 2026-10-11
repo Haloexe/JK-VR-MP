@@ -35,6 +35,11 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 //rww - RAGDOLL_END
 #define BONE_ANGLES_IK				0x4000  // the rag flags give more details
 
+// OpenJK VR: boneInfo_t.extraMatrix is a rigid transform in model space put on
+// top of the bone's final transform (after the angle overrides), so the bone
+// and its children can be moved about any point
+#define BONE_VR_TRANSFORM			0x0200
+
 #define BONE_ANGLES_TOTAL			( BONE_ANGLES_PREMULT | BONE_ANGLES_POSTMULT | BONE_ANGLES_REPLACE )
 #define BONE_ANIM_OVERRIDE			0x0008
 #define BONE_ANIM_OVERRIDE_LOOP		0x0010

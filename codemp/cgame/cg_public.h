@@ -724,6 +724,9 @@ typedef struct cgameImport_s {
 		// OpenJK VR: hide/show one model of a Ghoul2 instance (e.g. the weapon
 		// bolted to the player's hand) without removing it
 		qboolean		(*VR_G2SetModelHidden)					( void *ghoul2, int modelIndex, qboolean hidden );
+		// OpenJK VR: a rigid transform in model space on top of a bone's final
+		// transform (NULL removes it)
+		qboolean		(*VR_G2SetBoneTransform)				( void *ghoul2, int modelIndex, const char *boneName, const mdxaBone_t *matrix );
 	} ext;
 } cgameImport_t;
 

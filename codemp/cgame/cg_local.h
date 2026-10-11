@@ -1879,6 +1879,7 @@ qboolean CG_VR_HandAim( void );
 qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis );
 void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles );
 void CG_VR_AddAimDot( void );
+qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matrix3_t axis );
 // cg_vrbody.c (OpenJK VR)
 qboolean CG_VR_BodyActive( centity_t *cent );
 qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles );

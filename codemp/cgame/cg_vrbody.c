@@ -2,19 +2,26 @@
 ===========================================================================
 OpenJK VR (multiplayer) - your own body in first person.
 
-While you play in a headset with a gun out, your character's model is drawn
-around you: it stands under your head, turns with you, and its arms reach
-for your controllers. Nothing here is tied to one character. Every frame the
-model's own skeleton is measured (shoulders, elbows, wrists, knuckles, eyes),
-so any model built on the Jedi Academy humanoid skeleton - the stock
-characters and custom models alike - gets arms that fit its proportions.
+While you play in a headset with a gun or the saber out, your character's
+model is drawn around you: it stands under your head, turns with you, and
+its hands are on your controllers, gripping what they hold. Nothing here is
+tied to one character. Every frame the model's own skeleton is measured
+(shoulders, elbows, wrists, knuckles, the "held item" tag, eyes), so any
+model built on the Jedi Academy humanoid skeleton - the stock characters and
+custom models alike - gets arms that fit its proportions.
 
-How the arms work: the game animates the model as usual, then the upper arm
-and forearm bones are re-aimed with Ghoul2 "post-multiply" bone overrides
-(an extra rotation in the bone's own frame) so the hand lands on the
-controller. Hand and fingers hang off the forearm in this skeleton, so the
-forearm is also twisted to turn the hand the way the controller is turned,
-while the fingers keep playing the game's grip animation.
+How the arms work: the game animates the model as usual, then
+  - the upper arm and forearm bones are re-aimed with Ghoul2 "post-multiply"
+    bone overrides (an extra rotation in the bone's own frame) so the wrist
+    lands where the hand must be,
+  - the hand is turned at the wrist with an engine bone transform. In this
+    skeleton the finger bones hang off the forearm next to the hand bone, so
+    the hand and every finger bone are turned together about the wrist
+    (which bones need it is checked per model, see CG_VRB_ProbeHands).
+Where the hand must be comes from what it holds: a gun's grip is put in the
+hand exactly the way the game holds it in third person (the hand's "*r_hand"
+tag is where a weapon model's origin sits), and the saber's blade points
+along your fist, like a real hilt.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -23,8 +30,6 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "cg_local.h"
 #include "ghoul2/G2.h"
-
-extern qboolean BG_GetRootSurfNameWithVariant( void *ghoul2, const char *rootSurfName, char *returnSurfName, int returnSize );
 
 #define VRB_TURN_OFF		0x00000100	// G2SURFACEFLAG_NODESCENDANTS: surface and its children off
 #define VRB_HEAD_BIT		( 1 << ( G2_MODELPART_HEAD - 10 ) )
@@ -36,12 +41,24 @@ enum {
 	VRB_THUMB,		// thumb base
 	VRB_INDEX,		// index finger knuckle
 	VRB_LITTLE,		// ring/little finger knuckle
+	VRB_TAG,		// where a held item sits (a weapon model's origin)
 	VRB_NUM_ARM_BONES
 };
 
 static const char *const vrbArmBones[2][VRB_NUM_ARM_BONES] = {
-	{ "lhumerus", "lradius", "lhand", "l_d1_j1", "l_d2_j1", "l_d4_j1" },	// VR_HAND_LEFT
-	{ "rhumerus", "rradius", "rhand", "r_d1_j1", "r_d2_j1", "r_d4_j1" },	// VR_HAND_RIGHT
+	{ "lhumerus", "lradius", "lhand", "l_d1_j1", "l_d2_j1", "l_d4_j1", "*l_hand" },	// VR_HAND_LEFT
+	{ "rhumerus", "rradius", "rhand", "r_d1_j1", "r_d2_j1", "r_d4_j1", "*r_hand" },	// VR_HAND_RIGHT
+};
+
+// Everything that makes up a hand; the first one is the hand bone itself.
+#define VRB_MAX_HAND_BONES	17
+static const char *const vrbHandBones[2][VRB_MAX_HAND_BONES] = {
+	{ "lhand", "lhang_tag_bone",
+	  "l_d1_j1", "l_d1_j2", "l_d1_j3", "l_d2_j1", "l_d2_j2", "l_d2_j3", "l_d3_j1", "l_d3_j2", "l_d3_j3",
+	  "l_d4_j1", "l_d4_j2", "l_d4_j3", "l_d5_j1", "l_d5_j2", "l_d5_j3" },
+	{ "rhand", "rhang_tag_bone",
+	  "r_d1_j1", "r_d1_j2", "r_d1_j3", "r_d2_j1", "r_d2_j2", "r_d2_j3", "r_d3_j1", "r_d3_j2", "r_d3_j3",
+	  "r_d4_j1", "r_d4_j2", "r_d4_j3", "r_d5_j1", "r_d5_j2", "r_d5_j3" },
 };
 
 // G2API_GetBoltMatrix hands game code its axes relabelled ("this 90 degree
@@ -53,7 +70,7 @@ static const char *const vrbArmBones[2][VRB_NUM_ARM_BONES] = {
 #define VRB_NUM_CONVENTIONS	3
 
 // how strongly elbows are pulled down/out, against following the hand's turn
-static float vrbElbowPull = 0.3f;
+static float vrbElbowPull = 0.4f;
 
 typedef float vrbMat_t[3][3];		// rotation, row-major, acts on column vectors
 
@@ -62,10 +79,29 @@ typedef struct {
 	vec3_t		axis[3];			// the bone's own axes in the world
 } vrbBone_t;
 
+// what a hand holds
+enum {
+	VRB_GRIP_FREE,					// nothing: the hand rests on the controller
+	VRB_GRIP_GUN,					// the gun drawn at the controller (cg_weapons.c)
+	VRB_GRIP_SABER					// a saber bolted to this hand
+};
+
+typedef struct {
+	int			kind;
+	vec3_t		origin;				// GUN: the gun model's origin (its grip)
+	vec3_t		axis[3];			// GUN: the gun model's axes
+	int			saberModel;			// SABER: its Ghoul2 model index on the player
+} vrbGrip_t;
+
 typedef struct {
 	qboolean	solved;
 	qboolean	exact;				// well-bent arm in reach: the check below is meaningful
 	vec3_t		elbow, wrist;		// where the solution puts them
+	qboolean	tagTarget;			// the held-item tag was sent to an exact spot:
+	vec3_t		tagOrigin;
+	vec3_t		tagAxis[3];
+	float		reachExcess;		// wanted shoulder->wrist distance minus the arm's reach
+	vec3_t		reachDir;			// shoulder -> wrist
 } vrbArmResult_t;
 
 static struct {
@@ -83,10 +119,26 @@ static struct {
 	void		*headG2;
 	char		headSurf[MAX_QPATH];
 	void		*weaponG2;
+	void		*wristG2;
 
 	// where the entity was moved this frame (undone in CG_VR_BodyEndFrame)
 	centity_t	*shiftedEnt;
 	vec3_t		shift;
+
+	// leaning in: how far the body is brought forward (toward your eyes) so
+	// its arms reach where yours do
+	float		lean;
+	float		leanTarget;
+	int			leanTime;
+	int			leanSetTime;
+
+	// which bones turn with the hand at the wrist (CG_VRB_ProbeHands)
+	qboolean	probed;
+	int			probeRetry;			// cg.time to try again after a failed probe
+	void		*probeG2;
+	char		probeModel[MAX_QPATH];
+	qboolean	wristOk[2];
+	qboolean	handBoneTurn[2][VRB_MAX_HAND_BONES];
 
 	// per arm
 	vec3_t		pole[2];			// smoothed elbow direction, body-local
@@ -140,6 +192,11 @@ static void VRB_Mul( vrbMat_t a, vrbMat_t b, vrbMat_t out ) {
 		}
 	}
 	memcpy( out, t, sizeof( t ) );
+}
+
+static void VRB_Identity( vrbMat_t q ) {
+	memset( q, 0, sizeof( vrbMat_t ) );
+	q[0][0] = q[1][1] = q[2][2] = 1.0f;
 }
 
 // the rotation taking orthonormal frame "from" onto "to" (from[i] -> to[i])
@@ -245,13 +302,42 @@ skeleton access
 =============================================================================
 */
 
+static void CG_VRB_AxesFromBolt( const mdxaBone_t *m, int convention, vec3_t origin, vec3_t axis[3] ) {
+	vec3_t c[3];
+	int i;
+
+	for ( i = 0; i < 3; i++ ) {
+		origin[i] = m->matrix[i][3];
+		c[0][i] = m->matrix[i][0];
+		c[1][i] = m->matrix[i][1];
+		c[2][i] = m->matrix[i][2];
+	}
+	switch ( convention ) {
+	default:
+	case 0:	// undo GetBoltMatrix's relabelling (new x = -old y, new y = old x)
+		VectorCopy( c[1], axis[0] );
+		VectorScale( c[0], -1.0f, axis[1] );
+		VectorCopy( c[2], axis[2] );
+		break;
+	case 1:	// as returned
+		VectorCopy( c[0], axis[0] );
+		VectorCopy( c[1], axis[1] );
+		VectorCopy( c[2], axis[2] );
+		break;
+	case 2:	// the other way round
+		VectorScale( c[1], -1.0f, axis[0] );
+		VectorCopy( c[0], axis[1] );
+		VectorCopy( c[2], axis[2] );
+		break;
+	}
+}
+
 // A bone (or tag) of the player's model in the world. G2API_AddBolt returns
 // the existing bolt when there is one, so asking every frame never leaves a
 // stale index behind when the model changes.
 static qboolean CG_VRB_Bone( centity_t *cent, const char *name, int convention, vrbBone_t *out ) {
 	mdxaBone_t m;
-	vec3_t c[3];
-	int bolt, i;
+	int bolt;
 
 	bolt = trap->G2API_AddBolt( cent->ghoul2, 0, name );
 	if ( bolt < 0 ) {
@@ -261,32 +347,37 @@ static qboolean CG_VRB_Bone( centity_t *cent, const char *name, int convention, 
 			cg.time, cgs.gameModels, cent->modelScale ) ) {
 		return qfalse;
 	}
-	for ( i = 0; i < 3; i++ ) {
-		out->origin[i] = m.matrix[i][3];
-		c[0][i] = m.matrix[i][0];
-		c[1][i] = m.matrix[i][1];
-		c[2][i] = m.matrix[i][2];
-	}
-
-	switch ( convention ) {
-	default:
-	case 0:	// undo GetBoltMatrix's relabelling (new x = -old y, new y = old x)
-		VectorCopy( c[1], out->axis[0] );
-		VectorScale( c[0], -1.0f, out->axis[1] );
-		VectorCopy( c[2], out->axis[2] );
-		break;
-	case 1:	// as returned
-		VectorCopy( c[0], out->axis[0] );
-		VectorCopy( c[1], out->axis[1] );
-		VectorCopy( c[2], out->axis[2] );
-		break;
-	case 2:	// the other way round
-		VectorScale( c[1], -1.0f, out->axis[0] );
-		VectorCopy( c[0], out->axis[1] );
-		VectorCopy( c[2], out->axis[2] );
-		break;
-	}
+	CG_VRB_AxesFromBolt( &m, convention, out->origin, out->axis );
 	return VRB_Orthonormalize( out->axis );
+}
+
+// A bone's position in the model's own (unscaled) space - the space the
+// engine's bone transforms work in.
+static qboolean CG_VRB_ModelSpaceBone( void *g2, int bolt, vec3_t out ) {
+	static vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	mdxaBone_t m;
+
+	if ( bolt < 0 || !trap->G2API_GetBoltMatrix( g2, 0, bolt, &m, zero, zero, cg.time, cgs.gameModels, zero ) ) {
+		return qfalse;
+	}
+	VectorSet( out, m.matrix[0][3], m.matrix[1][3], m.matrix[2][3] );
+	return qtrue;
+}
+
+// world -> the model's own space, as GetBoltMatrix maps it the other way
+static void CG_VRB_WorldToModel( centity_t *cent, const vec3_t world, vec3_t model ) {
+	matrix3_t ax;
+	vec3_t d;
+	int i;
+
+	AnglesToAxis( cent->turAngles, ax );
+	VectorSubtract( world, cent->lerpOrigin, d );
+	for ( i = 0; i < 3; i++ ) {
+		model[i] = DotProduct( d, ax[i] );
+		if ( cent->modelScale[i] ) {
+			model[i] /= cent->modelScale[i];
+		}
+	}
 }
 
 // Sets a bone's post-multiply override so its axes become "want", given the
@@ -307,8 +398,23 @@ static void CG_VRB_SetBone( void *g2, const char *bone, vec3_t cur[3], vec3_t wa
 		POSITIVE_Z, NEGATIVE_Y, POSITIVE_X, NULL, 0, cg.time );
 }
 
+static void CG_VRB_SetHandBones( void *g2, int h, const mdxaBone_t *m ) {
+	int k;
+
+	if ( !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	for ( k = 0; k < VRB_MAX_HAND_BONES; k++ ) {
+		if ( vrb.handBoneTurn[h][k] ) {
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][k], m );
+		}
+	}
+}
+
+// Back to the animated pose: no arm overrides, wrists straight.
 static void CG_VRB_ResetArms( void *g2 ) {
 	static const vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	static const mdxaBone_t identity = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } } };
 	int h;
 
 	for ( h = 0; h < 2; h++ ) {
@@ -316,7 +422,134 @@ static void CG_VRB_ResetArms( void *g2 ) {
 			POSITIVE_Z, NEGATIVE_Y, POSITIVE_X, NULL, 0, cg.time );
 		trap->G2API_SetBoneAngles( g2, 0, vrbArmBones[h][VRB_FORE], zero, BONE_ANGLES_POSTMULT,
 			POSITIVE_Z, NEGATIVE_Y, POSITIVE_X, NULL, 0, cg.time );
+		if ( vrb.wristG2 == g2 && vrb.probeG2 == g2 ) {
+			CG_VRB_SetHandBones( g2, h, &identity );
+		}
 	}
+}
+
+/*
+=================
+CG_VRB_ProbeHands
+
+Finds out, once per model, which bones have to be turned for the hand to
+turn at the wrist: the hand bone, plus every finger/tag bone that does not
+already follow it. The hand bone is shifted with a test transform; whatever
+moves along is its child. (In Jedi Academy's skeleton the fingers are the
+forearm's children, so they all get turned with it.)
+=================
+*/
+static void CG_VRB_ProbeHands( centity_t *cent ) {
+	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
+	void *g2 = cent->ghoul2;
+	mdxaBone_t test = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 8 } } };	// shift up 8 units
+	vec3_t before[VRB_MAX_HAND_BONES], after;
+	int bolt[VRB_MAX_HAND_BONES];
+	int h, k, turned = 0;
+
+	if ( vrb.probed && vrb.probeG2 == g2 && !Q_stricmp( vrb.probeModel, ci->modelName ) &&
+		( ( vrb.wristOk[0] && vrb.wristOk[1] ) || cg.time < vrb.probeRetry ) ) {
+		return;
+	}
+	vrb.probed = qtrue;
+	vrb.probeRetry = cg.time + 2000;	// (only matters if a hand failed)
+	vrb.probeG2 = g2;
+	Q_strncpyz( vrb.probeModel, ci->modelName, sizeof( vrb.probeModel ) );
+	vrb.wristG2 = NULL;
+
+	for ( h = 0; h < 2; h++ ) {
+		vrb.wristOk[h] = qfalse;
+		memset( vrb.handBoneTurn[h], 0, sizeof( vrb.handBoneTurn[h] ) );
+		if ( !trap->ext.VR_G2SetBoneTransform ) {
+			continue;
+		}
+		for ( k = 0; k < VRB_MAX_HAND_BONES; k++ ) {
+			bolt[k] = trap->G2API_AddBolt( g2, 0, vrbHandBones[h][k] );
+			if ( bolt[k] >= 0 && !CG_VRB_ModelSpaceBone( g2, bolt[k], before[k] ) ) {
+				bolt[k] = -1;
+			}
+		}
+		if ( bolt[0] < 0 || !trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][0], &test ) ) {
+			continue;
+		}
+		if ( CG_VRB_ModelSpaceBone( g2, bolt[0], after ) && Distance( before[0], after ) > 4.0f ) {
+			vrb.wristOk[h] = qtrue;
+			vrb.handBoneTurn[h][0] = qtrue;
+			for ( k = 1; k < VRB_MAX_HAND_BONES; k++ ) {
+				if ( bolt[k] >= 0 && CG_VRB_ModelSpaceBone( g2, bolt[k], after ) && Distance( before[k], after ) < 1.0f ) {
+					vrb.handBoneTurn[h][k] = qtrue;		// didn't follow the hand: turn it too
+				}
+			}
+		}
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][0], NULL );
+
+		if ( vrb.wristOk[h] ) {
+			// A bone hanging off another chosen one (a finger's second joint
+			// under its first, say) would be moved twice: shift them all once
+			// and drop whatever moved double.
+			int pass;
+			for ( pass = 0; pass < VRB_MAX_HAND_BONES; pass++ ) {
+				qboolean dropped = qfalse;
+				CG_VRB_SetHandBones( g2, h, &test );
+				for ( k = 1; k < VRB_MAX_HAND_BONES; k++ ) {
+					if ( vrb.handBoneTurn[h][k] && CG_VRB_ModelSpaceBone( g2, bolt[k], after ) &&
+						Distance( before[k], after ) > 12.0f ) {
+						vrb.handBoneTurn[h][k] = qfalse;
+						dropped = qtrue;
+						break;		// one at a time: its parent may be the next to go
+					}
+				}
+				CG_VRB_SetHandBones( g2, h, NULL );
+				if ( !dropped ) {
+					break;
+				}
+			}
+			for ( k = 0, turned = 0; k < VRB_MAX_HAND_BONES; k++ ) {
+				turned += vrb.handBoneTurn[h][k] ? 1 : 0;
+			}
+		}
+
+		if ( vrb.wristOk[h] && cg_vrBodyDebug.integer ) {
+			// does the held-item tag go along? (it should: it is part of the hand)
+			const int tag = trap->G2API_AddBolt( g2, 0, vrbArmBones[h][VRB_TAG] );
+			vec3_t t0, t1;
+			qboolean follows = qfalse;
+			if ( CG_VRB_ModelSpaceBone( g2, tag, t0 ) ) {
+				CG_VRB_SetHandBones( g2, h, &test );
+				follows = ( CG_VRB_ModelSpaceBone( g2, tag, t1 ) && Distance( t0, t1 ) > 7.0f ) ? qtrue : qfalse;
+				CG_VRB_SetHandBones( g2, h, NULL );
+			}
+			Com_Printf( "VR body: %s %s hand: %d bone(s) turn at the wrist, item tag %s\n", ci->modelName,
+				h == VR_HAND_RIGHT ? "right" : "left", turned, follows ? "goes along" : S_COLOR_YELLOW "STAYS (guns may sit off the hand)" );
+		}
+	}
+}
+
+// Turns the hand (and the bones that make it up) by world rotation D about
+// the world point "wrist".
+static void CG_VRB_TurnWrist( centity_t *cent, int h, vrbMat_t D, const vec3_t wrist ) {
+	mdxaBone_t m;
+	matrix3_t ax;
+	vec3_t col, p;
+	int r, c;
+
+	if ( !vrb.wristOk[h] || vrb.probeG2 != cent->ghoul2 ) {
+		return;
+	}
+	// D in the model's own space, and the wrist there
+	AnglesToAxis( cent->turAngles, ax );
+	for ( c = 0; c < 3; c++ ) {
+		VRB_Apply( D, ax[c], col );
+		for ( r = 0; r < 3; r++ ) {
+			m.matrix[r][c] = DotProduct( ax[r], col );
+		}
+	}
+	CG_VRB_WorldToModel( cent, wrist, p );
+	for ( r = 0; r < 3; r++ ) {
+		m.matrix[r][3] = p[r] - ( m.matrix[r][0] * p[0] + m.matrix[r][1] * p[1] + m.matrix[r][2] * p[2] );
+	}
+	CG_VRB_SetHandBones( cent->ghoul2, h, &m );
+	vrb.wristG2 = cent->ghoul2;
 }
 
 /*
@@ -329,13 +562,14 @@ when, and which way the body faces
 
 qboolean CG_VR_BodyActive( centity_t *cent ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
+	const qboolean saber = ( cent->currentState.weapon == WP_SABER ) ? qtrue : qfalse;
 
-	if ( !cg_vrBody.integer || !CG_VR() || !cg.snap ) {
+	if ( !cg_vrBody.integer || !CG_VR() || !cg.snap || cg.demoPlayback ) {
 		return qfalse;
 	}
-	if ( !CG_VR_HandAim() ) {
+	if ( !CG_VR_HandAim() && !( saber && cg_vrSaber.integer ) ) {
 		// no gun in the VR hand (duel modes, a demo, vr_handAim 0, right
-		// controller lost): the stock first-person view
+		// controller lost) and no first-person saber: the stock view
 		return qfalse;
 	}
 	if ( cent->currentState.number != ps->clientNum || ( cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
@@ -350,9 +584,14 @@ qboolean CG_VR_BodyActive( centity_t *cent ) {
 	}
 	if ( ( cent->currentState.eFlags & ( EF_DEAD | EF_RAG | EF_NODRAW ) ) || cent->isRagging ||
 		( cent->currentState.eFlags2 & EF2_HELD_BY_MONSTER ) || cent->currentState.heldByClient ||
-		cent->currentState.m_iVehicleNum || cent->currentState.weapon == WP_EMPLACED_GUN ||
-		cent->currentState.weapon == WP_SABER ) {
-		return qfalse;	// the game's own posing (or the stock saber view) wins
+		cent->currentState.m_iVehicleNum || cent->currentState.weapon == WP_EMPLACED_GUN ) {
+		return qfalse;	// the game's own posing wins
+	}
+	if ( BG_FlippingAnim( ps->legsAnim ) || BG_InSpecialJump( ps->legsAnim ) ||
+		BG_InRoll( (playerState_t *)ps, ps->legsAnim ) ) {
+		// flips, wall runs, rolls: the whole body tumbles; it would swing
+		// around your eyes, so it is left out for that moment
+		return qfalse;
 	}
 	return qtrue;
 }
@@ -417,37 +656,66 @@ arms
 =============================================================================
 */
 
+// What hand h holds this frame.
+static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip ) {
+	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
+	const int weapon = cent->currentState.weapon;
+
+	memset( grip, 0, sizeof( *grip ) );
+	grip->kind = VRB_GRIP_FREE;
+
+	if ( weapon == WP_SABER ) {
+		// saber 1 in the right hand, a second saber in the left
+		const int model = ( h == VR_HAND_RIGHT ) ? 1 : 2;
+		if ( ( h == VR_HAND_RIGHT && cent->currentState.saberInFlight ) ||
+			( h == VR_HAND_LEFT && !ci->saber[1].model[0] ) ) {
+			return;
+		}
+		if ( trap->G2API_HasGhoul2ModelOnIndex( &cent->ghoul2, model ) ) {
+			grip->kind = VRB_GRIP_SABER;
+			grip->saberModel = model;
+		}
+		return;
+	}
+	if ( h == VR_HAND_RIGHT && CG_VR_HandAim() ) {
+		vec3_t angles;
+		if ( CG_VR_HeldWeaponPose( weapon, grip->origin, angles, grip->axis ) ) {
+			grip->kind = VRB_GRIP_GUN;
+		}
+	}
+}
+
 /*
 =================
 CG_VRB_SolveArm
 
-Two-bone IK for one arm, in the world. Reads the arm as the game animated it
-(overrides reset), works out where the elbow and wrist go, and sets the
-upper arm and forearm overrides. "commit" keeps the smoothing/hinge state
-(only the pass that is finally drawn does).
+Two-bone IK for one arm, in the world, then the wrist. Reads the arm as the
+game animated it (overrides reset), works out where the hand has to be and
+how it has to be turned for what it holds, puts the wrist there with the
+upper arm and forearm, and turns the hand at the wrist. "commit" keeps the
+smoothing/hinge state (only the pass that is finally drawn does).
 =================
 */
 static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int h, int convention,
-	float bodyYaw, qboolean commit, vrbArmResult_t *res ) {
+	float bodyYaw, qboolean commit, const vrbGrip_t *grip, vrbArmResult_t *res ) {
 	vrbBone_t b[VRB_NUM_ARM_BONES];
-	vec3_t gripLocal, gripAxisLocal[3], grip, gA[3];
-	vec3_t S, E0, W0, kmid, Ah[3], Ad[3], P, Wt, u, v, E, u0, u1, f0, f1, n0, n1, c0, c1, tmp;
+	qboolean have[VRB_NUM_ARM_BONES];
+	vec3_t gripLocal, gripAxisLocal[3], gripO, gA[3];
+	vec3_t S, E0, W0, kmid, Ah[3], Ad[3], anchor, Wt, u, v, E, u0, u1, f0, f1, n0, n1, c0, c1, tmp;
 	vec3_t bodyFwd, bodyLeft, outward, hint, down = { 0.0f, 0.0f, -1.0f };
 	vec3_t F0[3], F1[3], want[3], cur[3];
-	vrbMat_t Y, Q1, A, X;
+	vrbMat_t Y0, Y, Q1, A, X;
 	float a, len2, d, dmin, dmax, cosA, sinA, w, pitch;
-	qboolean haveHinge = qfalse, haveFingers = qtrue;
+	qboolean haveHinge = qfalse, anatomy = qfalse;
 	int i;
 
 	memset( res, 0, sizeof( *res ) );
 
 	for ( i = 0; i < VRB_NUM_ARM_BONES; i++ ) {
-		if ( !CG_VRB_Bone( cent, vrbArmBones[h][i], convention, &b[i] ) ) {
-			if ( i <= VRB_HAND ) {
-				return qfalse;	// this skeleton has no such arm
-			}
-			haveFingers = qfalse;	// can still reach, just not turn the hand
-		}
+		have[i] = CG_VRB_Bone( cent, vrbArmBones[h][i], convention, &b[i] );
+	}
+	if ( !have[VRB_UPPER] || !have[VRB_FORE] || !have[VRB_HAND] ) {
+		return qfalse;	// this skeleton has no such arm
 	}
 	VectorCopy( b[VRB_UPPER].origin, S );
 	VectorCopy( b[VRB_FORE].origin, E0 );
@@ -463,40 +731,37 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	for ( i = 0; i < 3; i++ ) {
 		VectorCopy( vr->gripAxis[h][i], gripAxisLocal[i] );
 	}
-	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gripLocal, gripAxisLocal, grip, gA );
-	VectorMA( grip, cg_vrHandX.value, gA[0], grip );
-	VectorMA( grip, ( h == VR_HAND_RIGHT ) ? cg_vrHandY.value : -cg_vrHandY.value, gA[1], grip );
-	VectorMA( grip, cg_vrHandZ.value, gA[2], grip );
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gripLocal, gripAxisLocal, gripO, gA );
+	VectorMA( gripO, cg_vrHandX.value, gA[0], gripO );
+	VectorMA( gripO, ( h == VR_HAND_RIGHT ) ? cg_vrHandY.value : -cg_vrHandY.value, gA[1], gripO );
+	VectorMA( gripO, cg_vrHandZ.value, gA[2], gripO );
 
 	// The hand as animated, by anatomy: wrist -> knuckles, and across the
 	// knuckles from the little finger to the index finger (the thumb is on
 	// that side; if a model has them the other way round, flip).
-	if ( haveFingers ) {
+	if ( have[VRB_THUMB] && have[VRB_INDEX] && have[VRB_LITTLE] ) {
 		VectorAdd( b[VRB_INDEX].origin, b[VRB_LITTLE].origin, kmid );
 		VectorScale( kmid, 0.5f, kmid );
 		VectorSubtract( kmid, W0, Ah[0] );
 		VectorSubtract( b[VRB_INDEX].origin, b[VRB_LITTLE].origin, Ah[1] );
-		if ( VectorNormalize( Ah[0] ) < 0.01f ) {
-			haveFingers = qfalse;
-		} else {
+		if ( VectorNormalize( Ah[0] ) > 0.01f ) {
 			VectorMA( Ah[1], -DotProduct( Ah[1], Ah[0] ), Ah[0], Ah[1] );
-			if ( VectorNormalize( Ah[1] ) < 0.01f ) {
-				haveFingers = qfalse;
+			if ( VectorNormalize( Ah[1] ) > 0.01f ) {
+				VectorSubtract( b[VRB_THUMB].origin, kmid, tmp );
+				if ( DotProduct( tmp, Ah[1] ) < 0.0f ) {
+					VectorScale( Ah[1], -1.0f, Ah[1] );
+				}
+				CrossProduct( Ah[0], Ah[1], Ah[2] );
+				anatomy = qtrue;
 			}
 		}
 	}
 
-	if ( haveFingers ) {
-		VectorSubtract( b[VRB_THUMB].origin, kmid, tmp );
-		if ( DotProduct( tmp, Ah[1] ) < 0.0f ) {
-			VectorScale( Ah[1], -1.0f, Ah[1] );
-		}
-		CrossProduct( Ah[0], Ah[1], Ah[2] );
-
-		// The same directions for a hand holding the controller (OpenXR grip
-		// pose: its -Z runs through the fist from the little finger to the
-		// thumb, +Y points back toward the wrist). Quake axes: gA[0] = -Z,
-		// gA[2] = +Y.
+	// Y0 turns the animated hand to lie on the controller like a real one:
+	// OpenXR's grip pose runs its -Z through the fist from the little finger
+	// to the thumb, its +Y back toward the wrist (Quake axes: gA[0] = -Z,
+	// gA[2] = +Y).
+	if ( anatomy ) {
 		VectorScale( gA[2], -1.0f, Ad[0] );
 		VectorCopy( gA[0], Ad[1] );
 		pitch = cg_vrHandPitch.value;
@@ -505,21 +770,63 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 			VectorCopy( tmp, Ad[0] );
 		}
 		CrossProduct( Ad[0], Ad[1], Ad[2] );
-
-		// Y turns the animated hand into the controller's orientation
-		VRB_FrameMap( Ah, Ad, Y );
-
-		// wrist target: the middle of the hand on the controller's grip
-		VectorSubtract( kmid, W0, tmp );
-		VectorScale( tmp, 0.5f, P );
-		VRB_Apply( Y, P, P );
-		VectorSubtract( grip, P, Wt );
+		VRB_FrameMap( Ah, Ad, Y0 );
 	} else {
-		// no finger bones: the wrist goes to the grip, the hand keeps its
-		// animated turn on the forearm
-		memset( Y, 0, sizeof( Y ) );
-		Y[0][0] = Y[1][1] = Y[2][2] = 1.0f;
-		VectorCopy( grip, Wt );
+		VRB_Identity( Y0 );
+	}
+
+	// Y: how the hand has to be turned for what it holds; Wt: where the
+	// wrist then goes so the hold point lands on target
+	if ( grip->kind == VRB_GRIP_GUN && have[VRB_TAG] ) {
+		// Exactly the game's own hold: a gun bolted to the hand has the tag's
+		// own axes. The gun drawn on its own (refEntity axis A) gets the
+		// renderer's 90-degree root on top (tr_ghoul2.cpp identityMatrix), so
+		// its model axes are A * R90 = ( A[1], -A[0], A[2] ).
+		vec3_t gunAxis[3];
+		VectorCopy( grip->axis[1], gunAxis[0] );
+		VectorScale( grip->axis[0], -1.0f, gunAxis[1] );
+		VectorCopy( grip->axis[2], gunAxis[2] );
+		VRB_FrameMap( b[VRB_TAG].axis, gunAxis, Y );
+		VectorSubtract( b[VRB_TAG].origin, W0, tmp );
+		VRB_Apply( Y, tmp, tmp );
+		VectorSubtract( grip->origin, tmp, Wt );
+		res->tagTarget = qtrue;
+		VectorCopy( grip->origin, res->tagOrigin );
+		VectorCopy( gunAxis[0], res->tagAxis[0] );
+		VectorCopy( gunAxis[1], res->tagAxis[1] );
+		VectorCopy( gunAxis[2], res->tagAxis[2] );
+	} else {
+		memcpy( Y, Y0, sizeof( Y ) );
+		if ( grip->kind == VRB_GRIP_SABER ) {
+			// the blade along your fist (tilted by cg_vrSaberPitch), the
+			// hand turned as little as that allows from lying naturally
+			mdxaBone_t m;
+			vec3_t bladeNow, bladeWant;
+			const float sp = DEG2RAD( cg_vrSaberPitch.value );
+			if ( trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 0, &m, cent->turAngles,
+					cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale ) ) {
+				BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, bladeNow );
+				VectorScale( gA[0], cosf( sp ), bladeWant );
+				VectorMA( bladeWant, -sinf( sp ), gA[2], bladeWant );
+				if ( VectorNormalize( bladeNow ) > 0.5f && VectorNormalize( bladeWant ) > 0.5f ) {
+					VRB_Apply( Y0, bladeNow, tmp );
+					VRB_Arc( tmp, bladeWant, A );
+					VRB_Mul( A, Y0, Y );
+				}
+			}
+		}
+		// the hold point (the tag, inside the fist) on the controller's grip
+		if ( have[VRB_TAG] ) {
+			VectorCopy( b[VRB_TAG].origin, anchor );
+		} else if ( anatomy ) {
+			VectorAdd( W0, kmid, anchor );
+			VectorScale( anchor, 0.5f, anchor );
+		} else {
+			VectorCopy( W0, anchor );
+		}
+		VectorSubtract( anchor, W0, tmp );
+		VRB_Apply( Y, tmp, tmp );
+		VectorSubtract( gripO, tmp, Wt );
 	}
 
 	// reach: shoulder -> wrist distance the arm can actually make
@@ -530,6 +837,8 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	}
 	dmin = fabsf( a - len2 ) + 0.02f * ( a + len2 );
 	dmax = 0.995f * ( a + len2 );
+	res->reachExcess = d - dmax;
+	VectorCopy( u, res->reachDir );
 	d = Com_Clamp( dmin, dmax, d );
 	VectorMA( S, d, u, Wt );
 	cosA = Com_Clamp( -1.0f, 1.0f, ( a * a + d * d - len2 * len2 ) / ( 2.0f * a * d ) );
@@ -650,8 +959,9 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		memcpy( Q1, A, sizeof( Q1 ) );
 	}
 
-	// Forearm (hand and fingers ride on it): the controller's orientation,
-	// corrected by the least turn that points the forearm at the wrist.
+	// Forearm (the hand rides on it): the hand's turn, corrected by the least
+	// turn that points the forearm at the wrist. The twist stays in the
+	// forearm, like a real one.
 	VRB_Apply( Y, f0, tmp );
 	VRB_Arc( tmp, f1, A );
 	VRB_Mul( A, Y, X );
@@ -662,6 +972,14 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	VRB_RotateFrame( Q1, b[VRB_FORE].axis, cur );
 	VRB_RotateFrame( X, b[VRB_FORE].axis, want );
 	CG_VRB_SetBone( cent->ghoul2, vrbArmBones[h][VRB_FORE], cur, want );
+
+	// Wrist: the bend that's left (Y = D X), about the wrist
+	if ( cg_vrBodyWrist.integer ) {
+		vrbMat_t D;
+		VRB_Apply( Y, f0, tmp );
+		VRB_Arc( f1, tmp, D );
+		CG_VRB_TurnWrist( cent, h, D, Wt );
+	}
 
 	res->solved = qtrue;
 	res->exact = ( sinA > 0.3f ) ? qtrue : qfalse;
@@ -696,16 +1014,65 @@ static float CG_VRB_ArmError( centity_t *cent, vrbArmResult_t res[2], qboolean *
 
 static int CG_VRB_SolveArms( centity_t *cent, const vrClientState_t *vr, int convention, float bodyYaw,
 	qboolean commit, vrbArmResult_t res[2] ) {
+	vrbGrip_t grip;
 	int h, n = 0;
 
 	CG_VRB_ResetArms( cent->ghoul2 );
 	for ( h = 0; h < 2; h++ ) {
 		memset( &res[h], 0, sizeof( res[h] ) );
-		if ( vr->handValid[h] && CG_VRB_SolveArm( cent, vr, h, convention, bodyYaw, commit, &res[h] ) ) {
+		if ( !vr->handValid[h] ) {
+			continue;
+		}
+		CG_VRB_Grip( cent, h, &grip );
+		if ( CG_VRB_SolveArm( cent, vr, h, convention, bodyYaw, commit, &grip, &res[h] ) ) {
 			n++;
 		}
 	}
 	return n;
+}
+
+// cg_vrBodyDebug 2: how well the held-item tag met its target
+static void CG_VRB_ReportGrip( centity_t *cent, vrbArmResult_t res[2] ) {
+	vrbBone_t tag;
+	float ang, worst;
+	int h, i;
+
+	for ( h = 0; h < 2; h++ ) {
+		if ( !res[h].tagTarget || !CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], vrb.convention, &tag ) ) {
+			continue;
+		}
+		worst = 0.0f;
+		for ( i = 0; i < 3; i++ ) {
+			ang = RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, DotProduct( tag.axis[i], res[h].tagAxis[i] ) ) ) );
+			worst = Q_max( worst, ang );
+		}
+		Com_Printf( "VR body: %s grip off by %.2f units, %.1f degrees\n", h == VR_HAND_RIGHT ? "right" : "left",
+			Distance( tag.origin, res[h].tagOrigin ), worst );
+	}
+}
+
+// When a hand can't reach forward far enough, the body leans in for the
+// next frames (up to having its eyes at yours), instead of the hand falling
+// short of what it holds; with reach to spare it leans back out.
+static void CG_VRB_UpdateLean( vrbArmResult_t res[2], float bodyYaw ) {
+	vec3_t fwd;
+	float want = -1e6f, f;
+	int h;
+
+	if ( vrb.leanSetTime == cg.time ) {
+		return;		// (second eye)
+	}
+	vrb.leanSetTime = cg.time;
+	VectorSet( fwd, cosf( DEG2RAD( bodyYaw ) ), sinf( DEG2RAD( bodyYaw ) ), 0.0f );
+	for ( h = 0; h < 2; h++ ) {
+		f = res[h].solved ? DotProduct( res[h].reachDir, fwd ) : 0.0f;
+		if ( f > 0.3f ) {
+			// leaning in by x brings the wrist target about x*f closer
+			want = Q_max( want, res[h].reachExcess / f );
+		}
+	}
+	// measured with this frame's lean already in (want < 0: reach to spare)
+	vrb.leanTarget = ( want > -1e5f ) ? Com_Clamp( 0.0f, Q_max( 0.0f, cg_vrBodyBack.value ), vrb.lean + want ) : 0.0f;
 }
 
 /*
@@ -725,6 +1092,8 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	int c, best;
 
 	vrb.armsG2 = cent->ghoul2;
+	CG_VRB_ResetArms( cent->ghoul2 );
+	CG_VRB_ProbeHands( cent );
 
 	if ( vrb.convention < 0 && vrb.checkTime != cg.time ) {
 		vrb.checkTime = cg.time;
@@ -769,6 +1138,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 		}
 		vrb.lastBest = ( vrb.convention >= 0 ) ? vrb.convention : best;
 		CG_VRB_SolveArms( cent, vr, vrb.lastBest, bodyYaw, qtrue, res );
+		CG_VRB_UpdateLean( res, bodyYaw );
 		return;
 	}
 
@@ -779,6 +1149,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	}
 
 	CG_VRB_SolveArms( cent, vr, vrb.convention, bodyYaw, qtrue, res );
+	CG_VRB_UpdateLean( res, bodyYaw );
 
 	// occasional re-check (a model with a different skeleton could need another convention)
 	if ( cg.time >= vrb.nextCheck || cg_vrBodyDebug.integer > 1 ) {
@@ -786,6 +1157,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 		vrb.nextCheck = cg.time + 2000;
 		if ( cg_vrBodyDebug.integer > 1 ) {
 			Com_Printf( "VR body: arm error %.2f%s\n", e, meaningful ? "" : " (not checked)" );
+			CG_VRB_ReportGrip( cent, res );
 		}
 		if ( meaningful ) {
 			if ( e > 2.0f ) {
@@ -858,10 +1230,19 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		vrb.headG2 = cent->ghoul2;
 	}
 
-	// the gun you see is the one in your VR hand (cg_weapons.c), not the
-	// copy bolted to the body's hand
-	if ( trap->ext.VR_G2SetModelHidden && trap->ext.VR_G2SetModelHidden( cent->ghoul2, 1, qtrue ) ) {
-		vrb.weaponG2 = cent->ghoul2;
+	// The gun you see is the one at your controller (cg_weapons.c), not the
+	// copy bolted to the body's hand. A saber stays on the body: it is
+	// drawn in the body's hand, which is on your controller.
+	if ( trap->ext.VR_G2SetModelHidden ) {
+		if ( cent->currentState.weapon != WP_SABER && cg_vrBodyDebug.integer != 3 ) {
+			if ( trap->ext.VR_G2SetModelHidden( cent->ghoul2, 1, qtrue ) ) {
+				vrb.weaponG2 = cent->ghoul2;
+			}
+		} else if ( vrb.weaponG2 == cent->ghoul2 ) {
+			// (cg_vrBodyDebug 3 shows it, to check it sits exactly on the VR gun)
+			trap->ext.VR_G2SetModelHidden( cent->ghoul2, 1, qfalse );
+			vrb.weaponG2 = NULL;
+		}
 	}
 
 	// the animated pose, without last frame's arm overrides
@@ -881,9 +1262,18 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		VectorCopy( le.origin, eyes );
 		haveEyes = qtrue;
 	}
+	// (leaning in eases toward what the arms asked for last frame)
+	if ( vrb.leanTime != cg.time ) {
+		const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.leanTime ) * 0.001f );
+		if ( cg.time - vrb.leanTime > 500 || cg.time < vrb.leanTime ) {
+			vrb.lean = vrb.leanTarget = 0.0f;
+		}
+		vrb.lean += ( vrb.leanTarget - vrb.lean ) * ( 1.0f - expf( -dt / 0.08f ) );
+		vrb.leanTime = cg.time;
+	}
 	if ( haveEyes && CG_VR_HeadPose( head, headAxis ) ) {
 		VectorSet( fwd, cosf( DEG2RAD( yaw ) ), sinf( DEG2RAD( yaw ) ), 0.0f );
-		VectorMA( head, -cg_vrBodyBack.value, fwd, head );
+		VectorMA( head, vrb.lean - cg_vrBodyBack.value, fwd, head );
 		VectorSubtract( head, eyes, shift );
 		shift[2] = 0.0f;
 		len = VectorLength( shift );
@@ -900,8 +1290,8 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		shift[2] = Com_Clamp( -48.0f, 48.0f, shift[2] );
 
 		// Move the entity itself for the rest of the frame, so effects bolted
-		// to the body (force powers from your hand...) come from the drawn
-		// model. CG_VR_BodyEndFrame puts it back.
+		// to the body (force powers from your hand, the saber) come from the
+		// drawn model. CG_VR_BodyEndFrame puts it back.
 		VectorAdd( cent->lerpOrigin, shift, cent->lerpOrigin );
 		VectorCopy( cent->lerpOrigin, legs->origin );
 		VectorCopy( cent->lerpOrigin, legs->oldorigin );
@@ -949,6 +1339,11 @@ void CG_VR_BodyRestore( centity_t *cent ) {
 		CG_VRB_ResetArms( cent->ghoul2 );
 		vrb.armsG2 = NULL;
 		vrb.poleValid[0] = vrb.poleValid[1] = qfalse;
+	}
+	if ( vrb.wristG2 == cent->ghoul2 ) {
+		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_LEFT, NULL );
+		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_RIGHT, NULL );
+		vrb.wristG2 = NULL;
 	}
 	if ( vrb.headG2 == cent->ghoul2 ) {
 		// back on, unless the head was cut off for real (the skin is

@@ -8917,7 +8917,9 @@ void CG_Player( centity_t *cent ) {
 #if 0
 			if (!cg_fpls.integer || cent->currentState.weapon != WP_SABER)
 #else
-			if (cent->currentState.weapon != WP_SABER && !vrBody)
+			// (OpenJK VR: in a headset your body shows in first person only
+			// as the tracked VR body, saber or not)
+			if ((cent->currentState.weapon != WP_SABER || CG_VR()) && !vrBody)
 #endif
 			{
 				renderfx = RF_THIRD_PERSON;			// only draw in mirrors
@@ -9342,7 +9344,8 @@ void CG_Player( centity_t *cent ) {
 	memset( &torso, 0, sizeof(torso) );
 
 	//rww - force speed "trail" effect
-	if (!(cent->currentState.powerups & (1 << PW_SPEED)) || doAlpha || !cg_speedTrail.integer)
+	// (OpenJK VR: not copies of your own body around you)
+	if (!(cent->currentState.powerups & (1 << PW_SPEED)) || doAlpha || !cg_speedTrail.integer || vrBody)
 	{
 		cent->frame_minus1_refreshed = 0;
 		cent->frame_minus2_refreshed = 0;
@@ -9418,9 +9421,13 @@ void CG_Player( centity_t *cent ) {
 		 &torso.oldframe, &torso.frame, &torso.backlerp );
 
 	if ( vrBody ) {
-		// OpenJK VR: hands on the controllers, against this frame's animation
+		// OpenJK VR: hands on the controllers, against this frame's animation.
+		// Then rebuild the skeleton through model 0 (as above): bolt queries on
+		// a saber (model 1/2) only rebuild when that model is out of date, and
+		// would otherwise still see the hand where the animation had it.
 		CG_VR_BodyArms( cent );
-		gotLHandMatrix = qfalse;	// the left hand moved
+		trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_lhand, &lHandMatrix, cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale);
+		gotLHandMatrix = qtrue;
 	}
 
 	// add the talk baloon or disconnect icon
@@ -10531,7 +10538,10 @@ stillDoSaber:
 				}
 				else
 				{
-					CG_AddSaberBlade( cent, cent, NULL, 0, 0, l, k, legs.origin, rootAngles, qfalse, qfalse);
+					// (OpenJK VR: while your body sits out a flip or roll in
+					// first person, its blade isn't shown either)
+					CG_AddSaberBlade( cent, cent, NULL, 0, 0, l, k, legs.origin, rootAngles, qfalse,
+						( cent->currentState.number == cg.clientNum && !cg.renderingThirdPerson && CG_VR() && !vrBody ) ? qtrue : qfalse );
 				}
 
 				k++;
@@ -10822,7 +10832,7 @@ stillDoSaber:
 		cent->frame_hold_time = cg.time + 254;
 	}
 
-	if (cent->frame_hold_time >= cg.time)
+	if (cent->frame_hold_time >= cg.time && !vrBody)
 	{
 		refEntity_t reframe_hold;
 

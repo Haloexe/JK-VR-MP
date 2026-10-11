@@ -2399,6 +2399,54 @@ int G2API_GetGhoul2ModelFlags(CGhoul2Info *ghlInfo)
 	return 0;
 }
 
+int G2_Find_Bone(const model_t *mod, boneInfo_v &blist, const char *boneName);
+int G2_Add_Bone(const model_t *mod, boneInfo_v &blist, const char *boneName);
+qboolean G2_Remove_Bone_Index(boneInfo_v &blist, int index);
+
+// OpenJK VR: a rigid transform in model space put on top of a bone's final
+// transform, moving the bone and its children about any point (NULL removes
+// it). Only for bones the game isn't driving with angle overrides.
+qboolean G2API_SetBoneVRTransform(CGhoul2Info_v &ghoul2, int modelIndex, const char *boneName, const mdxaBone_t *matrix)
+{
+	if (!boneName || modelIndex < 0 || modelIndex >= ghoul2.size() || ghoul2[modelIndex].mModelindex == -1)
+	{
+		return qfalse;
+	}
+	CGhoul2Info *ghlInfo = &ghoul2[modelIndex];
+	if (!G2_SetupModelPointers(ghlInfo) || (matrix && (ghlInfo->mFlags & GHOUL2_RAG_STARTED)))
+	{
+		return qfalse;	// (removing always works)
+	}
+	boneInfo_v &blist = ghlInfo->mBlist;
+	int index = G2_Find_Bone(ghlInfo->animModel, blist, boneName);
+	if (!matrix)
+	{
+		if (index != -1 && (blist[index].flags & BONE_VR_TRANSFORM))
+		{
+			blist[index].flags &= ~BONE_VR_TRANSFORM;
+			G2_Remove_Bone_Index(blist, index);	// frees the slot if nothing else uses it
+			ghlInfo->mSkelFrameNum = 0;
+		}
+		return qtrue;
+	}
+	if (index == -1)
+	{
+		index = G2_Add_Bone(ghlInfo->animModel, blist, boneName);
+		if (index == -1)
+		{
+			return qfalse;	// no such bone
+		}
+	}
+	if (blist[index].flags & (BONE_ANGLES_RAGDOLL | BONE_ANGLES_IK))
+	{
+		return qfalse;
+	}
+	blist[index].extraMatrix = *matrix;
+	blist[index].flags |= BONE_VR_TRANSFORM;
+	ghlInfo->mSkelFrameNum = 0;		// ensure we flush the cache
+	return qtrue;
+}
+
 // OpenJK VR: hide or show one model of a Ghoul2 instance without removing it,
 // e.g. the weapon bolted to the local player's hand while the VR hand holds
 // its own copy. Bolts on the hidden model keep working.

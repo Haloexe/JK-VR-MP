@@ -2587,6 +2587,16 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		{ //force third person for e-web and emplaced use
 			cg.renderingThirdPerson = 1;
 		}
+		else if (cg.predictedPlayerState.weapon == WP_SABER && CG_VR() && cg_vrSaber.integer && cg_vrBody.integer &&
+			!cg.demoPlayback && !(cg.snap->ps.pm_flags & PMF_FOLLOW) &&
+			!(cg.predictedPlayerState.eFlags2 & EF2_HELD_BY_MONSTER) && !cg.predictedPlayerState.heldByClient &&
+			cg_entities[cg.predictedPlayerState.clientNum].localAnimIndex <= 1 &&
+			!BG_InGrappleMove(cg.predictedPlayerState.torsoAnim) && !BG_InGrappleMove(cg.predictedPlayerState.legsAnim) &&
+			cg.predictedPlayerState.forceHandExtend != HANDEXTEND_KNOCKDOWN && !cg.predictedPlayerState.fallingToDeath &&
+			!cg.predictedPlayerState.m_iVehicleNum && !PM_InKnockDown(&cg.predictedPlayerState) &&
+			cg.predictedPlayerState.saberLockTime < cg.time)
+		{ //OpenJK VR: the saber in your hand, in first person (unless cg_thirdPerson)
+		}
 		else if (cg.predictedPlayerState.weapon == WP_SABER || cg.predictedPlayerState.weapon == WP_MELEE ||
 			BG_InGrappleMove(cg.predictedPlayerState.torsoAnim) || BG_InGrappleMove(cg.predictedPlayerState.legsAnim) ||
 			cg.predictedPlayerState.forceHandExtend == HANDEXTEND_KNOCKDOWN || cg.predictedPlayerState.fallingToDeath ||

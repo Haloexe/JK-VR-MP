@@ -489,24 +489,34 @@ static void CG_VR_AxisToAngles( matrix3_t a, vec3_t angles ) {
 	angles[ROLL] = RAD2DEG( atan2f( a[1][2], a[2][2] ) );
 }
 
-static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
+/*
+=================
+CG_VR_HeldWeaponPose
+
+Where the gun in your right hand is this frame: its model origin (the grip,
+where a third-person hand holds it) at the controller, its barrel along the
+controller's aim. The body (cg_vrbody.c) puts its hand on exactly this.
+=================
+*/
+qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matrix3_t axis ) {
 	const vrClientState_t *vr = CG_VR();
-	weaponInfo_t *wi = &cg_weapons[weaponNum];
-	void *g2 = CG_VR_HeldWeaponG2( weaponNum );
+	void *g2;
 	int flashBolt;
 	vec3_t zero = { 0.0f, 0.0f, 0.0f };
 	vec3_t gripLocal, aimLocal[3], grip, aim[3];
 	vec3_t fl = { 1.0f, 0.0f, 0.0f }, ul, ll;
-	vec3_t angles, origin;
 	matrix3_t model;
 	mdxaBone_t bolt;
-	refEntity_t ent;
-	float d;
 	int i, j;
 
-	cg_vrHeld.ready = qfalse;
-	if ( !vr || !cg_vrWorldGun.integer || !CG_VR_HandAim() || !g2 || !wi->weaponModel ) {
-		return;
+	if ( !vr || !cg_vrWorldGun.integer || !CG_VR_HandAim() || weaponNum <= WP_NONE || weaponNum >= WP_NUM_WEAPONS ||
+		weaponNum == WP_SABER || weaponNum == WP_MELEE || weaponNum == WP_EMPLACED_GUN ) {
+		return qfalse;
+	}
+	CG_RegisterWeapon( weaponNum );
+	g2 = CG_VR_HeldWeaponG2( weaponNum );
+	if ( !g2 || !cg_weapons[weaponNum].weaponModel ) {
+		return qfalse;
 	}
 	flashBolt = cg_vrHeldFlashBolt[weaponNum];
 
@@ -540,23 +550,42 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 		}
 	}
 	CG_VR_AxisToAngles( model, angles );
+	AnglesToAxis( angles, axis );	// exactly what gets drawn
 
 	// the model's origin is its grip; player-tunable nudge on top
 	VectorCopy( grip, origin );
 	VectorMA( origin, cg_vrGunX.value, aim[0], origin );
 	VectorMA( origin, cg_vrGunY.value, aim[1], origin );
 	VectorMA( origin, cg_vrGunZ.value, aim[2], origin );
+	return qtrue;
+}
+
+static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
+	void *g2;
+	int flashBolt;
+	vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	vec3_t angles, origin;
+	matrix3_t axis;
+	mdxaBone_t bolt;
+	refEntity_t ent;
+
+	cg_vrHeld.ready = qfalse;
+	if ( !CG_VR_HeldWeaponPose( weaponNum, origin, angles, axis ) ) {
+		return;
+	}
+	g2 = CG_VR_HeldWeaponG2( weaponNum );
+	flashBolt = cg_vrHeldFlashBolt[weaponNum];
 
 	memset( &ent, 0, sizeof( ent ) );
 	ent.reType = RT_MODEL;
-	ent.hModel = wi->weaponModel;
+	ent.hModel = cg_weapons[weaponNum].weaponModel;
 	ent.ghoul2 = g2;
 	ent.radius = 64.0f;
 	VectorCopy( angles, ent.angles );
-	AnglesToAxis( angles, ent.axis );
+	AxisCopy( axis, ent.axis );
 	VectorCopy( origin, ent.origin );
 	VectorCopy( origin, ent.oldorigin );
-	VectorCopy( grip, ent.lightingOrigin );
+	VectorCopy( origin, ent.lightingOrigin );
 	ent.renderfx = RF_FIRST_PERSON;
 	CG_AddWeaponWithPowerups( &ent, cent->currentState.powerups );
 
@@ -567,9 +596,16 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_Y, cg_vrHeld.flashAxis[1] );
 		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_Z, cg_vrHeld.flashAxis[2] );
 	} else {
-		// no bolt: put the flash a little ahead of the grip
-		d = 12.0f;
-		VectorMA( origin, d, aim[0], cg_vrHeld.flashOrigin );
+		// no bolt: put the flash a little ahead of the grip, along the barrel
+		const vrClientState_t *vr = CG_VR();
+		vec3_t gl, al[3], g, aim[3];
+		int i;
+		VectorCopy( vr->gripOrigin[VR_HAND_RIGHT], gl );
+		for ( i = 0; i < 3; i++ ) {
+			VectorCopy( vr->aimAxis[VR_HAND_RIGHT][i], al[i] );
+		}
+		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gl, al, g, aim );
+		VectorMA( origin, 12.0f, aim[0], cg_vrHeld.flashOrigin );
 		AxisCopy( aim, cg_vrHeld.flashAxis );
 	}
 	cg_vrHeld.ready = qtrue;
@@ -986,6 +1022,11 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 	// no gun if in third person view or a camera is active
 	//if ( cg.renderingThirdPerson || cg.cameraMode) {
 	if ( cg.renderingThirdPerson ) {
+		return;
+	}
+
+	// OpenJK VR: a first-person saber is in your body's hand (cg_vrbody.c)
+	if ( ps->weapon == WP_SABER && CG_VR() ) {
 		return;
 	}
 

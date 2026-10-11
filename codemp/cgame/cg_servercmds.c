@@ -1228,6 +1228,7 @@ static void CG_BodyQueueCopy(centity_t *cent, int clientNum, int knownWeapon)
 
 	cent->dustTrailTime = source->dustTrailTime;
 
+	CG_VR_BodyRestore(source);	// OpenJK VR: the corpse gets the normal model (head, arms, gun)
 	trap->G2API_DuplicateGhoul2Instance(source->ghoul2, &cent->ghoul2);
 
 	if (source->isRagging)

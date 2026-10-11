@@ -9,15 +9,19 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * VR controllers: thumbstick movement, snap/smooth turning, buttons
   * Guns are held in and aimed with your right hand, with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
-    and its arms and hands follow your controllers (works with any player
-    model on the standard skeleton, custom models included)
+    and its arms and hands follow your controllers, gripping what they
+    hold (works with any player model on the standard skeleton, custom
+    models included)
+  * First-person lightsaber: the hilt in your hand, the blade where your
+    controller points
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen
   * The desktop window mirrors the left eye
 
-Not yet: other players seeing your arm movements and shots leaving the gun
-barrel (needs the VR server mod), motion-controlled saber.
+Not yet: other players seeing your arm movements, shots leaving the gun
+barrel and saber hits where your blade really is (all need the VR server
+mod), two-handed weapons.
 
 
 INSTALL / RUN
@@ -64,13 +68,23 @@ a scope you aim where you look. Keyboard and mouse still work; the mouse
 turns your body.
 
 YOUR BODY: look down and you see your character. Its hands are on your
-controllers, its elbows bend on their own, and its torso turns with your
-head (it follows once you look more than 45 degrees to the side, and
-straightens out while you walk). The head is hidden so it never gets in
-your eyes. Your character's model is measured every frame, so a small or a
-tall model, the stock characters or a custom one all get arms that fit.
-The body is shown while a gun is out in first person; with the saber or
-fists the game's third-person camera takes over as before.
+controllers, its elbows bend on their own, its wrists bend, and its torso
+turns with your head (it follows once you look more than 45 degrees to the
+side, and straightens out while you walk). The head is hidden so it never
+gets in your eyes. Your character's model is measured every frame, so a
+small or a tall model, the stock characters or a custom one all get arms
+that fit. A gun sits in the right hand exactly the way the game holds it
+in third person, fingers around the grip. When you reach further than your
+character's arm, the body leans in a little so the hand still gets there.
+
+LIGHTSABER: with the saber out you stay in first person. The hilt is in
+your right hand (a second saber in your left) and the blade points along
+your fist, the way you would hold a real hilt, so it follows every turn
+of your wrist. Attacks, blocks and Force powers work as usual; for now the
+game still decides hits from its own swing animations (the VR server mod
+will make your real blade count). During flips, cartwheels and rolls your
+body and blade are hidden for that moment. Fists, saber locks, knockdowns
+and vehicles still use the third-person camera.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw
@@ -114,18 +128,26 @@ SETTINGS (console cvars, saved automatically)
                          when looking straight down
   cg_vrBodyTwist 45      how far you can turn your head before the torso
                          follows (degrees)
-  cg_vrHandX/Y/Z 0       nudge the body's hands on the controllers
-                         (forward/inward/up units)
-  cg_vrHandPitch 0       tilt the body's hands on the controllers (degrees)
+  cg_vrHandX/Y/Z 0       nudge an empty hand or the saber hilt on the
+                         controller (forward/inward/up units); a gun's
+                         grip follows cg_vrGunX/Y/Z
+  cg_vrHandPitch 0       tilt an empty hand on the controller (degrees)
+  cg_vrBodyWrist 1       0 = stiff wrists (the forearm turns the hand)
+  cg_vrSaber 1           0 = saber in third person, as in the stock game
+  cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
+  cg_vrBodyDebug 0       1 = log what the body found on your model,
+                         2 = also log how exactly the hand grips the gun,
+                         3 = also show the body's own copy of the gun
 
 On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up);
 the camera dip on landing is also skipped in the headset.
 Settings and downloads live in Documents\My Games\OpenJK-VR, separate from
 regular OpenJK.
 
-Camera: guns and force powers are first person. The game itself switches
-to a third-person camera (behind your character) with the lightsaber or
-fists out, while knocked down, in vehicles, on emplaced guns and when dead.
+Camera: guns, the lightsaber and force powers are first person. The game
+itself switches to a third-person camera (behind your character) with fists
+out, in saber locks, while knocked down, in vehicles, on emplaced guns,
+while watching another player and when dead.
 Head tracking still works there: you look around from the third-person
 camera. "cg_thirdPerson 1" gives third person all the time.
 
@@ -140,12 +162,11 @@ KNOWN LIMITATIONS
     server mod sends them.
   * The game picks your leg animation from the gun's direction, so with
     the gun pointed far to the side of where you walk, the legs may strafe.
-  * The character's wrists can't bend on their own (in Jedi Academy's
-    skeleton the fingers hang off the forearm), so the forearm turns with
-    the hand; at extreme wrist angles the hand matches the controller less
-    closely.
-  * If your real arm reaches further than the character's, the hand stops
-    at full stretch while the gun stays in your real hand.
+  * If your real arm reaches much further than the character's, the hand
+    stops at full stretch while the gun stays in your real hand.
+  * The lightsaber blade you see follows your hand, but hits and blocks
+    still come from the game's swing animations on normal servers.
+  * Two-handed weapons are held in the right hand only (for now).
   * Mirrors show your character without a head (it is hidden for your view).
   * Menus need the mouse (no laser pointer yet).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
@@ -180,8 +201,10 @@ which is why it works on ordinary servers. Source files:
   vr/build-win64.sh            how these binaries were built
 
 The arm IK re-aims the upper arm and forearm with Ghoul2 bone overrides
-after the game's animation, so any model on the _humanoid skeleton works.
-cg_vrBodyDebug 1 prints what the arm solver's self-check settles on.
+after the game's animation, and turns the hand at the wrist with a new
+engine bone transform (G2API_SetBoneVRTransform), so any model on the
+_humanoid skeleton works. cg_vrBodyDebug 1 prints what the solver's
+self-checks find on your model.
 
 Build (Linux, cross-compiling for Windows with llvm-mingw):  vr/build-win64.sh
 Build (Windows, Visual Studio 2022): run CreateVisualStudio2022Projects.bat,

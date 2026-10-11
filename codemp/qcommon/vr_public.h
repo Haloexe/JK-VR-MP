@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-3"	// -3: ext.VR_G2SetModelHidden
+#define VR_ENGINE_TAG			"openjkvr-4"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform
 
 enum {
 	VR_HAND_LEFT = 0,

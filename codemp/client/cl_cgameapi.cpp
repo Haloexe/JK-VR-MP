@@ -667,6 +667,11 @@ static qboolean CL_VR_G2SetModelHidden( void *ghoul2, int modelIndex, qboolean h
 	if ( !ghoul2 || !re->ext.G2API_SetModelNoRender ) return qfalse;
 	return re->ext.G2API_SetModelNoRender( *((CGhoul2Info_v *)ghoul2), modelIndex, hidden );
 }
+
+static qboolean CL_VR_G2SetBoneTransform( void *ghoul2, int modelIndex, const char *boneName, const mdxaBone_t *matrix ) {
+	if ( !ghoul2 || !re->ext.G2API_SetBoneVRTransform ) return qfalse;
+	return re->ext.G2API_SetBoneVRTransform( *((CGhoul2Info_v *)ghoul2), modelIndex, boneName, matrix );
+}
 #endif
 
 static qboolean CL_G2API_SetSurfaceOnOff( void *ghoul2, const char *surfaceName, const int flags ) {
@@ -1922,9 +1927,11 @@ void CL_BindCGame( void ) {
 #ifdef OPENJK_VR
 		cgi.ext.VR_GetClientState				= VR_GetClientState;
 		cgi.ext.VR_G2SetModelHidden				= CL_VR_G2SetModelHidden;
+		cgi.ext.VR_G2SetBoneTransform			= CL_VR_G2SetBoneTransform;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
+		cgi.ext.VR_G2SetBoneTransform			= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

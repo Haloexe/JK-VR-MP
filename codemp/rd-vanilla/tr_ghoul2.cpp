@@ -1952,6 +1952,16 @@ void G2_TransformBone (int child,CBoneCache &BC)
 		  	Multiply_3x4Matrix(&BC.mFinalBones[child].boneMatrix, &tempMatrix, &boneList[boneListIndex].matrix);
 		}
 	}
+
+	// OpenJK VR: an extra rigid transform in model space on top of all of the
+	// above (G2API_SetBoneVRTransform), e.g. a hand and the finger bones that
+	// hang off the forearm turned together about the wrist
+	if (boneListIndex != -1 && (boneList[boneListIndex].flags & BONE_VR_TRANSFORM))
+	{
+		mdxaBone_t	tempMatrix;
+		memcpy (&tempMatrix,&BC.mFinalBones[child].boneMatrix, sizeof(mdxaBone_t));
+		Multiply_3x4Matrix(&BC.mFinalBones[child].boneMatrix, &boneList[boneListIndex].extraMatrix, &tempMatrix);
+	}
 	/*
 	if (r_Ghoul2UnSqash->integer)
 	{
