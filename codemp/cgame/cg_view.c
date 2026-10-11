@@ -1034,8 +1034,9 @@ static void CG_OffsetFirstPersonView( void ) {
 	origin[2] += bob;
 
 
-	// add fall height
-	delta = cg.time - cg.landTime;
+	// add fall height (OpenJK VR: not in a headset, a forced camera dip is
+	// uncomfortable there)
+	delta = CG_VR() ? LAND_DEFLECT_TIME + LAND_RETURN_TIME : cg.time - cg.landTime;
 	if ( delta < LAND_DEFLECT_TIME ) {
 		f = delta / LAND_DEFLECT_TIME;
 		cg.refdef.vieworg[2] += cg.landChange * f;
@@ -2675,6 +2676,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	if ( !cg.hyperspace ) {
 		CG_AddLocalEntities();
 	}
+
+	// OpenJK VR: the scene is built; put your entity back where it really is
+	CG_VR_BodyEndFrame();
 
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );

@@ -662,6 +662,13 @@ static qboolean CL_G2API_SetRootSurface( void *ghoul2, const int modelIndex, con
 	return re->G2API_SetRootSurface( *((CGhoul2Info_v *)ghoul2), modelIndex, surfaceName );
 }
 
+#ifdef OPENJK_VR
+static qboolean CL_VR_G2SetModelHidden( void *ghoul2, int modelIndex, qboolean hidden ) {
+	if ( !ghoul2 || !re->ext.G2API_SetModelNoRender ) return qfalse;
+	return re->ext.G2API_SetModelNoRender( *((CGhoul2Info_v *)ghoul2), modelIndex, hidden );
+}
+#endif
+
 static qboolean CL_G2API_SetSurfaceOnOff( void *ghoul2, const char *surfaceName, const int flags ) {
 	if ( !ghoul2 ) return qfalse;
 	return re->G2API_SetSurfaceOnOff( *((CGhoul2Info_v *)ghoul2), surfaceName, flags );
@@ -1914,8 +1921,10 @@ void CL_BindCGame( void ) {
 		cgi.ext.R_Font_StrLenPixels				= re->ext.Font_StrLenPixels;
 #ifdef OPENJK_VR
 		cgi.ext.VR_GetClientState				= VR_GetClientState;
+		cgi.ext.VR_G2SetModelHidden				= CL_VR_G2SetModelHidden;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
+		cgi.ext.VR_G2SetModelHidden				= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

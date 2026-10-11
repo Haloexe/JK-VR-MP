@@ -2,18 +2,22 @@ OpenJK VR - Jedi Academy multiplayer in a VR headset
 =====================================================
 
 An OpenJK-based multiplayer client that renders Jedi Academy in stereo 3D
-on a PC VR headset (OpenXR). Current state (milestone 2, step 1):
+on a PC VR headset (OpenXR). Current state (milestone 2):
 
   * Stereo 3D with the headset's own field of view and lens geometry
   * Head tracking (rotation + limited positional movement)
   * VR controllers: thumbstick movement, snap/smooth turning, buttons
   * Guns are held in and aimed with your right hand, with a 3D aim dot
+  * Your own body in first person: it stands under you, turns with you,
+    and its arms and hands follow your controllers (works with any player
+    model on the standard skeleton, custom models included)
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen
   * The desktop window mirrors the left eye
 
-Not yet: a visible body and arms (next step), motion-controlled saber.
+Not yet: other players seeing your arm movements and shots leaving the gun
+barrel (needs the VR server mod), motion-controlled saber.
 
 
 INSTALL / RUN
@@ -59,6 +63,15 @@ small crosshair floats where your shots will land. With the saber, fists or
 a scope you aim where you look. Keyboard and mouse still work; the mouse
 turns your body.
 
+YOUR BODY: look down and you see your character. Its hands are on your
+controllers, its elbows bend on their own, and its torso turns with your
+head (it follows once you look more than 45 degrees to the side, and
+straightens out while you walk). The head is hidden so it never gets in
+your eyes. Your character's model is measured every frame, so a small or a
+tall model, the stock characters or a custom one all get arms that fit.
+The body is shown while a gun is out in first person; with the saber or
+fists the game's third-person camera takes over as before.
+
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw
   AUX16 right trigger   AUX20 A   AUX24 left stick click
@@ -94,8 +107,19 @@ SETTINGS (console cvars, saved automatically)
   cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
   cg_vrWorldGun 1        0 = hold the old first-person gun models instead
   vr_gunPitch 0          tilt the gun (and its aim) in your hand, + = up
+  cg_vrBody 1            0 = no body in first person (classic view)
+  cg_vrBodyArms 1        0 = body without tracked arms (animated arms)
+  cg_vrBodyBack 4        how far (units) the body stands behind your eyes;
+                         smaller = closer to you, but you may see the neck
+                         when looking straight down
+  cg_vrBodyTwist 45      how far you can turn your head before the torso
+                         follows (degrees)
+  cg_vrHandX/Y/Z 0       nudge the body's hands on the controllers
+                         (forward/inward/up units)
+  cg_vrHandPitch 0       tilt the body's hands on the controllers (degrees)
 
-On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up).
+On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up);
+the camera dip on landing is also skipped in the headset.
 Settings and downloads live in Documents\My Games\OpenJK-VR, separate from
 regular OpenJK.
 
@@ -106,11 +130,23 @@ Head tracking still works there: you look around from the third-person
 camera. "cg_thirdPerson 1" gives third person all the time.
 
 
-KNOWN LIMITATIONS (milestone 1)
--------------------------------
+KNOWN LIMITATIONS
+-----------------
   * Shots on normal servers still start at your eye, not the gun barrel
     (they go exactly where the aim dot shows). The VR server mod will fire
     them from the gun.
+  * Other players see an animated character facing where your gun points;
+    your tracked arms and head are only on your own screen until the VR
+    server mod sends them.
+  * The game picks your leg animation from the gun's direction, so with
+    the gun pointed far to the side of where you walk, the legs may strafe.
+  * The character's wrists can't bend on their own (in Jedi Academy's
+    skeleton the fingers hang off the forearm), so the forearm turns with
+    the hand; at extreme wrist angles the hand matches the controller less
+    closely.
+  * If your real arm reaches further than the character's, the hand stops
+    at full stretch while the gun stays in your real hand.
+  * Mirrors show your character without a head (it is hidden for your view).
   * Menus need the mouse (no laser pointer yet).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
@@ -128,16 +164,24 @@ KNOWN LIMITATIONS (milestone 1)
 
 HOW IT WORKS (for modders)
 --------------------------
-VR lives entirely in the engine (openjk.x86_64.exe) and the renderer
-(rd-vanilla_x86_64.dll); the cgame/ui/game DLLs are stock OpenJK. That is
-why it works on ordinary servers. Source files:
+VR lives in the engine (openjk.x86_64.exe), the renderer
+(rd-vanilla_x86_64.dll) and the client game module (base\cgamex86_64.dll,
+for the gun in your hand and your body). The server side is stock OpenJK,
+which is why it works on ordinary servers. Source files:
 
-  codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, head-aim
+  codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim
+  codemp/qcommon/vr_public.h   state the engine shares with the cgame
   codemp/rd-common/tr_vr.h     state shared with the renderer
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement
   codemp/rd-vanilla/tr_main.cpp    asymmetric per-eye projection
+  codemp/cgame/cg_vr.c         hands, aim dot
+  codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
+
+The arm IK re-aims the upper arm and forearm with Ghoul2 bone overrides
+after the game's animation, so any model on the _humanoid skeleton works.
+cg_vrBodyDebug 1 prints what the arm solver's self-check settles on.
 
 Build (Linux, cross-compiling for Windows with llvm-mingw):  vr/build-win64.sh
 Build (Windows, Visual Studio 2022): run CreateVisualStudio2022Projects.bat,

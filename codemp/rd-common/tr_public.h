@@ -31,9 +31,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../ghoul2/ghoul2_shared.h"
 #include "../rd-common/tr_vr.h"
 
-// OpenJK VR: refimport_t gained VR_GetRenderState, so a VR renderer must not
-// be paired with a stock engine (or vice versa).
-#define	REF_API_VERSION 1009
+// OpenJK VR: refimport_t gained VR_GetRenderState and refexport_t.ext gained
+// G2API_SetModelNoRender, so a VR renderer must not be paired with a stock
+// engine or an older VR engine (or vice versa).
+#define	REF_API_VERSION 1010
 
 //
 // these are the functions exported by the refresh module
@@ -246,6 +247,9 @@ typedef struct refexport_s {
 
 	struct {
 		float				(*Font_StrLenPixels)					( const char *text, const int iFontIndex, const float scale );
+
+		// OpenJK VR (NULL in renderers without it)
+		qboolean			(*G2API_SetModelNoRender)				( CGhoul2Info_v &ghoul2, int modelIndex, qboolean noRender );
 	} ext;
 
 } refexport_t;

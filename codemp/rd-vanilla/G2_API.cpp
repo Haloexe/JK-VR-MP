@@ -2399,6 +2399,26 @@ int G2API_GetGhoul2ModelFlags(CGhoul2Info *ghlInfo)
 	return 0;
 }
 
+// OpenJK VR: hide or show one model of a Ghoul2 instance without removing it,
+// e.g. the weapon bolted to the local player's hand while the VR hand holds
+// its own copy. Bolts on the hidden model keep working.
+qboolean G2API_SetModelNoRender(CGhoul2Info_v &ghoul2, int modelIndex, qboolean noRender)
+{
+	if (modelIndex < 0 || modelIndex >= ghoul2.size() || ghoul2[modelIndex].mModelindex == -1)
+	{
+		return qfalse;
+	}
+	if (noRender)
+	{
+		ghoul2[modelIndex].mFlags |= GHOUL2_NORENDER;
+	}
+	else
+	{
+		ghoul2[modelIndex].mFlags &= ~GHOUL2_NORENDER;
+	}
+	return qtrue;
+}
+
 // given a boltmatrix, return in vec a normalised vector for the axis requested in flags
 void G2API_GiveMeVectorFromMatrix(mdxaBone_t *boltMatrix, Eorientations flags, vec3_t vec)
 {

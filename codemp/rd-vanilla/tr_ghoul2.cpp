@@ -2072,6 +2072,13 @@ void G2_TransformGhoulBones(boneInfo_v &rootBoneList,mdxaBone_t &rootMatrix, CGh
 
 		// master smoothing control
 		float val=r_Ghoul2AnimSmooth->value;
+		// OpenJK VR: every eye is its own render pass, and this smoothing
+		// steps once per pass, so the two eyes would see different poses (and
+		// tracked arms would trail the hands). Keep it for ragdolls only.
+		if ( R_VRState() && !( ghoul2.mFlags & GHOUL2_RAG_STARTED ) )
+		{
+			val = 0.0f;
+		}
 		if (val>0.0f&&val<1.0f)
 		{
 			//if (ghoul2.mFlags&GHOUL2_RESERVED_FOR_RAGDOLL)

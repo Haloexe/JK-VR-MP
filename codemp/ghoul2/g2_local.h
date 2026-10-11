@@ -306,6 +306,7 @@ qboolean	G2API_HaveWeGhoul2Models(CGhoul2Info_v &ghoul2);
 void		G2API_SetGhoul2ModelIndexes(CGhoul2Info_v &ghoul2, qhandle_t *modelList, qhandle_t *skinList);
 qboolean	G2API_SetGhoul2ModelFlags(CGhoul2Info *ghlInfo, const int flags);
 int			G2API_GetGhoul2ModelFlags(CGhoul2Info *ghlInfo);
+qboolean	G2API_SetModelNoRender(CGhoul2Info_v &ghoul2, int modelIndex, qboolean noRender);
 
 qboolean	G2API_GetAnimFileName(CGhoul2Info *ghlInfo, char **filename);
 void		G2API_CollisionDetect(CollisionRecord_t *collRecMap, CGhoul2Info_v &ghoul2, const vec3_t angles, const vec3_t position, int frameNumber, int entNum, vec3_t rayStart, vec3_t rayEnd, vec3_t scale, IHeapAllocator *G2VertSpace, int traceFlags, int useLod, float fRadius);

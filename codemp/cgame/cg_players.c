@@ -4275,6 +4275,9 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 	{ //don't do these things on non-humanoids
 		vec3_t lookAngles;
 		entityState_t *emplaced = NULL;
+		// OpenJK VR: your own body faces where your head does, not your gun
+		vec3_t vrBodyAngles;
+		float *bodyAngles = CG_VR_BodyAngles(cent, vrBodyAngles) ? vrBodyAngles : cent->lerpAngles;
 
 		if (cent->currentState.hasLookTarget)
 		{
@@ -4284,7 +4287,7 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 		}
 		else
 		{
-			VectorCopy(cent->lerpAngles, lookAngles);
+			VectorCopy(bodyAngles, lookAngles);
 		}
 		lookAngles[PITCH] = 0;
 
@@ -4294,7 +4297,7 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 		}
 
 		BG_G2PlayerAngles(cent->ghoul2, ci->bolt_motion, &cent->currentState, cg.time,
-			cent->lerpOrigin, cent->lerpAngles, legs, legsAngles, &cent->pe.torso.yawing, &cent->pe.torso.pitching,
+			cent->lerpOrigin, bodyAngles, legs, legsAngles, &cent->pe.torso.yawing, &cent->pe.torso.pitching,
 			&cent->pe.legs.yawing, &cent->pe.torso.yawAngle, &cent->pe.torso.pitchAngle, &cent->pe.legs.yawAngle,
 			cg.frametime, cent->turAngles, cent->modelScale, ci->legsAnim, ci->torsoAnim, &ci->corrTime,
 			lookAngles, ci->lastHeadAngles, ci->lookTime, emplaced, &ci->superSmoothTime);
@@ -8461,6 +8464,16 @@ void CG_Player( centity_t *cent ) {
 	qboolean		g2HasWeapon = qfalse;
 	qboolean		drawPlayerSaber = qfalse;
 	qboolean		checkDroidShields = qfalse;
+	qboolean		vrBody = qfalse;	// OpenJK VR: drawing your own body in first person
+
+	// OpenJK VR: in a headset your own body is drawn in first person too
+	// (decided before any early return, so leaving that view always undoes it)
+	if ( cent->currentState.number == cg.clientNum || cent->currentState.number == cg.predictedPlayerState.clientNum ) {
+		vrBody = CG_VR_BodyActive( cent );
+		if ( !vrBody ) {
+			CG_VR_BodyRestore( cent );
+		}
+	}
 
 	//first if we are not an npc and we are using an emplaced gun then make sure our
 	//angles are visually capped to the constraints (otherwise it's possible to lerp
@@ -8904,7 +8917,7 @@ void CG_Player( centity_t *cent ) {
 #if 0
 			if (!cg_fpls.integer || cent->currentState.weapon != WP_SABER)
 #else
-			if (cent->currentState.weapon != WP_SABER)
+			if (cent->currentState.weapon != WP_SABER && !vrBody)
 #endif
 			{
 				renderfx = RF_THIRD_PERSON;			// only draw in mirrors
@@ -9217,6 +9230,11 @@ void CG_Player( centity_t *cent ) {
 	CG_G2PlayerAngles( cent, legs.axis, rootAngles );
 	CG_G2PlayerHeadAnims( cent );
 
+	if ( vrBody ) {
+		// OpenJK VR: under your head (the arms follow after the animation update)
+		CG_VR_BodyPose( cent, &legs );
+	}
+
 	if ( (cent->currentState.eFlags2&EF2_HELD_BY_MONSTER)
 		&& cent->currentState.hasLookTarget )//NOTE: lookTarget is an entity number, so this presumes that client 0 is NOT a Rancor...
 	{
@@ -9398,6 +9416,12 @@ void CG_Player( centity_t *cent ) {
 	// get the animation state (after rotation, to allow feet shuffle)
 	CG_PlayerAnimation( cent, &legs.oldframe, &legs.frame, &legs.backlerp,
 		 &torso.oldframe, &torso.frame, &torso.backlerp );
+
+	if ( vrBody ) {
+		// OpenJK VR: hands on the controllers, against this frame's animation
+		CG_VR_BodyArms( cent );
+		gotLHandMatrix = qfalse;	// the left hand moved
+	}
 
 	// add the talk baloon or disconnect icon
 	CG_PlayerSprites( cent );

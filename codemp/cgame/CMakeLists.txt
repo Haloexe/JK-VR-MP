@@ -84,6 +84,7 @@ set(MPCGameCgameFiles
 	"${MPDir}/cgame/cg_weaponinit.c"
 	"${MPDir}/cgame/cg_weapons.c"
 	"${MPDir}/cgame/cg_vr.c"
+	"${MPDir}/cgame/cg_vrbody.c"
 	"${MPDir}/cgame/fx_blaster.c"
 	"${MPDir}/cgame/fx_bowcaster.c"
 	"${MPDir}/cgame/fx_bryarpistol.c"

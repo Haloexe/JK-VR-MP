@@ -721,6 +721,9 @@ typedef struct cgameImport_s {
 
 		// OpenJK VR: only valid when the cvar "vr_engine" equals VR_ENGINE_TAG
 		const vrClientState_t *(*VR_GetClientState)				( void );
+		// OpenJK VR: hide/show one model of a Ghoul2 instance (e.g. the weapon
+		// bolted to the player's hand) without removing it
+		qboolean		(*VR_G2SetModelHidden)					( void *ghoul2, int modelIndex, qboolean hidden );
 	} ext;
 } cgameImport_t;
 
