@@ -9,7 +9,7 @@ rem     the GameData folder one level up; nothing there is modified.
 rem
 rem  Extra arguments are passed on, e.g.:
 rem     "Launch OpenJK VR.bat" +connect 1.2.3.4
-rem     "Launch OpenJK VR.bat" +set vr_enabled 0      (desktop mode)
+rem  Without the headset: "Launch OpenJK Desktop.bat" (its own settings).
 rem ------------------------------------------------------------------
 setlocal
 set "HERE=%~dp0"
@@ -23,4 +23,4 @@ if not exist "%GAMEDATA%\base\assets0.pk3" (
 )
 
 cd /d "%HERE%"
-start "" "%HERE%openjk.x86_64.exe" +set fs_cdpath "%GAMEDATA%" %*
+start "" "%HERE%openjk.x86_64.exe" +set fs_cdpath "%GAMEDATA%" +set vr_enabled 1 %*

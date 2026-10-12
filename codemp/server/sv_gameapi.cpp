@@ -1740,12 +1740,30 @@ static qboolean SV_VR_GetUserPose( int clientNum, vrUserPose_t *pose ) {
 	if ( !pose ) {
 		return qfalse;
 	}
-	if ( clientNum < 0 || clientNum >= sv_maxclients->integer || !svs.clients || !svs.clients[clientNum].vrPose.valid ) {
+	if ( clientNum < 0 || clientNum >= sv_maxclients->integer || !svs.clients ||
+		( !svs.clients[clientNum].vrPose.valid && !svs.clients[clientNum].vrPose.avatar.valid ) ) {
 		Com_Memset( pose, 0, sizeof( *pose ) );
 		return qfalse;
 	}
 	*pose = svs.clients[clientNum].vrPose;
 	return qtrue;
+}
+
+// OpenJK VR: a player's VR avatar, its hands offsets from the player's origin
+// (NULL: none), for the other players' snapshots (SV_WriteVRAvatars)
+static void SV_VR_SetAvatar( int clientNum, const vrAvatar_t *avatar ) {
+	client_t *cl;
+
+	if ( clientNum < 0 || clientNum >= sv_maxclients->integer || !svs.clients ) {
+		return;
+	}
+	cl = &svs.clients[clientNum];
+	if ( !avatar || !avatar->valid ) {
+		cl->vrAvatar.valid = qfalse;
+		return;
+	}
+	cl->vrAvatar = *avatar;
+	cl->vrAvatarTime = svs.time;
 }
 
 static qboolean SV_G2API_OverrideServer( void *serverInstance ) {
@@ -3133,6 +3151,7 @@ void SV_BindGame( void ) {
 		gi.G2API_GetSurfaceName					= SV_G2API_GetSurfaceName;
 
 		gi.ext.VR_GetUserPose					= SV_VR_GetUserPose;
+		gi.ext.VR_SetAvatar						= SV_VR_SetAvatar;
 
 		GetGameAPI = (GetGameAPI_t)gvm->GetModuleAPI;
 		ret = GetGameAPI( GAME_API_VERSION, &gi );

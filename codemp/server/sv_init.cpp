@@ -570,6 +570,7 @@ Ghoul2 Insert End
 		if (svs.clients[i].state >= CS_CONNECTED) {
 			svs.clients[i].oldServerTime = sv.time;
 		}
+		svs.clients[i].vrAvatar.valid = qfalse;	// OpenJK VR: nobody's arms carry over to the new map
 	}
 
 	// wipe the entire per-level structure

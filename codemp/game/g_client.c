@@ -3913,6 +3913,8 @@ void ClientDisconnect( int clientNum ) {
 		return;
 	}
 
+	G_VRSaberClientReset( clientNum );	// OpenJK VR: their VR saber and avatar go with them
+
 	i = 0;
 
 	while (i < NUM_FORCE_POWERS)

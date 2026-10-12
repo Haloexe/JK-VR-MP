@@ -1100,6 +1100,12 @@ typedef struct gameImport_s {
 		// The saber pose that came with the usercmd being thought right now
 		// (call from ClientThink); qfalse if there is none.
 		qboolean	(*VR_GetUserPose)						( int clientNum, vrUserPose_t *pose );
+		// OpenJK VR: what the other players see of this one in VR (the
+		// avatar, its hands offsets from the player's origin; NULL or
+		// valid == qfalse: none - their games show the animation). Set it
+		// whenever it changes; the engine leaves out one that hasn't been set
+		// for half a second.
+		void		(*VR_SetAvatar)							( int clientNum, const vrAvatar_t *avatar );
 	} ext;
 } gameImport_t;
 

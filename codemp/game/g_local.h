@@ -1374,6 +1374,7 @@ void		G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum );
 qboolean	G_VRSaberBlocksAnimated( gentity_t *self, int saberNum, int bladeNum, const vec3_t base, const vec3_t tip );
 qboolean	G_VRSaberHeldBox( gentity_t *ent );
 void		G_VRSaberGuard( gentity_t *self );
+void		G_VRSaberEndFrame( void );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //

@@ -154,6 +154,19 @@ typedef struct clientActive_s {
 
 	entityState_t	parseEntities[MAX_PARSE_ENTITIES];
 
+#ifdef OPENJK_VR
+	// the VR avatars that came with each snapshot (svc_vrAvatars); while a
+	// message is parsed, vrSnapParsed says it brought a valid snapshot
+	// (cl.snap) for the avatars that follow it
+	struct {
+		int				messageNum;
+		int				serverTime;
+		unsigned int	clientMask;		// which players have one (bit per client)
+		vrAvatar_t		avatar[MAX_CLIENTS];
+	}				vrAvatars[PACKET_BACKUP];
+	qboolean		vrSnapParsed;
+#endif
+
 	char			*mSharedMemory;
 } clientActive_t;
 
@@ -525,6 +538,9 @@ extern int cl_connectedToCheatServer;
 
 void CL_SystemInfoChanged( void );
 void CL_ParseServerMessage( msg_t *msg );
+#ifdef OPENJK_VR
+qboolean CL_VR_GetAvatar( int serverTime, int clientNum, vrAvatar_t *avatar );
+#endif
 
 //====================================================================
 

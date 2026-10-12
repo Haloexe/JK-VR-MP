@@ -1349,6 +1349,9 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta, qboolean vrPo
 	} else {
 		cl->deltaMessage = -1;
 	}
+	if ( vrPoses ) {
+		cl->vrViewer = qtrue;	// OpenJK VR: a VR build: it reads svc_vrAvatars
+	}
 
 	cmdCount = MSG_ReadByte( msg );
 
@@ -1377,7 +1380,7 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta, qboolean vrPo
 		if ( vrPoses ) {
 			VR_ReadUserPose( msg, &poses[i] );
 		} else {
-			poses[i].valid = qfalse;
+			Com_Memset( &poses[i], 0, sizeof( poses[i] ) );	// (no saber pose, no avatar)
 		}
 		if ( sv_legacyFixes->integer ) {
 			// block "charge jump" and other nonsense
@@ -1446,7 +1449,7 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta, qboolean vrPo
 		cl->vrPose = poses[i];	// the game reads it during this think (ext.VR_GetUserPose)
 		SV_ClientThink (cl, &cmds[ i ]);
 	}
-	cl->vrPose.valid = qfalse;	// never handed out with a later, pose-less think
+	Com_Memset( &cl->vrPose, 0, sizeof( cl->vrPose ) );	// never handed out with a later, pose-less think (bots')
 }
 
 

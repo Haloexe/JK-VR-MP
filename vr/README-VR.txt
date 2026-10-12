@@ -22,10 +22,13 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Menus, console and loading screens on a floating screen; point at the
     menus with a controller and pull the trigger to click
   * The desktop window mirrors the left eye
+  * Multiplayer: other players see you as you really move, and you see
+    other VR players as they do - arms, hands, head and saber (in games
+    hosted with this build, for everyone running it, in a headset or not;
+    see PLAYING WITH OTHERS)
 
-Not yet: other players seeing your arm movements and shots leaving the gun
-barrel (both need more server work), two-handed guns (two-handed sabers
-work).
+Not yet: shots leaving the gun barrel (they leave from your eye, toward
+where you aim), two-handed guns (two-handed sabers work).
 
 
 INSTALL / RUN
@@ -167,8 +170,9 @@ server running this build: your real blade is the weapon.
   * Bots fight back with their guard: they see your swing coming and raise
     their saber into its path - how often and how quickly goes with their
     saber defence. It still has to meet your blade to stop it: change the
-    angle or feint and it gets through. g_vrSaberBotGuard 0 turns it off,
-    0.5 makes it half as likely, 2 makes them guard every swing, faster.
+    angle or feint and it gets through. Players without VR guard the same
+    way (their automatic block). g_vrSaberBotGuard 0 turns it off, 0.5
+    makes it half as likely, 2 makes them guard every swing, faster.
   * Saber styles are the blade's weight (right stick click cycles them):
       light  (fast style)    small quick swings cut, up to 40 damage,
                              recovers quickly after a clash
@@ -205,11 +209,47 @@ weight), g_vrSaberDamageScale (1), g_vrSaberDebug 1 (prints every cut's
 speed and damage, and how every clash ended, to the console), and the stock
 g_dismember 100 if you want limbs to come off.
 
+PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
+sees a VR player as they really move, in a game hosted with this build:
+  * their body faces where theirs does, their head turns, nods and tilts
+    where they look, and their arms and hands are where their real ones
+    are, fingers round whatever they hold: the saber along their real
+    blade (which is what their blows are judged by), both hands on the
+    hilt when they hold it with both, a gun where they hold it
+  * they stay upright through flips and rolls, as they do in their headset
+  * cg_vrOthers 0 shows them with the game's animations instead.
+Players without VR - this build's desktop copy (below), or the normal game
+- fight the normal way, and block automatically as in the normal game:
+against your swing that is their guard raised into its path (as bots do),
+so it has to meet your blade, and a feint gets past it. With the normal
+game they see VR players' animated characters.
+
+Hosting: start a game from the menu the way you do with bots; your PC is
+then the server. Others connect with  connect <your address>  in the
+console (Shift+~); for players over the internet forward UDP port 29070 to
+your PC. To see VR players as they move, the others need this build too:
+give them this whole OpenJK-VR folder (it goes in their own GameData
+folder, as above). The Duel game type is the simplest way to fight one at a
+time. In Free For All you can challenge someone to a private duel: look at
+them and use engage_duel, and they accept by doing the same back within 5
+seconds. Put it on a button first, in Controls or in the console, e.g. the
+left stick click:  bind AUX24 engage_duel  (that button walks otherwise).
+
+Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
+without the headset (also for friends without VR). It keeps its own
+settings (Documents\My Games\OpenJK-VR-Desktop), so it never changes your
+VR setup. Start the VR game first and host, then in the desktop copy:
+  name Watcher           (so the two of you aren't both "Padawan")
+  connect 127.0.0.1      (not "localhost": that only reaches the same copy)
+  team s                 (spectate)
+then click to follow the next player (jump stops following). With a saber
+out you see them from behind; with a gun type  cg_thirdPerson 1.
+
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
                which weight, one or two hands - every cut and clash, every
                bot swing your blade stopped, every touch of blades, and
-               every guard a bot raised
+               every guard raised against you (bots, players without VR)
   vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, and the
                animation and fingers of the hand holding the saber
 Both are in Documents\My Games\OpenJK-VR\base.
@@ -228,7 +268,9 @@ Console (Shift+~) commands:
 
 SETTINGS (console cvars, saved automatically)
 ---------------------------------------------
-  vr_enabled 1           0 = desktop mode (then: vid_restart)
+  vr_enabled 1           0 = desktop mode (then: vid_restart); the VR
+                         launcher always starts in VR (for desktop mode
+                         use "Launch OpenJK Desktop.bat")
   vr_resolutionScale 1   eye resolution vs. headset recommendation (vid_restart)
   vr_worldScale 34       game units per metre (bigger = world feels smaller)
   vr_positional 1        camera follows your head movement
@@ -251,6 +293,8 @@ SETTINGS (console cvars, saved automatically)
   vr_gunPitch 0          tilt the gun (and its aim) in your hand, + = up
   cg_vrBody 1            0 = no body in first person (classic view)
   cg_vrBodyArms 1        0 = body without tracked arms (animated arms)
+  cg_vrOthers 1          0 = other VR players animated as in the normal
+                         game (not as they really move)
   cg_vrBodyBack 4        how far (units) the body stands behind your eyes;
                          smaller = closer to you, but you may see the neck
                          when looking straight down
@@ -292,9 +336,19 @@ KNOWN LIMITATIONS
   * Shots on normal servers still start at your eye, not the gun barrel
     (they go exactly where the aim dot shows). The VR server mod will fire
     them from the gun.
-  * Other players see an animated character facing where your gun points;
-    your tracked arms and head are only on your own screen until the VR
-    server mod sends them.
+  * Other players see your real arms and head only in games hosted with
+    this build, and only if they run it too (in a headset or not);
+    elsewhere they see an animated character facing where your gun
+    points.
+  * Online, other players' arms and blades are drawn a little behind where
+    the server has them (the same delay as everyone's movement), and
+    blades meet where the server has them at that moment: there is no lag
+    compensation for blade contacts yet, so blocks against another player
+    are the most exact with a low ping.
+  * Demos recorded with this build in games hosted with it (record, or
+    the server's svrecord / sv_autoDemo of players running it) keep the VR
+    bodies, so they play back in this build only (the normal game and
+    older builds stop at the first one).
   * The game picks your leg animation from the gun's direction, so with
     the gun pointed far to the side of where you walk, the legs may strafe.
   * If your real arm reaches much further than the character's, the hand
@@ -305,9 +359,8 @@ KNOWN LIMITATIONS
   * Saber combat: blaster bolts are still deflected automatically; no
     saber locks or disarming while you hold the saber in VR; a clash or a
     cut shows on your blade a moment after it happens (it comes back from
-    the game's server); other players see your character's animated
-    saber, not your arms;
-    custom sabers with more than two blades only fight with the first two.
+    the game's server); custom sabers with more than two blades only fight
+    with the first two.
   * Guns are held in the right hand only (for now); only sabers can be
     held with both hands.
   * Mirrors show your character without a head (it is hidden for your view).

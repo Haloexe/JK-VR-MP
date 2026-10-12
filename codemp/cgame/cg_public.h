@@ -736,6 +736,10 @@ typedef struct cgameImport_s {
 		// something now instead of pressing its key (call every frame; see
 		// vrClientState_t.grabbing)
 		void			(*VR_SetGrabZones)						( int handMask );
+		// OpenJK VR: what another player's VR body was doing in the snapshot
+		// of that server time (from a server running this build; offsets
+		// from their origin in that snapshot) - qfalse if they had none
+		qboolean		(*VR_GetAvatar)							( int serverTime, int clientNum, vrAvatar_t *avatar );
 	} ext;
 } cgameImport_t;
 

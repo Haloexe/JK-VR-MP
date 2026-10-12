@@ -207,6 +207,11 @@ int SV_BotAllocateClient(void) {
 	cl->lastPacketTime = svs.time;
 	cl->netchan.remoteAddress.type = NA_BOT;
 	cl->rate = 16384;
+	// OpenJK VR: nothing of a VR player who had this slot before
+	cl->vrViewer = qfalse;
+	Com_Memset( &cl->vrPose, 0, sizeof( cl->vrPose ) );
+	Com_Memset( &cl->vrAvatar, 0, sizeof( cl->vrAvatar ) );
+	cl->vrAvatarTime = 0;
 
 	// cannot start recording auto demos here since bot's name is not set yet
 	return i;

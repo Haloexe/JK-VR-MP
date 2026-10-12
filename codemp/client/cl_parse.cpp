@@ -25,6 +25,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cl_parse.c  -- parse a message received from the server
 
 #include "client.h"
+#ifdef OPENJK_VR
+#include "qcommon/vr_net.h"	// OpenJK VR: svc_vrAvatars
+#endif
 #include "cl_cgameapi.h"
 #include "qcommon/stringed_ingame.h"
 
@@ -48,6 +51,8 @@ char *svc_strings[256] = {
 	"svc_snapshot",
 	"svc_setgame",
 	"svc_mapchange",
+	"svc_EOF",
+	"svc_vrAvatars",	// OpenJK VR
 };
 
 void SHOWNET( msg_t *msg, char *s) {
@@ -347,6 +352,9 @@ void CL_ParseSnapshot( msg_t *msg ) {
 	}
 	// save the frame off in the backup array for later delta comparisons
 	cl.snapshots[cl.snap.messageNum & PACKET_MASK] = cl.snap;
+#ifdef OPENJK_VR
+	cl.vrSnapParsed = qtrue;	// (svc_vrAvatars that follow belong to it)
+#endif
 
 	if (cl_shownet->integer == 3) {
 		Com_Printf( "   snapshot:%i  delta:%i  ping:%i\n", cl.snap.messageNum,
@@ -804,6 +812,59 @@ void CL_ParseCommandString( msg_t *msg ) {
 }
 
 
+#ifdef OPENJK_VR
+/*
+=====================
+CL_ParseVRAvatars
+
+OpenJK VR: the VR avatars of the players in the snapshot this message just
+brought (only sent to VR builds; see qcommon/vr_net.h). Kept by snapshot
+for the cgame, which draws those players' bodies with them
+(CL_VR_GetAvatar). After an invalid snapshot they are read and dropped.
+=====================
+*/
+static void CL_ParseVRAvatars( msg_t *msg ) {
+	const int count = MSG_ReadByte( msg );
+	const qboolean keep = cl.vrSnapParsed;
+	int i;
+
+	if ( keep ) {
+		cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].messageNum = cl.snap.messageNum;
+		cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].serverTime = cl.snap.serverTime;
+		cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].clientMask = 0;
+	}
+	for ( i = 0; i < count; i++ ) {
+		const int n = MSG_ReadByte( msg );
+		vrAvatar_t a;
+		VR_ReadAvatar( msg, &a );
+		if ( keep && n >= 0 && n < MAX_CLIENTS ) {
+			cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].avatar[n] = a;
+			cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].clientMask |= 1u << n;
+		}
+	}
+}
+
+// The avatar a player had in the snapshot of that server time, if any.
+qboolean CL_VR_GetAvatar( int serverTime, int clientNum, vrAvatar_t *avatar ) {
+	int i;
+
+	if ( !avatar ) {
+		return qfalse;
+	}
+	if ( clientNum >= 0 && clientNum < MAX_CLIENTS ) {
+		for ( i = 0; i < PACKET_BACKUP; i++ ) {
+			if ( cl.vrAvatars[i].serverTime == serverTime && ( cl.vrAvatars[i].clientMask & ( 1u << clientNum ) ) &&
+				cl.vrAvatars[i].messageNum <= cl.snap.messageNum && cl.snap.messageNum - cl.vrAvatars[i].messageNum < PACKET_BACKUP ) {
+				*avatar = cl.vrAvatars[i].avatar[clientNum];
+				return qtrue;
+			}
+		}
+	}
+	Com_Memset( avatar, 0, sizeof( *avatar ) );
+	return qfalse;
+}
+#endif
+
 /*
 =====================
 CL_ParseServerMessage
@@ -830,6 +891,9 @@ void CL_ParseServerMessage( msg_t *msg ) {
 	//
 	// parse the message
 	//
+#ifdef OPENJK_VR
+	cl.vrSnapParsed = qfalse;
+#endif
 	while ( 1 ) {
 		if ( msg->readcount > msg->cursize ) {
 			Com_Error (ERR_DROP,"CL_ParseServerMessage: read past end of server message");
@@ -877,6 +941,11 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			if ( cls.cgameStarted )
 				CGVM_MapChange();
 			break;
+#ifdef OPENJK_VR
+		case svc_vrAvatars:
+			CL_ParseVRAvatars( msg );
+			break;
+#endif
 		}
 	}
 }

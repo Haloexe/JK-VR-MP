@@ -30,9 +30,10 @@ fights with those blades instead of the animated ones:
 	followed through the frame, a VR one pose by pose, an animated one
 	between its frames). An animated blade (bots, players without VR)
 	that meets a VR blade bounces off it (G_VRSaberBlocksAnimated); the
-	saber's box round a VR blade stops nothing. Bots see a VR swing coming
-	and raise their guard into its path (G_VRSaberGuard) - it has to meet
-	the blade to stop it.
+	saber's box round a VR blade stops nothing. Bots, NPCs and players
+	without VR see a VR swing coming and raise their guard into its path
+	(G_VRSaberGuard: their automatic block) - it has to meet the blade to
+	stop it.
   - The attack button doesn't swing a saber held in VR (the client drops
 	it, and so does the server).
 
@@ -133,6 +134,7 @@ typedef struct vrSaberState_s {
 
 static vrSaberState_t	vrSabers[MAX_CLIENTS];
 static qboolean			vrPosesAvailable;	// the engine hands out poses (sv_vrx, vr_engine)
+static qboolean			vrsAvatarSet[MAX_CLIENTS];	// an avatar was handed to the engine (VRS_TakeAvatar)
 
 /*
 --------------------------------------------------------------------------------
@@ -396,6 +398,7 @@ void G_VRSaberInit( void ) {
 	char tag[64];
 
 	memset( vrSabers, 0, sizeof( vrSabers ) );
+	memset( vrsAvatarSet, 0, sizeof( vrsAvatarSet ) );
 
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
 	// sent to clients, so a stock engine never has it) and offers sv_vrx.
@@ -421,6 +424,10 @@ void G_VRSaberPublish( void ) {
 void G_VRSaberClientReset( int clientNum ) {
 	if ( clientNum >= 0 && clientNum < MAX_CLIENTS ) {
 		memset( &vrSabers[clientNum], 0, sizeof( vrSabers[clientNum] ) );
+		if ( vrPosesAvailable && trap->ext.VR_SetAvatar ) {
+			trap->ext.VR_SetAvatar( clientNum, NULL );
+		}
+		vrsAvatarSet[clientNum] = qfalse;
 	}
 }
 
@@ -447,6 +454,133 @@ static void VRS_RoomOffset( const vrSaberSample_t *smp, const vec3_t point, vec3
 	out[2] = rel[2];
 }
 
+/*
+--------------------------------------------------------------------------------
+The avatar: what everyone else sees of a VR player (qcommon/vr_public.h)
+--------------------------------------------------------------------------------
+*/
+
+// Is this player's VR body to be shown to the others at all? (Not dead,
+// spectating, following someone, or between maps.)
+static qboolean VRS_AvatarShown( gentity_t *ent ) {
+	const gclient_t *cl = ent->client;
+
+	if ( !ent->inuse || !cl || cl->pers.connected != CON_CONNECTED || ent->health < 1 ) {
+		return qfalse;
+	}
+	if ( cl->sess.sessionTeam == TEAM_SPECTATOR || ( cl->ps.pm_flags & PMF_FOLLOW ) || ( cl->ps.eFlags & EF_DEAD ) ) {
+		return qfalse;
+	}
+	if ( cl->ps.pm_type == PM_SPECTATOR || cl->ps.pm_type == PM_DEAD || cl->ps.pm_type == PM_INTERMISSION ||
+		cl->ps.pm_type == PM_SPINTERMISSION ) {
+		return qfalse;
+	}
+	return qtrue;
+}
+
+static void VRS_ClearAvatar( int clientNum ) {
+	if ( vrsAvatarSet[clientNum] ) {
+		trap->ext.VR_SetAvatar( clientNum, NULL );
+		vrsAvatarSet[clientNum] = qfalse;
+	}
+}
+
+// Unit vector, or the fallback if it's nonsense.
+static void VRS_SafeDir( vec3_t v, const vec3_t fallback ) {
+	if ( !( VectorNormalize( v ) > 0.5f ) ) {
+		VectorCopy( fallback, v );
+	}
+}
+
+// The avatar that came with this usercmd (offsets from the camera the player
+// saw their hands from), within reach, for the other players (the engine
+// sends it with their snapshots). The hands go as offsets from the player's
+// origin before this command moves it - where the body was when they saw
+// them - so they move with the body wherever it is drawn.
+static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
+	static const vec3_t fwd = { 1.0f, 0.0f, 0.0f };
+	const int clientNum = ent - g_entities;
+	gclient_t *cl = ent->client;
+	vrAvatar_t a;
+	vec3_t eye, cam, view;
+	float len;
+	int h;
+
+	if ( !vrPosesAvailable || !trap->ext.VR_SetAvatar ) {
+		return;	// (an engine without it: never touch its ext)
+	}
+	if ( !pose || !pose->avatar.valid || !VRS_AvatarShown( ent ) ) {
+		VRS_ClearAvatar( clientNum );
+		return;
+	}
+	a = pose->avatar;
+	a.valid = qtrue;
+
+	// the camera the hands were seen from: the eye, moved only by the
+	// camera's own smoothing (as for the blades)
+	VectorCopy( cl->ps.origin, eye );
+	eye[2] += cl->ps.viewheight;
+	VectorCopy( pose->viewOffset, view );
+	len = sqrtf( view[0] * view[0] + view[1] * view[1] );
+	if ( len > VR_SABER_VIEW_XY ) {
+		view[0] *= VR_SABER_VIEW_XY / len;
+		view[1] *= VR_SABER_VIEW_XY / len;
+	}
+	view[2] = Com_Clamp( -VR_SABER_VIEW_Z, VR_SABER_VIEW_Z, view[2] );
+	VectorAdd( eye, view, cam );
+
+	a.bodyYaw = AngleNormalize360( a.bodyYaw );
+	for ( h = 0; h < 3; h++ ) {
+		a.headAngles[h] = AngleNormalize180( a.headAngles[h] );
+	}
+	len = sqrtf( a.shift[0] * a.shift[0] + a.shift[1] * a.shift[1] );
+	if ( len > 48.0f ) {
+		a.shift[0] *= 48.0f / len;	// (the body never wanders off from where the player is)
+		a.shift[1] *= 48.0f / len;
+	}
+	a.shift[2] = Com_Clamp( -48.0f, 48.0f, a.shift[2] );
+
+	for ( h = 0; h < 2; h++ ) {
+		vrAvatarHand_t *hand = &a.hand[h];
+		vec3_t ofs;
+		if ( hand->grip <= VR_GRIP_NONE || hand->grip >= VR_NUM_GRIPS ||
+			( !G_VRSaberOn() && ( hand->grip == VR_GRIP_SABER || hand->grip == VR_GRIP_HILT ) ) ) {
+			// (with the game's own saber combat the animation swings it, as
+			// everyone's blows are judged)
+			memset( hand, 0, sizeof( *hand ) );
+			continue;
+		}
+		VectorCopy( hand->origin, ofs );
+		VRS_ClampReach( eye, cam, ofs, hand->origin );
+		VRS_SafeDir( hand->axis[0], fwd );
+		VectorMA( hand->axis[2], -DotProduct( hand->axis[2], hand->axis[0] ), hand->axis[0], hand->axis[2] );
+		if ( !( VectorNormalize( hand->axis[2] ) > 0.5f ) ) {
+			PerpendicularVector( hand->axis[2], hand->axis[0] );
+		}
+		CrossProduct( hand->axis[2], hand->axis[0], hand->axis[1] );
+		VRS_SafeDir( hand->dir, hand->axis[0] );
+		hand->blend = Com_Clamp( 0.0f, 1.0f, hand->blend == hand->blend ? hand->blend : 0.0f );
+		VectorSubtract( hand->origin, cl->ps.origin, hand->origin );
+	}
+	trap->ext.VR_SetAvatar( clientNum, &a );
+	vrsAvatarSet[clientNum] = qtrue;
+}
+
+// Once a frame: avatars of players who died, started spectating or left the
+// game go (their animation shows again).
+void G_VRSaberEndFrame( void ) {
+	int i;
+
+	if ( !vrPosesAvailable || !trap->ext.VR_SetAvatar ) {
+		return;
+	}
+	for ( i = 0; i < level.maxclients && i < MAX_CLIENTS; i++ ) {
+		if ( vrsAvatarSet[i] && !VRS_AvatarShown( &g_entities[i] ) ) {
+			VRS_ClearAvatar( i );
+		}
+	}
+}
+
 // Called for every usercmd of a real client, before it is thought (the
 // player state still has the eye point the pose was rendered with).
 void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
@@ -465,7 +599,11 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 		return;
 	}
 	vs = &vrSabers[clientNum];
-	if ( !G_VRSaberOn() || !trap->ext.VR_GetUserPose( clientNum, &pose ) || !pose.valid ) {
+	if ( !vrPosesAvailable || !trap->ext.VR_GetUserPose( clientNum, &pose ) ) {
+		memset( &pose, 0, sizeof( pose ) );
+	}
+	VRS_TakeAvatar( ent, &pose );	// (what everyone else sees, saber or not)
+	if ( !G_VRSaberOn() || !pose.valid ) {
 		vs->count = 0;		// the stream broke: never sweep across the gap
 		vs->inVR = qfalse;	// and the client says there's no saber in its VR hands
 		return;
@@ -1902,11 +2040,13 @@ qboolean G_VRSaberHeldBox( gentity_t *ent ) {
 =================
 G_VRSaberGuard
 
-A bot (or NPC) with its saber ready sees a VR player's swing coming at it
-and raises its guard into the blade's path - the parry it would otherwise
-only make once hit. Whether it sees it in time depends on its saber
-defence (g_vrSaberBotGuard scales how often and how quickly); whether the
-guard then stops the blade is up to where the blade really goes.
+A bot, an NPC or a player without VR, with the saber ready, sees a VR
+player's swing coming and raises the guard into the blade's path: the
+automatic block it would otherwise only make once hit (a player without VR
+blocks automatically against everyone else too). Whether it sees it in
+time depends on its saber defence (g_vrSaberBotGuard scales how often and
+how quickly); whether the guard then stops the blade is up to where the
+blade really goes.
 =================
 */
 static struct {
@@ -1968,9 +2108,11 @@ void G_VRSaberGuard( gentity_t *self ) {
 	vec3_t eye, low, fwd, ang;
 	int defense, i;
 
-	if ( !vrPosesAvailable || !G_VRSaberOn() || !cl || g <= 0.0f || G_VRSaberClient( self ) ||
-		( !( self->r.svFlags & SVF_BOT ) && self->s.eType != ET_NPC ) ) {
-		return;
+	if ( !vrPosesAvailable || !G_VRSaberOn() || !cl || g <= 0.0f || G_VRSaberClient( self ) ) {
+		return;	// (a VR player guards with their own blade)
+	}
+	if ( !( self->r.svFlags & SVF_BOT ) && self->s.eType != ET_NPC && ( cl->pers.cmd.buttons & BUTTON_ATTACK ) ) {
+		return;	// (a player trying to swing doesn't block, as in the normal game)
 	}
 	if ( !VRS_ReadyToGuard( self ) ) {
 		return;

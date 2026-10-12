@@ -19,9 +19,11 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-6"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-7"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
-												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing
+												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
+												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
+												//     ext.VR_GetAvatar (cgame)
 
 /*
 --------------------------------------------------------------------------------
@@ -49,7 +51,7 @@ flip or roll animates the body, a hitch delayed the pose).
 twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		2		// 2: twoHanded, grip2
+#define VR_POSE_PROTOCOL		3		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars
 #define VR_POSE_MAX_SABERS		2		// right hand, left hand
 #define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
 #define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
@@ -58,6 +60,49 @@ typedef struct vrBladePose_s {
 	vec3_t			base;		// blade start (the muzzle point), offset from the camera
 	vec3_t			dir;		// unit vector along the blade
 } vrBladePose_t;
+
+/*
+--------------------------------------------------------------------------------
+The VR avatar: what everyone else sees of a VR player - which way their body
+faces, where they look, and their hands, holding what.
+
+The player's game sends it with every usercmd (vrUserPose_t.avatar, offsets
+from the camera like the saber pose; valid whenever their VR body is drawn,
+saber or not). The server's game keeps the hands within reach and makes them
+offsets from the player's origin as that usercmd found it (where their body
+was when they saw their hands), so the hands move with the body, and hands
+it to the engine (gameImport_t.ext.VR_SetAvatar), which sends it after each
+snapshot to the other players that run this build (svc_vrAvatars, only to
+clients that sent clc_moveVR). Their games pose that player's body with it,
+the hands offset from where they draw the player
+(cgameImport_t.ext.VR_GetAvatar). Directions are world axes.
+--------------------------------------------------------------------------------
+*/
+enum {
+	VR_GRIP_NONE,		// the hand isn't on a controller: the animation has it
+	VR_GRIP_FREE,		// an empty hand on the controller
+	VR_GRIP_GUN,		// holding a gun: origin and axis are the gun model's
+	VR_GRIP_SABER,		// holding its own saber: dir runs along the blade
+	VR_GRIP_HILT,		// on the other hand's hilt: dir runs along it through the fist
+	VR_NUM_GRIPS
+};
+
+typedef struct vrAvatarHand_s {
+	int			grip;			// VR_GRIP_*
+	vec3_t		origin;			// where the hand holds (the controller's grip as the arm reaches for it); GUN: the gun's origin
+								// (offset from the camera, then from the player's origin: see above)
+	vec3_t		axis[3];		// the controller as the hand lies on it (forward along it, left, up); GUN: the gun's axes
+	vec3_t		dir;			// SABER: along the blade; HILT: along the hilt, toward the thumb
+	float		blend;			// HILT: how far the hold has taken the hand over (0..1)
+} vrAvatarHand_t;
+
+typedef struct vrAvatar_s {
+	qboolean		valid;
+	float			bodyYaw;		// where the body faces (world yaw)
+	vec3_t			headAngles;		// where the head looks (pitch, yaw, roll)
+	vec3_t			shift;			// how far the body is drawn from the entity origin (stood under the head)
+	vrAvatarHand_t	hand[2];		// VR_HAND_LEFT, VR_HAND_RIGHT
+} vrAvatar_t;
 
 typedef struct vrUserPose_s {
 	qboolean		valid;		// a lit saber is in the player's VR hands
@@ -68,7 +113,25 @@ typedef struct vrUserPose_s {
 	qboolean		twoHanded[VR_POSE_MAX_SABERS];	// the other hand holds it too...
 	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (offset from the camera)
 	vrBladePose_t	blade[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
+	vrAvatar_t		avatar;		// the whole player, for everyone else (offsets from the camera)
 } vrUserPose_t;
+
+// Angles that AnglesToAxis turns back into axis (forward, left, up).
+static inline void VR_AxisToAngles( vec3_t axis[3], vec3_t angles ) {
+	const float len = sqrtf( axis[0][0] * axis[0][0] + axis[0][1] * axis[0][1] );
+
+	if ( len > 1e-5f ) {
+		angles[PITCH] = RAD2DEG( atan2f( -axis[0][2], len ) );
+		angles[YAW] = RAD2DEG( atan2f( axis[0][1], axis[0][0] ) );
+		angles[ROLL] = RAD2DEG( atan2f( axis[1][2], axis[2][2] ) );
+	} else {
+		// straight up or down: yaw and roll are the same turn, all in roll
+		const float sp = ( axis[0][2] < 0.0f ) ? 1.0f : -1.0f;
+		angles[PITCH] = sp * 90.0f;
+		angles[YAW] = 0.0f;
+		angles[ROLL] = RAD2DEG( atan2f( axis[1][0] * sp, axis[1][1] ) );
+	}
+}
 
 enum {
 	VR_HAND_LEFT = 0,

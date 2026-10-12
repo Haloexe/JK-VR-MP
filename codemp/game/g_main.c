@@ -3319,7 +3319,7 @@ void G_RunFrame( int levelTime ) {
 				WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
 				WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
 				WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
-				G_VRSaberGuard( ent );	// OpenJK VR: a bot sees a VR swing coming
+				G_VRSaberGuard( ent );	// OpenJK VR: a VR swing coming is blocked as any other
 			}
 
 			if (g_allowNPC.integer)
@@ -3410,6 +3410,8 @@ void G_RunFrame( int levelTime ) {
 
 	// for tracking changes
 	CheckCvars();
+
+	G_VRSaberEndFrame();	// OpenJK VR: the VR players' avatars, for everyone else
 
 #ifdef _G_FRAME_PERFANAL
 	iTimer_GameChecks = trap->PrecisionTimer_End(timer_GameChecks);

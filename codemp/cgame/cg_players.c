@@ -4297,6 +4297,8 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 			VectorCopy(bodyAngles, lookAngles);
 		}
 		lookAngles[PITCH] = 0;
+		// OpenJK VR: another VR player's head looks where theirs does (nods and tilts too)
+		CG_VR_BodyLook( cent, lookAngles );
 
 		if (cent->currentState.otherEntityNum2)
 		{
@@ -8478,12 +8480,15 @@ void CG_Player( centity_t *cent ) {
 	qboolean		g2HasWeapon = qfalse;
 	qboolean		drawPlayerSaber = qfalse;
 	qboolean		checkDroidShields = qfalse;
-	qboolean		vrBody = qfalse;	// OpenJK VR: drawing your own body in first person
+	qboolean		vrBody = qfalse;	// OpenJK VR: drawing a tracked VR body (yours, or another VR player's)
+	qboolean		vrSelf = qfalse;	// OpenJK VR: ...your own, in first person
 
-	// OpenJK VR: in a headset your own body is drawn in first person too
-	// (decided before any early return, so leaving that view always undoes it)
-	if ( cent->currentState.number == cg.clientNum || cent->currentState.number == cg.predictedPlayerState.clientNum ) {
+	// OpenJK VR: in a headset your own body is drawn in first person too, and
+	// other VR players' bodies move as theirs do (decided before any early
+	// return, so leaving that always undoes it)
+	if ( cent->currentState.number < MAX_CLIENTS ) {
 		vrBody = CG_VR_BodyActive( cent );
+		vrSelf = ( vrBody && cent->currentState.number == cg.clientNum ) ? qtrue : qfalse;
 		if ( !vrBody ) {
 			CG_VR_BodyRestore( cent );
 		}
@@ -8933,7 +8938,7 @@ void CG_Player( centity_t *cent ) {
 #else
 			// (OpenJK VR: in a headset your body shows in first person only
 			// as the tracked VR body, saber or not)
-			if ((cent->currentState.weapon != WP_SABER || CG_VR()) && !vrBody)
+			if ((cent->currentState.weapon != WP_SABER || CG_VR()) && !vrSelf)
 #endif
 			{
 				renderfx = RF_THIRD_PERSON;			// only draw in mirrors
@@ -9359,7 +9364,7 @@ void CG_Player( centity_t *cent ) {
 
 	//rww - force speed "trail" effect
 	// (OpenJK VR: not copies of your own body around you)
-	if (!(cent->currentState.powerups & (1 << PW_SPEED)) || doAlpha || !cg_speedTrail.integer || vrBody)
+	if (!(cent->currentState.powerups & (1 << PW_SPEED)) || doAlpha || !cg_speedTrail.integer || vrSelf)
 	{
 		cent->frame_minus1_refreshed = 0;
 		cent->frame_minus2_refreshed = 0;
@@ -10555,7 +10560,7 @@ stillDoSaber:
 					// (OpenJK VR: while your body sits out a flip or roll in
 					// first person, its blade isn't shown either)
 					CG_AddSaberBlade( cent, cent, NULL, 0, 0, l, k, legs.origin, rootAngles, qfalse,
-						( cent->currentState.number == cg.clientNum && !cg.renderingThirdPerson && CG_VR() && !vrBody ) ? qtrue : qfalse );
+						( cent->currentState.number == cg.clientNum && !cg.renderingThirdPerson && CG_VR() && !vrSelf ) ? qtrue : qfalse );
 				}
 
 				k++;
@@ -10846,7 +10851,7 @@ stillDoSaber:
 		cent->frame_hold_time = cg.time + 254;
 	}
 
-	if (cent->frame_hold_time >= cg.time && !vrBody)
+	if (cent->frame_hold_time >= cg.time && !vrSelf)
 	{
 		refEntity_t reframe_hold;
 

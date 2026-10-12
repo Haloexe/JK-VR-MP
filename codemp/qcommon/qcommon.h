@@ -239,7 +239,11 @@ enum svc_ops_e {
 	svc_snapshot,
 	svc_setgame,
 	svc_mapchange,
-	svc_EOF
+	svc_EOF,
+
+	// OpenJK VR, only to clients that sent clc_moveVR: the VR avatars of the
+	// players in the snapshot just before it (vr_net.h)
+	svc_vrAvatars
 };
 
 

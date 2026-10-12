@@ -129,7 +129,7 @@ typedef struct {
 	vec3_t		reachDir;			// shoulder -> wrist
 } vrbArmResult_t;
 
-static struct {
+typedef struct vrbState_s {
 	qboolean	init;
 
 	// body yaw, kept in VR tracking space so snap/smooth turning carries the
@@ -247,7 +247,30 @@ static struct {
 	int			logTorso;
 	float		logTip;
 	int			logPrinted;
-} vrb;
+
+	// another player's body (CG_VRB_OtherUsable): their avatar this frame,
+	// the hands offsets from where the player is drawn (worked out once a
+	// frame: at this time, between these snapshots)
+	int			avatarTime, avatarSnap, avatarNext;
+	qboolean	avatarValid;
+	vrAvatar_t	avatar;
+
+	// your body: what the arm solver held each hand to this frame - the
+	// avatar everyone else sees (CG_VRB_SolveArm, CG_VR_BodyEndFrame)
+	vrAvatarHand_t	sent[2];
+	int			sentTime[2];
+} vrbState_t;
+
+// The body being posed: yours, or - while CG_VRB_OtherArms and the rest pose
+// another VR player's from their avatar - theirs. Every vrb.x is that one's.
+static vrbState_t	vrbSelf;
+static vrbState_t	vrbOthers[MAX_CLIENTS];
+static vrbState_t	*vrbCur = &vrbSelf;
+#define vrb			( *vrbCur )
+
+// While another player's body is posed: their avatar (in the world), which
+// stands in for the headset and controllers. NULL while yours is.
+static const vrAvatar_t	*vrbRemote;
 
 // Physical lightsaber: the blades in your hands this frame, reported to the
 // engine (which sends them to the server with every usercmd)
@@ -763,7 +786,9 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 		( ( vrb.wristOk[0] && vrb.wristOk[1] ) || cg.time < vrb.probeRetry ) ) {
 		return;
 	}
-	CG_VRB_DumpModel( ci, cent );
+	if ( !vrbRemote ) {
+		CG_VRB_DumpModel( ci, cent );
+	}
 	vrb.probed = qtrue;
 	vrb.probeRetry = cg.time + 2000;	// (only matters if a hand failed)
 	vrb.probeG2 = g2;
@@ -1191,7 +1216,7 @@ static void CG_VRB_CurlFingers( centity_t *cent, int h, const mdxaBone_t *H, con
 	}
 
 	// (the log: the hand round the hilt, now and then)
-	logGeo = ( cg_vrLog.integer && ( cg.time >= vrb.curlGeoTime[h] || vrb.curlGeoTime[h] - cg.time > 20000 ) ) ? qtrue : qfalse;
+	logGeo = ( !vrbRemote && cg_vrLog.integer && ( cg.time >= vrb.curlGeoTime[h] || vrb.curlGeoTime[h] - cg.time > 20000 ) ) ? qtrue : qfalse;
 	if ( logGeo ) {
 		VRB_AxisOffset( hand.origin, o, u, v );
 		if ( VectorNormalize( v ) < 0.01f ) {
@@ -1357,7 +1382,13 @@ static qboolean CG_VRB_BodyUsable( centity_t *cent ) {
 	return qtrue;
 }
 
+static qboolean CG_VRB_OtherUsable( centity_t *cent );
+
+// You, drawn as your VR body - or another player in VR, drawn as theirs.
 qboolean CG_VR_BodyActive( centity_t *cent ) {
+	if ( cent->currentState.number != cg.clientNum ) {
+		return CG_VRB_OtherUsable( cent );
+	}
 	return CG_VRB_BodyUsable( cent );
 }
 
@@ -1366,15 +1397,26 @@ qboolean CG_VR_BodyActive( centity_t *cent ) {
 // the headset you stay upright, so your body shows the in-air pose instead
 // (a crouch for a roll), and your arms, hands and saber stay where yours
 // are. The game itself still flips and rolls you.
+extern qboolean BG_InRollES( entityState_t *ps, int anim );
+
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
 	const animation_t *anims;
+	qboolean roll;
 	int anim;
 
-	if ( !CG_VRB_BodyUsable( cent ) ) {
+	if ( cent->currentState.number != cg.clientNum ) {
+		// (another VR player stays upright in their headset too)
+		if ( !CG_VRB_OtherUsable( cent ) ) {
+			return;
+		}
+		roll = BG_InRollES( &cent->currentState, *legsAnim );
+	} else if ( CG_VRB_BodyUsable( cent ) ) {
+		roll = BG_InRoll( (playerState_t *)ps, *legsAnim );
+	} else {
 		return;
 	}
-	if ( BG_InRoll( (playerState_t *)ps, *legsAnim ) ) {
+	if ( roll ) {
 		anim = BOTH_CROUCH1IDLE;
 	} else if ( BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
 		anim = BOTH_FORCEINAIR1;
@@ -1463,6 +1505,14 @@ static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles ) {
 	const vrClientState_t *vr;
 
+	if ( cent->currentState.number != cg.clientNum ) {
+		// another VR player: where their body faces (level, like yours)
+		if ( !CG_VRB_OtherUsable( cent ) ) {
+			return qfalse;
+		}
+		VectorSet( angles, 0.0f, vrbOthers[cent->currentState.number].avatar.bodyYaw, 0.0f );
+		return qtrue;
+	}
 	CG_VRB_Init();
 	if ( !CG_VR_BodyActive( cent ) || !( vr = CG_VR() ) ) {
 		return qfalse;
@@ -1481,10 +1531,18 @@ arms
 */
 
 // Controller h in the world, where the hand is put on it (cg_vrHandX/Y/Z).
+// (Another player's: where their avatar says their hand is.)
 static void CG_VRB_Controller( const vrClientState_t *vr, int h, vec3_t origin, vec3_t axis[3] ) {
 	vec3_t local, localAxis[3];
 	int i;
 
+	if ( vrbRemote ) {
+		VectorCopy( vrbRemote->hand[h].origin, origin );
+		for ( i = 0; i < 3; i++ ) {
+			VectorCopy( vrbRemote->hand[h].axis[i], axis[i] );
+		}
+		return;
+	}
 	VectorCopy( vr->gripOrigin[h], local );
 	for ( i = 0; i < 3; i++ ) {
 		VectorCopy( vr->gripAxis[h][i], localAxis[i] );
@@ -1512,6 +1570,34 @@ static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip ) {
 
 	memset( grip, 0, sizeof( *grip ) );
 	grip->kind = VRB_GRIP_FREE;
+
+	if ( vrbRemote ) {
+		// another player's hand: what their avatar says it holds
+		const vrAvatarHand_t *ah = &vrbRemote->hand[h];
+		const int model = ( h == VR_HAND_RIGHT ) ? 1 : 2;
+		int i;
+		switch ( ah->grip ) {
+		case VR_GRIP_SABER:
+			if ( weapon == WP_SABER && trap->G2API_HasGhoul2ModelOnIndex( &cent->ghoul2, model ) ) {
+				grip->kind = VRB_GRIP_SABER;
+				grip->saberModel = model;
+			}
+			break;
+		case VR_GRIP_HILT:
+		case VR_GRIP_GUN:
+			grip->kind = ( ah->grip == VR_GRIP_HILT ) ? VRB_GRIP_HILT : VRB_GRIP_GUN;
+			VectorCopy( ah->origin, grip->origin );
+			for ( i = 0; i < 3; i++ ) {
+				VectorCopy( ah->axis[i], grip->axis[i] );
+			}
+			VectorCopy( ah->dir, grip->dir );
+			grip->blend = ah->blend;
+			break;
+		default:
+			break;
+		}
+		return;
+	}
 
 	if ( weapon == WP_SABER ) {
 		// saber 1 in the right hand, a second saber in the left
@@ -2058,7 +2144,7 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	vec3_t bodyFwd, bodyLeft, outward, hint, down = { 0.0f, 0.0f, -1.0f };
 	vec3_t F0[3], F1[3], want[3], cur[3];
 	vrbMat_t Y0, Y, Q1, A, X;
-	vec3_t holdO, holdDir;
+	vec3_t holdO, holdDir, sentDir;
 	float a, len2, d, dmin, dmax, cosA, sinA, w, pitch, handLen = 0.0f;
 	qboolean haveHinge = qfalse, anatomy = qfalse, inFist;
 	int i;
@@ -2118,7 +2204,7 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	if ( anatomy ) {
 		VectorScale( gA[2], -1.0f, Ad[0] );
 		VectorCopy( gA[0], Ad[1] );
-		pitch = cg_vrHandPitch.value;
+		pitch = vrbRemote ? 0.0f : cg_vrHandPitch.value;	// (another player's avatar has theirs in already)
 		if ( pitch != 0.0f ) {
 			RotatePointAroundVector( tmp, Ad[1], Ad[0], -pitch );
 			VectorCopy( tmp, Ad[0] );
@@ -2128,6 +2214,8 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	} else {
 		VRB_Identity( Y0 );
 	}
+
+	VectorCopy( gA[0], sentDir );
 
 	// Y: how the hand has to be turned for what it holds; Wt: where the
 	// wrist then goes so the hold point lands on target
@@ -2177,6 +2265,7 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 					VRB_Apply( Y0, bladeNow, tmp );
 					VRB_Arc( tmp, bladeWant, A );
 					VRB_Mul( A, Y0, Y );
+					VectorCopy( bladeWant, sentDir );
 				}
 			}
 		} else if ( grip->kind == VRB_GRIP_HILT ) {
@@ -2186,7 +2275,9 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 			// from resting on the controller.
 			vrbBone_t own;
 			vec3_t bladeNow, bladeWant;
-			if ( inFist || CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &own ) ) {
+			// (another player's hand without a fist frame: the way their hilt
+			// lay in it isn't known here - their hand just rests on it)
+			if ( inFist || ( !vrbRemote && CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &own ) ) ) {
 				if ( inFist ) {
 					VectorCopy( holdDir, bladeNow );
 				} else {
@@ -2402,6 +2493,48 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		vrb.armTime[h] = cg.time;
 		VectorCopy( gripO, vrb.armGrip[h] );
 	}
+	if ( commit && !vrbRemote ) {
+		// your hand as everyone else will see it (CG_VR_BodyEndFrame): what
+		// it holds, and the controller it lies on with the hand's pitch in
+		vrAvatarHand_t *sent = &vrb.sent[h];
+		memset( sent, 0, sizeof( *sent ) );
+		VectorCopy( gripO, sent->origin );
+		if ( anatomy ) {
+			VectorCopy( Ad[1], sent->axis[0] );
+			VectorScale( Ad[0], -1.0f, sent->axis[2] );
+			CrossProduct( sent->axis[2], sent->axis[0], sent->axis[1] );
+		} else {
+			VectorCopy( gA[0], sent->axis[0] );
+			VectorCopy( gA[1], sent->axis[1] );
+			VectorCopy( gA[2], sent->axis[2] );
+		}
+		switch ( grip->kind ) {
+		case VRB_GRIP_GUN:
+			sent->grip = VR_GRIP_GUN;
+			VectorCopy( grip->origin, sent->origin );
+			VectorCopy( grip->axis[0], sent->axis[0] );
+			VectorCopy( grip->axis[1], sent->axis[1] );
+			VectorCopy( grip->axis[2], sent->axis[2] );
+			break;
+		case VRB_GRIP_SABER:
+			sent->grip = VR_GRIP_SABER;
+			VectorCopy( sentDir, sent->dir );
+			break;
+		case VRB_GRIP_HILT:
+			if ( vrb.twoHand ) {
+				sent->grip = VR_GRIP_HILT;
+				VectorCopy( grip->dir, sent->dir );
+				sent->blend = grip->blend;
+			} else {
+				sent->grip = VR_GRIP_FREE;	// (letting go: the hand coming off it, fingers open)
+			}
+			break;
+		default:
+			sent->grip = VR_GRIP_FREE;
+			break;
+		}
+		vrb.sentTime[h] = cg.time;
+	}
 	res->solved = qtrue;
 	res->exact = ( sinA > 0.3f ) ? qtrue : qfalse;
 	VectorCopy( E, res->elbow );
@@ -2515,8 +2648,11 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	vrb.armsG2 = cent->ghoul2;
 	CG_VRB_ResetArms( cent->ghoul2 );
 	CG_VRB_ProbeHands( cent );
-	CG_VRB_TwoHand( cent, vr );
-	CG_VRB_BladeInertia( cent, vr );
+	if ( !vrbRemote ) {
+		// (another player's: their avatar says, CG_VRB_OtherArms)
+		CG_VRB_TwoHand( cent, vr );
+		CG_VRB_BladeInertia( cent, vr );
+	}
 	CG_VRB_HandPoses( cent );
 
 	if ( vrb.convention < 0 && vrb.checkTime != cg.time ) {
@@ -2562,7 +2698,9 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 		}
 		vrb.lastBest = ( vrb.convention >= 0 ) ? vrb.convention : best;
 		CG_VRB_SolveArms( cent, vr, vrb.lastBest, bodyYaw, qtrue, res );
-		CG_VRB_UpdateLean( res, bodyYaw );
+		if ( !vrbRemote ) {
+			CG_VRB_UpdateLean( res, bodyYaw );
+		}
 		return;
 	}
 
@@ -2573,7 +2711,9 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	}
 
 	CG_VRB_SolveArms( cent, vr, vrb.convention, bodyYaw, qtrue, res );
-	CG_VRB_UpdateLean( res, bodyYaw );
+	if ( !vrbRemote ) {
+		CG_VRB_UpdateLean( res, bodyYaw );
+	}
 
 	// occasional re-check (a model with a different skeleton could need another convention)
 	if ( cg.time >= vrb.nextCheck || cg_vrBodyDebug.integer > 1 ) {
@@ -2596,6 +2736,215 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 			}
 		}
 	}
+}
+
+/*
+=============================================================================
+
+other players' VR bodies
+
+Another player in VR is drawn from the avatar their game sends with every
+command (through a server running this build; qcommon/vr_public.h): their
+body faces where theirs does and stays upright through flips like it does
+for them, their head looks where they look, and their arms are posed by the
+same solver as yours - their hands where theirs are, holding what they hold,
+the saber along their real blade, which their blows are judged by.
+
+=============================================================================
+*/
+
+// Two of a player's avatars, a fraction f of the way from a to b.
+static void CG_VRB_BlendAvatar( const vrAvatar_t *a, const vrAvatar_t *b, float f, vrAvatar_t *out ) {
+	int h, i;
+
+	*out = ( f < 0.5f ) ? *a : *b;
+	out->valid = qtrue;
+	out->bodyYaw = LerpAngle( a->bodyYaw, b->bodyYaw, f );
+	for ( i = 0; i < 3; i++ ) {
+		out->headAngles[i] = LerpAngle( a->headAngles[i], b->headAngles[i], f );
+		out->shift[i] = a->shift[i] + f * ( b->shift[i] - a->shift[i] );
+	}
+	for ( h = 0; h < 2; h++ ) {
+		const vrAvatarHand_t *ha = &a->hand[h], *hb = &b->hand[h];
+		vrAvatarHand_t *ho = &out->hand[h];
+		vec3_t axA[3], axB[3];
+		if ( ha->grip != hb->grip || ha->grip <= VR_GRIP_NONE || ha->grip >= VR_NUM_GRIPS ) {
+			continue;	// (it took hold or let go: the nearer one; no hand: nothing to blend)
+		}
+		for ( i = 0; i < 3; i++ ) {
+			ho->origin[i] = ha->origin[i] + f * ( hb->origin[i] - ha->origin[i] );
+			VectorCopy( ha->axis[i], axA[i] );
+			VectorCopy( hb->axis[i], axB[i] );
+		}
+		VRB_FrameBlend( axA, axB, f, ho->axis );
+		if ( ha->grip == VR_GRIP_SABER || ha->grip == VR_GRIP_HILT ) {
+			VRB_Slerp( ha->dir, hb->dir, f, ho->dir );
+		}
+		ho->blend = ha->blend + f * ( hb->blend - ha->blend );
+	}
+}
+
+// A player's avatar at this frame's time, between the snapshots their
+// entity is drawn between (the hands offsets from where the player is
+// drawn). qfalse: they have none.
+static qboolean CG_VRB_InterpolateAvatar( centity_t *cent, vrAvatar_t *out ) {
+	const int n = cent->currentState.number;
+	vrAvatar_t a, b;
+	qboolean lerp = cent->interpolate, haveA, haveB;
+	int h;
+
+	if ( n == cg.snap->ps.clientNum ) {
+		// the player you follow as a spectator, drawn from the playerstate:
+		// it moves between the snapshots unless the next one jumps
+		lerp = ( cg.nextSnap && cg.nextSnap->ps.clientNum == n && !cg.nextFrameTeleport ) ? qtrue : qfalse;
+	}
+	haveA = trap->ext.VR_GetAvatar( cg.snap->serverTime, n, &a );
+	haveB = ( lerp && cg.nextSnap && trap->ext.VR_GetAvatar( cg.nextSnap->serverTime, n, &b ) ) ? qtrue : qfalse;
+	if ( haveA && haveB ) {
+		CG_VRB_BlendAvatar( &a, &b, cg.frameInterpolation, out );
+	} else if ( haveA ) {
+		*out = a;
+	} else if ( haveB && cg.frameInterpolation >= 0.5f ) {
+		*out = b;	// (just started)
+	} else {
+		return qfalse;
+	}
+	for ( h = 0; h < 2; h++ ) {
+		if ( out->hand[h].grip <= VR_GRIP_NONE || out->hand[h].grip >= VR_NUM_GRIPS ) {
+			out->hand[h].grip = VR_GRIP_NONE;
+		}
+	}
+	return qtrue;
+}
+
+// Another player in VR, drawn as their VR body (cg_vrOthers): their avatar,
+// worked out once a frame (and again if the snapshots change).
+static qboolean CG_VRB_OtherUsable( centity_t *cent ) {
+	const int n = cent->currentState.number;
+	vrbState_t *st;
+
+	if ( n < 0 || n >= MAX_CLIENTS || n == cg.clientNum || !cg_vrOthers.integer || !cg.snap ) {
+		return qfalse;
+	}
+	if ( !CG_VR_Engine() || !trap->ext.VR_GetAvatar || !trap->ext.VR_G2SetBoneTransform ) {
+		return qfalse;	// (an engine without them)
+	}
+	if ( cent->currentState.eType != ET_PLAYER || !cent->ghoul2 || cent->localAnimIndex > 1 ) {
+		return qfalse;	// not a humanoid player
+	}
+	if ( ( cent->currentState.eFlags & ( EF_DEAD | EF_RAG | EF_NODRAW ) ) || cent->isRagging ||
+		( cent->currentState.eFlags2 & EF2_HELD_BY_MONSTER ) || cent->currentState.heldByClient ||
+		cent->currentState.m_iVehicleNum || cent->currentState.weapon == WP_EMPLACED_GUN ) {
+		return qfalse;	// the game's own posing wins
+	}
+	st = &vrbOthers[n];
+	if ( !st->init ) {
+		vrbCur = st;
+		CG_VRB_Init();
+		vrbCur = &vrbSelf;
+	}
+	if ( st->avatarTime != cg.time || st->avatarSnap != cg.snap->serverTime ||
+		st->avatarNext != ( cg.nextSnap ? cg.nextSnap->serverTime : -1 ) ) {
+		st->avatarTime = cg.time;
+		st->avatarSnap = cg.snap->serverTime;
+		st->avatarNext = cg.nextSnap ? cg.nextSnap->serverTime : -1;
+		st->avatarValid = CG_VRB_InterpolateAvatar( cent, &st->avatar );
+	}
+	return st->avatarValid;
+}
+
+// Where another VR player's head looks: where theirs does (the game would
+// turn it toward their aim). qfalse: the game's own look.
+qboolean CG_VR_BodyLook( centity_t *cent, vec3_t lookAngles ) {
+	if ( cent->currentState.number == cg.clientNum || !CG_VRB_OtherUsable( cent ) ) {
+		return qfalse;
+	}
+	VectorCopy( vrbOthers[cent->currentState.number].avatar.headAngles, lookAngles );
+	return qtrue;
+}
+
+// Another VR player's body stood under their head, as their game stands it
+// (undone in CG_VR_BodyEndFrame).
+static void CG_VRB_OtherPose( centity_t *cent, refEntity_t *legs ) {
+	const int n = cent->currentState.number;
+
+	if ( !CG_VRB_OtherUsable( cent ) ) {
+		return;
+	}
+	vrbCur = &vrbOthers[n];
+	CG_VRB_Init();
+	CG_VRB_ResetArms( cent->ghoul2 );	// (the animated pose, without last frame's arm overrides)
+	vrb.armsG2 = cent->ghoul2;
+	VectorAdd( cent->lerpOrigin, vrb.avatar.shift, cent->lerpOrigin );
+	VectorCopy( cent->lerpOrigin, legs->origin );
+	VectorCopy( cent->lerpOrigin, legs->oldorigin );
+	VectorCopy( cent->lerpOrigin, legs->lightingOrigin );
+	vrb.shiftedEnt = cent;
+	VectorCopy( vrb.avatar.shift, vrb.shift );
+	vrbCur = &vrbSelf;
+}
+
+// The avatar of the body being posed, its hands in the world: from where
+// the player is drawn now - after the game's own smoothing moved them, and
+// without the body's shift (CG_VRB_OtherPose).
+static void CG_VRB_AvatarInWorld( centity_t *cent, vrAvatar_t *world ) {
+	vec3_t base;
+	int h;
+
+	*world = vrb.avatar;
+	VectorCopy( cent->lerpOrigin, base );
+	if ( vrb.shiftedEnt == cent ) {
+		VectorSubtract( base, vrb.shift, base );
+	}
+	for ( h = 0; h < 2; h++ ) {
+		if ( world->hand[h].grip != VR_GRIP_NONE ) {
+			VectorAdd( world->hand[h].origin, base, world->hand[h].origin );
+		}
+	}
+}
+
+// Another VR player's arms: the hands where theirs are, holding what they
+// hold - the same solver as yours, their avatar standing in for the headset.
+static void CG_VRB_OtherArms( centity_t *cent ) {
+	const int n = cent->currentState.number;
+	vrClientState_t vr;
+	vrAvatar_t world;
+	int h;
+
+	if ( !CG_VRB_OtherUsable( cent ) ) {
+		return;
+	}
+	vrbCur = &vrbOthers[n];
+	CG_VRB_Init();
+	CG_VRB_AvatarInWorld( cent, &world );
+	vrbRemote = &world;
+	if ( cg_vrBodyArms.integer ) {
+		memset( &vr, 0, sizeof( vr ) );
+		vr.active = qtrue;
+		for ( h = 0; h < 2; h++ ) {
+			const vrAvatarHand_t *ah = &world.hand[h];
+			vr.handValid[h] = ( ah->grip != VR_GRIP_NONE ) ? qtrue : qfalse;
+			// a blade points where theirs does (not where a controller would)
+			if ( ah->grip == VR_GRIP_SABER ) {
+				vrb.blade[h].valid = qtrue;
+				VectorCopy( ah->dir, vrb.blade[h].out );
+				vrb.blade[h].outTime = cg.time;
+			} else {
+				vrb.blade[h].valid = qfalse;
+			}
+		}
+		// the left hand on the right hand's hilt
+		vrb.twoHandTime = cg.time;
+		vrb.twoHand = vrb.twoHandArms = ( vrb.avatar.hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ) ? qtrue : qfalse;
+		vrb.twoHandEase = vrb.twoHand ? vrb.avatar.hand[VR_HAND_LEFT].blend : 0.0f;
+		CG_VRB_Arms( cent, &vr, vrb.avatar.bodyYaw );
+	} else {
+		CG_VRB_ResetArms( cent->ghoul2 );
+		CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );
+		CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
+	}
+	vrbRemote = NULL;
+	vrbCur = &vrbSelf;
 }
 
 /*
@@ -2642,6 +2991,10 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 	float yaw, len, duck;
 	qboolean haveEyes = qfalse;
 
+	if ( cent->currentState.number != cg.clientNum ) {
+		CG_VRB_OtherPose( cent, legs );
+		return;
+	}
 	CG_VRB_Init();
 	if ( !vr || !cent->ghoul2 ) {
 		return;
@@ -2734,6 +3087,10 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 void CG_VR_BodyArms( centity_t *cent ) {
 	const vrClientState_t *vr = CG_VR();
 
+	if ( cent->currentState.number != cg.clientNum ) {
+		CG_VRB_OtherArms( cent );
+		return;
+	}
 	if ( !vr || !cent->ghoul2 ) {
 		return;
 	}
@@ -2916,12 +3273,47 @@ static void CG_VRB_LogHands( centity_t *cent ) {
 	}
 }
 
-// After the frame's scene is built: the entity's real position back (next
-// frame's events and sounds use it), and the blades in your hands to the
-// engine.
+// Your body as everyone else is to see it (offsets from the camera, like the
+// saber pose): which way it faces, where you look, and your hands as the arm
+// solver held them this frame (a hand it didn't: the animation has it).
+static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vrAvatar_t *a ) {
+	vec3_t head[3], world[3];
+	int h, i;
+
+	memset( a, 0, sizeof( *a ) );
+	a->valid = qtrue;
+	a->bodyYaw = vrb.worldYaw;
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( vr->headAxis[i], head[i] );
+	}
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, NULL, head, NULL, world );
+	VR_AxisToAngles( world, a->headAngles );
+	VectorCopy( shift, a->shift );
+	for ( h = 0; h < 2; h++ ) {
+		if ( vrb.sentTime[h] == cg.time && vrb.armTime[h] == cg.time ) {
+			a->hand[h] = vrb.sent[h];
+			VectorSubtract( a->hand[h].origin, cg.refdef.vieworg, a->hand[h].origin );
+		}
+	}
+}
+
+// After the frame's scene is built: the entities' real positions back (next
+// frame's events and sounds use them), and the blades in your hands and your
+// body to the engine.
 void CG_VR_BodyEndFrame( void ) {
 	const vrClientState_t *vr = CG_VR();
+	vec3_t shift;
+	int i;
 
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		if ( vrbOthers[i].shiftedEnt ) {
+			VectorSubtract( vrbOthers[i].shiftedEnt->lerpOrigin, vrbOthers[i].shift, vrbOthers[i].shiftedEnt->lerpOrigin );
+			vrbOthers[i].shiftedEnt = NULL;
+			VectorClear( vrbOthers[i].shift );
+		}
+	}
+
+	VectorCopy( vrb.shift, shift );	// (where your body stood this frame: for the others)
 	if ( vrb.shiftedEnt ) {
 		VectorSubtract( vrb.shiftedEnt->lerpOrigin, vrb.shift, vrb.shiftedEnt->lerpOrigin );
 		vrb.shiftedEnt = NULL;
@@ -2929,16 +3321,18 @@ void CG_VR_BodyEndFrame( void ) {
 	}
 
 	if ( CG_VR_Engine() && trap->ext.VR_SetUserPose ) {
-		if ( vr && CG_VRB_SaberHands() ) {
+		const qboolean saber = ( vr && CG_VRB_SaberHands() ) ? qtrue : qfalse;
+		const qboolean body = ( vr && vrb.bodyCent && vrb.bodyTime == cg.time && CG_VRB_BodyUsable( vrb.bodyCent ) ) ? qtrue : qfalse;
+		if ( saber || body ) {
 			vrUserPose_t *p = &vrbSaber.pose;
 			vec3_t eye;
 			int s;
 
-			if ( vrbSaber.time != cg.time ) {
+			if ( vrbSaber.time != cg.time || !saber ) {
 				// no blade in your hands drawn this frame (a flip, a lost hand)
 				memset( p, 0, sizeof( *p ) );
 			}
-			p->valid = qtrue;
+			p->valid = saber;
 			p->trackYaw = AngleNormalize180( VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw );
 
 			// the camera you see your hands from is the eye point of the
@@ -2949,7 +3343,7 @@ void CG_VR_BodyEndFrame( void ) {
 
 			// the hands holding the sabers (saber 1 right, saber 2 left), and
 			// the left hand when it holds the first one too
-			for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+			for ( s = 0; saber && s < VR_POSE_MAX_SABERS; s++ ) {
 				const int h = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
 				p->twoHanded[s] = qfalse;
 				if ( p->bladeMask[s] ) {
@@ -2959,6 +3353,13 @@ void CG_VR_BodyEndFrame( void ) {
 						VectorSubtract( vrb.twoHandGrip2, cg.refdef.vieworg, p->grip2[s] );
 					}
 				}
+			}
+
+			// and what everyone else sees of you
+			if ( body ) {
+				CG_VRB_FillAvatar( vr, shift, &p->avatar );
+			} else {
+				memset( &p->avatar, 0, sizeof( p->avatar ) );
 			}
 			trap->ext.VR_SetUserPose( p );
 		} else {
@@ -3134,7 +3535,24 @@ void CG_VR_SaberWallFeel( centity_t *cent, int saberNum ) {
 
 // Undoes CG_VR_BodyPose on a model (third person, death, leaving VR...).
 // Only touches what was changed on this very instance; cheap otherwise.
+static void CG_VRB_Restore( centity_t *cent );
+
 void CG_VR_BodyRestore( centity_t *cent ) {
+	const int n = cent->currentState.number;
+
+	if ( n != cg.clientNum ) {
+		// another player's (their VR body, if they had one)
+		if ( n >= 0 && n < MAX_CLIENTS ) {
+			vrbCur = &vrbOthers[n];
+			CG_VRB_Restore( cent );
+			vrbCur = &vrbSelf;
+		}
+		return;
+	}
+	CG_VRB_Restore( cent );
+}
+
+static void CG_VRB_Restore( centity_t *cent ) {
 	CG_VRB_Init();
 	if ( !cent->ghoul2 ) {
 		return;

@@ -1884,6 +1884,7 @@ qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matr
 qboolean CG_VR_BodyActive( centity_t *cent );
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim );
 qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles );
+qboolean CG_VR_BodyLook( centity_t *cent, vec3_t lookAngles );
 void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs );
 void CG_VR_BodyArms( centity_t *cent );
 void CG_VR_BodyEndFrame( void );

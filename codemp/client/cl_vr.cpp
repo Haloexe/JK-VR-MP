@@ -2406,7 +2406,7 @@ static vrUserPose_t	vrUserPose;			// latest report from the cgame
 static int			vrUserPoseTime;		// cls.realtime of that report
 
 void VR_SetUserPose( const vrUserPose_t *pose ) {
-	if ( !pose || !pose->valid ) {
+	if ( !pose || ( !pose->valid && !pose->avatar.valid ) ) {
 		Com_Memset( &vrUserPose, 0, sizeof( vrUserPose ) );
 		return;
 	}
@@ -2416,8 +2416,8 @@ void VR_SetUserPose( const vrUserPose_t *pose ) {
 
 void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 	Com_Memset( out, 0, sizeof( *out ) );
-	if ( !VR_IsRunning() || cls.state != CA_ACTIVE || !vrUserPose.valid ) {
-		return;	// no lit saber in your VR hands
+	if ( !VR_IsRunning() || cls.state != CA_ACTIVE || ( !vrUserPose.valid && !vrUserPose.avatar.valid ) ) {
+		return;	// no VR body drawn (and so no lit saber in your VR hands)
 	}
 	const int age = cls.realtime - vrUserPoseTime;
 	if ( age < 0 || age > 1000 ) {
@@ -2427,8 +2427,9 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 		*out = vrUserPose;
 	} else {
 		// No fresh report (a hitch): the saber is still in your hands, but
-		// where its blades were then is no use to the server any more.
-		out->valid = qtrue;
+		// where its blades were then is no use to the server any more (nor
+		// where your arms were, to anyone else).
+		out->valid = vrUserPose.valid;
 		out->trackYaw = vrUserPose.trackYaw;
 	}
 
@@ -2436,7 +2437,7 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 	// serverinfo), your swings are the attacks: the trigger doesn't also
 	// start the game's canned swing animations. (Elsewhere it still does.)
 	// The server does the same with every command that has a pose.
-	if ( clc.vrPoseExt ) {
+	if ( clc.vrPoseExt && out->valid ) {
 		const char *serverInfo = cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO];
 		if ( atoi( Info_ValueForKey( serverInfo, "vrSaber" ) ) > 0 ) {
 			cmd->buttons &= ~BUTTON_ATTACK;

@@ -23,6 +23,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "server.h"
 #include "qcommon/cm_public.h"
+#include "qcommon/vr_net.h"	// OpenJK VR: svc_vrAvatars
 
 /*
 =============================================================================
@@ -761,6 +762,63 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 
 /*
+==================
+SV_WriteVRAvatars
+
+OpenJK VR: after the snapshot, the VR avatars of the other players in it -
+which way their bodies face, where they look, where their hands are and what
+they hold - to a client that reads them (it sent clc_moveVR, so it runs a VR
+build). The hands are offsets from each player's origin (the game made them
+so), so they move with the player the way the client draws them.
+==================
+*/
+#define VR_AVATAR_MAX_AGE	500		// ms: an avatar the game hasn't set since then is left out
+
+// Another player whose avatar goes out: in the game, with a fresh one.
+static qboolean SV_VRAvatarFresh( int num, int self ) {
+	const client_t *other;
+
+	if ( num < 0 || num >= sv_maxclients->integer || num == self ) {
+		return qfalse;
+	}
+	other = &svs.clients[num];
+	return (qboolean)( other->state == CS_ACTIVE && other->vrAvatar.valid &&
+		svs.time - other->vrAvatarTime <= VR_AVATAR_MAX_AGE && svs.time >= other->vrAvatarTime );
+}
+
+static void SV_WriteVRAvatars( client_t *client, msg_t *msg ) {
+	const clientSnapshot_t *frame = &client->frames[ client->netchan.outgoingSequence & PACKET_MASK ];
+	const int self = client - svs.clients;
+	int nums[MAX_CLIENTS];
+	int i, count = 0;
+
+	if ( !client->vrViewer || sv_vrx->integer != VR_POSE_PROTOCOL ) {
+		return;
+	}
+	// a spectator following someone: the snapshot's playerstate is theirs
+	// (their entity is left out of the list; the client draws it from that)
+	if ( SV_VRAvatarFresh( frame->ps.clientNum, self ) ) {
+		nums[count++] = frame->ps.clientNum;
+	}
+	for ( i = 0; i < frame->num_entities && count < MAX_CLIENTS; i++ ) {
+		const entityState_t *es = &svs.snapshotEntities[( frame->first_entity + i ) % svs.numSnapshotEntities];
+		if ( es->number == frame->ps.clientNum || !SV_VRAvatarFresh( es->number, self ) ) {
+			continue;
+		}
+		nums[count++] = es->number;
+	}
+	if ( !count ) {
+		return;
+	}
+	MSG_WriteByte( msg, svc_vrAvatars );
+	MSG_WriteByte( msg, count );
+	for ( i = 0; i < count; i++ ) {
+		MSG_WriteByte( msg, nums[i] );
+		VR_WriteAvatar( msg, &svs.clients[nums[i]].vrAvatar );
+	}
+}
+
+/*
 =======================
 SV_SendClientSnapshot
 
@@ -843,6 +901,9 @@ void SV_SendClientSnapshot( client_t *client ) {
 	// send over all the relevant entityState_t
 	// and the playerState_t
 	SV_WriteSnapshotToClient( client, &msg );
+
+	// OpenJK VR: where the VR players in it are
+	SV_WriteVRAvatars( client, &msg );
 
 	// Add any download data if the client is downloading
 	SV_WriteDownloadToClient( client, &msg );

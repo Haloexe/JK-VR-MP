@@ -313,6 +313,11 @@ static void SV_MapRestart_f( void ) {
 	sv.state = SS_LOADING;
 	sv.restarting = qtrue;
 
+	// OpenJK VR: nobody's arms carry over the restart (the game sets them again)
+	for ( i = 0; i < sv_maxclients->integer; i++ ) {
+		svs.clients[i].vrAvatar.valid = qfalse;
+	}
+
 	SV_RestartGame();
 
 	// run a few frames to allow everything to settle

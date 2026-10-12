@@ -194,6 +194,12 @@ typedef struct client_s {
 	// OpenJK VR: saber pose that came with the usercmd being thought right now
 	// (clc_moveVR), handed to the game through ext.VR_GetUserPose
 	vrUserPose_t	vrPose;
+	// OpenJK VR: this client runs a VR build (it sent clc_moveVR) and reads
+	// svc_vrAvatars; and its own avatar as the game last set it (hands from
+	// its origin; ext.VR_SetAvatar; svs.time then)
+	qboolean		vrViewer;
+	vrAvatar_t		vrAvatar;
+	int				vrAvatarTime;
 } client_t;
 
 //=============================================================================
