@@ -1930,12 +1930,14 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_G2SetBoneTransform			= CL_VR_G2SetBoneTransform;
 		cgi.ext.VR_SetUserPose					= VR_SetUserPose;
 		cgi.ext.VR_Haptic						= VR_Haptic;
+		cgi.ext.VR_SetGrabZones					= VR_SetGrabZones;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
 		cgi.ext.VR_G2SetBoneTransform			= NULL;
 		cgi.ext.VR_SetUserPose					= NULL;
 		cgi.ext.VR_Haptic						= NULL;
+		cgi.ext.VR_SetGrabZones					= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

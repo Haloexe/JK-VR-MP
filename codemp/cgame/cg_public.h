@@ -732,6 +732,10 @@ typedef struct cgameImport_s {
 		void			(*VR_SetUserPose)						( const vrUserPose_t *pose );
 		// OpenJK VR: a short buzz in one hand (VR_HAND_LEFT / VR_HAND_RIGHT)
 		void			(*VR_Haptic)							( int hand, float seconds, float amplitude );
+		// OpenJK VR: hands (1 << VR_HAND_*) whose grip button would grab
+		// something now instead of pressing its key (call every frame; see
+		// vrClientState_t.grabbing)
+		void			(*VR_SetGrabZones)						( int handMask );
 	} ext;
 } cgameImport_t;
 

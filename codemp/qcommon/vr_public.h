@@ -19,8 +19,9 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-5"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
-												// -5: ext.VR_SetUserPose, ext.VR_Haptic
+#define VR_ENGINE_TAG			"openjkvr-6"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
+												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing
 
 /*
 --------------------------------------------------------------------------------
@@ -44,9 +45,11 @@ movement from snap/smooth turning, running and the camera's smoothing.
 valid means a lit saber is in the player's VR hands: the arm swings it and
 the attack button doesn't. Its blades can still be missing for a moment (a
 flip or roll animates the body, a hitch delayed the pose).
+
+twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		1
+#define VR_POSE_PROTOCOL		2		// 2: twoHanded, grip2
 #define VR_POSE_MAX_SABERS		2		// right hand, left hand
 #define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
 #define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
@@ -62,6 +65,8 @@ typedef struct vrUserPose_s {
 	vec3_t			viewOffset;	// camera minus eye point
 	int				bladeMask[VR_POSE_MAX_SABERS];	// blades with a pose (bit per blade)
 	vec3_t			grip[VR_POSE_MAX_SABERS];		// the hand holding the saber, offset from the camera
+	qboolean		twoHanded[VR_POSE_MAX_SABERS];	// the other hand holds it too...
+	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (offset from the camera)
 	vrBladePose_t	blade[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
 } vrUserPose_t;
 
@@ -94,6 +99,11 @@ typedef struct vrClientState_s {
 	vec3_t		gripAxis[2][3];
 	vec3_t		aimOrigin[2];
 	vec3_t		aimAxis[2][3];
+
+	// the hand's grip button is held as a grab (it was pressed while the
+	// cgame said the hand could grab something, ext.VR_SetGrabZones), so it
+	// didn't press its bound key
+	qboolean	grabbing[2];
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

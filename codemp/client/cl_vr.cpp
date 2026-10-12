@@ -396,6 +396,9 @@ typedef struct vrState_s {
 	qboolean				keyDown[VR_NUM_BUTTONS];
 	int						keySent[VR_NUM_BUTTONS];	// key each held button sent when pressed (0 = none)
 	qboolean				keyBlocked[VR_NUM_BUTTONS];	// held through a focus loss: ignored until let go
+	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
+	int						grabZones;		// hands the cgame says could grab now (bit per hand)...
+	int						grabZoneTime;	// ...as of this cls.realtime
 	qboolean				topOfFrame;		// this poll runs at the top of CL_Frame (not nested)
 
 	// menu pointer: a controller points at the menu screen like a mouse
@@ -1125,7 +1128,14 @@ static int VR_ButtonKeyCode( int key ) {
 	return VR_FIRST_KEY + key;	// the rest stay bindable in the Controls menu
 }
 
+// The hand whose grip button this is, or -1.
+static int VR_GripHand( int key ) {
+	return ( key == VR_KEY_GRIP_L ) ? VR_HAND_LEFT : ( key == VR_KEY_GRIP_R ) ? VR_HAND_RIGHT : -1;
+}
+
 static void VR_SetKey( int key, qboolean down ) {
+	const int gripHand = VR_GripHand( key );
+
 	if ( vr.keyBlocked[key] ) {
 		// held through a focus loss: only letting go counts
 		if ( !down ) {
@@ -1137,6 +1147,22 @@ static void VR_SetKey( int key, qboolean down ) {
 		return;
 	}
 	vr.keyDown[key] = down;
+
+	if ( gripHand >= 0 ) {
+		// A grip squeezed where the cgame says the hand can take hold of
+		// something (the other hand's saber hilt) grabs it instead of
+		// pressing its key; letting go lets go.
+		if ( !down && vr.grabbing[gripHand] ) {
+			vr.grabbing[gripHand] = qfalse;
+			return;
+		}
+		if ( down && !vr.pointerMode && cls.state == CA_ACTIVE && ( vr.grabZones & ( 1 << gripHand ) ) &&
+			cls.realtime - vr.grabZoneTime >= 0 && cls.realtime - vr.grabZoneTime < 200 ) {
+			vr.grabbing[gripHand] = qtrue;
+			vr.keySent[key] = 0;
+			return;
+		}
+	}
 
 	if ( !down ) {
 		// the release goes wherever the press went, even if the menu
@@ -2221,6 +2247,8 @@ static void VR_UpdateTracking( void ) {
 	// What the cgame needs to put the gun in your hand
 	vrClient.active = vr.poseValid;
 	vrClient.handAim = vr.aimFromHand;
+	vrClient.grabbing[VR_HAND_LEFT] = vr.grabbing[VR_HAND_LEFT];
+	vrClient.grabbing[VR_HAND_RIGHT] = vr.grabbing[VR_HAND_RIGHT];
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
 	const float hp[3] = { headOfs[0] * posScale, headOfs[1] * posScale, headOfs[2] * posScale };
@@ -2421,6 +2449,11 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {
 		return;
 	}
 	VR_Pulse( hand, Com_Clamp( 0.0f, 1.0f, seconds ), Com_Clamp( 0.0f, 1.0f, amplitude ) );
+}
+
+void VR_SetGrabZones( int handMask ) {
+	vr.grabZones = handMask & ( ( 1 << VR_HAND_LEFT ) | ( 1 << VR_HAND_RIGHT ) );
+	vr.grabZoneTime = cls.realtime;
 }
 
 /*
@@ -2793,6 +2826,7 @@ const vrRenderState_t *VR_GetRenderState( void ) { return &vrRender; }
 void VR_SetUserPose( const vrUserPose_t *pose ) {}
 void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) { Com_Memset( out, 0, sizeof( *out ) ); }
 void VR_Haptic( int hand, float seconds, float amplitude ) {}
+void VR_SetGrabZones( int handMask ) {}
 
 #endif // _WIN32
 

@@ -23,6 +23,8 @@ fights with those blades instead of the animated ones:
 	it and carries on through, for half damage.
   - Whichever blade it is (dual sabers, a staff's two ends), a player cuts
 	the same opponent at most once in VR_SABER_CUT_REPEAT ms.
+  - A saber held with both hands swings one weight heavier (a heavy one
+	counts one stronger in clashes), and either hand drives the swing.
   - Blocking is whatever your blade physically stops. Animated attackers
 	(bots, players without VR) collide with the VR blade through the stock
 	saber code, which sees the VR blade as that player's saber.
@@ -73,6 +75,7 @@ qboolean WP_SaberBladeUseSecondBladeStyle( saberInfo_t *saber, int bladeNum );
 #define VR_SABER_THROUGH_MS	200		// a blow that broke a guard cuts for half damage this long
 #define VR_SABER_BURN		1		// damage of a blade just touching someone
 #define VR_SABER_ACTIVITY	8.0f	// moving a hand this far counts as activity (g_inactivity)
+#define VR_SABER_TWO_HANDS	30.0f	// two hands on one hilt are no further apart than this
 #define VR_UNITS_PER_METRE	34.0f	// (default vr_worldScale) for the m/s in prints and the weight cvars
 
 typedef struct vrSaberSample_s {
@@ -83,6 +86,8 @@ typedef struct vrSaberSample_s {
 	int				bladeMask[VR_POSE_MAX_SABERS];
 	int				breakMask[VR_POSE_MAX_SABERS];	// blades that don't carry on from the pose before
 	vec3_t			grip[VR_POSE_MAX_SABERS];		// the hand holding the saber (world)
+	qboolean		twoHanded[VR_POSE_MAX_SABERS];	// the other hand holds it too...
+	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (world; else the same as grip)
 	vec3_t			base[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// world
 	vec3_t			dir[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
 } vrSaberSample_t;
@@ -125,7 +130,12 @@ typedef struct vrSaberWeight_s {
 	int			strength;	// in clashes: 1 light .. 3 heavy (+1 for a full-speed swing)
 } vrSaberWeight_t;
 
-enum { VRS_LIGHT, VRS_MEDIUM, VRS_HEAVY, VRS_NUM_WEIGHTS };
+enum {
+	VRS_LIGHT, VRS_MEDIUM, VRS_HEAVY,
+	VRS_NUM_WEIGHTS,
+	VRS_HEAVY2 = VRS_NUM_WEIGHTS,		// heavy, held with both hands: one stronger in clashes
+	VRS_NUM_ALL_WEIGHTS
+};
 
 // (the defaults of g_vrSaberLight / Medium / Heavy: 1.8 5.3 40 150 and so on)
 static const vrSaberWeight_t vrSaberDefaults[VRS_NUM_WEIGHTS] = {
@@ -133,10 +143,11 @@ static const vrSaberWeight_t vrSaberDefaults[VRS_NUM_WEIGHTS] = {
 	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
 	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
 };
-static vrSaberWeight_t vrSaberWeights[VRS_NUM_WEIGHTS] = {
+static vrSaberWeight_t vrSaberWeights[VRS_NUM_ALL_WEIGHTS] = {
 	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE,  40.0f, 150, 1 },
 	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
 	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 4 },
 };
 
 // The server's g_vrSaberLight / Medium / Heavy changed: "cut from (m/s)
@@ -166,21 +177,37 @@ void G_VRSaberWeightsChanged( void ) {
 		vrSaberWeights[i].maxDamage = maxDamage;
 		vrSaberWeights[i].recover = recover;
 	}
+	vrSaberWeights[VRS_HEAVY2] = vrSaberWeights[VRS_HEAVY];
+	vrSaberWeights[VRS_HEAVY2].strength = vrSaberWeights[VRS_HEAVY].strength + 1;
 }
 
-static const vrSaberWeight_t *VRS_Weight( const gclient_t *cl ) {
+// The weight the saber style gives.
+static int VRS_StyleWeight( const gclient_t *cl ) {
 	switch ( cl->ps.fd.saberAnimLevel ) {
 	case SS_FAST:
 	case SS_TAVION:
-		return &vrSaberWeights[VRS_LIGHT];
+		return VRS_LIGHT;
 	case SS_STRONG:
 	case SS_DESANN:
-		return &vrSaberWeights[VRS_HEAVY];
+		return VRS_HEAVY;
 	case SS_DUAL:	// dual sabers: two medium blades
 	case SS_STAFF:
 	default:
-		return &vrSaberWeights[VRS_MEDIUM];
+		return VRS_MEDIUM;
 	}
+}
+
+static qboolean VRS_TwoHanded( gentity_t *ent );
+
+// The weight a player's saber swings with: the style's, one heavier held
+// with both hands.
+static const vrSaberWeight_t *VRS_Weight( gentity_t *ent ) {
+	int w = VRS_StyleWeight( ent->client );
+
+	if ( VRS_TwoHanded( ent ) ) {
+		w = ( w >= VRS_HEAVY ) ? VRS_HEAVY2 : w + 1;
+	}
+	return &vrSaberWeights[w];
 }
 
 static float VRS_SpeedScale( void ) {
@@ -479,6 +506,17 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 		}
 		VectorCopy( pose.grip[s], ofs );
 		VRS_ClampReach( eye, smp->cam, ofs, smp->grip[s] );
+		VectorCopy( smp->grip[s], smp->grip2[s] );
+		if ( pose.twoHanded[s] && s == 0 && !( pose.bladeMask[1] & ( ( 1 << VR_POSE_MAX_BLADES ) - 1 ) ) ) {
+			// the other hand on this hilt too (it can't be holding another saber)
+			vec3_t grip2;
+			VectorCopy( pose.grip2[s], ofs );
+			VRS_ClampReach( eye, smp->cam, ofs, grip2 );
+			if ( Distance( grip2, smp->grip[s] ) <= VR_SABER_TWO_HANDS ) {
+				VectorCopy( grip2, smp->grip2[s] );
+				smp->twoHanded[s] = qtrue;
+			}
+		}
 
 		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
 			vec3_t dir;
@@ -592,11 +630,24 @@ qboolean G_VRSaberBlade( gentity_t *ent, int saberNum, int bladeNum, vec3_t base
 	return qtrue;
 }
 
+// Whether this player holds their saber with both hands right now.
+static qboolean VRS_TwoHanded( gentity_t *ent ) {
+	vrSaberState_t *vs;
+
+	if ( !G_VRSaberActive( ent ) ) {
+		return qfalse;
+	}
+	vs = VRS_State( ent );
+	return VRS_Sample( vs, 0 )->twoHanded[0];
+}
+
 /*
 --------------------------------------------------------------------------------
 How fast a blade moves
 --------------------------------------------------------------------------------
 */
+
+enum { VRS_POINT_BLADE, VRS_POINT_GRIP, VRS_POINT_GRIP2 };
 
 // The poses of one blade that carry on from each other, newest first: back
 // to where the blade appeared, or jumped (teleport, tracking glitch).
@@ -616,35 +667,54 @@ static int VRS_BladeHistory( vrSaberState_t *vs, int s, int b, const vrSaberSamp
 	return n;
 }
 
-// Where a point 'along' the blade (or the hand holding it, if grip) was at
-// time t, in the player's room (see VRS_RoomOffset).
-static qboolean VRS_RoomPoint( const vrSaberSample_t **hist, int n, int s, int b, float t, float along, qboolean grip, vec3_t out ) {
-	const vrSaberSample_t *newer = NULL, *older = NULL;
-	vec3_t p[2];
-	float f = 0.0f;
-	int i, k;
+// The two poses of a blade's history around time t, and how far t is from
+// the older to the newer.
+static qboolean VRS_Bracket( const vrSaberSample_t **hist, int n, float t, const vrSaberSample_t **older,
+	const vrSaberSample_t **newer, float *f ) {
+	int i;
 
+	*older = *newer = NULL;
+	*f = 0.0f;
 	for ( i = 0; i < n; i++ ) {
 		if ( hist[i]->time <= t ) {
-			older = hist[i];
+			*older = hist[i];
 			break;
 		}
-		newer = hist[i];
+		*newer = hist[i];
 	}
-	if ( !older ) {
+	if ( !*older ) {
 		return qfalse;	// t is before the blade's history
 	}
-	if ( newer && newer->time > older->time ) {
-		f = Com_Clamp( 0.0f, 1.0f, ( t - older->time ) / (float)( newer->time - older->time ) );
+	if ( *newer && ( *newer )->time > ( *older )->time ) {
+		*f = Com_Clamp( 0.0f, 1.0f, ( t - ( *older )->time ) / (float)( ( *newer )->time - ( *older )->time ) );
 	} else {
-		newer = older;
+		*newer = *older;
 	}
+	return qtrue;
+}
 
+// Where a point 'along' the blade (or a hand holding it) was at time t, in
+// the player's room (see VRS_RoomOffset). The second hand only while it was
+// on the hilt.
+static qboolean VRS_RoomPoint( const vrSaberSample_t **hist, int n, int s, int b, float t, float along, int which, vec3_t out ) {
+	const vrSaberSample_t *newer, *older;
+	vec3_t p[2];
+	float f;
+	int k;
+
+	if ( !VRS_Bracket( hist, n, t, &older, &newer, &f ) ) {
+		return qfalse;
+	}
+	if ( which == VRS_POINT_GRIP2 && ( !older->twoHanded[s] || !newer->twoHanded[s] ) ) {
+		return qfalse;
+	}
 	for ( k = 0; k < 2; k++ ) {
 		const vrSaberSample_t *smp = k ? newer : older;
 		vec3_t point;
-		if ( grip ) {
+		if ( which == VRS_POINT_GRIP ) {
 			VectorCopy( smp->grip[s], point );
+		} else if ( which == VRS_POINT_GRIP2 ) {
+			VectorCopy( smp->grip2[s], point );
 		} else {
 			VectorMA( smp->base[s][b], along, smp->dir[s][b], point );
 		}
@@ -654,33 +724,71 @@ static qboolean VRS_RoomPoint( const vrSaberSample_t **hist, int n, int s, int b
 	return qtrue;
 }
 
+// Which way the blade pointed at time t, in the player's room.
+static qboolean VRS_RoomDir( const vrSaberSample_t **hist, int n, int s, int b, float t, vec3_t out ) {
+	const vrSaberSample_t *newer, *older;
+	vec3_t d[2];
+	float f;
+	int k;
+
+	if ( !VRS_Bracket( hist, n, t, &older, &newer, &f ) ) {
+		return qfalse;
+	}
+	for ( k = 0; k < 2; k++ ) {
+		const vrSaberSample_t *smp = k ? newer : older;
+		const float c = cosf( DEG2RAD( -smp->trackYaw ) );
+		const float sn = sinf( DEG2RAD( -smp->trackYaw ) );
+		d[k][0] = smp->dir[s][b][0] * c - smp->dir[s][b][1] * sn;
+		d[k][1] = smp->dir[s][b][0] * sn + smp->dir[s][b][1] * c;
+		d[k][2] = smp->dir[s][b][2];
+	}
+	VRS_Lerp( d[0], f, d[1], out );
+	return (qboolean)( VectorNormalize( out ) > 0.1f );
+}
+
 // How fast that point moved over the last moment before t (units/s, in the
-// player's room).
-static float VRS_PointSpeed( const vrSaberSample_t **hist, int n, int s, int b, float t, float along, qboolean grip ) {
-	vec3_t p0, p1;
+// player's room). The second hand only counts while it held the hilt the
+// whole time, and only as it moved across the blade: sliding along the hilt
+// doesn't move it.
+static float VRS_PointSpeed( const vrSaberSample_t **hist, int n, int s, int b, float t, float along, int which ) {
+	vec3_t p0, p1, d;
 	float t0 = t - VR_SABER_SPEED_MS;
 
-	if ( !n || !VRS_RoomPoint( hist, n, s, b, t, along, grip, p1 ) ) {
+	if ( !n || !VRS_RoomPoint( hist, n, s, b, t, along, which, p1 ) ) {
 		return 0.0f;
 	}
-	if ( !VRS_RoomPoint( hist, n, s, b, t0, along, grip, p0 ) ) {
+	if ( !VRS_RoomPoint( hist, n, s, b, t0, along, which, p0 ) ) {
 		// shorter history: from the oldest pose of this blade
 		t0 = hist[n - 1]->time;
-		if ( t - t0 < 20.0f || !VRS_RoomPoint( hist, n, s, b, t0, along, grip, p0 ) ) {
+		if ( t - t0 < 20.0f || !VRS_RoomPoint( hist, n, s, b, t0, along, which, p0 ) ) {
 			return 0.0f;
 		}
 	}
-	return Distance( p0, p1 ) / ( ( t - t0 ) * 0.001f );
+	VectorSubtract( p1, p0, d );
+	if ( which == VRS_POINT_GRIP2 ) {
+		vec3_t a0, a1, axis;
+		if ( !VRS_RoomDir( hist, n, s, b, t0, a0 ) || !VRS_RoomDir( hist, n, s, b, t, a1 ) ) {
+			return 0.0f;
+		}
+		VectorAdd( a0, a1, axis );
+		if ( VectorNormalize( axis ) > 0.1f ) {
+			VectorMA( d, -DotProduct( d, axis ), axis, d );
+		}
+	}
+	return VectorLength( d ) / ( ( t - t0 ) * 0.001f );
 }
 
 // The speed a blade point hits with: how fast it moved, but no more than a
 // few times what the hand did, so a flick of the wrist with a still arm
-// barely cuts (the tip of a long blade moves fast even then).
+// barely cuts (the tip of a long blade moves fast even then). With both
+// hands on the hilt, the faster hand drives it (one pushing, the other
+// pulling is a real swing).
 static float VRS_SwingSpeed( vrSaberState_t *vs, int s, int b, float t, float along ) {
 	const vrSaberSample_t *hist[VR_SABER_SAMPLES];
 	const int n = VRS_BladeHistory( vs, s, b, hist );
-	const float pointSpeed = VRS_PointSpeed( hist, n, s, b, t, along, qfalse );
-	const float handSpeed = VRS_PointSpeed( hist, n, s, b, t, 0.0f, qtrue );
+	const float pointSpeed = VRS_PointSpeed( hist, n, s, b, t, along, VRS_POINT_BLADE );
+	const float handSpeed = Q_max( VRS_PointSpeed( hist, n, s, b, t, 0.0f, VRS_POINT_GRIP ),
+		VRS_PointSpeed( hist, n, s, b, t, 0.0f, VRS_POINT_GRIP2 ) );
 
 	return Q_min( pointSpeed, handSpeed * VR_SABER_LEVER );
 }
@@ -772,10 +880,10 @@ static float VRS_BladeSpeedAt( vrSaberState_t *ovs, const vrsOtherBlade_t *ob, c
 // stronger breaks the guard and goes on through.
 static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, vec3_t point, float speed ) {
 	gentity_t *other = ob->ent;
-	const vrSaberWeight_t *w = VRS_Weight( self->client );
-	const vrSaberWeight_t *ow = VRS_Weight( other->client );
+	const vrSaberWeight_t *w = VRS_Weight( self );
+	const vrSaberWeight_t *ow = VRS_Weight( other );
 	const int strength = VRS_Strength( w, speed );
-	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] );
+	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] );
 	vrSaberState_t *ovs;
 
 	if ( G_VRSaberClient( other ) && ( ovs = VRS_State( other ) ) != NULL ) {
@@ -838,7 +946,7 @@ static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, ve
 static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t *ob, vec3_t point, const vec3_t moveDir, float speed ) {
 	gentity_t *other = ob->ent;
 	vrSaberState_t *vs = VRS_State( self );
-	const vrSaberWeight_t *w = VRS_Weight( self->client );
+	const vrSaberWeight_t *w = VRS_Weight( self );
 	const qboolean swing = (qboolean)( speed >= w->minSpeed * VRS_SpeedScale() );
 	const vrSaberState_t *ovs;
 	vrsClash_t result;
@@ -897,8 +1005,9 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 		vs->recoverTime = level.time + recover;
 	}
 	if ( g_vrSaberDebug.integer ) {
-		Com_Printf( "VR saber: %s's %s blade met %s's at %.1f m/s: %s\n", self->client->pers.netname, w->name,
-			other->client ? other->client->pers.netname : "?", speed / VR_UNITS_PER_METRE, vrsClashNames[result] );
+		Com_Printf( "VR saber: %s's %s%s blade met %s's at %.1f m/s: %s\n", self->client->pers.netname, w->name,
+			VRS_TwoHanded( self ) ? " (two hands)" : "", other->client ? other->client->pers.netname : "?",
+			speed / VR_UNITS_PER_METRE, vrsClashNames[result] );
 	}
 	return (qboolean)( result == VRS_CLASH_THROUGH );
 }
@@ -979,7 +1088,7 @@ static void VRS_NoteCut( vrSaberState_t *vs, int victim ) {
 static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t point, const vec3_t base, const vec3_t dir,
 	float length, float t, const vec3_t moveDir ) {
 	vrSaberState_t *vs = VRS_State( self );
-	const vrSaberWeight_t *w = VRS_Weight( self->client );
+	const vrSaberWeight_t *w = VRS_Weight( self );
 	const float minSpeed = w->minSpeed * VRS_SpeedScale();
 	const float fullSpeed = w->fullSpeed * VRS_SpeedScale();
 	saberInfo_t *saber = &self->client->saber[s];
@@ -1077,9 +1186,9 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 		self->client->ps.saberEventFlags |= ( self->enemy == victim ) ? SEF_HITENEMY : SEF_HITOBJECT;
 	}
 	if ( g_vrSaberDebug.integer && dmg > VR_SABER_BURN ) {
-		Com_Printf( "VR saber: %s cut %s at %.1f m/s with a %s blade: %d damage\n", self->client->pers.netname,
+		Com_Printf( "VR saber: %s cut %s at %.1f m/s with a %s%s blade: %d damage\n", self->client->pers.netname,
 			victim->client ? victim->client->pers.netname : ( victim->classname ? victim->classname : "?" ), speed / VR_UNITS_PER_METRE,
-			w->name, (int)( dmg + 0.5f ) );
+			w->name, VRS_TwoHanded( self ) ? " (two hands)" : "", (int)( dmg + 0.5f ) );
 	}
 }
 

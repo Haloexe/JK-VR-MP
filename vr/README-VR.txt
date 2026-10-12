@@ -24,7 +24,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * The desktop window mirrors the left eye
 
 Not yet: other players seeing your arm movements and shots leaving the gun
-barrel (both need more server work), two-handed weapons.
+barrel (both need more server work), two-handed guns (two-handed sabers
+work).
 
 
 INSTALL / RUN
@@ -60,7 +61,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Right trigger        attack
   Left trigger         alternate attack
   Right grip           use (doors, switches, pick-ups)
-  Left grip            use the selected Force power
+  Left grip            use the selected Force power (or, at your saber's
+                       hilt, take hold of it with both hands)
   A / B                jump / crouch
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
@@ -104,6 +106,26 @@ of your wrist. During flips, cartwheels and rolls your body and blade are
 hidden for that moment. Fists, saber locks, knockdowns and vehicles still
 use the third-person camera.
 
+BOTH HANDS ON THE HILT: bring your left hand to the saber's hilt (below
+your right hand, above it on a long hilt, or anywhere along a staff) and
+squeeze the left grip. Your left hand closes round the hilt with a short
+buzz, and while you hold the grip the saber is in both hands:
+  * The blade follows both wrists, and the further apart your hands are,
+    the more it follows the line between them, so pushing with one hand
+    and pulling with the other levers it round like a real two-handed hilt.
+  * Your left hand slides along the hilt with your real hand, staying a
+    hand's width from the right one.
+  * Let go of the grip to let go (or pull your hand well away from the
+    hilt). Taking hold and letting go settle smoothly over a few frames.
+  * Near the hilt the left grip takes hold instead of using the Force;
+    anywhere else it uses the Force as usual. cg_vrTwoHand 0 turns taking
+    hold off.
+  * On servers with VR saber combat a two-handed saber swings one weight
+    heavier (light becomes medium, medium becomes heavy, and a heavy saber
+    in both hands wins clashes against a one-handed heavy), and either hand
+    drives the swing (sliding your left hand along the hilt doesn't count
+    as a swing). Hits and clashes buzz both hands.
+
 SABER COMBAT in games you host (Create Game, bots included) and on any
 server running this build: your real blade is the weapon.
   * Swing it. A hit's damage comes from how fast the blade moves where it
@@ -131,7 +153,8 @@ server running this build: your real blade is the weapon.
                              through guards, recovers slowly
     Dual sabers are two medium blades, and the staff is medium too. With
     dual sabers the right stick click switches the left one off instead;
-    the right one is then a light saber, as in the normal game.
+    the right one is then a light saber, as in the normal game. Held with
+    both hands (above), a saber or staff swings one weight heavier.
   * You feel it: a buzz when your blade cuts (stronger for deeper cuts), a
     hard knock when it clashes, a grind when it scrapes a wall, both hands
     when you get cut.
@@ -197,6 +220,10 @@ SETTINGS (console cvars, saved automatically)
   cg_vrBodyWrist 1       0 = stiff wrists (the forearm turns the hand)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
+  cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
+  cg_vrTwoHandLever 0.7  how much the line between your hands steers a
+                         two-handed blade when they are far apart
+                         (0 = only your wrists, 1 = only the line)
   cg_vrBodyDebug 0       1 = log what the body found on your model,
                          2 = also log how exactly the hand grips the gun,
                          3 = also show the body's own copy of the gun
@@ -235,7 +262,8 @@ KNOWN LIMITATIONS
     other players see your character's animated saber, not your arms;
     during flips and rolls the animation holds your saber for a moment;
     custom sabers with more than two blades only fight with the first two.
-  * Two-handed weapons are held in the right hand only (for now).
+  * Guns are held in the right hand only (for now); only sabers can be
+    held with both hands.
   * Mirrors show your character without a head (it is hidden for your view).
   * Typing in menus (names, server addresses) and chat need the keyboard
     (no on-screen keyboard yet).

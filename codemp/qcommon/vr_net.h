@@ -6,13 +6,14 @@ Written by the client right after each usercmd it sends, only to servers
 that put "sv_vrx" in their systeminfo, and then in clc_moveVR /
 clc_moveNoDeltaVR messages, so the server always knows whether to read it.
 
-Format (VR_POSE_PROTOCOL 1):
+Format (VR_POSE_PROTOCOL 2):
 	1 bit		valid (nothing else follows if 0)
 	16 bits		trackYaw
 	1 bit		viewOffset follows (else it is zero)
 	[48 bits	viewOffset x, y, z]
 	per saber:	VR_POSE_MAX_BLADES bits of blade mask
 				if any blade: grip x, y, z
+				              1 bit two-handed [grip2 x, y, z]
 	per blade:	base x, y, z
 				dir pitch, yaw		16 bits each
 Positions are 16 bits signed each, in 1/32 units.
@@ -85,6 +86,14 @@ static inline void VR_WriteUserPose( msg_t *msg, const vrUserPose_t *pose ) {
 		VR_WritePoseCoord( msg, pose->grip[s][0] );
 		VR_WritePoseCoord( msg, pose->grip[s][1] );
 		VR_WritePoseCoord( msg, pose->grip[s][2] );
+		if ( pose->twoHanded[s] ) {
+			MSG_WriteBits( msg, 1, 1 );
+			VR_WritePoseCoord( msg, pose->grip2[s][0] );
+			VR_WritePoseCoord( msg, pose->grip2[s][1] );
+			VR_WritePoseCoord( msg, pose->grip2[s][2] );
+		} else {
+			MSG_WriteBits( msg, 0, 1 );
+		}
 		for ( int b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
 			if ( !( mask & ( 1 << b ) ) ) {
 				continue;
@@ -121,6 +130,12 @@ static inline void VR_ReadUserPose( msg_t *msg, vrUserPose_t *pose ) {
 		pose->grip[s][0] = VR_ReadPoseCoord( msg );
 		pose->grip[s][1] = VR_ReadPoseCoord( msg );
 		pose->grip[s][2] = VR_ReadPoseCoord( msg );
+		if ( MSG_ReadBits( msg, 1 ) ) {
+			pose->twoHanded[s] = qtrue;
+			pose->grip2[s][0] = VR_ReadPoseCoord( msg );
+			pose->grip2[s][1] = VR_ReadPoseCoord( msg );
+			pose->grip2[s][2] = VR_ReadPoseCoord( msg );
+		}
 		for ( int b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
 			if ( !( pose->bladeMask[s] & ( 1 << b ) ) ) {
 				continue;

@@ -75,6 +75,10 @@ void		VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out );
 // A short buzz in one hand (cgameImport_t.ext.VR_Haptic).
 void		VR_Haptic( int hand, float seconds, float amplitude );
 
+// Hands (bit per hand) whose grip button grabs something right now instead
+// of pressing its key (cgameImport_t.ext.VR_SetGrabZones, every frame).
+void		VR_SetGrabZones( int handMask );
+
 #else // !OPENJK_VR
 
 static inline qboolean VR_IsRunning( void ) { return qfalse; }
