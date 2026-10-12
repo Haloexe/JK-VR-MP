@@ -3315,6 +3315,7 @@ static void CG_PlayerAnimation( centity_t *cent, int *legsOld, int *legs, float 
 	clientInfo_t	*ci;
 	int				clientNum;
 	float			speedScale;
+	int				vrLegsAnim, vrTorsoAnim;
 
 	clientNum = cent->currentState.clientNum;
 
@@ -3351,7 +3352,13 @@ static void CG_PlayerAnimation( centity_t *cent, int *legsOld, int *legs, float 
 		ci = &cgs.clientinfo[ clientNum ];
 	}
 
-	CG_RunLerpFrame( cent, ci, &cent->pe.legs, cent->currentState.legsFlip, cent->currentState.legsAnim, speedScale, qfalse);
+	{//OpenJK VR: your VR body stays upright through flips and rolls
+		int legsAnim = cent->currentState.legsAnim, torsoAnim = cent->currentState.torsoAnim;
+		CG_VR_BodyAnim( cent, &legsAnim, &torsoAnim );
+		vrLegsAnim = legsAnim;
+		vrTorsoAnim = torsoAnim;
+	}
+	CG_RunLerpFrame( cent, ci, &cent->pe.legs, cent->currentState.legsFlip, vrLegsAnim, speedScale, qfalse);
 
 	if (!(cent->currentState.forcePowersActive & (1 << FP_RAGE)))
 	{ //don't affect torso anim speed unless raged
@@ -3369,7 +3376,7 @@ static void CG_PlayerAnimation( centity_t *cent, int *legsOld, int *legs, float 
 	// If this is not a vehicle, you may lerm the frame (since vehicles never have a torso anim). -AReis
 	if ( cent->currentState.NPC_class != CLASS_VEHICLE )
 	{
-		CG_RunLerpFrame( cent, ci, &cent->pe.torso, cent->currentState.torsoFlip, cent->currentState.torsoAnim, speedScale, qtrue );
+		CG_RunLerpFrame( cent, ci, &cent->pe.torso, cent->currentState.torsoFlip, vrTorsoAnim, speedScale, qtrue );
 
 		*torsoOld = cent->pe.torso.oldFrame;
 		*torso = cent->pe.torso.frame;

@@ -99,12 +99,14 @@ that fit. A gun sits in the right hand exactly the way the game holds it
 in third person, fingers around the grip. When you reach further than your
 character's arm, the body leans in a little so the hand still gets there.
 
-LIGHTSABER: with the saber out you stay in first person. The hilt is in
-your right hand (a second saber in your left) and the blade points along
-your fist, the way you would hold a real hilt, so it follows every turn
-of your wrist. During flips, cartwheels and rolls your body and blade are
-hidden for that moment. Fists, saber locks, knockdowns and vehicles still
-use the third-person camera.
+LIGHTSABER: with the saber out you stay in first person. The hilt is
+locked in your right fist (a second saber in your left), the fingers closed
+round it whatever your body is doing, and the blade points along your fist
+the way you would hold a real hilt, so it follows every turn of your wrist.
+Through flips, force jumps, cartwheels and rolls your body stays upright
+(in an in-air pose, or a crouch for a roll) with the saber in your hands,
+so you can keep fighting mid-air. Fists, saber locks, knockdowns and
+vehicles still use the third-person camera.
 
 BOTH HANDS ON THE HILT: bring your left hand to the saber's hilt (below
 your right hand, above it on a long hilt, or anywhere along a staff) and
@@ -113,8 +115,9 @@ buzz, and while you hold the grip the saber is in both hands:
   * The blade follows both wrists, and the further apart your hands are,
     the more it follows the line between them, so pushing with one hand
     and pulling with the other levers it round like a real two-handed hilt.
-  * Your left hand slides along the hilt with your real hand, staying a
-    hand's width from the right one.
+  * Your left hand grips the hilt where it took hold: it doesn't slide
+    along it or turn round it. To hold it somewhere else, let go and take
+    hold again.
   * Let go of the grip to let go (or pull your hand well away from the
     hilt). Taking hold and letting go settle smoothly over a few frames.
   * Near the hilt the left grip takes hold instead of using the Force;
@@ -157,11 +160,9 @@ server running this build: your real blade is the weapon.
     staff it switches the second blade off (click again for both). Held
     with both hands (above), a saber or staff swings one weight heavier.
   * The weight is something you feel, not just numbers:
-      - the blade has weight: a light saber keeps up with the quickest
-        flick of your wrist, a heavy one trails a fast swing a little and
-        carries on a touch when your hand stops (slow, careful moves stay
-        exact; two hands on it hold it closer). cg_vrSaberWeight scales
-        it (1; 0 = weightless, 2 = twice as heavy)
+      - the hilt stays locked in your fist; if you want the blade itself
+        to drag behind a fast swing (a light one hardly, a heavy one
+        more), set cg_vrSaberLag 1 (0 = locked, the default)
       - swings whoosh, deeper and heavier the heavier the style (other
         players hear your swings too)
       - another blade stops yours dead for a moment; cutting through
@@ -240,7 +241,8 @@ SETTINGS (console cvars, saved automatically)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
-  cg_vrSaberWeight 1     how heavy the blade feels (0 = weightless)
+  cg_vrSaberLag 0        1 = the blade drags behind fast swings by its
+                         weight (0 = locked in your fist)
   cg_vrLog 1             0 = don't write vrdebug.log
   cg_vrTwoHandLever 0.7  how much the line between your hands steers a
                          two-handed blade when they are far apart
@@ -282,7 +284,6 @@ KNOWN LIMITATIONS
     cut shows on your blade a moment after it happens (it comes back from
     the game's server); other players see your character's animated
     saber, not your arms;
-    during flips and rolls the animation holds your saber for a moment;
     custom sabers with more than two blades only fight with the first two.
   * Guns are held in the right hand only (for now); only sabers can be
     held with both hands.
