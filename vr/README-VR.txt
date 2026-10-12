@@ -122,8 +122,10 @@ buzz, and while you hold the grip the saber is in both hands:
     slip off: only pulling your left hand a long way (about 70 cm) from
     where it holds breaks the hold. Taking hold and letting go settle
     smoothly over a few frames.
-  * Both hands close their fingers round the hilt whatever the body is
-    doing (running, jumping, flipping), rather than holding it open-handed.
+  * Both hands hold the hilt in the hole of the fist, the way a real hand
+    holds a handle, and wrap their fingers round it whatever the body is
+    doing (running, jumping, flipping). (Models whose gloves are one solid
+    piece, with no finger bones, can't close their fingers.)
   * Near the hilt the left grip takes hold instead of using the Force;
     anywhere else it uses the Force as usual. cg_vrTwoHand 0 turns taking
     hold off.
