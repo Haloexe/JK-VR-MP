@@ -2694,6 +2694,8 @@ Called before every level change or subsystem restart
 */
 void CG_Shutdown( void )
 {
+	CG_VR_Shutdown();	// OpenJK VR: its log
+
 	BG_ClearAnimsets(); //free all dynamic allocations made through the engine
 
     CG_DestroyAllGhoul2();

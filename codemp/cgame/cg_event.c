@@ -2125,9 +2125,17 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_SABER_ATTACK:
 		DEBUGNAME("EV_SABER_ATTACK");
+		if ( es->eventParm && es->number == cg.clientNum && CG_VR() )
+		{//OpenJK VR: your own swing in VR; your game already played its whoosh (cg_vrbody.c)
+			break;
+		}
 		{
 			qhandle_t swingSound = trap->S_RegisterSound(va("sound/weapons/saber/saberhup%i.wav", Q_irand(1, 8)));
 			clientInfo_t *client = NULL;
+			if ( es->eventParm >= 1 && es->eventParm <= 4 )
+			{//OpenJK VR: a swing in VR, by its weight (light, medium, heavy, heavy with both hands)
+				swingSound = trap->S_RegisterSound(va("sound/weapons/saber/saberhup%i.wav", 1 + 3 * Q_min(es->eventParm - 1, 2) + Q_irand(0, 2)));
+			}
 			if ( cg_entities[es->number].currentState.eType == ET_NPC )
 			{
 				client = cg_entities[es->number].npcClient;

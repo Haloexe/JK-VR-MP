@@ -1889,6 +1889,7 @@ void CG_VR_BodyEndFrame( void );
 qboolean CG_VR_Engine( void );
 void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
+void CG_VR_Shutdown( void );
 void CG_VR_SaberWallFeel( centity_t *cent, int saberNum );
 void CG_VR_BodyRestore( centity_t *cent );
 void CG_AddPlayerWeapon( refEntity_t *parent, playerState_t *ps, centity_t *cent, int team, vec3_t newAngles, qboolean thirdPerson );

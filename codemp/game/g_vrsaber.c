@@ -52,6 +52,7 @@ void WP_VR_KnockAttack( gentity_t *attacker );
 qboolean PM_SaberInBrokenParry( int move );
 qboolean BG_SabersOff( playerState_t *ps );
 qboolean WP_SaberBladeUseSecondBladeStyle( saberInfo_t *saber, int bladeNum );
+void G_Knockdown( gentity_t *victim );
 
 #define VR_SABER_SAMPLES	32		// poses kept per player (about a third of a second)
 #define VR_SABER_MIN_GAP	4		// ms: a pose closer than this to the last one isn't kept
@@ -110,6 +111,15 @@ typedef struct vrSaberState_s {
 	}				cuts[VR_SABER_CUTS];	// recent cuts, by victim
 	qboolean		activitySet;
 	vec3_t			activity;			// where in the room a hand last moved to (g_inactivity)
+	struct {							// the swing under way (VRS_TrackSwing)
+		qboolean	on;
+		qboolean	cutting;			// fast enough to cut (the whoosh went out)
+		int			start, lastFast;	// sample times
+		float		peak, peakBlade, peakHand;	// units/s (the speed it cuts with; the blade's; the hand's)
+		int			weight;				// vrSaberWeights index at the peak
+		qboolean	twoHanded;
+		int			cuts, clashes;
+	}				swing;
 } vrSaberState_t;
 
 static vrSaberState_t	vrSabers[MAX_CLIENTS];
@@ -198,6 +208,8 @@ static int VRS_StyleWeight( const gclient_t *cl ) {
 }
 
 static qboolean VRS_TwoHanded( gentity_t *ent );
+static void VRS_TrackSwing( gentity_t *ent, vrSaberState_t *vs );
+static qboolean VRS_BladeOn( const gclient_t *cl, int s, int b );
 
 // The weight a player's saber swings with: the style's, one heavier held
 // with both hands.
@@ -577,6 +589,8 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 		}
 		break;
 	}
+
+	VRS_TrackSwing( ent, vs );
 }
 
 // Whether this player fights with a saber in their VR hands: no automatic
@@ -795,6 +809,90 @@ static float VRS_SwingSpeed( vrSaberState_t *vs, int s, int b, float t, float al
 
 /*
 --------------------------------------------------------------------------------
+Swings: told to everyone (the whoosh) and written to the log
+--------------------------------------------------------------------------------
+*/
+
+#define VR_SABER_SWING_START	0.5f	// a swing starts at this much of the speed a cut needs...
+#define VR_SABER_SWING_END		0.35f	// ...and ends when it has been slower than this...
+#define VR_SABER_SWING_REST		120		// ...for this long (ms)
+
+static void VRS_EndSwing( gentity_t *ent, vrSaberState_t *vs ) {
+	if ( g_vrSaberLog.integer && vs->swing.weight >= 0 && vs->swing.weight < VRS_NUM_ALL_WEIGHTS ) {
+		const vrSaberWeight_t *w = &vrSaberWeights[vs->swing.weight];
+		const float u = 1.0f / VR_UNITS_PER_METRE, scale = VRS_SpeedScale();
+		G_LogPrintf( "VRSaber: swing %i \"%s\" %s%s: %.1f m/s (blade %.1f, hand %.1f; cuts from %.1f, full at %.1f), "
+			"%i ms, %i cut%s, %i clash%s\n", (int)( ent - g_entities ), ent->client->pers.netname, w->name,
+			vs->swing.twoHanded ? " two-handed" : "", vs->swing.peak * u, vs->swing.peakBlade * u, vs->swing.peakHand * u,
+			w->minSpeed * scale * u, w->fullSpeed * scale * u, vs->swing.lastFast - vs->swing.start,
+			vs->swing.cuts, vs->swing.cuts == 1 ? "" : "s", vs->swing.clashes, vs->swing.clashes == 1 ? "" : "es" );
+	}
+	memset( &vs->swing, 0, sizeof( vs->swing ) );
+}
+
+// After every pose: how fast the blades swing (where they cut best, two
+// thirds along), so a swing's whoosh goes out to the other players and the
+// log says how hard each swing was.
+static void VRS_TrackSwing( gentity_t *ent, vrSaberState_t *vs ) {
+	const vrSaberSample_t *smp = VRS_Sample( vs, 0 );
+	const vrSaberWeight_t *w = VRS_Weight( ent );
+	const float minSpeed = w->minSpeed * VRS_SpeedScale();
+	const vrSaberSample_t *hist[VR_SABER_SAMPLES];
+	float best = 0.0f, bestBlade = 0.0f, bestHand = 0.0f;
+	int s, b;
+
+	for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+			float along, blade, hand, speed;
+			int n;
+			if ( !( smp->bladeMask[s] & ( 1 << b ) ) || !VRS_BladeOn( ent->client, s, b ) ) {
+				continue;
+			}
+			n = VRS_BladeHistory( vs, s, b, hist );
+			along = 0.66f * ent->client->saber[s].blade[b].lengthMax;
+			blade = VRS_PointSpeed( hist, n, s, b, smp->time, along, VRS_POINT_BLADE );
+			hand = Q_max( VRS_PointSpeed( hist, n, s, b, smp->time, 0.0f, VRS_POINT_GRIP ),
+				VRS_PointSpeed( hist, n, s, b, smp->time, 0.0f, VRS_POINT_GRIP2 ) );
+			speed = Q_min( blade, hand * VR_SABER_LEVER );
+			if ( speed > best ) {
+				best = speed;
+				bestBlade = blade;
+				bestHand = hand;
+			}
+		}
+	}
+
+	if ( !vs->swing.on ) {
+		if ( best < VR_SABER_SWING_START * minSpeed ) {
+			return;
+		}
+		memset( &vs->swing, 0, sizeof( vs->swing ) );
+		vs->swing.on = qtrue;
+		vs->swing.start = vs->swing.lastFast = smp->time;
+	}
+	if ( best >= VR_SABER_SWING_END * minSpeed ) {
+		vs->swing.lastFast = smp->time;
+	}
+	if ( best > vs->swing.peak ) {
+		vs->swing.peak = best;
+		vs->swing.peakBlade = bestBlade;
+		vs->swing.peakHand = bestHand;
+		vs->swing.weight = (int)( w - vrSaberWeights );
+		vs->swing.twoHanded = VRS_TwoHanded( ent );
+	}
+	if ( !vs->swing.cutting && best >= minSpeed ) {
+		// fast enough to cut: everyone else hears it (the player's own game
+		// already played it; bots notice it as an attack)
+		vs->swing.cutting = qtrue;
+		G_AddEvent( ent, EV_SABER_ATTACK, 1 + (int)( w - vrSaberWeights ) );
+	}
+	if ( smp->time - vs->swing.lastFast > VR_SABER_SWING_REST || smp->time - vs->swing.start > 3000 ) {
+		VRS_EndSwing( ent, vs );
+	}
+}
+
+/*
+--------------------------------------------------------------------------------
 Blade against blade
 --------------------------------------------------------------------------------
 */
@@ -1004,10 +1102,18 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 	if ( recover && vs->recoverTime < level.time + recover ) {
 		vs->recoverTime = level.time + recover;
 	}
+	if ( vs->swing.on ) {
+		vs->swing.clashes++;
+	}
 	if ( g_vrSaberDebug.integer ) {
 		Com_Printf( "VR saber: %s's %s%s blade met %s's at %.1f m/s: %s\n", self->client->pers.netname, w->name,
 			VRS_TwoHanded( self ) ? " (two hands)" : "", other->client ? other->client->pers.netname : "?",
 			speed / VR_UNITS_PER_METRE, vrsClashNames[result] );
+	}
+	if ( g_vrSaberLog.integer ) {
+		G_LogPrintf( "VRSaber: clash %i \"%s\" %s%s %.1f m/s vs \"%s\": %s\n", self->s.number, self->client->pers.netname,
+			w->name, VRS_TwoHanded( self ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE,
+			other->client ? other->client->pers.netname : "?", vrsClashNames[result] );
 	}
 	return (qboolean)( result == VRS_CLASH_THROUGH );
 }
@@ -1085,6 +1191,49 @@ static void VRS_NoteCut( vrSaberState_t *vs, int victim ) {
 	vs->cuts[slot].time = level.time;
 }
 
+// The weight of a blow on whoever it cut: a medium blade nudges them, a heavy
+// one shoves them back, and a heavy blow near full speed (two hands: well
+// short of it) knocks them off their feet. (frac: how near full speed it was, 0..1)
+static void VRS_Impact( gentity_t *self, const vrSaberWeight_t *w, gentity_t *victim, const vec3_t moveDir, float frac,
+	float dmg ) {
+	const int weight = (int)( w - vrSaberWeights );
+	vec3_t dir, away;
+	float push;
+
+	if ( !victim->client || victim->health <= 0 || ( OnSameTeam( self, victim ) && !g_friendlySaber.integer ) ) {
+		return;
+	}
+	if ( victim->client->ps.duelInProgress && victim->client->ps.duelIndex != self->s.number ) {
+		return;
+	}
+	switch ( weight ) {
+	case VRS_LIGHT:		push = 0.0f;					break;
+	case VRS_MEDIUM:	push = 15.0f * frac;			break;
+	default:			push = 25.0f + 35.0f * frac;	break;	// heavy
+	}
+	if ( push <= 0.0f ) {
+		return;
+	}
+	// along the swing, and away from the attacker
+	VectorSubtract( victim->r.currentOrigin, self->r.currentOrigin, away );
+	away[2] = 0.0f;
+	VectorNormalize( away );
+	VectorSet( dir, moveDir[0], moveDir[1], 0.0f );
+	VectorNormalize( dir );
+	VectorMA( dir, 0.7f, away, dir );
+	if ( VectorNormalize( dir ) < 0.1f ) {
+		VectorCopy( away, dir );
+	}
+	if ( G_VRSaberClient( victim ) ) {
+		push *= 0.5f;	// (gentler on someone in a headset)
+	}
+	G_Throw( victim, dir, push );
+	if ( weight >= VRS_HEAVY && frac >= ( weight == VRS_HEAVY2 ? 0.6f : 0.8f ) && victim->health > dmg &&
+		!G_VRSaberClient( victim ) ) {
+		G_Knockdown( victim );
+	}
+}
+
 static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t point, const vec3_t base, const vec3_t dir,
 	float length, float t, const vec3_t moveDir ) {
 	vrSaberState_t *vs = VRS_State( self );
@@ -1094,7 +1243,7 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 	saberInfo_t *saber = &self->client->saber[s];
 	const qboolean style2 = WP_SaberBladeUseSecondBladeStyle( saber, b );
 	vec3_t rel;
-	float along, speed, dmg;
+	float along, speed, dmg, frac = 0.0f;
 	qboolean doDismember;
 	int knockback = 0;
 
@@ -1130,7 +1279,6 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 		self->client->ps.saberIdleWound = level.time + g_saberDmgDelay_Idle.integer;
 		dmg = VR_SABER_BURN;
 	} else {
-		float frac;
 		if ( VRS_RecentlyCut( vs, victim->s.number ) ) {
 			return;	// still the same cut, or the other blade just cut them
 		}
@@ -1184,6 +1332,19 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 
 	if ( victim->client ) {
 		self->client->ps.saberEventFlags |= ( self->enemy == victim ) ? SEF_HITENEMY : SEF_HITOBJECT;
+	}
+	if ( dmg > VR_SABER_BURN ) {
+		VRS_Impact( self, w, victim, moveDir, frac, dmg );
+		if ( vs->swing.on ) {
+			vs->swing.cuts++;
+		}
+	}
+	if ( g_vrSaberLog.integer && dmg > VR_SABER_BURN ) {
+		G_LogPrintf( "VRSaber: cut %i \"%s\" -> \"%s\" %s%s %.1f m/s (cuts from %.1f, full at %.1f): %i damage\n",
+			self->s.number, self->client->pers.netname,
+			victim->client ? victim->client->pers.netname : ( victim->classname ? victim->classname : "?" ), w->name,
+			VRS_TwoHanded( self ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE,
+			minSpeed / VR_UNITS_PER_METRE, fullSpeed / VR_UNITS_PER_METRE, (int)( dmg + 0.5f ) );
 	}
 	if ( g_vrSaberDebug.integer && dmg > VR_SABER_BURN ) {
 		Com_Printf( "VR saber: %s cut %s at %.1f m/s with a %s%s blade: %d damage\n", self->client->pers.netname,

@@ -204,6 +204,35 @@ static struct {
 	vec3_t		twoHandGrip2;		// the left controller's grip (world)
 	int			grabZones;			// hands that could take hold of something now (engine)
 	void		*fistG2;			// the left fingers are closed round the hilt on this instance
+	vec3_t		twoHandFist;		// the way the hilt runs through the left fist, as drawn
+
+	// the blade's weight (CG_VRB_BladeInertia, once per frame)
+	int			bladeTime;
+	struct {
+		qboolean	valid;
+		int			time;
+		vec3_t		dir;			// the blade as drawn, in your room
+		vec3_t		vel;			// how it turns (rad/s, axis * rate)
+		int			holdUntil;		// stopped on another blade until then
+		vec3_t		out;			// the blade as drawn this frame (world)
+		int			outTime;
+	}			blade[2];
+
+	// the whoosh of your swings (CG_VRB_SwingSound)
+	struct {
+		vec3_t		prev[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// room: a point two thirds along each blade
+		int			prevMask[VR_POSE_MAX_SABERS];
+		int			prevTime;
+		float		speed;			// m/s, smoothed
+		qboolean	armed;
+		int			lastTime;		// the last whoosh
+	}			swing;
+
+	// the debug log (cg_vrLog)
+	int			logTime;
+	int			logTorso;
+	float		logTip;
+	int			logPrinted;
 } vrb;
 
 // Physical lightsaber: the blades in your hands this frame, reported to the
@@ -215,6 +244,89 @@ static struct {
 	vec3_t			tip[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
 	int				wallFeelTime;
 } vrbSaber;
+
+/*
+--------------------------------------------------------------------------------
+The VR log (cg_vrLog 1): vrdebug.log next to the settings, saying what your
+body and saber did - two-handed holds, swings, clashes, and the animation and
+fingers of the hand holding the saber - for working out what feels wrong.
+--------------------------------------------------------------------------------
+*/
+
+static fileHandle_t	vrbLogFile;
+static qboolean		vrbLogTried;
+
+static void QDECL CG_VRB_Log( const char *fmt, ... ) {
+	char text[1024];
+	va_list ap;
+	int n;
+
+	if ( !cg_vrLog.integer ) {
+		return;
+	}
+	if ( !vrbLogFile ) {
+		qtime_t now;
+		char version[128];
+		if ( vrbLogTried ) {
+			return;
+		}
+		vrbLogTried = qtrue;
+		if ( trap->FS_Open( "vrdebug.log", &vrbLogFile, FS_APPEND_SYNC ) < 0 || !vrbLogFile ) {
+			vrbLogFile = 0;
+			return;
+		}
+		trap->RealTime( &now );
+		trap->Cvar_VariableStringBuffer( "version", version, sizeof( version ) );
+		n = Com_sprintf( text, sizeof( text ), "\n=== %04i-%02i-%02i %02i:%02i:%02i  %s  map %s ===\n", now.tm_year + 1900,
+			now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec, version, cgs.mapname );
+		trap->FS_Write( text, n, vrbLogFile );
+	}
+	n = Com_sprintf( text, sizeof( text ), "%7.2f ", cg.time * 0.001f );
+	va_start( ap, fmt );
+	Q_vsnprintf( text + n, sizeof( text ) - n, fmt, ap );
+	va_end( ap );
+	trap->FS_Write( text, strlen( text ), vrbLogFile );
+}
+
+// (CG_Shutdown)
+void CG_VR_Shutdown( void ) {
+	if ( vrbLogFile ) {
+		trap->FS_Close( vrbLogFile );
+		vrbLogFile = 0;
+	}
+	vrbLogTried = qfalse;
+}
+
+// The weight your saber swings with, as the server reckons it
+// (g_vrsaber.c): the style's - and, if withHands, one heavier held with both
+// hands (heavy stays heavy).
+enum { VRB_LIGHT, VRB_MEDIUM, VRB_HEAVY };
+static const char *const vrbWeightNames[3] = { "light", "medium", "heavy" };
+
+static qboolean CG_VRB_TwoHanded( void );
+static void CG_VRB_LogHands( centity_t *cent );
+
+static int CG_VRB_Weight( qboolean withHands ) {
+	int w;
+
+	switch ( cg.predictedPlayerState.fd.saberAnimLevel ) {
+	case SS_FAST:
+	case SS_TAVION:
+		w = VRB_LIGHT;
+		break;
+	case SS_STRONG:
+	case SS_DESANN:
+		w = VRB_HEAVY;
+		break;
+	default:
+		w = VRB_MEDIUM;	// (dual sabers and the staff too)
+		break;
+	}
+	if ( withHands && w < VRB_HEAVY && CG_VRB_TwoHanded() ) {
+		w++;
+	}
+	return w;
+}
 
 static void CG_VRB_Init( void ) {
 	if ( !vrb.init ) {
@@ -820,7 +932,7 @@ static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip ) {
 			VectorCopy( vrb.twoHandAxis[0], grip->axis[0] );
 			VectorCopy( vrb.twoHandAxis[1], grip->axis[1] );
 			VectorCopy( vrb.twoHandAxis[2], grip->axis[2] );
-			VectorScale( vrb.twoHandDir, vrb.twoHandSign, grip->dir );
+			VectorScale( vrb.bladeTime == cg.time ? vrb.twoHandFist : vrb.twoHandDir, vrb.twoHandSign, grip->dir );
 			grip->blend = vrb.twoHandEase;
 			return;
 		}
@@ -1104,14 +1216,195 @@ off:
 done:
 	if ( vrb.twoHand ) {
 		CG_VRB_Fist( cent, qtrue );
-		if ( !was && trap->ext.VR_Haptic ) {
-			trap->ext.VR_Haptic( VR_HAND_LEFT, 0.04f, 0.6f );	// took hold
+		if ( !was ) {
+			if ( trap->ext.VR_Haptic ) {
+				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.04f, 0.6f );	// took hold
+			}
+			CG_VRB_Log( "two hands: took hold %s the right hand (%.1f along the hilt)%s\n",
+				vrb.twoHandSide > 0.0f ? "above" : "below", vrb.twoHandT, vrb.twoHandSign < 0.0f ? ", reversed" : "" );
 		}
 	} else {
 		CG_VRB_Fist( cent, qfalse );
-		if ( was && trap->ext.VR_Haptic ) {
-			trap->ext.VR_Haptic( VR_HAND_LEFT, 0.02f, 0.3f );	// let go
+		if ( was ) {
+			if ( trap->ext.VR_Haptic ) {
+				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.02f, 0.3f );	// let go
+			}
+			CG_VRB_Log( "two hands: %s\n", vrb.twoHandBroke ? "pulled off the hilt" : "let go" );
 		}
+	}
+}
+
+/*
+=================
+CG_VRB_BladeInertia
+
+The blade's weight. The saber you see - and fight with: the server gets the
+blade as drawn - follows your hand through a spring: a light one keeps up
+with the quickest flick, a heavy one trails a fast swing and carries on a
+touch when your hand stops, and two hands on it hold it closer. It runs in
+your room, so turning and walking never swing it. Another blade stops it
+dead for a moment; cutting through someone drags it (CG_VRB_BladeImpulse).
+cg_vrSaberWeight scales how heavy (0 = none).
+=================
+*/
+
+#define VRB_BLADE_STEP		0.002f	// s: integration step
+#define VRB_BLADE_DAMPING	0.75f	// (a little overshoot when the hand stops)
+
+static const float	vrbBladeOmega[3] = { 160.0f, 80.0f, 48.0f };	// rad/s: light, medium, heavy
+static const float	vrbBladeMaxLag[3] = { 20.0f, 35.0f, 50.0f };	// degrees behind the hand at most
+static const int	vrbBladeHold[3] = { 35, 55, 75 };				// ms another blade stops it for
+
+static void VRB_RotZ( const vec3_t in, float deg, vec3_t out ) {
+	const float r = DEG2RAD( deg ), c = cosf( r ), sn = sinf( r );
+	const float x = in[0] * c - in[1] * sn, y = in[0] * sn + in[1] * c;
+
+	out[0] = x;
+	out[1] = y;
+	out[2] = in[2];
+}
+
+// v turned about the unit axis k by a radians
+static void VRB_Rotate( const vec3_t v, const vec3_t k, float a, vec3_t out ) {
+	const float c = cosf( a ), sn = sinf( a ), kv = DotProduct( k, v );
+	vec3_t kxv, t;
+
+	CrossProduct( k, v, kxv );
+	VectorScale( v, c, t );
+	VectorMA( t, sn, kxv, t );
+	VectorMA( t, kv * ( 1.0f - c ), k, out );
+}
+
+// world yaw minus room (tracking) yaw
+static float CG_VRB_RoomYaw( const vrClientState_t *vr ) {
+	return VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw;
+}
+
+static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t want, int weight, qboolean twoHands,
+	vec3_t out ) {
+	const float yaw = CG_VRB_RoomYaw( vr );
+	const float scale = cg_vrSaberWeight.value;
+	float omega, maxLag, t, ang;
+	vec3_t target, axis;
+
+	VRB_RotZ( want, -yaw, target );
+	if ( VectorNormalize( target ) < 0.5f ) {
+		VectorCopy( want, out );
+		return;
+	}
+	if ( !vrb.blade[h].valid || cg.time - vrb.blade[h].time < 0 || cg.time - vrb.blade[h].time > 200 ) {
+		VectorCopy( target, vrb.blade[h].dir );
+		VectorClear( vrb.blade[h].vel );
+		vrb.blade[h].holdUntil = 0;
+		vrb.blade[h].valid = qtrue;
+	} else {
+		if ( scale > 0.0f ) {
+			omega = vrbBladeOmega[weight] / Com_Clamp( 0.1f, 4.0f, scale );
+			maxLag = vrbBladeMaxLag[weight] * Com_Clamp( 0.5f, 2.0f, scale );
+		} else {
+			omega = 400.0f;	// no weight: only clashes and cuts show
+			maxLag = vrbBladeMaxLag[VRB_LIGHT];
+		}
+		if ( twoHands ) {
+			omega *= 1.4f;
+		}
+		omega = Q_min( omega, 400.0f );
+
+		if ( cg.time - vrb.blade[h].holdUntil < 0 ) {
+			VectorClear( vrb.blade[h].vel );	// stopped on the other blade
+		} else {
+			for ( t = ( cg.time - vrb.blade[h].time ) * 0.001f; t > 0.0f; t -= VRB_BLADE_STEP ) {
+				const float step = Q_min( t, VRB_BLADE_STEP );
+				vec3_t acc;
+				float sn, rate;
+				CrossProduct( vrb.blade[h].dir, target, axis );
+				sn = VectorNormalize( axis );
+				ang = atan2f( sn, DotProduct( vrb.blade[h].dir, target ) );
+				VectorScale( axis, omega * omega * ang, acc );
+				VectorMA( acc, -2.0f * VRB_BLADE_DAMPING * omega, vrb.blade[h].vel, acc );
+				VectorMA( vrb.blade[h].vel, step, acc, vrb.blade[h].vel );
+				VectorMA( vrb.blade[h].vel, -DotProduct( vrb.blade[h].vel, vrb.blade[h].dir ), vrb.blade[h].dir,
+					vrb.blade[h].vel );	// (it doesn't spin about itself)
+				rate = VectorLength( vrb.blade[h].vel );
+				if ( rate > 1e-5f ) {
+					vec3_t k;
+					VectorScale( vrb.blade[h].vel, 1.0f / rate, k );
+					VRB_Rotate( vrb.blade[h].dir, k, rate * step, vrb.blade[h].dir );
+					VectorNormalize( vrb.blade[h].dir );
+				}
+			}
+		}
+
+		// never further behind than this: past it the hand drags it along
+		CrossProduct( vrb.blade[h].dir, target, axis );
+		ang = atan2f( VectorNormalize( axis ), DotProduct( vrb.blade[h].dir, target ) );
+		if ( ang > DEG2RAD( maxLag ) ) {
+			VRB_Rotate( vrb.blade[h].dir, axis, ang - DEG2RAD( maxLag ), vrb.blade[h].dir );
+			VectorNormalize( vrb.blade[h].dir );
+		}
+	}
+	vrb.blade[h].time = cg.time;
+	VRB_RotZ( vrb.blade[h].dir, yaw, out );
+}
+
+static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
+	const qboolean twoHands = (qboolean)( vrb.twoHand && vrb.twoHandTime == cg.time );
+	const int weight = CG_VRB_Weight( qfalse );
+	int h;
+
+	if ( vrb.bladeTime == cg.time ) {
+		return;	// (second eye)
+	}
+	vrb.bladeTime = cg.time;
+	VectorCopy( vrb.twoHandDir, vrb.twoHandFist );
+
+	for ( h = 0; h < 2; h++ ) {
+		vrbGrip_t grip;
+		vec3_t pos, ax[3], want, out;
+
+		vrb.blade[h].outTime = 0;
+		CG_VRB_Grip( cent, h, &grip );
+		if ( grip.kind != VRB_GRIP_SABER || !vr->handValid[h] ) {
+			vrb.blade[h].valid = qfalse;
+			continue;
+		}
+		CG_VRB_Controller( vr, h, pos, ax );
+		CG_VRB_SaberDir( ax, want );
+		if ( h == VR_HAND_RIGHT && vrb.twoHandArms && vrb.twoHandTime == cg.time ) {
+			vec3_t tmp;
+			VRB_Slerp( want, vrb.twoHandDir, vrb.twoHandEase, tmp );	// (held with both hands)
+			VectorCopy( tmp, want );
+		}
+		CG_VRB_BladeSpring( h, vr, want, weight, (qboolean)( twoHands && h == VR_HAND_RIGHT ), out );
+		VectorCopy( out, vrb.blade[h].out );
+		vrb.blade[h].outTime = cg.time;
+
+		if ( h == VR_HAND_RIGHT && vrb.twoHandArms && vrb.twoHandTime == cg.time ) {
+			// the left hand holds the hilt where it is drawn
+			vrbMat_t R;
+			vec3_t rel;
+			VRB_Arc( want, out, R );
+			VectorSubtract( vrb.twoHandHand, pos, rel );
+			VRB_Apply( R, rel, rel );
+			VectorAdd( pos, rel, vrb.twoHandHand );
+			VRB_Apply( R, vrb.twoHandDir, vrb.twoHandFist );
+		}
+	}
+}
+
+// Your blade met another one (clash) or cut through someone (strength 0..1).
+static void CG_VRB_BladeImpulse( int h, qboolean clash, float strength ) {
+	const int weight = CG_VRB_Weight( qfalse );
+
+	if ( h < 0 || h > 1 || !vrb.blade[h].valid ) {
+		return;
+	}
+	strength = Com_Clamp( 0.0f, 1.0f, strength );
+	if ( clash ) {
+		vrb.blade[h].holdUntil = cg.time + (int)( vrbBladeHold[weight] * ( 0.5f + 0.5f * strength ) );
+		VectorClear( vrb.blade[h].vel );
+	} else {
+		VectorScale( vrb.blade[h].vel, 1.0f - 0.6f * strength, vrb.blade[h].vel );
 	}
 }
 
@@ -1239,7 +1532,9 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 				BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, bladeNow );
 				VectorScale( gA[0], cosf( sp ), bladeWant );
 				VectorMA( bladeWant, -sinf( sp ), gA[2], bladeWant );
-				if ( h == VR_HAND_RIGHT && vrb.twoHandArms && vrb.twoHandTime == cg.time ) {
+				if ( vrb.blade[h].outTime == cg.time ) {
+					VectorCopy( vrb.blade[h].out, bladeWant );	// where its weight lets it be (CG_VRB_BladeInertia)
+				} else if ( h == VR_HAND_RIGHT && vrb.twoHandArms && vrb.twoHandTime == cg.time ) {
 					// held with both hands (or settling into it, or out of it)
 					VectorNormalize( bladeWant );
 					VRB_Slerp( bladeWant, vrb.twoHandDir, vrb.twoHandEase, tmp );
@@ -1554,6 +1849,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	CG_VRB_ResetArms( cent->ghoul2 );
 	CG_VRB_ProbeHands( cent );
 	CG_VRB_TwoHand( cent, vr );
+	CG_VRB_BladeInertia( cent, vr );
 
 	if ( vrb.convention < 0 && vrb.checkTime != cg.time ) {
 		vrb.checkTime = cg.time;
@@ -1775,11 +2071,156 @@ void CG_VR_BodyArms( centity_t *cent ) {
 	}
 	if ( cg_vrBodyArms.integer ) {
 		CG_VRB_Arms( cent, vr, CG_VRB_BodyYaw( vr ) );
+		CG_VRB_LogHands( cent );
 	} else {
 		CG_VRB_ResetArms( cent->ghoul2 );
 		CG_VRB_Fist( cent, qfalse );	// (no hands to hold the hilt with)
 		vrb.twoHand = vrb.twoHandArms = qfalse;
 		vrb.twoHandBlend = 0.0f;
+		vrb.blade[0].valid = vrb.blade[1].valid = qfalse;
+	}
+}
+
+// The whoosh of your swings. The stock game plays it from its attack
+// animations, which a swing of your arm doesn't have: here it comes from how
+// fast your blade really moves (two thirds along it, in your room), heavier
+// for a heavier weight, with a light tick in the hand. (Everyone else hears
+// it from the server, g_vrsaber.c.)
+static const float vrbWhooshSpeed[3] = { 3.0f, 3.5f, 4.0f };	// m/s: light, medium, heavy
+
+static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
+	const float dt = ( cg.time - vrb.swing.prevTime ) * 0.001f;
+	const float yaw = vr ? CG_VRB_RoomYaw( vr ) : 0.0f;
+	float speed = 0.0f;
+	vec3_t where = { 0.0f, 0.0f, 0.0f };
+	int s, b, mask[VR_POSE_MAX_SABERS], hand = VR_HAND_RIGHT, weight;
+
+	if ( !vr || vrbSaber.time != cg.time || !vrbSaber.pose.valid || vr->worldScale <= 0.0f ) {
+		vrb.swing.prevMask[0] = vrb.swing.prevMask[1] = 0;
+		vrb.swing.speed = 0.0f;
+		vrb.swing.armed = qtrue;
+		return;
+	}
+	for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+		mask[s] = vrbSaber.pose.bladeMask[s];
+		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+			vec3_t p, rel, room;
+			if ( !( mask[s] & ( 1 << b ) ) ) {
+				continue;
+			}
+			VectorSubtract( vrbSaber.tip[s][b], vrbSaber.base[s][b], rel );
+			VectorMA( vrbSaber.base[s][b], 0.66f, rel, p );
+			VectorSubtract( p, cg.refdef.vieworg, rel );
+			VRB_RotZ( rel, -yaw, room );
+			if ( ( vrb.swing.prevMask[s] & ( 1 << b ) ) && dt > 0.001f && dt < 0.1f ) {
+				const float v = Distance( room, vrb.swing.prev[s][b] ) / dt / vr->worldScale;
+				if ( v > speed ) {
+					speed = v;
+					VectorCopy( p, where );
+					hand = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+				}
+			}
+			VectorCopy( room, vrb.swing.prev[s][b] );
+		}
+	}
+	vrb.swing.prevMask[0] = mask[0];
+	vrb.swing.prevMask[1] = mask[1];
+	vrb.swing.prevTime = cg.time;
+	if ( dt <= 0.0f ) {
+		return;
+	}
+	// (a little smoothing: tracking jitters)
+	vrb.swing.speed += ( speed - vrb.swing.speed ) * Com_Clamp( 0.0f, 1.0f, dt / ( dt + 0.02f ) );
+
+	weight = CG_VRB_Weight( qtrue );
+	if ( !vrb.swing.armed ) {
+		if ( vrb.swing.speed < 0.5f * vrbWhooshSpeed[weight] ) {
+			vrb.swing.armed = qtrue;	// slowed down: the next swing whooshes again
+		} else if ( cg.time - vrb.swing.lastTime > 450 && vrb.swing.speed >= 1.3f * vrbWhooshSpeed[weight] ) {
+			vrb.swing.armed = qtrue;	// still swinging hard (spinning it)
+		}
+	}
+	if ( vrb.swing.armed && vrb.swing.speed >= vrbWhooshSpeed[weight] && cg.time - vrb.swing.lastTime > 150 ) {
+		const clientInfo_t *ci = &cgs.clientinfo[cg.clientNum];
+		qhandle_t sfx;
+		vrb.swing.armed = qfalse;
+		vrb.swing.lastTime = cg.time;
+		if ( ci->infoValid && ci->saber[0].swingSound[0] ) {
+			sfx = ci->saber[0].swingSound[Q_irand( 0, 2 )];	// the saber's own
+		} else {
+			sfx = trap->S_RegisterSound( va( "sound/weapons/saber/saberhup%i.wav", 1 + 3 * weight + Q_irand( 0, 2 ) ) );
+		}
+		trap->S_StartSound( where, cg.clientNum, CHAN_AUTO, sfx );
+		if ( trap->ext.VR_Haptic ) {
+			trap->ext.VR_Haptic( hand, 0.02f, 0.1f + 0.06f * weight );
+		}
+		CG_VRB_Log( "swing: %s%s, %.1f m/s\n", vrbWeightNames[weight], CG_VRB_TwoHanded() ? " (two hands)" : "",
+			vrb.swing.speed );
+	}
+}
+
+// How far a bone is from the line through o along d.
+static float CG_VRB_LineDistance( centity_t *cent, const char *bone, const vec3_t o, const vec3_t d ) {
+	vrbBone_t b;
+	vec3_t rel;
+
+	if ( !CG_VRB_Bone( cent, bone, 1, &b ) ) {
+		return -1.0f;
+	}
+	VectorSubtract( b.origin, o, rel );
+	VectorMA( rel, -DotProduct( rel, d ), d, rel );
+	return VectorLength( rel );
+}
+
+// The log: which animation your body is in, and how far the fingers of the
+// hand holding the saber are from its hilt (a closed fist hugs it), now and
+// then and whenever either changes.
+extern stringID_table_t animTable[MAX_ANIMATIONS + 1];
+
+static const char *CG_VRB_AnimName( int anim ) {
+	return ( anim >= 0 && anim < MAX_ANIMATIONS && animTable[anim].name ) ? animTable[anim].name : "?";
+}
+
+static void CG_VRB_LogHands( centity_t *cent ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	vrbGrip_t grip;
+	vrbBone_t tag;
+	mdxaBone_t m;
+	vec3_t blade;
+	float index, middle, left = -1.0f;
+
+	if ( !cg_vrLog.integer || ( cg.time - vrb.logTime >= 0 && cg.time - vrb.logTime < 200 ) ) {
+		return;
+	}
+	vrb.logTime = cg.time;
+	CG_VRB_Grip( cent, VR_HAND_RIGHT, &grip );
+	if ( grip.kind != VRB_GRIP_SABER ) {
+		vrb.logTorso = -1;
+		return;
+	}
+	if ( !CG_VRB_Bone( cent, vrbArmBones[VR_HAND_RIGHT][VRB_TAG], 1, &tag ) ||
+		!trap->G2API_GetBoltMatrix( cent->ghoul2, grip.saberModel, 0, &m, cent->turAngles, cent->lerpOrigin, cg.time,
+			cgs.gameModels, cent->modelScale ) ) {
+		return;
+	}
+	BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, blade );
+	if ( VectorNormalize( blade ) < 0.5f ) {
+		return;
+	}
+	index = CG_VRB_LineDistance( cent, "r_d2_j3", tag.origin, blade );
+	middle = CG_VRB_LineDistance( cent, "r_d3_j3", tag.origin, blade );
+	if ( vrb.twoHand && vrb.twoHandTime == cg.time ) {
+		left = CG_VRB_LineDistance( cent, "l_d2_j3", tag.origin, blade );
+	}
+	if ( ps->torsoAnim != vrb.logTorso || fabsf( index - vrb.logTip ) > 0.8f || cg.time - vrb.logPrinted > 3000 ||
+		cg.time - vrb.logPrinted < 0 ) {
+		CG_VRB_Log( "hand: torso %s, legs %s, saber move %i, style %i, holstered %i, hand extend %i | right fingertips "
+			"%.1f %.1f from the hilt%s%s\n", CG_VRB_AnimName( ps->torsoAnim ), CG_VRB_AnimName( ps->legsAnim ),
+			ps->saberMove, ps->fd.saberAnimLevel, ps->saberHolstered, ps->forceHandExtend, index, middle,
+			left >= 0.0f ? va( " | two hands, left fingertip %.1f", left ) : "", ps->weaponTime > 0 ? " | busy" : "" );
+		vrb.logTorso = ps->torsoAnim;
+		vrb.logTip = index;
+		vrb.logPrinted = cg.time;
 	}
 }
 
@@ -1833,6 +2274,8 @@ void CG_VR_BodyEndFrame( void ) {
 			trap->ext.VR_SetUserPose( NULL );
 		}
 	}
+
+	CG_VRB_SwingSound( vr );
 
 	// where a squeezed grip takes hold of something instead of using the Force
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
@@ -1932,12 +2375,22 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 	}
 	if ( event == EV_SABER_HIT ) {
 		if ( es->otherEntityNum2 == cg.clientNum && es->otherEntityNum != ENTITYNUM_NONE ) {
-			// your blade cut something
-			const float a = 0.8f * CG_VRB_HitStrength( es->eventParm );
-			trap->ext.VR_Haptic( es->weapon == 1 ? VR_HAND_LEFT : VR_HAND_RIGHT, 0.05f, a );
+			// your blade cut something: a sharp tick for a light blade, a
+			// thump for a heavy one, and it drags through
+			static const float len[3] = { 0.035f, 0.055f, 0.085f }, amp[3] = { 0.65f, 0.8f, 1.0f };
+			const int weight = CG_VRB_Weight( qtrue );
+			const float strength = CG_VRB_HitStrength( es->eventParm );
+			const float a = amp[weight] * strength;
+			const int hand = ( es->weapon == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+			trap->ext.VR_Haptic( hand, len[weight], a );
 			if ( es->weapon == 0 && CG_VRB_TwoHanded() ) {
-				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.05f, 0.7f * a );	// (both hands on it)
+				trap->ext.VR_Haptic( VR_HAND_LEFT, len[weight], 0.7f * a );	// (both hands on it)
 			}
+			if ( es->eventParm ) {
+				CG_VRB_BladeImpulse( hand, qfalse, strength );
+			}
+			CG_VRB_Log( "event: your %s blade cut %i (hit strength %i)\n", vrbWeightNames[weight], es->otherEntityNum,
+				es->eventParm );
 		} else if ( es->otherEntityNum == cg.clientNum ) {
 			// you were cut
 			const float a = 0.6f * CG_VRB_HitStrength( es->eventParm );
@@ -1958,10 +2411,16 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 			hand = CG_VRB_SaberHandNear( es->origin, 32.0f );
 		}
 		if ( hand >= 0 ) {
-			trap->ext.VR_Haptic( hand, 0.08f, 1.0f );
+			// a hard knock, longer the heavier the blade; the blade stops
+			static const float len[3] = { 0.06f, 0.09f, 0.13f };
+			const int weight = CG_VRB_Weight( qtrue );
+			trap->ext.VR_Haptic( hand, len[weight], 1.0f );
 			if ( hand == VR_HAND_RIGHT && CG_VRB_TwoHanded() ) {
-				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.08f, 0.8f );	// (both hands on it)
+				trap->ext.VR_Haptic( VR_HAND_LEFT, len[weight], 0.8f );	// (both hands on it)
 			}
+			CG_VRB_BladeImpulse( hand, qtrue, 1.0f );
+			CG_VRB_Log( "event: clash on your %s blade (%s)\n", vrbWeightNames[weight],
+				es->otherEntityNum2 == cg.clientNum ? "your swing" : "their blade" );
 		}
 	}
 }

@@ -153,11 +153,24 @@ server running this build: your real blade is the weapon.
                              through guards, recovers slowly
     Dual sabers are two medium blades, and the staff is medium too. With
     dual sabers the right stick click switches the left one off instead;
-    the right one is then a light saber, as in the normal game. Held with
-    both hands (above), a saber or staff swings one weight heavier.
-  * You feel it: a buzz when your blade cuts (stronger for deeper cuts), a
-    hard knock when it clashes, a grind when it scrapes a wall, both hands
-    when you get cut.
+    the right one is then a light saber, as in the normal game. With the
+    staff it switches the second blade off (click again for both). Held
+    with both hands (above), a saber or staff swings one weight heavier.
+  * The weight is something you feel, not just numbers:
+      - the blade has weight: a light saber keeps up with the quickest
+        flick of your wrist, a heavy one trails a fast swing a little and
+        carries on a touch when your hand stops (slow, careful moves stay
+        exact; two hands on it hold it closer). cg_vrSaberWeight scales
+        it (1; 0 = weightless, 2 = twice as heavy)
+      - swings whoosh, deeper and heavier the heavier the style (other
+        players hear your swings too)
+      - another blade stops yours dead for a moment; cutting through
+        someone drags it
+      - a medium blow nudges whoever it hits, a heavy one shoves them back,
+        and a heavy one near full speed knocks them off their feet
+      - the buzz in your hand: a sharp tick for a light blade, a thump for
+        a heavy one, a hard knock on a clash (longer the heavier), a grind
+        when it scrapes a wall, both hands when you get cut.
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
@@ -167,9 +180,15 @@ full-damage-at max-damage recover": swing speeds in m/s, recovery after a
 clash in ms; defaults "1.8 5.3 40 150", "2.5 7.1 65 220", "3.2 8.8 100
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
 weight), g_vrSaberDamageScale (1), g_vrSaberDebug 1 (prints every cut's
-speed and damage, and how every clash ended, to the console - handy for
-telling me what feels off), and the stock g_dismember 100 if you want
-limbs to come off.
+speed and damage, and how every clash ended, to the console), and the stock
+g_dismember 100 if you want limbs to come off.
+
+LOGS for working out what feels off (both on by default):
+  games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
+               which weight, one or two hands - and every cut and clash
+  vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, and the
+               animation and fingers of the hand holding the saber
+Both are in Documents\My Games\OpenJK-VR\base.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw
@@ -221,6 +240,8 @@ SETTINGS (console cvars, saved automatically)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
+  cg_vrSaberWeight 1     how heavy the blade feels (0 = weightless)
+  cg_vrLog 1             0 = don't write vrdebug.log
   cg_vrTwoHandLever 0.7  how much the line between your hands steers a
                          two-handed blade when they are far apart
                          (0 = only your wrists, 1 = only the line)
@@ -257,9 +278,10 @@ KNOWN LIMITATIONS
     swing animations; your real blade only counts on servers running this
     build.
   * Saber combat: blaster bolts are still deflected automatically; no
-    saber locks or disarming while you hold the saber in VR; when another
-    blade stops yours you feel it, but the blade you see doesn't stop yet;
-    other players see your character's animated saber, not your arms;
+    saber locks or disarming while you hold the saber in VR; a clash or a
+    cut shows on your blade a moment after it happens (it comes back from
+    the game's server); other players see your character's animated
+    saber, not your arms;
     during flips and rolls the animation holds your saber for a moment;
     custom sabers with more than two blades only fight with the first two.
   * Guns are held in the right hand only (for now); only sabers can be
