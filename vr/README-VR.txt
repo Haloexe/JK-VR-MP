@@ -205,8 +205,9 @@ g_vrSaberLight / g_vrSaberMedium / g_vrSaberHeavy (each "cut-from
 full-damage-at max-damage recover": swing speeds in m/s, recovery after a
 clash in ms; defaults "1.8 5.3 40 150", "2.5 7.1 65 220", "3.2 8.8 100
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
-weight), g_vrSaberDamageScale (1), g_vrSaberDebug 1 (prints every cut's
-speed and damage, and how every clash ended, to the console), and the stock
+weight), g_vrSaberDamageScale (1), g_vrSaberUnlag (1: blades judged as
+the VR player saw them, below), g_vrSaberDebug 1 (prints every cut's speed
+and damage, and how every clash ended, to the console), and the stock
 g_dismember 100 if you want limbs to come off.
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
@@ -223,6 +224,14 @@ Players without VR - this build's desktop copy (below), or the normal game
 against your swing that is their guard raised into its path (as bots do),
 so it has to meet your blade, and a feint gets past it. With the normal
 game they see VR players' animated characters.
+Blades are judged as you saw them (lag compensation): your game shows the
+others where the server had them a moment ago, and your moves reach it a
+moment later still (20-60 ms on a LAN), so your blade meets their blade and
+their body where they were when you saw them, and their cut on you waits
+for your moves of that moment - if your blade met that swing of theirs
+first, or cut them down first, the cut never lands. (Between two VR
+players, blades meet where the server has them. Server setting
+g_vrSaberUnlag 0 turns it off.)
 
 Hosting: start a game from the menu the way you do with bots; your PC is
 then the server. Others connect with  connect <your address>  in the
@@ -248,10 +257,14 @@ out you see them from behind; with a gun type  cg_thirdPerson 1.
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
                which weight, one or two hands - every cut and clash, every
-               bot swing your blade stopped, every touch of blades, and
-               every guard raised against you (bots, players without VR)
-  vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, and the
-               animation and fingers of the hand holding the saber
+               bot swing your blade stopped, every touch of blades, every
+               guard raised against you (bots, players without VR), and
+               every cut on you your blade stopped as you saw it ("blocked")
+  vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, the
+               animation and fingers of the hand holding the saber, and
+               every 10 s how smoothly the game arrives ("net:" - snapshots
+               a second, ping, and how often others had to stand still
+               because the next snapshot was late)
 Both are in Documents\My Games\OpenJK-VR\base.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
@@ -341,10 +354,12 @@ KNOWN LIMITATIONS
     elsewhere they see an animated character facing where your gun
     points.
   * Online, other players' arms and blades are drawn a little behind where
-    the server has them (the same delay as everyone's movement), and
-    blades meet where the server has them at that moment: there is no lag
-    compensation for blade contacts yet, so blocks against another player
-    are the most exact with a low ping.
+    the server has them (the same delay as everyone's movement). Your
+    blade is judged as you saw them (see PLAYING WITH OTHERS), but someone
+    else's cut on you lands only once your moves for that moment are in -
+    a moment later on their screen; with much lag (over a quarter second)
+    it lands anyway. Between two VR players blades meet where the server
+    has them, so those blocks are the most exact with a low ping.
   * Demos recorded with this build in games hosted with it (record, or
     the server's svrecord / sv_autoDemo of players running it) keep the VR
     bodies, so they play back in this build only (the normal game and

@@ -3492,6 +3492,9 @@ static vec3_t	dmgDir[MAX_SABER_VICTIMS];
 static vec3_t	dmgSpot[MAX_SABER_VICTIMS];
 static qboolean dismemberDmg[MAX_SABER_VICTIMS];
 static int saberKnockbackFlags[MAX_SABER_VICTIMS];
+static qboolean victimDeferred[MAX_SABER_VICTIMS];	// OpenJK VR: the cut on this VR player waits (G_VRSaberDeferHit)...
+static int victimDeferSaber[MAX_SABER_VICTIMS];		// ...made by this blade
+static int victimDeferBlade[MAX_SABER_VICTIMS];
 static int numVictims = 0;
 void WP_SaberClearDamage( void )
 {
@@ -3501,6 +3504,9 @@ void WP_SaberClearDamage( void )
 		victimEntityNum[ven] = ENTITYNUM_NONE;
 	}
 	memset( victimHitEffectDone, 0, sizeof( victimHitEffectDone ) );
+	memset( victimDeferred, 0, sizeof( victimDeferred ) );
+	memset( victimDeferSaber, 0, sizeof( victimDeferSaber ) );
+	memset( victimDeferBlade, 0, sizeof( victimDeferBlade ) );
 	memset( totalDmg, 0, sizeof( totalDmg ) );
 	memset( dmgDir, 0, sizeof( dmgDir ) );
 	memset( dmgSpot, 0, sizeof( dmgSpot ) );
@@ -3584,6 +3590,11 @@ void WP_SaberApplyDamage( gentity_t *self )
 		}
 		dflags |= saberKnockbackFlags[i];
 
+		if ( victimDeferred[i] )
+		{ //OpenJK VR: a VR player's: it lands once their moves for now have come in, unless their blade met this one first
+			G_VRSaberDeferHit( self, victim, dmgDir[i], dmgSpot[i], (int)totalDmg[i], dflags, victimDeferSaber[i], victimDeferBlade[i] );
+			continue;
+		}
 		G_Damage( victim, self, self, dmgDir[i], dmgSpot[i], totalDmg[i], dflags, MOD_SABER );
 	}
 }
@@ -3609,6 +3620,14 @@ void WP_SaberDoHit( gentity_t *self, int saberNum, int bladeNum )
 		victimHitEffectDone[i] = qtrue;
 
 		victim = &g_entities[victimEntityNum[i]];
+
+		if ( G_VRSaberDefersHit( self, victim, saberNum ) )
+		{ //OpenJK VR: shown when the cut lands (G_VRSaberDeferHit)
+			victimDeferred[i] = qtrue;
+			victimDeferSaber[i] = saberNum;
+			victimDeferBlade[i] = bladeNum;
+			continue;
+		}
 
 		if ( victim->client )
 		{
@@ -8566,6 +8585,7 @@ nextStep:
 	properOrigin[0] += addVel[0]*fVSpeed;
 	properOrigin[1] += addVel[1]*fVSpeed;
 	properOrigin[2] += addVel[2]*fVSpeed;
+	G_VRSaberBladeOrigin( self, properOrigin );	// OpenJK VR: (lag compensation keeps the blades round where the body is drawn)
 
 	properAngles[0] = 0;
 	if (self->s.number < MAX_CLIENTS && self->client->ps.m_iVehicleNum)

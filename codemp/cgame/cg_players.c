@@ -4305,6 +4305,19 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 			emplaced = &cg_entities[cent->currentState.otherEntityNum2].currentState;
 		}
 
+		// OpenJK VR: the right eye shows the head turned as far as the left one
+		// did (the turn eases a step per call; the swinging legs and torso don't
+		// move on there, cg.frametime is 0)
+		if ( cg.secondEye && cent->lookTimeEye == cg.time )
+		{
+			VectorCopy( cent->lookBefore, ci->lastHeadAngles );
+		}
+		else
+		{
+			VectorCopy( ci->lastHeadAngles, cent->lookBefore );
+			cent->lookTimeEye = cg.time;
+		}
+
 		BG_G2PlayerAngles(cent->ghoul2, ci->bolt_motion, &cent->currentState, cg.time,
 			cent->lerpOrigin, bodyAngles, legs, legsAngles, &cent->pe.torso.yawing, &cent->pe.torso.pitching,
 			&cent->pe.legs.yawing, &cent->pe.torso.yawAngle, &cent->pe.torso.pitchAngle, &cent->pe.legs.yawAngle,
@@ -7596,13 +7609,20 @@ void CG_G2Animated( centity_t *cent )
 	}
 
 #ifdef SMOOTH_G2ANIM_LERPANGLES
-	if ((cent->lerpAngles[YAW] > 0 && cent->smoothYaw < 0) ||
-		(cent->lerpAngles[YAW] < 0 && cent->smoothYaw > 0))
-	{ //keep it from snapping around on the threshold
-		cent->smoothYaw = -cent->smoothYaw;
+	if ( cg.secondEye && cent->smoothTime == cg.time )
+	{ //OpenJK VR: the right eye: turned as far as the left one's step took it
+		cent->lerpAngles[YAW] = cent->smoothYaw;
 	}
-	cent->lerpAngles[YAW] = cent->smoothYaw+(cent->lerpAngles[YAW]-cent->smoothYaw)*angSmoothFactor;
-	cent->smoothYaw = cent->lerpAngles[YAW];
+	else
+	{
+		if ((cent->lerpAngles[YAW] > 0 && cent->smoothYaw < 0) ||
+			(cent->lerpAngles[YAW] < 0 && cent->smoothYaw > 0))
+		{ //keep it from snapping around on the threshold
+			cent->smoothYaw = -cent->smoothYaw;
+		}
+		cent->lerpAngles[YAW] = cent->smoothYaw+(cent->lerpAngles[YAW]-cent->smoothYaw)*angSmoothFactor;
+		cent->smoothYaw = cent->lerpAngles[YAW];
+	}
 #endif
 
 	//now just render as a player
@@ -8524,7 +8544,11 @@ void CG_Player( centity_t *cent ) {
 		VectorClear(cent->modelScale);
 	}
 
-	if ((cg_smoothClients.integer || cent->currentState.heldByClient) && (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD || cent->currentState.eType == ET_TERRAIN) &&
+	if ( cg.secondEye && cent->smoothTime == cg.time )
+	{ //OpenJK VR: the right eye: where the left one's smoothing put them (it takes one step a frame)
+		VectorCopy( cent->beamEnd, cent->lerpOrigin );
+	}
+	else if ((cg_smoothClients.integer || cent->currentState.heldByClient) && (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD || cent->currentState.eType == ET_TERRAIN) &&
 		!(cent->currentState.eFlags2 & EF2_HYPERSPACE) && cg.predictedPlayerState.m_iVehicleNum != cent->currentState.number)
 	{ //always smooth when being thrown
 		vec3_t			posDif;
@@ -8564,10 +8588,12 @@ void CG_Player( centity_t *cent ) {
 			cent->beamEnd[k]=(cent->beamEnd[k]+posDif[k]*smoothFactor);
 			cent->lerpOrigin[k]=cent->beamEnd[k];
 		}
+		cent->smoothTime = cg.time;
 	}
 	else
 	{
 		VectorCopy(cent->lerpOrigin, cent->beamEnd);
+		cent->smoothTime = cg.time;
 	}
 
 	if (cent->currentState.m_iVehicleNum &&
@@ -10461,8 +10487,8 @@ stillDoSaber:
 	}
 #endif
 
-	if (cent->currentState.weapon == WP_SABER)
-	{
+	if (cent->currentState.weapon == WP_SABER && !cg.secondEye)
+	{ //OpenJK VR: (once a frame, not again for the other eye: it grows a step each time)
 		BG_SI_SetLengthGradual(&ci->saber[0], cg.time);
 		BG_SI_SetLengthGradual(&ci->saber[1], cg.time);
 	}

@@ -934,7 +934,11 @@ static void CG_General( centity_t *cent ) {
 	}
 	else if (cent->currentState.eFlags & EF_CLIENTSMOOTH)
 	{
-		if (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD)
+		if ( cg.secondEye && cent->smoothTime == cg.time )
+		{ //OpenJK VR: the other eye of the same frame: where the first eye's smoothing put it
+			VectorCopy( cent->turAngles, cent->lerpOrigin );
+		}
+		else if (cent->currentState.groundEntityNum >= ENTITYNUM_WORLD)
 		{
 			float smoothFactor = 0.5f*timescale.value;
 			int k = 0;
@@ -953,6 +957,7 @@ static void CG_General( centity_t *cent ) {
 				cent->turAngles[k]=(cent->turAngles[k]+posDif[k]*smoothFactor);
 				cent->lerpOrigin[k]=cent->turAngles[k];
 			}
+			cent->smoothTime = cg.time;
 		}
 		else
 		{ //if we're sitting on an entity like a moving plat then we don't want to smooth either
@@ -1271,18 +1276,26 @@ static void CG_General( centity_t *cent ) {
 		//	return;
 		}
 
-		//Use origin smoothing since dismembered limbs use ExPhys
-		if (DistanceSquared(cent->turAngles,cent->lerpOrigin)>18000.0f)
-		{
-			VectorCopy(cent->lerpOrigin, cent->turAngles);
+		if ( cg.secondEye && cent->smoothTime == cg.time )
+		{ //OpenJK VR: the other eye of the same frame: where the first eye's smoothing put it
+			VectorCopy( cent->turAngles, cent->lerpOrigin );
 		}
-
-		VectorSubtract(cent->lerpOrigin, cent->turAngles, posDif);
-
-		for (k=0;k<3;k++)
+		else
 		{
-			cent->turAngles[k]=(cent->turAngles[k]+posDif[k]*smoothFactor);
-			cent->lerpOrigin[k]=cent->turAngles[k];
+			//Use origin smoothing since dismembered limbs use ExPhys
+			if (DistanceSquared(cent->turAngles,cent->lerpOrigin)>18000.0f)
+			{
+				VectorCopy(cent->lerpOrigin, cent->turAngles);
+			}
+
+			VectorSubtract(cent->lerpOrigin, cent->turAngles, posDif);
+
+			for (k=0;k<3;k++)
+			{
+				cent->turAngles[k]=(cent->turAngles[k]+posDif[k]*smoothFactor);
+				cent->lerpOrigin[k]=cent->turAngles[k];
+			}
+			cent->smoothTime = cg.time;
 		}
 
 		if (cent->ghoul2 && cent->bolt4 != -1 && cent->trailTime < cg.time)

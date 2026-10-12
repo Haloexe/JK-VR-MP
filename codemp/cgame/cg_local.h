@@ -456,6 +456,10 @@ typedef struct centity_s {
 	qboolean		cloaked;
 
 	int				vChatTime;
+
+	int				smoothTime;		// OpenJK VR: cg.time cg_smoothClients (beamEnd) or EF_CLIENTSMOOTH (turAngles) last smoothed this
+	int				lookTimeEye;	// OpenJK VR: cg.time the head last turned toward its look...
+	vec3_t			lookBefore;		// ...from these angles (the right eye takes the same step)
 } centity_t;
 
 
@@ -789,6 +793,8 @@ typedef struct cg_s {
 	qboolean	mapRestart;			// set on a map restart to set back the weapon
 
 	qboolean	renderingThirdPerson;		// during deaths, chasecams, etc
+	qboolean	secondEye;				// OpenJK VR: drawing the right eye of a stereo frame - the
+										// same moment as the left: nothing moves on (cg.frametime 0)
 
 	// prediction state
 	qboolean	hyperspace;				// true if prediction has hit a trigger_teleport
@@ -1888,6 +1894,7 @@ qboolean CG_VR_BodyLook( centity_t *cent, vec3_t lookAngles );
 void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs );
 void CG_VR_BodyArms( centity_t *cent );
 void CG_VR_BodyEndFrame( void );
+void CG_VR_NetStats( void );
 qboolean CG_VR_Engine( void );
 void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );

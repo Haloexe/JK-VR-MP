@@ -2423,7 +2423,31 @@ extern void CG_ActualLoadDeferredPlayers( void );
 
 static int cg_siegeClassIndex = -2;
 
+static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback );
+
+// OpenJK VR: a stereo frame (a headset) is drawn by running the whole frame
+// once per eye. The right eye shows the same moment as the left one, so
+// nothing may move on between the two: whatever eases toward a target each
+// frame (legs and torso swinging round, a head turning, other players'
+// smoothed positions, puffs left behind) would otherwise take two steps a
+// frame and show each eye a different step - other players jitter in the
+// headset. (cg.frametime is the last frame's length here, as always; the
+// right eye gets 0.)
 void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
+	if ( stereoView == STEREO_RIGHT ) {
+		const int frametime = cg.frametime;
+		cg.secondEye = qtrue;
+		cg.frametime = 0;
+		CG_DrawActiveFrameEye( serverTime, stereoView, demoPlayback );
+		cg.frametime = frametime;
+		cg.secondEye = qfalse;
+		return;
+	}
+	cg.secondEye = qfalse;
+	CG_DrawActiveFrameEye( serverTime, stereoView, demoPlayback );
+}
+
+static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
 	int		inwater;
 	const char *cstr;
 	float mSensitivity = cg.zoomSensitivity;
@@ -2487,6 +2511,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	// set up cg.snap and possibly cg.nextSnap
 	CG_ProcessSnapshots();
+	if ( !cg.secondEye ) {
+		CG_VR_NetStats();	// OpenJK VR: how smoothly the game arrives (vrdebug.log)
+	}
 
 	trap->ROFF_UpdateEntities();
 

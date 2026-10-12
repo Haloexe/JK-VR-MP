@@ -1375,6 +1375,10 @@ qboolean	G_VRSaberBlocksAnimated( gentity_t *self, int saberNum, int bladeNum, c
 qboolean	G_VRSaberHeldBox( gentity_t *ent );
 void		G_VRSaberGuard( gentity_t *self );
 void		G_VRSaberEndFrame( void );
+void		G_VRSaberBladeOrigin( gentity_t *ent, const vec3_t origin );
+qboolean	G_VRSaberDefersHit( gentity_t *attacker, gentity_t *victim, int saberNum );
+void		G_VRSaberDeferHit( gentity_t *attacker, gentity_t *victim, const vec3_t dir, const vec3_t spot, int dmg, int dflags,
+				int saberNum, int bladeNum );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //

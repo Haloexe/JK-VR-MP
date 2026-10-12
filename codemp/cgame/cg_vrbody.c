@@ -325,6 +325,57 @@ static void QDECL CG_VRB_Log( const char *fmt, ... ) {
 	trap->FS_Write( text, strlen( text ), vrbLogFile );
 }
 
+// (the log) Every 10 s in a game: how smoothly the server's snapshots
+// arrive, and how far behind the newest one everything is drawn - other
+// players move between two snapshots, and when the next one is late they
+// stop where they were last seen (which reads as jitter).
+static struct {
+	int		start;				// cg.time the window began (0: not yet)
+	int		frames, noNext;		// frames drawn; ...with no next snapshot to move toward
+	int		lastNum, snaps;		// newest snapshot number seen; how many arrived
+	int		lastArrive, worstGap;	// real time (ms) the last one arrived; the longest wait
+	int		pingSum, behindSum;
+} vrbNet;
+
+void CG_VR_NetStats( void ) {
+	int num, time, now;
+
+	if ( !cg_vrLog.integer || !cg.snap || cg.demoPlayback ) {
+		vrbNet.start = 0;
+		return;
+	}
+	trap->GetCurrentSnapshotNumber( &num, &time );
+	now = trap->Milliseconds();
+	if ( !vrbNet.start || cg.time < vrbNet.start ) {
+		memset( &vrbNet, 0, sizeof( vrbNet ) );
+		vrbNet.start = cg.time;
+		vrbNet.lastNum = num;
+		vrbNet.lastArrive = now;
+		return;
+	}
+	if ( num != vrbNet.lastNum ) {
+		vrbNet.snaps += num - vrbNet.lastNum;
+		vrbNet.lastNum = num;
+		vrbNet.worstGap = Q_max( vrbNet.worstGap, now - vrbNet.lastArrive );
+		vrbNet.lastArrive = now;
+	}
+	vrbNet.frames++;
+	if ( !cg.nextSnap ) {
+		vrbNet.noNext++;
+	}
+	vrbNet.pingSum += cg.snap->ping;
+	vrbNet.behindSum += time - cg.time;
+	if ( cg.time - vrbNet.start >= 10000 && vrbNet.frames ) {
+		const float secs = ( cg.time - vrbNet.start ) * 0.001f;
+		CG_VRB_Log( "net: %.1f snapshots/s (longest wait %i ms), ping %i ms; drawn %i ms behind the newest; "
+			"%.1f%% of %i frames had no newer snapshot to move toward\n", vrbNet.snaps / secs, vrbNet.worstGap,
+			vrbNet.pingSum / vrbNet.frames, vrbNet.behindSum / vrbNet.frames, 100.0f * vrbNet.noNext / vrbNet.frames,
+			vrbNet.frames );
+		vrbNet.start = cg.time;
+		vrbNet.frames = vrbNet.noNext = vrbNet.snaps = vrbNet.worstGap = vrbNet.pingSum = vrbNet.behindSum = 0;
+	}
+}
+
 // (the log) A copy of a model file next to the log (vrdump/), once: the
 // body, its skeleton and the saber, so the hands can be studied in detail
 // away from the game. Returns the size copied (0: none, or already there).

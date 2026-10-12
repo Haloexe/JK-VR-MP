@@ -176,6 +176,7 @@ XCVAR_DEF( g_vrSaberLight,				"1.8 5.3 40 150",	CVU_VRSaberWeights,	CVAR_ARCHIVE
 XCVAR_DEF( g_vrSaberLog,					"1",			NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_vrSaberMedium,				"2.5 7.1 65 220",	CVU_VRSaberWeights,	CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberSpeedScale,			"1",			NULL,						CVAR_ARCHIVE,									qtrue )
+XCVAR_DEF( g_vrSaberUnlag,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_warmup,					"20",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_weaponDisable,				"0",			NULL,						CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_LATCH,		qtrue )
 XCVAR_DEF( g_weaponRespawn,				"5",			NULL,						CVAR_NONE,										qtrue )
