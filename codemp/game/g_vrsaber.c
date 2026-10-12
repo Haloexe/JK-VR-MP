@@ -76,7 +76,8 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_THROUGH_MS	200		// a blow that broke a guard cuts for half damage this long
 #define VR_SABER_BURN		1		// damage of a blade just touching someone
 #define VR_SABER_ACTIVITY	8.0f	// moving a hand this far counts as activity (g_inactivity)
-#define VR_SABER_TWO_HANDS	30.0f	// two hands on one hilt are no further apart than this
+#define VR_SABER_TWO_HANDS	40.0f	// two hands on one hilt are no further apart than this (the client lets
+									// go 24 from where it holds, which can be a hilt-length from the first)
 #define VR_UNITS_PER_METRE	34.0f	// (default vr_worldScale) for the m/s in prints and the weight cvars
 
 typedef struct vrSaberSample_s {

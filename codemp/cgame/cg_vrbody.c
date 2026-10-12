@@ -69,6 +69,12 @@ static const char *const vrbHandBones[2][VRB_MAX_HAND_BONES] = {
 	  "r_d4_j1", "r_d4_j2", "r_d4_j3", "r_d5_j1", "r_d5_j2", "r_d5_j3" },
 };
 
+// The fingers that close round a hilt: thumb, index, and the rest (the
+// humanoid skeleton moves the last three together), each a first and a
+// second joint, as indices into vrbHandBones.
+#define VRB_FINGERS			3
+static const int vrbFingerJ1[VRB_FINGERS] = { 2, 5, 11 };	// r_d1_j1, r_d2_j1, r_d4_j1 (j2 is the next one)
+
 // G2API_GetBoltMatrix hands game code its axes relabelled ("this 90 degree
 // offset thing", G2_API.cpp). The overrides need the bone's real axes. The
 // relabelling is undone one way below; the arm solver also checks its own
@@ -106,9 +112,9 @@ typedef struct {
 
 // both hands on one saber
 #define VRB_GRAB_REACH		5.0f	// a hand this close to the other hand's hilt can take hold of it
-#define VRB_GRAB_BREAK		9.0f	// ...and lets go when pulled this far from its place on it
+#define VRB_GRAB_BREAK		24.0f	// ...and lets go only when pulled this far from its place on it
 #define VRB_HAND_GAP		3.5f	// two hands on a hilt are at least a hand's width apart
-#define VRB_HILT_BELOW		8.0f	// a second hand on a single saber holds it this far below the first at most
+#define VRB_HILT_BELOW		6.5f	// a second hand on a single saber holds it this far below the first at most
 #define VRB_TWO_HAND_IN		0.08f	// seconds the hands take to settle onto the hilt together...
 #define VRB_TWO_HAND_OUT	0.15f	// ...and to come apart again
 
@@ -158,6 +164,10 @@ static struct {
 	char		probeModel[MAX_QPATH];
 	qboolean	wristOk[2];
 	qboolean	handBoneTurn[2][VRB_MAX_HAND_BONES];
+	qboolean	fingerUnderJ1[2][3];	// a finger's second joint hangs off its first (VRB_FINGERS)
+	void		*curlG2;				// fingers curled round a hilt on this instance (CG_VRB_CurlFingers)
+	float		curlLog[2][3];			// (the log: how far each finger closed, degrees...
+	float		curlOff[2];				// ...and how far the hand was from the hilt's axis; -1: not holding one)
 
 	// per arm
 	vec3_t		pole[2];			// smoothed elbow direction, body-local
@@ -439,6 +449,26 @@ static void VRB_Slerp( const vec3_t a, const vec3_t b, float f, vec3_t out ) {
 	}
 }
 
+static void VRB_RotZ( const vec3_t in, float deg, vec3_t out ) {
+	const float r = DEG2RAD( deg ), c = cosf( r ), sn = sinf( r );
+	const float x = in[0] * c - in[1] * sn, y = in[0] * sn + in[1] * c;
+
+	out[0] = x;
+	out[1] = y;
+	out[2] = in[2];
+}
+
+// v turned about the unit axis k by a radians
+static void VRB_Rotate( const vec3_t v, const vec3_t k, float a, vec3_t out ) {
+	const float c = cosf( a ), sn = sinf( a ), kv = DotProduct( k, v );
+	vec3_t kxv, t;
+
+	CrossProduct( k, v, kxv );
+	VectorScale( v, c, t );
+	VectorMA( t, sn, kxv, t );
+	VectorMA( t, kv * ( 1.0f - c ), k, out );
+}
+
 static void VRB_RotateFrame( vrbMat_t q, vec3_t in[3], vec3_t out[3] ) {
 	VRB_Apply( q, in[0], out[0] );
 	VRB_Apply( q, in[1], out[1] );
@@ -607,10 +637,14 @@ static void CG_VRB_SetHandBones( void *g2, int h, const mdxaBone_t *m ) {
 }
 
 // Back to the animated pose: no arm overrides, wrists straight.
+static void CG_VRB_ClearCurl( void *g2 );
+
 static void CG_VRB_ResetArms( void *g2 ) {
 	static const vec3_t zero = { 0.0f, 0.0f, 0.0f };
 	static const mdxaBone_t identity = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } } };
 	int h;
+
+	CG_VRB_ClearCurl( g2 );
 
 	for ( h = 0; h < 2; h++ ) {
 		trap->G2API_SetBoneAngles( g2, 0, vrbArmBones[h][VRB_UPPER], zero, BONE_ANGLES_POSTMULT,
@@ -690,6 +724,7 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 					if ( vrb.handBoneTurn[h][k] && CG_VRB_ModelSpaceBone( g2, bolt[k], after ) &&
 						Distance( before[k], after ) > 12.0f ) {
 						vrb.handBoneTurn[h][k] = qfalse;
+						trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][k], NULL );	// (not cleared below now)
 						dropped = qtrue;
 						break;		// one at a time: its parent may be the next to go
 					}
@@ -701,6 +736,24 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 			}
 			for ( k = 0, turned = 0; k < VRB_MAX_HAND_BONES; k++ ) {
 				turned += vrb.handBoneTurn[h][k] ? 1 : 0;
+			}
+		}
+
+		// each finger: does its second joint hang off its first? (curling it
+		// round a hilt turns them one after the other, CG_VRB_CurlFingers)
+		{
+			int f;
+			for ( f = 0; f < VRB_FINGERS; f++ ) {
+				const int j1 = vrbFingerJ1[f], j2 = j1 + 1;
+				vrb.fingerUnderJ1[h][f] = qfalse;
+				if ( bolt[j1] < 0 || bolt[j2] < 0 ||
+					!trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][j1], &test ) ) {
+					continue;
+				}
+				if ( CG_VRB_ModelSpaceBone( g2, bolt[j2], after ) && Distance( before[j2], after ) > 4.0f ) {
+					vrb.fingerUnderJ1[h][f] = qtrue;
+				}
+				trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][j1], NULL );
 			}
 		}
 
@@ -722,29 +775,247 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 
 // Turns the hand (and the bones that make it up) by world rotation D about
 // the world point "wrist".
-static void CG_VRB_TurnWrist( centity_t *cent, int h, vrbMat_t D, const vec3_t wrist ) {
-	mdxaBone_t m;
+// A turn R about the world point p, as the model-space transform Ghoul2 puts
+// on top of a bone (G2API_SetBoneVRTransform).
+static void CG_VRB_ModelTurn( centity_t *cent, vrbMat_t R, const vec3_t p, mdxaBone_t *m ) {
 	matrix3_t ax;
-	vec3_t col, p;
+	vec3_t col, q;
 	int r, c;
 
-	if ( !vrb.wristOk[h] || vrb.probeG2 != cent->ghoul2 ) {
-		return;
-	}
-	// D in the model's own space, and the wrist there
 	AnglesToAxis( cent->turAngles, ax );
 	for ( c = 0; c < 3; c++ ) {
-		VRB_Apply( D, ax[c], col );
+		VRB_Apply( R, ax[c], col );
 		for ( r = 0; r < 3; r++ ) {
-			m.matrix[r][c] = DotProduct( ax[r], col );
+			m->matrix[r][c] = DotProduct( ax[r], col );
 		}
 	}
-	CG_VRB_WorldToModel( cent, wrist, p );
+	CG_VRB_WorldToModel( cent, p, q );
 	for ( r = 0; r < 3; r++ ) {
-		m.matrix[r][3] = p[r] - ( m.matrix[r][0] * p[0] + m.matrix[r][1] * p[1] + m.matrix[r][2] * p[2] );
+		m->matrix[r][3] = q[r] - ( m->matrix[r][0] * q[0] + m->matrix[r][1] * q[1] + m->matrix[r][2] * q[2] );
 	}
-	CG_VRB_SetHandBones( cent->ghoul2, h, &m );
+}
+
+// a after b
+static void VRB_Compose( const mdxaBone_t *a, const mdxaBone_t *b, mdxaBone_t *out ) {
+	mdxaBone_t t;
+	int r, c;
+
+	for ( r = 0; r < 3; r++ ) {
+		for ( c = 0; c < 4; c++ ) {
+			t.matrix[r][c] = a->matrix[r][0] * b->matrix[0][c] + a->matrix[r][1] * b->matrix[1][c] +
+				a->matrix[r][2] * b->matrix[2][c] + ( c == 3 ? a->matrix[r][3] : 0.0f );
+		}
+	}
+	*out = t;
+}
+
+// Turns the hand about the wrist (and says how, in model space: m).
+static qboolean CG_VRB_TurnWrist( centity_t *cent, int h, vrbMat_t D, const vec3_t wrist, mdxaBone_t *m ) {
+	if ( !vrb.wristOk[h] || vrb.probeG2 != cent->ghoul2 ) {
+		return qfalse;
+	}
+	CG_VRB_ModelTurn( cent, D, wrist, m );
+	CG_VRB_SetHandBones( cent->ghoul2, h, m );
 	vrb.wristG2 = cent->ghoul2;
+	return qtrue;
+}
+
+/*
+=================
+CG_VRB_CurlFingers
+
+A hand holding a hilt closes its fingers round it. The animations hold a
+hilt loosely or not at all (running, jumping, and the second hand on a
+hilt), so each finger - thumb, index, the rest - is turned at its first
+joint and then its second, about lines along the hilt, until it lies
+against it: a fist round the hilt whatever the body does, on any model.
+=================
+*/
+
+#define VRB_GRIP_RADIUS		1.0f	// finger joints lie this far from the hilt's axis
+#define VRB_CURL_NEAR		2.0f	// the hand (its held-item tag) this near the hilt's axis closes fully...
+#define VRB_CURL_FAR		4.0f	// ...and not at all from this far
+
+static float CG_VRB_AxisDistance( const vec3_t p, const vec3_t o, const vec3_t u ) {
+	vec3_t rel;
+
+	VectorSubtract( p, o, rel );
+	VectorMA( rel, -DotProduct( rel, u ), u, rel );
+	return VectorLength( rel );
+}
+
+// How far (radians, about +u) to turn 'child' about the line through 'pivot'
+// along u for it to lie rho from the hilt's axis (o, u): closing round the
+// hilt by up to maxDeg, or opening by up to 30 degrees if it is inside it.
+static float CG_VRB_CurlAngle( const vec3_t pivot, const vec3_t child, const vec3_t o, const vec3_t u, float maxDeg ) {
+	const float d0 = CG_VRB_AxisDistance( child, o, u );
+	vec3_t rel, p;
+	float closing, sign, deg, best = 0.0f, bestErr = fabsf( d0 - VRB_GRIP_RADIUS );
+	int i;
+
+	VectorSubtract( child, pivot, rel );
+	{
+		// (a bone lying along the hilt would only roll about itself)
+		const float len = VectorLength( rel ), along = DotProduct( rel, u );
+		if ( len < 0.05f || len * len - along * along < Square( 0.3f * len ) ) {
+			return 0.0f;
+		}
+	}
+	// the closing way: the one that brings it nearer the axis
+	VRB_Rotate( rel, u, DEG2RAD( 2.0f ), p );
+	VectorAdd( p, pivot, p );
+	closing = ( CG_VRB_AxisDistance( p, o, u ) < d0 ) ? 1.0f : -1.0f;
+	sign = ( d0 > VRB_GRIP_RADIUS ) ? closing : -closing;
+	for ( i = 1; i <= 60; i++ ) {
+		float d, err;
+		deg = 2.0f * i;
+		if ( deg > ( sign == closing ? maxDeg : 30.0f ) ) {
+			break;
+		}
+		VRB_Rotate( rel, u, sign * DEG2RAD( deg ), p );
+		VectorAdd( p, pivot, p );
+		d = CG_VRB_AxisDistance( p, o, u );
+		err = fabsf( d - VRB_GRIP_RADIUS );
+		if ( err < bestErr ) {
+			bestErr = err;
+			best = sign * DEG2RAD( deg );
+		}
+		if ( sign == closing ? d <= VRB_GRIP_RADIUS : d >= VRB_GRIP_RADIUS ) {
+			break;	// (got there)
+		}
+	}
+	return best;
+}
+
+// Rotation by a radians about the unit axis u.
+static void VRB_AxisAngle( const vec3_t u, float a, vrbMat_t R ) {
+	static const vec3_t basis[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+	vec3_t col;
+	int r, c;
+
+	for ( c = 0; c < 3; c++ ) {
+		VRB_Rotate( basis[c], u, a, col );
+		for ( r = 0; r < 3; r++ ) {
+			R[r][c] = col[r];
+		}
+	}
+}
+
+// (after the arm and wrist are posed; H: the wrist turn already on the bones
+// that turn with the hand, in model space; strength: 0..1 of the full curl)
+static void CG_VRB_CurlFingers( centity_t *cent, int h, const mdxaBone_t *H, const vec3_t o, const vec3_t hiltDir, float strength ) {
+	vrbBone_t b1[VRB_FINGERS], b2[VRB_FINGERS], tag;
+	qboolean have[VRB_FINGERS];
+	vec3_t u;
+	int f;
+
+	VectorCopy( hiltDir, u );
+	if ( !trap->ext.VR_G2SetBoneTransform || VectorNormalize( u ) < 0.5f || strength <= 0.0f ) {
+		return;
+	}
+	// every finger first, then the turns (setting one rebuilds the skeleton
+	// for the next query, and the fingers don't move each other)
+	if ( !CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) ) {
+		return;
+	}
+	for ( f = 0; f < VRB_FINGERS; f++ ) {
+		const int j1 = vrbFingerJ1[f];
+		have[f] = CG_VRB_Bone( cent, vrbHandBones[h][j1], 1, &b1[f] ) && CG_VRB_Bone( cent, vrbHandBones[h][j1 + 1], 1, &b2[f] );
+	}
+	// only a hand that is at the hilt closes round it (not one the arm
+	// couldn't reach it with, or one beside a saber bolted to the wrist)
+	vrb.curlOff[h] = CG_VRB_AxisDistance( tag.origin, o, u );
+	strength *= Com_Clamp( 0.0f, 1.0f, ( VRB_CURL_FAR - vrb.curlOff[h] ) / ( VRB_CURL_FAR - VRB_CURL_NEAR ) );
+	if ( strength <= 0.0f ) {
+		return;
+	}
+	for ( f = 0; f < VRB_FINGERS; f++ ) {
+		const int j1 = vrbFingerJ1[f], j2 = j1 + 1;
+		vrbMat_t R1, R2;
+		mdxaBone_t C1, C2, m;
+		vec3_t seg, tipDir, tip, p2, rel;
+		float len, best = 0.0f, a1, a2;
+		int k, along = 0;
+
+		if ( !have[f] ) {
+			continue;
+		}
+		VectorSubtract( b2[f].origin, b1[f].origin, seg );
+		len = VectorNormalize( seg );
+		if ( len < 0.2f ) {
+			continue;
+		}
+		// the finger beyond its second joint: that joint's own axis that runs
+		// the way the first joint's runs along the finger
+		for ( k = 0; k < 3; k++ ) {
+			const float d = DotProduct( b1[f].axis[k], seg );
+			if ( fabsf( d ) > fabsf( best ) ) {
+				best = d;
+				along = k;
+			}
+		}
+		VectorScale( b2[f].axis[along], best < 0.0f ? -1.0f : 1.0f, tipDir );
+		VectorMA( b2[f].origin, 0.9f * len, tipDir, tip );
+
+		// close the first joint till the second lies against the hilt, then
+		// the second till the fingertip does (then only as much of both as
+		// strength says)
+		a1 = CG_VRB_CurlAngle( b1[f].origin, b2[f].origin, o, u, 70.0f );
+		VRB_AxisAngle( u, a1, R1 );
+		VectorSubtract( b2[f].origin, b1[f].origin, rel );
+		VRB_Apply( R1, rel, rel );
+		VectorAdd( b1[f].origin, rel, p2 );
+		VectorSubtract( tip, b1[f].origin, rel );
+		VRB_Apply( R1, rel, rel );
+		VectorAdd( b1[f].origin, rel, tip );
+		a2 = strength * CG_VRB_CurlAngle( p2, tip, o, u, 100.0f );
+		if ( strength < 1.0f ) {
+			a1 *= strength;
+			VRB_AxisAngle( u, a1, R1 );
+			VectorSubtract( b2[f].origin, b1[f].origin, rel );
+			VRB_Apply( R1, rel, rel );
+			VectorAdd( b1[f].origin, rel, p2 );
+		}
+		VRB_AxisAngle( u, a2, R2 );
+		CG_VRB_ModelTurn( cent, R1, b1[f].origin, &C1 );
+		CG_VRB_ModelTurn( cent, R2, p2, &C2 );
+
+		// on top of what each bone already has (the wrist turn) - the
+		// second joint gets the first one's turn from it if it hangs off it
+		if ( vrb.handBoneTurn[h][j1] ) {
+			VRB_Compose( &C1, H, &m );
+		} else {
+			m = C1;
+		}
+		trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbHandBones[h][j1], &m );
+		if ( !vrb.fingerUnderJ1[h][f] ) {
+			VRB_Compose( &C2, &C1, &C2 );
+			if ( vrb.handBoneTurn[h][j2] ) {
+				VRB_Compose( &C2, H, &C2 );
+			}
+		}
+		trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbHandBones[h][j2], &C2 );
+		vrb.curlG2 = cent->ghoul2;
+		vrb.curlLog[h][f] = RAD2DEG( fabsf( a1 ) + fabsf( a2 ) );
+	}
+}
+
+// The fingers back to what the animation (and the wrist turn) does.
+static void CG_VRB_ClearCurl( void *g2 ) {
+	int h, f;
+
+	memset( vrb.curlLog, 0, sizeof( vrb.curlLog ) );
+	vrb.curlOff[0] = vrb.curlOff[1] = -1.0f;
+	if ( vrb.curlG2 != g2 || !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	for ( h = 0; h < 2; h++ ) {
+		for ( f = 0; f < VRB_FINGERS; f++ ) {
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][vrbFingerJ1[f]], NULL );
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][vrbFingerJ1[f] + 1], NULL );
+		}
+	}
+	vrb.curlG2 = NULL;
 }
 
 /*
@@ -1332,26 +1603,6 @@ static const float	vrbBladeOmega[3] = { 160.0f, 80.0f, 48.0f };	// rad/s: light,
 static const float	vrbBladeMaxLag[3] = { 20.0f, 35.0f, 50.0f };	// degrees behind the hand at most
 static const int	vrbBladeHold[3] = { 35, 55, 75 };				// ms another blade stops it for
 
-static void VRB_RotZ( const vec3_t in, float deg, vec3_t out ) {
-	const float r = DEG2RAD( deg ), c = cosf( r ), sn = sinf( r );
-	const float x = in[0] * c - in[1] * sn, y = in[0] * sn + in[1] * c;
-
-	out[0] = x;
-	out[1] = y;
-	out[2] = in[2];
-}
-
-// v turned about the unit axis k by a radians
-static void VRB_Rotate( const vec3_t v, const vec3_t k, float a, vec3_t out ) {
-	const float c = cosf( a ), sn = sinf( a ), kv = DotProduct( k, v );
-	vec3_t kxv, t;
-
-	CrossProduct( k, v, kxv );
-	VectorScale( v, c, t );
-	VectorMA( t, sn, kxv, t );
-	VectorMA( t, kv * ( 1.0f - c ), k, out );
-}
-
 // world yaw minus room (tracking) yaw
 static float CG_VRB_RoomYaw( const vrClientState_t *vr ) {
 	return VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw;
@@ -1803,11 +2054,35 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	CG_VRB_SetBone( cent->ghoul2, vrbArmBones[h][VRB_FORE], cur, want );
 
 	// Wrist: the bend that's left (Y = D X), about the wrist
-	if ( cg_vrBodyWrist.integer ) {
-		vrbMat_t D;
-		VRB_Apply( Y, f0, tmp );
-		VRB_Arc( f1, tmp, D );
-		CG_VRB_TurnWrist( cent, h, D, Wt );
+	{
+		static const mdxaBone_t identity = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } } };
+		mdxaBone_t H = identity;
+		if ( cg_vrBodyWrist.integer ) {
+			vrbMat_t D;
+			VRB_Apply( Y, f0, tmp );
+			VRB_Arc( f1, tmp, D );
+			if ( !CG_VRB_TurnWrist( cent, h, D, Wt, &H ) ) {
+				H = identity;
+			}
+		}
+
+		// fingers closed round whatever hilt the hand holds
+		if ( grip->kind == VRB_GRIP_HILT ) {
+			// (only while it holds it, closing as it settles on)
+			CG_VRB_CurlFingers( cent, h, &H, grip->origin, grip->dir, vrb.twoHand ? grip->blend : 0.0f );
+		} else if ( grip->kind == VRB_GRIP_SABER && have[VRB_TAG] ) {
+			vrbBone_t tag;
+			mdxaBone_t m;
+			vec3_t emitter, blade;
+			// (a model-0 bone first: that rebuilds the skeleton the saber hangs on)
+			if ( CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) &&
+				trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 0, &m, cent->turAngles,
+					cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale ) ) {
+				BG_GiveMeVectorFromMatrix( &m, ORIGIN, emitter );
+				BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, blade );
+				CG_VRB_CurlFingers( cent, h, &H, emitter, blade, 1.0f );
+			}
+		}
 	}
 
 	if ( commit ) {
@@ -2316,6 +2591,10 @@ static void CG_VRB_LogHands( centity_t *cent ) {
 			"%.1f %.1f from the hilt%s%s\n", CG_VRB_AnimName( ps->torsoAnim ), CG_VRB_AnimName( ps->legsAnim ),
 			ps->saberMove, ps->fd.saberAnimLevel, ps->saberHolstered, ps->forceHandExtend, index, middle,
 			left >= 0.0f ? va( " | two hands, left fingertip %.1f", left ) : "", ps->weaponTime > 0 ? " | busy" : "" );
+		CG_VRB_Log( "fingers closed round the hilt (thumb, index, rest; degrees): right %.0f %.0f %.0f (hand %.1f off its axis), "
+			"left %.0f %.0f %.0f (%.1f off)\n",
+			vrb.curlLog[VR_HAND_RIGHT][0], vrb.curlLog[VR_HAND_RIGHT][1], vrb.curlLog[VR_HAND_RIGHT][2], vrb.curlOff[VR_HAND_RIGHT],
+			vrb.curlLog[VR_HAND_LEFT][0], vrb.curlLog[VR_HAND_LEFT][1], vrb.curlLog[VR_HAND_LEFT][2], vrb.curlOff[VR_HAND_LEFT] );
 		vrb.logTorso = ps->torsoAnim;
 		vrb.logTip = index;
 		vrb.logPrinted = cg.time;

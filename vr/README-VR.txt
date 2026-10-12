@@ -118,8 +118,12 @@ buzz, and while you hold the grip the saber is in both hands:
   * Your left hand grips the hilt where it took hold: it doesn't slide
     along it or turn round it. To hold it somewhere else, let go and take
     hold again.
-  * Let go of the grip to let go (or pull your hand well away from the
-    hilt). Taking hold and letting go settle smoothly over a few frames.
+  * Let go of the grip to let go. Moving your hands about doesn't make it
+    slip off: only pulling your left hand a long way (about 70 cm) from
+    where it holds breaks the hold. Taking hold and letting go settle
+    smoothly over a few frames.
+  * Both hands close their fingers round the hilt whatever the body is
+    doing (running, jumping, flipping), rather than holding it open-handed.
   * Near the hilt the left grip takes hold instead of using the Force;
     anywhere else it uses the Force as usual. cg_vrTwoHand 0 turns taking
     hold off.
