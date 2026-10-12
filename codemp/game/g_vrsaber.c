@@ -934,6 +934,14 @@ static int VRS_Strength( const vrSaberWeight_t *w, float speed ) {
 	return w->strength + ( speed >= w->fullSpeed * VRS_SpeedScale() ? 1 : 0 );
 }
 
+// Does a blow (strength, at speed) break the guard or attack it meets
+// (theirs) and carry on through? Only a heavy blade swung at full speed,
+// and only one two or more stronger; anything less is parried.
+static qboolean VRS_Breaks( const vrSaberWeight_t *w, float speed, int strength, int theirs ) {
+	return (qboolean)( ( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] ) &&
+		speed >= w->fullSpeed * VRS_SpeedScale() && strength >= theirs + 2 );
+}
+
 // Swinging at someone does what starting an attack does: spawn protection
 // ends, and bots take note.
 static void VRS_Attacked( gentity_t *self ) {
@@ -994,14 +1002,14 @@ static float VRS_BladeSpeedAt( vrSaberState_t *ovs, const vrsOtherBlade_t *ob, c
 // Our blade, swinging at this speed, hit another VR player's blade: both
 // sweeps see this contact, so the faster blade's owner decides - the
 // stronger blow wins (weight, plus one for a full-speed swing), a heavy
-// blow two or more stronger goes on through - and their blade recovers the
-// other way round. (Animated blades: VRS_MeetAnimated.)
+// one at full speed two or more stronger goes on through (VRS_Breaks) -
+// and their blade recovers the other way round. (Animated blades:
+// VRS_MeetAnimated.)
 static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, vec3_t point, float speed ) {
 	gentity_t *other = ob->ent;
 	const vrSaberWeight_t *w = VRS_Weight( self );
 	const vrSaberWeight_t *ow = VRS_Weight( other );
 	const int strength = VRS_Strength( w, speed );
-	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] );
 	vrSaberState_t *ovs = VRS_State( other );
 	const float theirSpeed = VRS_BladeSpeedAt( ovs, ob, point );
 	const int theirs = VRS_Strength( ow, theirSpeed );
@@ -1011,7 +1019,7 @@ static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, ve
 	if ( theirSpeed > speed ) {
 		return VRS_CLASH_HELD;
 	}
-	if ( heavy && strength >= theirs + 2 ) {
+	if ( VRS_Breaks( w, speed, strength, theirs ) ) {
 		result = VRS_CLASH_THROUGH;
 		recover = 2 * ow->recover;
 	} else if ( strength > theirs ) {
@@ -1132,16 +1140,15 @@ static struct {
 // blade stops: it cuts nothing for a moment. An attack meeting the VR blade
 // bounces off - a stronger swing (or a much stronger guard) knocks it away,
 // a much stronger attack jars the VR blade; a VR swing into a guard is
-// parried, or breaks it if two stronger (heavy blows go on through). Sparks
-// fly back from the faster blade (moveDir). Returns qtrue if the VR blade
-// goes on through.
+// parried, unless it's a heavy one at full speed two stronger, which
+// breaks it and goes on through (VRS_Breaks). Sparks fly back from the
+// faster blade (moveDir). Returns qtrue if the VR blade goes on through.
 static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other, int saberNum, int bladeNum,
 	vec3_t point, const vec3_t moveDir, float speed ) {
 	vrSaberState_t *vs = VRS_State( vr );
 	gclient_t *ocl = other->client;
 	const vrSaberWeight_t *w = VRS_Weight( vr );
 	const vrSaberWeight_t *ow = VRS_Weight( other );
-	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] );
 	const qboolean swing = (qboolean)( speed >= w->minSpeed * VRS_SpeedScale() );
 	const qboolean attacking = WP_VR_SaberAttacking( other );
 	const int strength = VRS_Strength( w, speed );
@@ -1191,7 +1198,7 @@ static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other,
 		// their attack can't go through the VR blade
 		if ( swing ? ( strength > theirs ) : ( strength >= theirs + 2 ) ) {
 			WP_VR_KnockAttack( other );
-			through = (qboolean)( swing && heavy && strength >= theirs + 2 );
+			through = (qboolean)( swing && VRS_Breaks( w, speed, strength, theirs ) );
 			result = through ? "knocked away, broke through" : "knocked away";
 		} else {
 			ocl->ps.saberBlocked = BLOCKED_ATK_BOUNCE;
@@ -1205,11 +1212,11 @@ static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other,
 			jarred = ", jarring the VR blade";
 		}
 	} else if ( swing ) {
-		// a VR swing into their guard
-		if ( strength >= theirs + 2 ) {
+		// a VR swing into their guard: only a full-speed heavy blow breaks it
+		if ( VRS_Breaks( w, speed, strength, theirs ) ) {
 			WP_VR_BreakParry( other, point );
-			through = heavy;
-			result = heavy ? "broke the guard, through" : "broke the guard";
+			through = qtrue;
+			result = "broke the guard, through";
 		} else {
 			WP_SaberBlockNonRandom( other, point, qfalse );
 			result = "parried";

@@ -155,10 +155,12 @@ server running this build: your real blade is the weapon.
     When they meet they spark, your hand buzzes hard, and the swinging
     blade can't cut for a moment while it recovers. The stronger blow wins:
     weight, plus one if the swing was at full speed. Your swing into a
-    bot's guard is parried, or breaks it if two stronger; into its swing,
-    both bounce and the weaker blade reels twice as long (a weaker bot
-    swing is knocked away). A heavy blow that out-weighs a guard by two
-    breaks it and carries on through, cutting for half damage. A bot's
+    bot's guard is parried; into its swing, both bounce and the weaker
+    blade reels twice as long (a weaker bot swing is knocked away). Only a
+    heavy blade swung at full speed breaks a guard - and only one it
+    out-weighs by two (a heavy guard holds against a one-handed blow, not
+    a two-handed one) - and carries on through, cutting for half damage.
+    Anything slower is parried, however heavy. A bot's
     swing that meets your blade held still bounces off it (a much stronger
     guard knocks it away; a much stronger swing jars your guard for a
     moment); one that misses your blade lands.
@@ -172,7 +174,7 @@ server running this build: your real blade is the weapon.
                              recovers quickly after a clash
       medium (medium style)  up to 65 damage
       heavy  (strong style)  needs big swings, up to 100 damage, breaks
-                             through guards, recovers slowly
+                             through guards at full speed, recovers slowly
     Dual sabers are two medium blades, and the staff is medium too. With
     dual sabers the right stick click switches the left one off instead;
     the right one is then a light saber, as in the normal game. With the
