@@ -3319,6 +3319,7 @@ void G_RunFrame( int levelTime ) {
 				WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
 				WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
 				WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
+				G_VRSaberGuard( ent );	// OpenJK VR: a bot sees a VR swing coming
 			}
 
 			if (g_allowNPC.integer)
@@ -3346,6 +3347,7 @@ void G_RunFrame( int levelTime ) {
 			WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
 			WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
 			WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
+			G_VRSaberGuard( ent );	// OpenJK VR
 		}
 
 		G_RunThink( ent );

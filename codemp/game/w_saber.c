@@ -4056,6 +4056,33 @@ static QINLINE qboolean CheckSaberDamage(gentity_t *self, int rSaberNum, int rBl
 		saberTraceDone = qtrue;
 	}
 
+	{ //OpenJK VR: the box round a VR player's saber stops nothing - its blade stops a blade only
+	  //where it really meets it (G_VRSaberBlocksAnimated): on to whatever is behind it
+		gentity_t *vrBoxes[4];
+		int numVrBoxes = 0;
+
+		while ( numVrBoxes < 4 && ( tr.fraction != 1.0f || tr.startsolid ) && tr.entityNum < ENTITYNUM_WORLD &&
+			( g_entities[tr.entityNum].r.contents & CONTENTS_LIGHTSABER ) && G_VRSaberHeldBox( &g_entities[tr.entityNum] ) )
+		{
+			vrBoxes[numVrBoxes] = &g_entities[tr.entityNum];
+			vrBoxes[numVrBoxes]->r.contents &= ~CONTENTS_LIGHTSABER;	//(just for this trace)
+			numVrBoxes++;
+			trap->Trace( &tr, lastValidStart, saberTrMins, saberTrMaxs, lastValidEnd, self->s.number, trMask, qfalse, 0, 0 );
+			if ( tr.entityNum < MAX_CLIENTS )
+			{
+				G_G2TraceCollide( &tr, lastValidStart, lastValidEnd, saberTrMins, saberTrMaxs );
+			}
+			else if ( tr.entityNum < ENTITYNUM_WORLD && g_entities[tr.entityNum].inuse && g_entities[tr.entityNum].ghoul2 )
+			{
+				G_G2TraceCollide( &tr, lastValidStart, lastValidEnd, saberTrMins, saberTrMaxs );
+			}
+		}
+		while ( numVrBoxes > 0 )
+		{
+			vrBoxes[--numVrBoxes]->r.contents |= CONTENTS_LIGHTSABER;
+		}
+	}
+
 	if ( self->client->ps.saberAttackWound < level.time
 		&& (SaberAttacking(self)
 			|| BG_SuperBreakWinAnim(self->client->ps.torsoAnim)
@@ -8933,6 +8960,9 @@ nextStep:
 				if ( vrBlade )
 				{ //OpenJK VR: the blade in the player's hand cuts as fast as it really moves
 					G_VRSaberSweep( self, rSaberNum, rBladeNum );
+				}
+				else if ( G_VRSaberBlocksAnimated( self, rSaberNum, rBladeNum, boltOrigin, end ) )
+				{ //OpenJK VR: a VR player's blade stood in this one's way: it stopped there
 				}
 				else if (self->client->hasCurrentPosition && d_saberInterpolate.integer)
 				{

@@ -148,12 +148,25 @@ server running this build: your real blade is the weapon.
     game's canned swings - your arm swings.
   * Block with it. Only what your blade physically stops is blocked, thrown
     sabers included (no automatic blocks, saber locks or disarms while you
-    hold it). When blades meet they spark, your hand buzzes hard, and the
-    swinging blade can't cut for a moment while it recovers. The stronger
-    blow wins: weight, plus one if the swing was at full speed. The loser
-    recovers twice as long (a bot's guard breaks, its swing is knocked
-    away), and a heavy blow that out-weighs a guard by two breaks it and
-    carries on through, cutting for half damage.
+    hold it). Blades meet only where their cores really touch, at the same
+    moment - not their glow, and not the box round the saber - whether you
+    swing into a bot's blade or its swing comes at yours, and one blade
+    never passes through another (except a heavy blow breaking a guard).
+    When they meet they spark, your hand buzzes hard, and the swinging
+    blade can't cut for a moment while it recovers. The stronger blow wins:
+    weight, plus one if the swing was at full speed. Your swing into a
+    bot's guard is parried, or breaks it if two stronger; into its swing,
+    both bounce and the weaker blade reels twice as long (a weaker bot
+    swing is knocked away). A heavy blow that out-weighs a guard by two
+    breaks it and carries on through, cutting for half damage. A bot's
+    swing that meets your blade held still bounces off it (a much stronger
+    guard knocks it away; a much stronger swing jars your guard for a
+    moment); one that misses your blade lands.
+  * Bots fight back with their guard: they see your swing coming and raise
+    their saber into its path - how often and how quickly goes with their
+    saber defence. It still has to meet your blade to stop it: change the
+    angle or feint and it gets through. g_vrSaberBotGuard 0 turns it off,
+    0.5 makes it half as likely, 2 makes them guard every swing, faster.
   * Saber styles are the blade's weight (right stick click cycles them):
       light  (fast style)    small quick swings cut, up to 40 damage,
                              recovers quickly after a clash
@@ -192,7 +205,9 @@ g_dismember 100 if you want limbs to come off.
 
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
-               which weight, one or two hands - and every cut and clash
+               which weight, one or two hands - every cut and clash, every
+               bot swing your blade stopped, every touch of blades, and
+               every guard a bot raised
   vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, and the
                animation and fingers of the hand holding the saber
 Both are in Documents\My Games\OpenJK-VR\base.

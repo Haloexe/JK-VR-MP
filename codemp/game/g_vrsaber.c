@@ -25,9 +25,14 @@ fights with those blades instead of the animated ones:
 	the same opponent at most once in VR_SABER_CUT_REPEAT ms.
   - A saber held with both hands swings one weight heavier (a heavy one
 	counts one stronger in clashes), and either hand drives the swing.
-  - Blocking is whatever your blade physically stops. Animated attackers
-	(bots, players without VR) collide with the VR blade through the stock
-	saber code, which sees the VR blade as that player's saber.
+  - Blocking is whatever your blade physically stops, both ways: blades
+	meet only where their cores touch, at the same moment (every blade is
+	followed through the frame, a VR one pose by pose, an animated one
+	between its frames). An animated blade (bots, players without VR)
+	that meets a VR blade bounces off it (G_VRSaberBlocksAnimated); the
+	saber's box round a VR blade stops nothing. Bots see a VR swing coming
+	and raise their guard into its path (G_VRSaberGuard) - it has to meet
+	the blade to stop it.
   - The attack button doesn't swing a saber held in VR (the client drops
 	it, and so does the server).
 
@@ -79,6 +84,9 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_TWO_HANDS	40.0f	// two hands on one hilt are no further apart than this (the client lets
 									// go 24 from where it holds, which can be a hilt-length from the first)
 #define VR_UNITS_PER_METRE	34.0f	// (default vr_worldScale) for the m/s in prints and the weight cvars
+#define VR_SABER_CORE		1.5f	// a blade's core: two blades meet where their cores touch (not their glow)
+#define VR_SABER_BLOCK_MS	250		// an animated swing stopped on a VR blade cuts nothing this long
+#define VR_SABER_GUARD_AHEAD 0.25f	// s: how far ahead a bot sees a VR swing coming at it
 
 typedef struct vrSaberSample_s {
 	int				time;			// usercmd serverTime (clamped like ClientThink_real does)
@@ -937,9 +945,18 @@ static void VRS_Attacked( gentity_t *self ) {
 typedef struct {
 	gentity_t	*ent;
 	int			saber, blade;
-	vec3_t		base, tip;
-	float		radius;
+	vec3_t		base, tip;			// now (time1)...
+	vec3_t		base0, tip0;		// ...and the frame before (time0): it's followed in between
+	int			time0, time1;		// (level times)
 } vrsOtherBlade_t;
+
+// Where another blade was at level time t, between its last two frames.
+static void VRS_OtherBladeAt( const vrsOtherBlade_t *ob, float t, vec3_t base, vec3_t tip ) {
+	const float f = ( ob->time1 > ob->time0 ) ? Com_Clamp( 0.0f, 1.0f, ( t - ob->time0 ) / (float)( ob->time1 - ob->time0 ) ) : 1.0f;
+
+	VRS_Lerp( ob->base0, f, ob->base, base );
+	VRS_Lerp( ob->tip0, f, ob->tip, tip );
+}
 
 // How a clash ends for the blade that swung into the other one. Ours stops
 // and can't cut until it has recovered (unless it broke through); a VR
@@ -974,74 +991,48 @@ static float VRS_BladeSpeedAt( vrSaberState_t *ovs, const vrsOtherBlade_t *ob, c
 		Com_Clamp( 0.0f, len, DotProduct( rel, dir ) ) );
 }
 
-// Our blade, swinging at this speed, hit the other blade: the stronger blow
-// wins (weight, plus one for a full-speed swing); a heavy blow two or more
-// stronger breaks the guard and goes on through.
+// Our blade, swinging at this speed, hit another VR player's blade: both
+// sweeps see this contact, so the faster blade's owner decides - the
+// stronger blow wins (weight, plus one for a full-speed swing), a heavy
+// blow two or more stronger goes on through - and their blade recovers the
+// other way round. (Animated blades: VRS_MeetAnimated.)
 static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, vec3_t point, float speed ) {
 	gentity_t *other = ob->ent;
 	const vrSaberWeight_t *w = VRS_Weight( self );
 	const vrSaberWeight_t *ow = VRS_Weight( other );
 	const int strength = VRS_Strength( w, speed );
 	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] );
-	vrSaberState_t *ovs;
+	vrSaberState_t *ovs = VRS_State( other );
+	const float theirSpeed = VRS_BladeSpeedAt( ovs, ob, point );
+	const int theirs = VRS_Strength( ow, theirSpeed );
+	vrsClash_t result;
+	int recover;
 
-	if ( G_VRSaberClient( other ) && ( ovs = VRS_State( other ) ) != NULL ) {
-		// both in VR, and both sweeps see this contact: the faster blade's
-		// owner decides, and their blade recovers the other way round
-		const float theirSpeed = VRS_BladeSpeedAt( ovs, ob, point );
-		const int theirs = VRS_Strength( ow, theirSpeed );
-		vrsClash_t result;
-		int recover;
-
-		if ( theirSpeed > speed ) {
-			return VRS_CLASH_HELD;
-		}
-		if ( heavy && strength >= theirs + 2 ) {
-			result = VRS_CLASH_THROUGH;
-			recover = 2 * ow->recover;
-		} else if ( strength > theirs ) {
-			result = VRS_CLASH_WON;
-			recover = 2 * ow->recover;
-		} else if ( strength == theirs ) {
-			result = VRS_CLASH_EVEN;
-			recover = ow->recover;
-		} else {
-			result = VRS_CLASH_LOST;
-			recover = ow->recover / 2;
-		}
-		if ( ovs->recoverTime < level.time + recover ) {
-			ovs->recoverTime = level.time + recover;
-		}
-		return result;
+	if ( theirSpeed > speed ) {
+		return VRS_CLASH_HELD;
 	}
-
-	{
-		const qboolean attacking = WP_VR_SaberAttacking( other );
-		const int theirs = ow->strength + ( attacking ? 1 : 0 );
-
-		if ( attacking ) {
-			if ( strength > theirs ) {
-				WP_VR_KnockAttack( other );							// their swing is knocked away
-				return ( heavy && strength >= theirs + 2 ) ? VRS_CLASH_THROUGH : VRS_CLASH_WON;
-			}
-			if ( strength == theirs ) {
-				other->client->ps.saberBlocked = BLOCKED_ATK_BOUNCE;	// both bounce off
-				return VRS_CLASH_EVEN;
-			}
-			return VRS_CLASH_LOST;									// theirs was heavier: we reel
-		}
-		if ( strength >= theirs + 2 ) {
-			WP_VR_BreakParry( other, point );						// a heavy blow breaks their guard
-			return heavy ? VRS_CLASH_THROUGH : VRS_CLASH_WON;
-		}
-		WP_SaberBlockNonRandom( other, point, qfalse );				// they parry
-		return VRS_CLASH_EVEN;
+	if ( heavy && strength >= theirs + 2 ) {
+		result = VRS_CLASH_THROUGH;
+		recover = 2 * ow->recover;
+	} else if ( strength > theirs ) {
+		result = VRS_CLASH_WON;
+		recover = 2 * ow->recover;
+	} else if ( strength == theirs ) {
+		result = VRS_CLASH_EVEN;
+		recover = ow->recover;
+	} else {
+		result = VRS_CLASH_LOST;
+		recover = ow->recover / 2;
 	}
+	if ( ovs->recoverTime < level.time + recover ) {
+		ovs->recoverTime = level.time + recover;
+	}
+	return result;
 }
 
-// Our blade met another blade at point: sparks, and the stronger blow wins.
-// Returns qtrue if ours carries on (it broke their guard), qfalse if it
-// stops there.
+// Our blade met another VR player's blade at point: sparks, and the
+// stronger blow wins. Returns qtrue if ours carries on (it broke their
+// guard), qfalse if it stops there.
 static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t *ob, vec3_t point, const vec3_t moveDir, float speed ) {
 	gentity_t *other = ob->ent;
 	vrSaberState_t *vs = VRS_State( self );
@@ -1058,8 +1049,8 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 	}
 
 	// sparks, unless the other VR player's sweep already reported this
-	ovs = G_VRSaberClient( other ) ? VRS_State( other ) : NULL;
-	if ( !ovs || ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
+	ovs = VRS_State( other );
+	if ( ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
 		gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
 		VectorCopy( point, te->s.origin );
 		VectorScale( moveDir, -1.0f, te->s.angles );
@@ -1117,6 +1108,148 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 			other->client ? other->client->pers.netname : "?", vrsClashNames[result] );
 	}
 	return (qboolean)( result == VRS_CLASH_THROUGH );
+}
+
+/*
+VR blades against animated ones (bots, NPCs, players not in VR). Both sides
+look for these contacts: the VR player's sweep as their blade moves
+(G_VRSaberSweep), and the animated blade's check before its damage traces
+(G_VRSaberBlocksAnimated). Whichever player comes first in the frame sees
+the contact first and settles it; the other side goes along with that.
+*/
+#define VR_SABER_MET_MS		150		// a contact goes on while the blades keep touching within this
+
+static struct {
+	int			vrEnt;			// the VR player whose blade met this saber...
+	int			time;			// ...when (renewed while the blades keep touching)
+	qboolean	attacking;		// this saber's owner was attacking then...
+	qboolean	vrSwing;		// ...the VR blade swinging
+	qboolean	vrGoesOn;		// the VR blade broke through (it carries on, for half damage)
+} vrsMet[MAX_GENTITIES][MAX_SABERS];
+
+// A VR player's blade (s, b) and an animated one (other's saberNum,
+// bladeNum) met at point, the VR blade moving at speed there. The animated
+// blade stops: it cuts nothing for a moment. An attack meeting the VR blade
+// bounces off - a stronger swing (or a much stronger guard) knocks it away,
+// a much stronger attack jars the VR blade; a VR swing into a guard is
+// parried, or breaks it if two stronger (heavy blows go on through). Sparks
+// fly back from the faster blade (moveDir). Returns qtrue if the VR blade
+// goes on through.
+static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other, int saberNum, int bladeNum,
+	vec3_t point, const vec3_t moveDir, float speed ) {
+	vrSaberState_t *vs = VRS_State( vr );
+	gclient_t *ocl = other->client;
+	const vrSaberWeight_t *w = VRS_Weight( vr );
+	const vrSaberWeight_t *ow = VRS_Weight( other );
+	const qboolean heavy = (qboolean)( w == &vrSaberWeights[VRS_HEAVY] || w == &vrSaberWeights[VRS_HEAVY2] );
+	const qboolean swing = (qboolean)( speed >= w->minSpeed * VRS_SpeedScale() );
+	const qboolean attacking = WP_VR_SaberAttacking( other );
+	const int strength = VRS_Strength( w, speed );
+	const int theirs = ow->strength + ( attacking ? 1 : 0 );
+	const char *result = "touched";
+	const char *jarred = "";
+	qboolean through = qfalse;
+	int recover = 0;
+
+	if ( saberNum < 0 || saberNum >= MAX_SABERS ) {
+		return qfalse;
+	}
+	ocl->ps.saberAttackWound = Q_max( ocl->ps.saberAttackWound, level.time + VR_SABER_BLOCK_MS );
+	ocl->ps.saberIdleWound = Q_max( ocl->ps.saberIdleWound, level.time + VR_SABER_BLOCK_MS );
+
+	if ( vrsMet[other->s.number][saberNum].vrEnt == vr->s.number && level.time - vrsMet[other->s.number][saberNum].time < VR_SABER_MET_MS &&
+		( !attacking || vrsMet[other->s.number][saberNum].attacking ) && ( !swing || vrsMet[other->s.number][saberNum].vrSwing ) ) {
+		// the same contact: the blades still together (or the other side saw it
+		// first), settled already
+		vrsMet[other->s.number][saberNum].time = level.time;
+		return vrsMet[other->s.number][saberNum].vrGoesOn;
+	}
+	vrsMet[other->s.number][saberNum].vrEnt = vr->s.number;
+	vrsMet[other->s.number][saberNum].time = level.time;
+	vrsMet[other->s.number][saberNum].attacking = attacking;
+	vrsMet[other->s.number][saberNum].vrSwing = swing;
+	vrsMet[other->s.number][saberNum].vrGoesOn = qfalse;
+	vs->clashEnt = other->s.number;
+	vs->clashTime = level.time;
+
+	// sparks, told as the swinging blade's (the VR player feels it in that hand)
+	{
+		gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
+		VectorCopy( point, te->s.origin );
+		VectorScale( moveDir, -1.0f, te->s.angles );
+		if ( VectorNormalize( te->s.angles ) < 0.001f ) {
+			VectorSet( te->s.angles, 0.0f, 0.0f, 1.0f );
+		}
+		te->s.eventParm = 1;
+		te->s.otherEntityNum2 = swing ? vr->s.number : other->s.number;
+		te->s.weapon = swing ? s : saberNum;
+		te->s.legsAnim = swing ? b : bladeNum;
+	}
+	WP_SaberBounceSound( swing ? vr : other, swing ? s : saberNum, swing ? b : bladeNum );
+
+	if ( attacking ) {
+		// their attack can't go through the VR blade
+		if ( swing ? ( strength > theirs ) : ( strength >= theirs + 2 ) ) {
+			WP_VR_KnockAttack( other );
+			through = (qboolean)( swing && heavy && strength >= theirs + 2 );
+			result = through ? "knocked away, broke through" : "knocked away";
+		} else {
+			ocl->ps.saberBlocked = BLOCKED_ATK_BOUNCE;
+			result = "bounced off";
+		}
+		if ( swing ) {
+			recover = through ? 0 : ( strength < theirs ) ? 2 * w->recover : w->recover;	// a weaker swing reels
+			jarred = ( strength < theirs ) ? ", jarring the VR blade" : "";
+		} else if ( theirs >= strength + 2 ) {
+			recover = w->recover;		// a much stronger attack jars the guard
+			jarred = ", jarring the VR blade";
+		}
+	} else if ( swing ) {
+		// a VR swing into their guard
+		if ( strength >= theirs + 2 ) {
+			WP_VR_BreakParry( other, point );
+			through = heavy;
+			result = heavy ? "broke the guard, through" : "broke the guard";
+		} else {
+			WP_SaberBlockNonRandom( other, point, qfalse );
+			result = "parried";
+		}
+		recover = through ? 0 : w->recover;
+	}
+
+	if ( through ) {
+		vs->throughEnt = other->s.number;
+		vs->throughTime = level.time;
+	}
+	if ( recover && vs->recoverTime < level.time + recover ) {
+		vs->recoverTime = level.time + recover;
+	}
+	if ( swing ) {
+		VRS_Attacked( vr );
+		if ( vs->swing.on ) {
+			vs->swing.clashes++;
+		}
+	}
+	vrsMet[other->s.number][saberNum].vrGoesOn = through;
+
+	if ( g_vrSaberDebug.integer ) {
+		Com_Printf( "VR saber: %s's %s blade (%.1f m/s) and %s's%s: %s%s\n", vr->client->pers.netname, w->name,
+			speed / VR_UNITS_PER_METRE, ocl->pers.netname, attacking ? " attack" : "", result, jarred );
+	}
+	if ( g_vrSaberLog.integer ) {
+		if ( swing ) {
+			G_LogPrintf( "VRSaber: clash %i \"%s\" %s%s %.1f m/s vs \"%s\" %s: %s%s\n", vr->s.number, vr->client->pers.netname,
+				w->name, VRS_TwoHanded( vr ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE, ocl->pers.netname,
+				attacking ? "attacking" : "guarding", result, jarred );
+		} else if ( attacking ) {
+			G_LogPrintf( "VRSaber: block %i \"%s\" %s%s %.1f m/s stopped \"%s\": %s%s\n", vr->s.number, vr->client->pers.netname,
+				w->name, VRS_TwoHanded( vr ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE, ocl->pers.netname, result, jarred );
+		} else {
+			G_LogPrintf( "VRSaber: touch %i \"%s\" %.1f m/s, \"%s\"'s blade\n", vr->s.number, vr->client->pers.netname,
+				speed / VR_UNITS_PER_METRE, ocl->pers.netname );
+		}
+	}
+	return through;
 }
 
 // A thrown saber reaching a VR player: blocked only if one of their blades
@@ -1415,7 +1548,18 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 				VectorCopy( blade->muzzlePoint, out[num].base );
 				VectorMA( blade->muzzlePoint, blade->lengthMax, blade->muzzleDir, tip );
 				VRS_ClipBlade( other->s.number, out[num].base, tip, out[num].tip );
-				out[num].radius = blade->radius;
+				// (and where it was the frame before)
+				out[num].time1 = blade->storageTime;
+				out[num].time0 = blade->storageTime - Q_max( 1, level.time - level.previousTime );
+				if ( DistanceSquared( blade->muzzlePointOld, blade->muzzlePoint ) < Square( 64.0f ) &&
+					VectorLengthSquared( blade->muzzleDirOld ) > 0.5f ) {
+					VectorCopy( blade->muzzlePointOld, out[num].base0 );
+					VectorMA( blade->muzzlePointOld, blade->lengthMax, blade->muzzleDirOld, tip );
+					VRS_ClipBlade( other->s.number, out[num].base0, tip, out[num].tip0 );
+				} else {
+					VectorCopy( out[num].base, out[num].base0 );
+					VectorCopy( out[num].tip, out[num].tip0 );
+				}
 				num++;
 			}
 		}
@@ -1424,12 +1568,12 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 }
 
 // Sweep one blade from pose A to pose B. Returns qfalse if it stopped on
-// another blade.
+// another blade. (otherSpeed: units/ms the fastest blade near it moves -
+// the steps are fine enough for both to be followed.)
 static qboolean VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSample_t *A, const vrSaberSample_t *B,
-	const vrsOtherBlade_t *others, int numOthers, int *stepsLeft ) {
+	const vrsOtherBlade_t *others, int numOthers, float otherSpeed, int *stepsLeft, int shift ) {
 	vrSaberState_t *vs = VRS_State( self );
 	const float length = self->client->saber[s].blade[b].lengthMax;
-	const float radius = self->client->saber[s].blade[b].radius;
 	vec3_t tipA, tipB, prevBase, prevTip, prevFullTip;
 	float travel;
 	int steps, k, i;
@@ -1437,6 +1581,9 @@ static qboolean VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSa
 	VectorMA( A->base[s][b], length, A->dir[s][b], tipA );
 	VectorMA( B->base[s][b], length, B->dir[s][b], tipB );
 	travel = Q_max( Distance( A->base[s][b], B->base[s][b] ), Distance( tipA, tipB ) );
+	if ( numOthers ) {
+		travel += otherSpeed * ( B->time - A->time );
+	}
 	steps = Com_Clampi( 1, VR_SABER_MAX_STEPS, (int)ceilf( travel / VR_SABER_STEP ) );
 	if ( steps > *stepsLeft ) {
 		steps = Q_max( 1, *stepsLeft );	// (no more this frame than an honest swing ever needs)
@@ -1460,15 +1607,24 @@ static qboolean VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSa
 		VectorSubtract( fullTip, prevFullTip, moveDir );
 		VectorNormalize( moveDir );
 
-		// another blade in the way stops this one (unless it breaks through)
+		// another blade in the way stops this one (unless it breaks through):
+		// where it was at that moment, the cores touching
 		for ( i = 0; i < numOthers; i++ ) {
-			if ( VRS_BladesMeet( prevBase, prevTip, base, tip, others[i].base, others[i].tip,
-				radius + others[i].radius, point ) ) {
+			vec3_t oBase, oTip;
+			VRS_OtherBladeAt( &others[i], t + shift, oBase, oTip );
+			if ( VRS_BladesMeet( prevBase, prevTip, base, tip, oBase, oTip, 2.0f * VR_SABER_CORE, point ) ) {
 				vec3_t rel;
-				float along;
+				float along, speed;
+				qboolean goesOn;
 				VectorSubtract( point, base, rel );
 				along = Com_Clamp( 0.0f, length, DotProduct( rel, dir ) );
-				if ( !VRS_Clash( self, s, b, &others[i], point, moveDir, VRS_SwingSpeed( vs, s, b, t, along ) ) ) {
+				speed = VRS_SwingSpeed( vs, s, b, t, along );
+				if ( G_VRSaberClient( others[i].ent ) ) {
+					goesOn = VRS_Clash( self, s, b, &others[i], point, moveDir, speed );
+				} else {
+					goesOn = VRS_MeetAnimated( self, s, b, others[i].ent, others[i].saber, others[i].blade, point, moveDir, speed );
+				}
+				if ( !goesOn ) {
 					return qfalse;	// stopped here
 				}
 			}
@@ -1502,8 +1658,8 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 	const vrSaberSample_t *hist[VR_SABER_SAMPLES];
 	vrsOtherBlade_t others[VRS_MAX_OTHER_BLADES];
 	vec3_t mins, maxs;
-	float length;
-	int i, n, num, numOthers, swept, stepsLeft = VR_SABER_FRAME_STEPS;
+	float length, otherSpeed = 0.0f;
+	int i, n, num, numOthers, swept, stepsLeft = VR_SABER_FRAME_STEPS, shift;
 
 	if ( !vs || saberNum < 0 || saberNum >= VR_POSE_MAX_SABERS || bladeNum < 0 || bladeNum >= VR_POSE_MAX_BLADES || !vs->count ) {
 		return;
@@ -1532,15 +1688,377 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 		AddPointToBounds( tip, mins, maxs );
 	}
 	numOthers = VRS_GatherBlades( self, mins, maxs, others, VRS_MAX_OTHER_BLADES );
+	for ( i = 0; i < numOthers; i++ ) {
+		if ( others[i].time1 > others[i].time0 ) {
+			otherSpeed = Q_max( otherSpeed, Q_max( Distance( others[i].base0, others[i].base ), Distance( others[i].tip0, others[i].tip ) ) /
+				( others[i].time1 - others[i].time0 ) );
+		}
+	}
 
+	// (pose times are the player's command times; the newest one is now)
+	shift = level.time - VRS_Sample( vs, 0 )->time;
 	for ( i = num; i > 0; i-- ) {
 		const vrSaberSample_t *A = hist[i];
 		const vrSaberSample_t *B = hist[i - 1];
 		if ( B->time - A->time > VR_SABER_GAP ) {
 			continue;	// lag: don't sweep across the gap
 		}
-		if ( !VRS_SweepSegment( self, saberNum, bladeNum, A, B, others, numOthers, &stepsLeft ) ) {
+		if ( !VRS_SweepSegment( self, saberNum, bladeNum, A, B, others, numOthers, otherSpeed, &stepsLeft, shift ) ) {
 			break;	// stopped on another blade
+		}
+	}
+}
+
+/*
+--------------------------------------------------------------------------------
+Animated blades against VR blades
+--------------------------------------------------------------------------------
+*/
+
+// Where a VR blade was at time t (its player's command time), from its poses.
+static qboolean VRS_BladeAt( const vrSaberSample_t **hist, int n, int s, int b, float t, float length, vec3_t base, vec3_t tip ) {
+	const vrSaberSample_t *older, *newer;
+	vec3_t dir;
+	float f;
+
+	if ( n < 1 ) {
+		return qfalse;
+	}
+	if ( !VRS_Bracket( hist, n, t, &older, &newer, &f ) ) {
+		older = newer = hist[n - 1];	// (before its history: where it started)
+		f = 0.0f;
+	}
+	VRS_Lerp( older->base[s][b], f, newer->base[s][b], base );
+	VRS_SlerpDir( older->dir[s][b], newer->dir[s][b], f, dir );
+	VectorMA( base, length, dir, tip );
+	return qtrue;
+}
+
+// Can this player's and that one's blades meet at all? (as VRS_GatherBlades)
+static qboolean VRS_Fencing( gentity_t *a, gentity_t *b ) {
+	if ( OnSameTeam( a, b ) && !g_friendlySaber.integer ) {
+		return qfalse;
+	}
+	if ( ( a->s.eType == ET_NPC || b->s.eType == ET_NPC ) && a->client->playerTeam == b->client->playerTeam &&
+		level.gametype != GT_SIEGE ) {
+		return qfalse;
+	}
+	if ( ( a->client->ps.duelInProgress && a->client->ps.duelIndex != b->s.number ) ||
+		( b->client->ps.duelInProgress && b->client->ps.duelIndex != a->s.number ) ) {
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// How far a VR blade's ends moved from time t0 to t1 (its player's command
+// times), pose to pose.
+static float VRS_BladeTravel( const vrSaberSample_t **hist, int n, int s, int b, float length, float t0, float t1 ) {
+	vec3_t pb, pt, nb, nt;
+	float travel = 0.0f;
+	int i;
+
+	if ( !VRS_BladeAt( hist, n, s, b, t0, length, pb, pt ) ) {
+		return 0.0f;
+	}
+	for ( i = n - 1; i >= 0; i-- ) {	// (oldest first)
+		if ( hist[i]->time <= t0 || hist[i]->time >= t1 ) {
+			continue;
+		}
+		VectorCopy( hist[i]->base[s][b], nb );
+		VectorMA( nb, length, hist[i]->dir[s][b], nt );
+		travel += Q_max( Distance( pb, nb ), Distance( pt, nt ) );
+		VectorCopy( nb, pb );
+		VectorCopy( nt, pt );
+	}
+	VRS_BladeAt( hist, n, s, b, t1, length, nb, nt );
+	return travel + Q_max( Distance( pb, nb ), Distance( pt, nt ) );
+}
+
+/*
+=================
+G_VRSaberBlocksAnimated
+
+An animated blade (a bot's, or a player's without VR), followed from where
+it was last frame to where it is now: does a VR player's blade stand in its
+way? Then it stops there - sparks, the VR player feels it, it bounces off
+(or a much stronger guard knocks it away) and cuts nothing for a moment
+(VRS_MeetAnimated). w_saber.c asks before the blade's damage traces, and
+skips them if so. Both blades are followed a few units at a time, so they
+can't pass through each other between two looks.
+=================
+*/
+#define VR_SABER_MEET_STEPS	32		// most looks per pair of blades per frame
+
+qboolean G_VRSaberBlocksAnimated( gentity_t *self, int saberNum, int bladeNum, const vec3_t base, const vec3_t tip ) {
+	bladeInfo_t *blade;
+	vec3_t base0, tip0, mins, maxs;
+	float travel;
+	int t0, i;
+
+	if ( !vrPosesAvailable || !G_VRSaberOn() || !self || !self->client || G_VRSaberClient( self ) ||
+		saberNum < 0 || saberNum >= MAX_SABERS || bladeNum < 0 || bladeNum >= MAX_BLADES ||
+		!VRS_BladeOn( self->client, saberNum, bladeNum ) ) {
+		return qfalse;	// (a thrown saber: G_VRSaberStopsThrown)
+	}
+	blade = &self->client->saber[saberNum].blade[bladeNum];
+	if ( level.time - blade->trail.lastTime > 100 || level.time <= blade->trail.lastTime ||
+		DistanceSquared( blade->trail.base, base ) > Square( 64.0f ) ) {
+		VectorCopy( base, base0 );	// (no last frame: as it is)
+		VectorCopy( tip, tip0 );
+		t0 = level.time;
+	} else {
+		VectorCopy( blade->trail.base, base0 );
+		VectorCopy( blade->trail.tip, tip0 );
+		t0 = blade->trail.lastTime;
+	}
+	travel = Q_max( Distance( base0, base ), Distance( tip0, tip ) );
+	ClearBounds( mins, maxs );
+	AddPointToBounds( base0, mins, maxs );
+	AddPointToBounds( tip0, mins, maxs );
+	AddPointToBounds( base, mins, maxs );
+	AddPointToBounds( tip, mins, maxs );
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		gentity_t *vr = &g_entities[i];
+		vrSaberState_t *vs;
+		int s, b, shift;
+
+		if ( vr == self || !G_VRSaberActive( vr ) || !VRS_Fencing( self, vr ) ) {
+			continue;
+		}
+		if ( vr->r.absmin[0] - 64.0f > maxs[0] || vr->r.absmax[0] + 64.0f < mins[0] ||
+			vr->r.absmin[1] - 64.0f > maxs[1] || vr->r.absmax[1] + 64.0f < mins[1] ||
+			vr->r.absmin[2] - 64.0f > maxs[2] || vr->r.absmax[2] + 64.0f < mins[2] ) {
+			continue;	// (too far for their blades to reach)
+		}
+		vs = VRS_State( vr );
+		shift = level.time - VRS_Sample( vs, 0 )->time;
+		for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+			for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+				const vrSaberSample_t *hist[VR_SABER_SAMPLES];
+				const float length = vr->client->saber[s].blade[b].lengthMax;
+				int n, k, steps;
+
+				if ( !VRS_BladeOn( vr->client, s, b ) || ( n = VRS_BladeHistory( vs, s, b, hist ) ) < 1 ) {
+					continue;
+				}
+				// both blades through the frame, a step at a time: together they
+				// move no more than a step's worth between two looks
+				steps = Com_Clampi( 1, VR_SABER_MEET_STEPS,
+					(int)ceilf( ( travel + VRS_BladeTravel( hist, n, s, b, length, t0 - shift, level.time - shift ) ) / VR_SABER_STEP ) );
+				for ( k = ( t0 == level.time ) ? steps : 0; k <= steps; k++ ) {
+					const float f = (float)k / steps;
+					const float t = t0 + f * ( level.time - t0 );
+					vec3_t ab, at, vb, vt, c1, c2, point, rel, vdir, vb0, vt0, aMove, vMove;
+					float speed;
+					VRS_Lerp( base0, f, base, ab );
+					VRS_Lerp( tip0, f, tip, at );
+					VRS_BladeAt( hist, n, s, b, t - shift, length, vb, vt );
+					if ( VRS_SegSegClosest( ab, at, vb, vt, c1, c2 ) > 2.0f * VR_SABER_CORE ) {
+						continue;
+					}
+					VRS_Lerp( c1, 0.5f, c2, point );
+					// how fast the VR blade moved there; the sparks fly back from
+					// whichever blade came at the other faster
+					VectorSubtract( vt, vb, vdir );
+					VectorNormalize( vdir );
+					VectorSubtract( point, vb, rel );
+					speed = VRS_SwingSpeed( vs, s, b, t - shift, Com_Clamp( 0.0f, length, DotProduct( rel, vdir ) ) );
+					VRS_BladeAt( hist, n, s, b, t0 - shift, length, vb0, vt0 );
+					VRS_BladeAt( hist, n, s, b, level.time - shift, length, vb, vt );
+					VectorSubtract( vt, vt0, vMove );
+					VectorSubtract( tip, tip0, aMove );
+					VRS_MeetAnimated( vr, s, b, self, saberNum, bladeNum, point,
+						( VectorLengthSquared( vMove ) > VectorLengthSquared( aMove ) ) ? vMove : aMove, speed );
+					return qtrue;
+				}
+			}
+		}
+	}
+	return qfalse;
+}
+
+// Is this entity the saber of a VR player, held in their hand? (Its box
+// stops nothing: G_VRSaberBlocksAnimated is where its blade really is.)
+qboolean G_VRSaberHeldBox( gentity_t *ent ) {
+	gentity_t *owner;
+
+	if ( !ent || ent->r.ownerNum < 0 || ent->r.ownerNum >= MAX_CLIENTS || !vrPosesAvailable ) {
+		return qfalse;
+	}
+	owner = &g_entities[ent->r.ownerNum];
+	return (qboolean)( owner->client && owner->client->ps.saberEntityNum == ent->s.number && !owner->client->ps.saberInFlight &&
+		G_VRSaberActive( owner ) );
+}
+
+/*
+=================
+G_VRSaberGuard
+
+A bot (or NPC) with its saber ready sees a VR player's swing coming at it
+and raises its guard into the blade's path - the parry it would otherwise
+only make once hit. Whether it sees it in time depends on its saber
+defence (g_vrSaberBotGuard scales how often and how quickly); whether the
+guard then stops the blade is up to where the blade really goes.
+=================
+*/
+static struct {
+	int		vrEnt;			// the swing being watched: whose...
+	int		swingStart;		// ...and which
+	int		seen;			// level.time it was first seen coming
+	qboolean will;			// will it guard against this one
+	qboolean done;
+} vrsGuard[MAX_GENTITIES];
+
+extern qboolean PM_SaberInParry( int move );
+extern qboolean PM_SaberInBounce( int move );
+extern qboolean PM_SaberInKnockaway( int move );
+extern qboolean BG_SaberInSpecial( int move );
+extern qboolean PM_InKnockDown( playerState_t *ps );
+extern qboolean BG_SuperBreakLoseAnim( int anim );
+extern qboolean BG_SuperBreakWinAnim( int anim );
+
+// Can it raise its saber into a parry now? (As stock blocks: not while busy
+// with an attack, a parry or a bounce, down, rolling, kicking, using a
+// force power with its hands, in a saber lock...; the parry would only wait
+// until it could, and then come too late.)
+static qboolean VRS_ReadyToGuard( gentity_t *self ) {
+	gclient_t *cl = self->client;
+
+	if ( self->health < 1 || cl->ps.weapon != WP_SABER || BG_SabersOff( &cl->ps ) || cl->ps.saberInFlight ||
+		!cl->ps.saberEntityNum || cl->ps.weaponTime > 0 || cl->ps.weaponstate == WEAPON_RAISING ||
+		( cl->saber[0].saberFlags & SFL_NOT_ACTIVE_BLOCKING ) ) {
+		return qfalse;
+	}
+	if ( WP_VR_SaberAttacking( self ) || cl->ps.saberBlocked != BLOCKED_NONE || PM_SaberInParry( cl->ps.saberMove ) ||
+		PM_SaberInBrokenParry( cl->ps.saberMove ) || PM_SaberInBounce( cl->ps.saberMove ) ||
+		PM_SaberInKnockaway( cl->ps.saberMove ) || BG_SaberInSpecial( cl->ps.saberMove ) ) {
+		return qfalse;
+	}
+	if ( cl->ps.pm_type != PM_NORMAL && cl->ps.pm_type != PM_JETPACK && cl->ps.pm_type != PM_FLOAT ) {
+		return qfalse;
+	}
+	if ( cl->ps.forceHandExtend != HANDEXTEND_NONE || PM_InKnockDown( &cl->ps ) || BG_InRoll( &cl->ps, cl->ps.legsAnim ) ||
+		BG_KickingAnim( cl->ps.legsAnim ) || BG_KickingAnim( cl->ps.torsoAnim ) ||
+		BG_SuperBreakLoseAnim( cl->ps.torsoAnim ) || BG_SuperBreakWinAnim( cl->ps.torsoAnim ) ||
+		cl->ps.saberLockTime > level.time || cl->ps.m_iVehicleNum ) {
+		return qfalse;
+	}
+	if ( cl->ps.fd.forcePowersActive & ( ( 1 << FP_GRIP ) | ( 1 << FP_LIGHTNING ) | ( 1 << FP_DRAIN ) | ( 1 << FP_PUSH ) ) ) {
+		return qfalse;
+	}
+	if ( cl->ps.fd.forcePowerDebounce[FP_SABER_DEFENSE] > level.time || cl->ps.saberBlockTime >= level.time ) {
+		return qfalse;	// (can't move the saber to another parry yet)
+	}
+	return qtrue;
+}
+
+void G_VRSaberGuard( gentity_t *self ) {
+	static const float chance[4] = { 0.0f, 0.45f, 0.65f, 0.85f };
+	static const int reaction[4] = { 0, 200, 140, 90 };
+	gclient_t *cl = self ? self->client : NULL;
+	const float g = g_vrSaberBotGuard.value;
+	vec3_t eye, low, fwd, ang;
+	int defense, i;
+
+	if ( !vrPosesAvailable || !G_VRSaberOn() || !cl || g <= 0.0f || G_VRSaberClient( self ) ||
+		( !( self->r.svFlags & SVF_BOT ) && self->s.eType != ET_NPC ) ) {
+		return;
+	}
+	if ( !VRS_ReadyToGuard( self ) ) {
+		return;
+	}
+	defense = Com_Clampi( 0, 3, cl->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] );
+	if ( !defense ) {
+		return;
+	}
+
+	// its body: from above its feet up to its eyes
+	VectorCopy( cl->ps.origin, eye );
+	eye[2] += cl->ps.viewheight;
+	VectorCopy( cl->ps.origin, low );
+	low[2] += self->r.mins[2] + 8.0f;
+	VectorSet( ang, 0.0f, cl->ps.viewangles[YAW], 0.0f );
+	AngleVectors( ang, fwd, NULL, NULL );
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		gentity_t *vr = &g_entities[i];
+		vrSaberState_t *vs;
+		const vrSaberWeight_t *w;
+		int s, b;
+
+		if ( vr == self || !G_VRSaberActive( vr ) || !VRS_Fencing( self, vr ) ||
+			DistanceSquared( vr->r.currentOrigin, self->r.currentOrigin ) > Square( 128.0f ) ) {
+			continue;
+		}
+		vs = VRS_State( vr );
+		if ( !vs->swing.on || !vs->swing.cutting ) {
+			continue;	// (not swinging hard enough to cut)
+		}
+		w = VRS_Weight( vr );
+		for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+			for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+				const vrSaberSample_t *hist[VR_SABER_SAMPLES];
+				const float length = vr->client->saber[s].blade[b].lengthMax;
+				vec3_t b0, t0, b1, t1, vb, vt;
+				int n, k, now;
+
+				if ( !VRS_BladeOn( vr->client, s, b ) || ( n = VRS_BladeHistory( vs, s, b, hist ) ) < 2 ) {
+					continue;
+				}
+				// where the blade is going: carried on as it moves now
+				now = hist[0]->time;
+				VRS_BladeAt( hist, n, s, b, now - 40, length, b0, t0 );
+				VRS_BladeAt( hist, n, s, b, now, length, b1, t1 );
+				VectorSubtract( b1, b0, vb );
+				VectorSubtract( t1, t0, vt );
+				VectorScale( vb, 1000.0f / 40.0f, vb );
+				VectorScale( vt, 1000.0f / 40.0f, vt );
+				if ( VectorLength( vt ) < w->minSpeed * VRS_SpeedScale() ) {
+					continue;
+				}
+				for ( k = 0; k <= 5; k++ ) {
+					const float ahead = VR_SABER_GUARD_AHEAD * k / 5.0f;
+					vec3_t pb, pt, c1, c2, flat;
+					VectorMA( b1, ahead, vb, pb );
+					VectorMA( t1, ahead, vt, pt );
+					if ( VRS_SegSegClosest( pb, pt, low, eye, c1, c2 ) > 18.0f ) {
+						continue;
+					}
+					// coming at it: from in front?
+					VectorSubtract( c1, eye, flat );
+					flat[2] = 0.0f;
+					if ( VectorNormalize( flat ) > 0.1f && DotProduct( flat, fwd ) < -0.2f ) {
+						break;	// (from behind: it doesn't see it)
+					}
+					if ( vrsGuard[self->s.number].vrEnt != vr->s.number || vrsGuard[self->s.number].swingStart != vs->swing.start ) {
+						vrsGuard[self->s.number].vrEnt = vr->s.number;
+						vrsGuard[self->s.number].swingStart = vs->swing.start;
+						vrsGuard[self->s.number].seen = level.time;
+						vrsGuard[self->s.number].will = (qboolean)( Q_flrand( 0.0f, 1.0f ) < Q_min( 1.0f, chance[defense] * g ) - 0.0001f || chance[defense] * g >= 1.0f );
+						vrsGuard[self->s.number].done = qfalse;
+					}
+					if ( !vrsGuard[self->s.number].will || vrsGuard[self->s.number].done ||
+						level.time - vrsGuard[self->s.number].seen < reaction[defense] / Q_max( 0.5f, g ) ) {
+						return;
+					}
+					// guard where it will land
+					WP_SaberBlockNonRandom( self, c1, qfalse );
+					vrsGuard[self->s.number].done = qtrue;
+					if ( self->NPC ) {
+						// (and hold it: the NPC's own fencing would put its saber
+						// back down before the parry starts)
+						const int hold = (int)( ahead * 1000.0f ) + 300;
+						TIMER_Set( self, "parryTime", hold );
+						TIMER_Set( self, "parryReCalcTime", hold );
+					}
+					if ( g_vrSaberLog.integer ) {
+						G_LogPrintf( "VRSaber: guard %i \"%s\" raises its saber against \"%s\"'s swing %.0f ms before it lands (seen %i ms ago)\n",
+							self->s.number, cl->pers.netname, vr->client->pers.netname, ahead * 1000.0f, level.time - vrsGuard[self->s.number].seen );
+					}
+					return;
+				}
+			}
 		}
 	}
 }
