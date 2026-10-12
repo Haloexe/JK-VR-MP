@@ -203,7 +203,8 @@ static struct {
 	vec3_t		twoHandBladeLocal;	// the blade in the frame of the hand tag it is bolted to (raw axes)
 	vec3_t		twoHandGrip2;		// the left controller's grip (world)
 	int			grabZones;			// hands that could take hold of something now (engine)
-	void		*fistG2;			// the left fingers are closed round the hilt on this instance
+	void		*fistG2[2];			// that hand's fingers are closed round a hilt on this instance
+	void		*bonesLoggedG2;		// the log has said which finger bones this model has
 	vec3_t		twoHandFist;		// the way the hilt runs through the left fist, as drawn
 
 	// the blade's weight (CG_VRB_BladeInertia, once per frame)
@@ -224,6 +225,7 @@ static struct {
 		int			prevMask[VR_POSE_MAX_SABERS];
 		int			prevTime;
 		float		speed;			// m/s, smoothed
+		float		lag;			// degrees the blade trailed the hand by at most, since the last whoosh
 		qboolean	armed;
 		int			lastTime;		// the last whoosh
 	}			swing;
@@ -966,9 +968,13 @@ on the hilt the left hand is.
 =================
 */
 
-// The left fingers closed round a hilt (the left hand of the dual-saber
-// stance, which holds one), or back to what the body's animation does.
-static void CG_VRB_Fist( centity_t *cent, qboolean on ) {
+// A hand's fingers closed round a hilt (as in the dual-saber stance, where
+// both hands hold one), or back to what the body's animation does. Whatever
+// the body is doing - running, jumping, parrying, whose animations open the
+// hand - a hand holding a hilt keeps hold of it.
+static const char *const vrbForearm[2] = { "lradius", "rradius" };	// (the fingers are its children)
+
+static void CG_VRB_Fist( centity_t *cent, int h, qboolean on ) {
 	if ( on ) {
 		const animation_t *anims = bgAllAnims[cent->localAnimIndex].anims;
 		const animation_t *anim = &anims[BOTH_SABERDUAL_STANCE];
@@ -979,12 +985,25 @@ static void CG_VRB_Fist( centity_t *cent, qboolean on ) {
 			return;
 		}
 		// (every frame: a new model may have taken the old one's instance)
-		trap->G2API_SetBoneAnim( cent->ghoul2, 0, "lradius", anim->firstFrame, anim->firstFrame + 1,
+		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], anim->firstFrame, anim->firstFrame + 1,
 			BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, anim->firstFrame, 0 );
-		vrb.fistG2 = cent->ghoul2;
-	} else if ( vrb.fistG2 && vrb.fistG2 == cent->ghoul2 ) {
-		trap->G2API_SetBoneAnim( cent->ghoul2, 0, "lradius", 0, 1, 0, 1.0f, cg.time, -1, 0 );
-		vrb.fistG2 = NULL;
+		vrb.fistG2[h] = cent->ghoul2;
+	} else if ( vrb.fistG2[h] && vrb.fistG2[h] == cent->ghoul2 ) {
+		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], 0, 1, 0, 1.0f, cg.time, -1, 0 );
+		vrb.fistG2[h] = NULL;
+	}
+}
+
+// Both hands, before the arms are solved: a fist round whatever hilt each
+// holds (the left one round the right hand's too, while it holds it).
+static void CG_VRB_HandPoses( centity_t *cent ) {
+	int h;
+
+	for ( h = 0; h < 2; h++ ) {
+		vrbGrip_t grip;
+		CG_VRB_Grip( cent, h, &grip );
+		CG_VRB_Fist( cent, h, (qboolean)( grip.kind == VRB_GRIP_SABER ||
+			( h == VR_HAND_LEFT && vrb.twoHand && vrb.twoHandTime == cg.time ) ) );
 	}
 }
 
@@ -1215,7 +1234,6 @@ off:
 	vrb.twoHandBlend = 0.0f;
 done:
 	if ( vrb.twoHand ) {
-		CG_VRB_Fist( cent, qtrue );
 		if ( !was ) {
 			if ( trap->ext.VR_Haptic ) {
 				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.04f, 0.6f );	// took hold
@@ -1224,7 +1242,6 @@ done:
 				vrb.twoHandSide > 0.0f ? "above" : "below", vrb.twoHandT, vrb.twoHandSign < 0.0f ? ", reversed" : "" );
 		}
 	} else {
-		CG_VRB_Fist( cent, qfalse );
 		if ( was ) {
 			if ( trap->ext.VR_Haptic ) {
 				trap->ext.VR_Haptic( VR_HAND_LEFT, 0.02f, 0.3f );	// let go
@@ -1341,7 +1358,9 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 		if ( ang > DEG2RAD( maxLag ) ) {
 			VRB_Rotate( vrb.blade[h].dir, axis, ang - DEG2RAD( maxLag ), vrb.blade[h].dir );
 			VectorNormalize( vrb.blade[h].dir );
+			ang = DEG2RAD( maxLag );
 		}
+		vrb.swing.lag = Q_max( vrb.swing.lag, RAD2DEG( ang ) );	// (for the log)
 	}
 	vrb.blade[h].time = cg.time;
 	VRB_RotZ( vrb.blade[h].dir, yaw, out );
@@ -1850,6 +1869,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	CG_VRB_ProbeHands( cent );
 	CG_VRB_TwoHand( cent, vr );
 	CG_VRB_BladeInertia( cent, vr );
+	CG_VRB_HandPoses( cent );
 
 	if ( vrb.convention < 0 && vrb.checkTime != cg.time ) {
 		vrb.checkTime = cg.time;
@@ -2074,7 +2094,8 @@ void CG_VR_BodyArms( centity_t *cent ) {
 		CG_VRB_LogHands( cent );
 	} else {
 		CG_VRB_ResetArms( cent->ghoul2 );
-		CG_VRB_Fist( cent, qfalse );	// (no hands to hold the hilt with)
+		CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );	// (no hands to hold the hilt with)
+		CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
 		vrb.twoHand = vrb.twoHandArms = qfalse;
 		vrb.twoHandBlend = 0.0f;
 		vrb.blade[0].valid = vrb.blade[1].valid = qfalse;
@@ -2114,7 +2135,7 @@ static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
 			VRB_RotZ( rel, -yaw, room );
 			if ( ( vrb.swing.prevMask[s] & ( 1 << b ) ) && dt > 0.001f && dt < 0.1f ) {
 				const float v = Distance( room, vrb.swing.prev[s][b] ) / dt / vr->worldScale;
-				if ( v > speed ) {
+				if ( v > speed && v < 30.0f ) {	// (faster: it jumped - a respawn, a flip - rather than swung)
 					speed = v;
 					VectorCopy( p, where );
 					hand = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
@@ -2154,17 +2175,19 @@ static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
 		if ( trap->ext.VR_Haptic ) {
 			trap->ext.VR_Haptic( hand, 0.02f, 0.1f + 0.06f * weight );
 		}
-		CG_VRB_Log( "swing: %s%s, %.1f m/s\n", vrbWeightNames[weight], CG_VRB_TwoHanded() ? " (two hands)" : "",
-			vrb.swing.speed );
+		CG_VRB_Log( "swing: %s%s, %.1f m/s (the blade trailed your hand by up to %.0f deg)\n", vrbWeightNames[weight],
+			CG_VRB_TwoHanded() ? " (two hands)" : "", vrb.swing.speed, vrb.swing.lag );
+		vrb.swing.lag = 0.0f;
 	}
 }
 
-// How far a bone is from the line through o along d.
-static float CG_VRB_LineDistance( centity_t *cent, const char *bone, const vec3_t o, const vec3_t d ) {
+// How far a finger's last joint (j3, else j2) is from the line through o
+// along d.
+static float CG_VRB_LineDistance( centity_t *cent, const char *finger, const vec3_t o, const vec3_t d ) {
 	vrbBone_t b;
 	vec3_t rel;
 
-	if ( !CG_VRB_Bone( cent, bone, 1, &b ) ) {
+	if ( !CG_VRB_Bone( cent, va( "%s_j3", finger ), 1, &b ) && !CG_VRB_Bone( cent, va( "%s_j2", finger ), 1, &b ) ) {
 		return -1.0f;
 	}
 	VectorSubtract( b.origin, o, rel );
@@ -2207,10 +2230,25 @@ static void CG_VRB_LogHands( centity_t *cent ) {
 	if ( VectorNormalize( blade ) < 0.5f ) {
 		return;
 	}
-	index = CG_VRB_LineDistance( cent, "r_d2_j3", tag.origin, blade );
-	middle = CG_VRB_LineDistance( cent, "r_d3_j3", tag.origin, blade );
+	if ( vrb.bonesLoggedG2 != cent->ghoul2 ) {
+		// which finger bones this model has (once)
+		static const char *const fingers[] = { "r_d1", "r_d2", "r_d3", "r_d4", "r_d5" };
+		char have[256] = "";
+		int i, j;
+		vrb.bonesLoggedG2 = cent->ghoul2;
+		for ( i = 0; i < 5; i++ ) {
+			for ( j = 1; j <= 3; j++ ) {
+				if ( trap->G2API_AddBolt( cent->ghoul2, 0, va( "%s_j%i", fingers[i], j ) ) >= 0 ) {
+					Q_strcat( have, sizeof( have ), va( " %s_j%i", fingers[i], j ) );
+				}
+			}
+		}
+		CG_VRB_Log( "model: right hand bones%s\n", have[0] ? have : " (none found)" );
+	}
+	index = CG_VRB_LineDistance( cent, "r_d2", tag.origin, blade );
+	middle = CG_VRB_LineDistance( cent, "r_d3", tag.origin, blade );
 	if ( vrb.twoHand && vrb.twoHandTime == cg.time ) {
-		left = CG_VRB_LineDistance( cent, "l_d2_j3", tag.origin, blade );
+		left = CG_VRB_LineDistance( cent, "l_d2", tag.origin, blade );
 	}
 	if ( ps->torsoAnim != vrb.logTorso || fabsf( index - vrb.logTip ) > 0.8f || cg.time - vrb.logPrinted > 3000 ||
 		cg.time - vrb.logPrinted < 0 ) {
@@ -2447,7 +2485,8 @@ void CG_VR_BodyRestore( centity_t *cent ) {
 	if ( !cent->ghoul2 ) {
 		return;
 	}
-	CG_VRB_Fist( cent, qfalse );
+	CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );
+	CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
 	if ( vrb.armsG2 == cent->ghoul2 ) {
 		CG_VRB_ResetArms( cent->ghoul2 );
 		vrb.armsG2 = NULL;
