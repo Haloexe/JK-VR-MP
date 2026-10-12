@@ -1030,13 +1030,15 @@ How far (radians, about +u through pivot) to bend the bone pivot -> child
 so its end lies VRB_FINGER_R from the hilt's axis (o, u): further the way
 the finger bends (bend: +1/-1 about u) if it stands off the hilt, by up to
 maxClose degrees, as long as the bone doesn't cut into the hilt (nearer
-than VRB_FINGER_DIP); back the other way if it's inside or cutting in,
-by up to maxOpen, till it's on it and clear.
+than VRB_FINGER_DIP) - and no further than it gets nearer: a fist off the
+hilt (the arm not quite reaching it) can leave a finger that can't reach
+it, which would otherwise curl on round past it; back the other way if
+it's inside or cutting in, by up to maxOpen, till it's on it and clear.
 */
 static float CG_VRB_FitJoint( const vec3_t pivot, const vec3_t child, const vec3_t o, const vec3_t u,
 	float bend, float maxClose, float maxOpen ) {
 	vec3_t rel, p;
-	float sign, limit, deg;
+	float sign, limit, deg, nearest;
 	qboolean closing;
 
 	VectorSubtract( child, pivot, rel );
@@ -1051,19 +1053,21 @@ static float CG_VRB_FitJoint( const vec3_t pivot, const vec3_t child, const vec3
 		VRB_SegmentAxisDistance( pivot, child, o, u ) >= VRB_FINGER_DIP ) ? qtrue : qfalse;
 	sign = closing ? bend : -bend;
 	limit = closing ? maxClose : maxOpen;
+	nearest = CG_VRB_AxisDistance( child, o, u );
 	for ( deg = 1.0f; deg <= limit; deg += 1.0f ) {
 		float d, g;
 		VRB_TurnAbout( pivot, child, u, sign * DEG2RAD( deg ), p );
 		d = CG_VRB_AxisDistance( p, o, u );
 		g = VRB_SegmentAxisDistance( pivot, p, o, u );
 		if ( closing ) {
-			if ( g < VRB_FINGER_DIP ) {
-				deg -= 1.0f;	// (it would cut into the hilt: as far as it went)
+			if ( g < VRB_FINGER_DIP || d > nearest ) {
+				deg -= 1.0f;	// (it would cut into the hilt, or it's past its nearest: as far as it went)
 				break;
 			}
 			if ( d <= VRB_FINGER_R ) {
 				break;
 			}
+			nearest = d;
 		} else if ( d >= VRB_FINGER_R && g >= VRB_FINGER_DIP ) {
 			break;
 		}
