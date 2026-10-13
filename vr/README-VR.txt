@@ -247,7 +247,9 @@ g_vrSaberUnlag 0 turns it off.)
 VOICE CHAT: talk to the players near you, and hear them from where they
 are - louder near, quieter further off, from the side they're on, their
 lips moving as they talk. It works in games hosted with this build, for
-everyone running it (in a headset or not). Set it up in Setup > Sound:
+everyone running it (in a headset or not). Set it up in Setup > Sound, in
+the main menu or in game (left menu button, Setup, Sound), under the sound
+settings:
   Voice Chat          on or off
   Voice Chat Volume   how loud the others are
   Microphone          click the one you talk into (the green one is in
@@ -436,8 +438,8 @@ KNOWN LIMITATIONS
     pass voices on), between players running it. There's no echo
     cancelling: in a game where you hear others through speakers next to
     your microphone, use headphones or raise the voice activation mark.
-    A mod's own menus (fs_game) with a fuller Sound page may have no room
-    for the voice chat settings; the cl_voice settings still work there.
+    On a Sound page a menu mod has filled up, the voice chat settings are
+    behind a "Voice Chat Settings..." button there (where EAX was).
   * Mods that ship their own client DLL (cgame) need an x86_64 build of it;
     servers running server-side mods (JA+, base, etc.) work.
   * rd-vanilla only (the experimental rend2 renderer has no VR support).

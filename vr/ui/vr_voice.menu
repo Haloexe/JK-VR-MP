@@ -2,79 +2,250 @@
 //
 //	OpenJK VR: VOICE CHAT SETTINGS
 //
-//	The game's menu code (ui_vrvoice.c) puts these on the Sound page of Setup - in the main
-//	menu and in game - below the sound settings already there, and lays them out: where they
-//	go, and the font, size and colour of their text, follow those settings. So only what they
-//	are is here.
+//	The game's menu code (ui_vrvoice.c) puts the settings below on the Sound page of Setup -
+//	in the main menu and in game - under the sound settings already there, and lays them out
+//	there: where they go, and the font, size and colour of their text, follow the page's own
+//	settings, so their rects and fonts here don't matter there.
+//
+//	A Sound page with no room for them (one a menu mod has changed) gets a "Voice Chat
+//	Settings" button instead, which opens this panel with them on it, as laid out here.
 //
 //	feeder 64:		the microphones there are (cl_voiceMic)
 //	ownerdraw 400:	how loud the microphone is, and how loud you must be to be heard
-//					(cl_voiceThreshold: click or drag along it)
+//					(cl_voiceThreshold: click or drag along it); special: its width
 //
 //----------------------------------------------------------------------------------------------
 {
 	menuDef
 	{
 		name				"vr_voice"
+		visible				0
+		fullScreen			0
+		rect				110 75 420 330
+		focusColor			1 1 1 1
+		descX				320
+		descY				331
+		descScale			1
+		descColor			1 .682 0 .8
+		descAlignment		ITEM_ALIGN_CENTER
+		popup
+
+		onESC
+		{
+			play			"sound/interface/esc.wav"
+			close			vr_voice
+		}
 
 		itemDef
 		{
-			name			vr_voicechat
-			group			sound
-			type			ITEM_TYPE_MULTI
+			name			vr_panelback
+			group			none
+			style			WINDOW_STYLE_FILLED
+			rect			0 0 420 330
+			backcolor		0 0 .2 .96
+			forecolor		1 1 1 1
+			border			1
+			bordercolor		0 0 .8 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			vr_paneltitleglow
+			group			none
+			style			WINDOW_STYLE_SHADER
+			rect			0 6 420 26
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			vr_paneltitle
+			group			none
+			style			WINDOW_STYLE_EMPTY
 			text			"Voice Chat"
-			cvar			"cl_voice"
-			cvarFloatList	{ @MENUS_OFF 0 @MENUS_ON 1 }
-			descText		"Talk to the players near you, and hear them (where the server has it)"
-			visible			0
-			action
-			{
-				play		"sound/interface/button1.wav"
-			}
+			rect			0 8 420 22
+			font			3
+			textscale		0.8
+			textalign		ITEM_ALIGN_CENTER
+			textalignx		210
+			textaligny		1
+			forecolor		.549 .854 1 1
+			visible			1
+			decoration
 		}
 
+		// the bars that light up behind a row while the mouse is on it
 		itemDef
 		{
-			name			vr_voicevolume
-			group			sound
-			type			ITEM_TYPE_SLIDER
-			text			"Voice Chat Volume"
-			cvarfloat		"cl_voiceVolume" 1 0 2
-			descText		"How loud the other players' voices are"
+			name			vr_panelhl1
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			10 46 400 20
+			background		"gfx/menus/menu_blendbox"
+			forecolor		1 1 1 1
 			visible			0
-			action
-			{
-				play		"sound/interface/button1.wav"
-			}
+			decoration
 		}
-
 		itemDef
 		{
-			name			vr_voicemiclabel
-			group			sound
-			type			ITEM_TYPE_TEXT
-			text			"Microphone"
+			name			vr_panelhl2
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			10 68 400 20
+			background		"gfx/menus/menu_blendbox"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+		itemDef
+		{
+			name			vr_panelhl3
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			10 184 400 20
+			background		"gfx/menus/menu_blendbox"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+		itemDef
+		{
+			name			vr_panelhl4
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			10 206 400 20
+			background		"gfx/menus/menu_blendbox"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+		itemDef
+		{
+			name			vr_panelhl5
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			10 228 400 20
+			background		"gfx/menus/menu_blendbox"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+		itemDef
+		{
+			name			vr_paneldoneglow
+			group			vr_panelhl
+			style			WINDOW_STYLE_SHADER
+			rect			140 286 140 30
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
 			visible			0
 			decoration
 		}
 
 		itemDef
 		{
+			name			vr_voicechat
+			group			vr_voice
+			type			ITEM_TYPE_MULTI
+			text			"Voice Chat"
+			cvar			"cl_voice"
+			cvarFloatList	{ @MENUS_OFF 0 @MENUS_ON 1 }
+			rect			10 46 400 20
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			descText		"Talk to the players near you, and hear them (where the server has it)"
+			visible			1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				show		vr_panelhl1
+			}
+			mouseExit
+			{
+				hide		vr_panelhl1
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicevolume
+			group			vr_voice
+			type			ITEM_TYPE_SLIDER
+			text			"Voice Chat Volume"
+			cvarfloat		"cl_voiceVolume" 1 0 2
+			rect			10 68 400 20
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			descText		"How loud the other players' voices are"
+			visible			1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				show		vr_panelhl2
+			}
+			mouseExit
+			{
+				hide		vr_panelhl2
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicemiclabel
+			group			vr_voice
+			type			ITEM_TYPE_TEXT
+			text			"Microphone"
+			rect			10 92 400 16
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
 			name			vr_voicemic
-			group			sound
+			group			vr_voice
 			type			ITEM_TYPE_LISTBOX
 			style			WINDOW_STYLE_FILLED
 			elementtype		LISTBOX_TEXT
-			elementwidth	150
-			elementheight	14
+			elementwidth	380
+			elementheight	16
 			feeder			64
+			rect			20 110 380 68
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
 			border			1
 			bordersize		1
 			bordercolor		0.45 0.45 0.9 1
 			backcolor		0 0 0.2 0.5
 			outlinecolor	0.3 0.45 1 0.45
 			descText		"The microphone you talk into (green: the one in use)"
-			visible			0
+			visible			1
 			action
 			{
 				play		"sound/interface/button1.wav"
@@ -84,45 +255,121 @@
 		itemDef
 		{
 			name			vr_voicemode
-			group			sound
+			group			vr_voice
 			type			ITEM_TYPE_MULTI
 			text			"Input Mode"
 			cvar			"cl_voiceMode"
 			cvarFloatList	{ "Voice Activity" 0 "Push to Talk" 1 }
+			rect			10 184 400 20
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
 			descText		"Voice Activity: you're heard when you speak. Push to Talk: while +voice is held"
-			visible			0
+			visible			1
 			action
 			{
 				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				show		vr_panelhl3
+			}
+			mouseExit
+			{
+				hide		vr_panelhl3
 			}
 		}
 
 		itemDef
 		{
 			name			vr_voicelevel
-			group			sound
+			group			vr_voice
 			ownerdraw		400
+			special			222
 			text			"Voice Activation"
+			rect			10 206 400 20
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
 			descText		"How loud you are now; you're heard when you go past the mark - click or drag to move it"
-			visible			0
+			visible			1
 			action
 			{
 				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				show		vr_panelhl4
+			}
+			mouseExit
+			{
+				hide		vr_panelhl4
 			}
 		}
 
 		itemDef
 		{
 			name			vr_voicegain
-			group			sound
+			group			vr_voice
 			type			ITEM_TYPE_SLIDER
 			text			"Mic Boost"
 			cvarfloat		"cl_voiceGain" 1 0.5 4
+			rect			10 228 400 20
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		160
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
 			descText		"Makes your microphone louder (or quieter) for everyone"
-			visible			0
+			visible			1
 			action
 			{
 				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				show		vr_panelhl5
+			}
+			mouseExit
+			{
+				hide		vr_panelhl5
+			}
+		}
+
+		itemDef
+		{
+			name			vr_paneldone
+			group			vr_voice
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			@MENUS_DONE
+			rect			140 286 140 30
+			font			3
+			textscale		0.9
+			textalign		ITEM_ALIGN_CENTER
+			textalignx		70
+			textaligny		3
+			forecolor		1 .682 0 1
+			visible			1
+			action
+			{
+				play		"sound/interface/button1.wav"
+				close		vr_voice
+			}
+			mouseEnter
+			{
+				show		vr_paneldoneglow
+			}
+			mouseExit
+			{
+				hide		vr_paneldoneglow
 			}
 		}
 	}
