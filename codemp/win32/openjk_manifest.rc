@@ -1,0 +1,8 @@
+// OpenJK VR: the application manifest - Common Controls 6, asInvoker, the
+// Windows versions it supports, and per-monitor DPI awareness, so windows and
+// resolutions are real pixels on a display with Windows scaling (125%, 150%)
+// - for MinGW builds. MSVC's linker embeds shared/sys/win_manifest.manifest
+// on its own (it's one of the engine's sources); MinGW's doesn't.
+//
+// 1 = CREATEPROCESS_MANIFEST_RESOURCE_ID, 24 = RT_MANIFEST
+1 24 "../../shared/sys/win_manifest.manifest"

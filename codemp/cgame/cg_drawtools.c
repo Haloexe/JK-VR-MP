@@ -25,6 +25,72 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "cg_local.h"
 #include "qcommon/q_shared.h"
 
+/*
+================================================================================
+OpenJK VR: widescreen 2D
+
+On a window wider than 4:3 the HUD is kept in proportion rather than stretched
+across it (the renderer's Anchor2D, r_aspectCorrect2D): what's drawn next is
+squeezed toward the x CG_Anchor2D was last given - the middle (where CG_Draw2D
+starts every frame), the left edge or the right edge (a HUD menu: the one its
+items are nearest as a whole, CG_AnchorForMenu). What marks a place in the
+world (the crosshair, a lock, brackets) is squeezed toward that place, so it
+stays on it. With an engine that can't (one other than this build's), it's
+all stretched as always.
+================================================================================
+*/
+
+static float cgAnchor2D = ANCHOR2D_STRETCH;
+
+static qboolean CG_Widescreen( void ) {
+	static int supported = -1;
+
+	if ( supported < 0 ) {
+		char tag[64];
+		trap->Cvar_VariableStringBuffer( "vr_engine", tag, sizeof( tag ) );
+		supported = ( !strcmp( tag, VR_ENGINE_TAG ) && trap->ext.R_Anchor2D && trap->ext.R_Aspect2D ) ? 1 : 0;
+	}
+	return supported ? qtrue : qfalse;
+}
+
+void CG_Anchor2D( float anchorX ) {
+	cgAnchor2D = anchorX;
+	if ( CG_Widescreen() ) {
+		trap->ext.R_Anchor2D( anchorX );
+	}
+}
+
+// What it's squeezed toward now (to go back to after).
+float CG_Anchored( void ) {
+	return cgAnchor2D;
+}
+
+// What marks the place x on the screen: squeezed toward x (unless it's all
+// stretched).
+void CG_AnchorAt( float x ) {
+	if ( cgAnchor2D > ANCHOR2D_STRETCH ) {
+		CG_Anchor2D( ( x > ANCHOR2D_STRETCH ) ? x : ANCHOR2D_STRETCH + 1.0f );
+	}
+}
+
+// How much narrower things are drawn than in 640x480 (1: they're stretched).
+float CG_Aspect2D( void ) {
+	return CG_Widescreen() ? trap->ext.R_Aspect2D() : 1.0f;
+}
+
+// A box something is rendered into other than by the 2D (a 3D model), where
+// it would be drawn now.
+void CG_AnchorRect( float *x, float *w ) {
+	const float squeeze = CG_Aspect2D();
+	const float anchor = cgAnchor2D;
+
+	if ( anchor <= ANCHOR2D_STRETCH || squeeze >= 1.0f || ( *x <= 0.0f && *x + *w >= SCREEN_WIDTH ) ) {
+		return;
+	}
+	*x = anchor + ( *x - anchor ) * squeeze;
+	*w *= squeeze;
+}
+
 
 /*
 ================

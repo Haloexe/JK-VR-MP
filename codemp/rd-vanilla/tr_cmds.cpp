@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "tr_local.h"
+#include "../qcommon/vr_public.h"	// OpenJK VR: VR_ANCHOR2D_STRETCH
 
 
 /*
@@ -218,6 +219,58 @@ void	RE_SetColor( const float *rgba ) {
 
 
 /*
+================================================================================
+OpenJK VR: widescreen 2D
+
+The cgame and ui modules draw in a 640x480 space the window stretches to fit,
+so on a window wider than 4:3 everything they draw comes out wider than it is
+(round things oval, text broad). A module that knows about this says where
+the things it draws next belong - RE_Anchor2D( 0 ) at the left edge, 320 in
+the middle, 640 at the right edge, or wherever a point in the world is on the
+screen - and they're then drawn in proportion, squeezed toward that x:
+
+    x' = anchor + ( x - anchor ) * squeeze,   w' = w * squeeze
+
+with squeeze = 4:3 / the window's aspect (RE_Aspect2D). A picture across the
+whole screen (a background, a fade) stays stretched across it.
+RE_Anchor2D( VR_ANCHOR2D_STRETCH ) stretches what's drawn again, as it always
+was - which is how every frame starts, so modules that don't know about this
+(and the engine's console) are drawn as ever. Off with r_aspectCorrect2D 0,
+and in a headset (whose HUD is a 4:3 screen of its own).
+================================================================================
+*/
+
+static float r2DAnchor = VR_ANCHOR2D_STRETCH;
+
+extern qboolean g_bFont2DSqueezed;	// (tr_font.cpp: r_aspectCorrectFonts would narrow text twice)
+
+float RE_Aspect2D( void ) {
+	float squeeze;
+
+	if ( !r_aspectCorrect2D || !r_aspectCorrect2D->integer || R_VRState() || R_VROffscreen()
+		|| glConfig.vidWidth <= 0 || glConfig.vidHeight <= 0 ) {
+		return 1.0f;
+	}
+	squeeze = ( 4.0f * glConfig.vidHeight ) / ( 3.0f * glConfig.vidWidth );
+	return ( squeeze < 0.999f ) ? squeeze : 1.0f;	// (only wider than 4:3)
+}
+
+void RE_Anchor2D( float anchorX ) {
+	r2DAnchor = anchorX;
+	g_bFont2DSqueezed = ( anchorX > VR_ANCHOR2D_STRETCH && RE_Aspect2D() < 1.0f ) ? qtrue : qfalse;
+}
+
+// How what's drawn now is squeezed: qfalse when it's stretched.
+static qboolean R_Squeeze2D( float *anchorX, float *squeeze ) {
+	if ( r2DAnchor <= VR_ANCHOR2D_STRETCH ) {
+		return qfalse;
+	}
+	*squeeze = RE_Aspect2D();
+	*anchorX = r2DAnchor;
+	return ( *squeeze < 1.0f ) ? qtrue : qfalse;
+}
+
+/*
 =============
 RE_StretchPic
 =============
@@ -225,9 +278,15 @@ RE_StretchPic
 void RE_StretchPic ( float x, float y, float w, float h,
 					  float s1, float t1, float s2, float t2, qhandle_t hShader ) {
 	stretchPicCommand_t	*cmd;
+	float	anchorX, squeeze;
 
 	if ( !tr.registered ) {
 		return;
+	}
+	// OpenJK VR: widescreen 2D (not across the whole screen)
+	if ( R_Squeeze2D( &anchorX, &squeeze ) && !( x <= 0.0f && x + w >= 640.0f ) ) {
+		x = anchorX + ( x - anchorX ) * squeeze;
+		w *= squeeze;
 	}
 	cmd = (stretchPicCommand_t *) R_GetCommandBuffer( sizeof( *cmd ) );
 	if ( !cmd ) {
@@ -272,6 +331,11 @@ void RE_RotatePic ( float x, float y, float w, float h,
 	cmd->s2 = s2;
 	cmd->t2 = t2;
 	cmd->a = a;
+	// OpenJK VR: widescreen 2D (once it's rotated: RB_RotatePic)
+	if ( !R_Squeeze2D( &cmd->squeezeX, &cmd->squeeze ) ) {
+		cmd->squeezeX = 0.0f;
+		cmd->squeeze = 1.0f;
+	}
 }
 
 /*
@@ -302,6 +366,11 @@ void RE_RotatePic2 ( float x, float y, float w, float h,
 	cmd->s2 = s2;
 	cmd->t2 = t2;
 	cmd->a = a;
+	// OpenJK VR: widescreen 2D (once it's rotated: RB_RotatePic2)
+	if ( !R_Squeeze2D( &cmd->squeezeX, &cmd->squeeze ) ) {
+		cmd->squeezeX = 0.0f;
+		cmd->squeeze = 1.0f;
+	}
 }
 
 void RE_RenderWorldEffects(void)
@@ -351,6 +420,8 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 
 	tr.frameCount++;
 	tr.frameSceneNum = 0;
+
+	RE_Anchor2D( VR_ANCHOR2D_STRETCH );	// OpenJK VR: every frame starts with the 2D stretched
 
 	//
 	// do overdraw measurement

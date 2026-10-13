@@ -1239,7 +1239,9 @@ static int CG_CalcFov( void ) {
 		}
 	}
 
-	if ( cg_fovAspectAdjust.integer ) {
+	// (OpenJK VR: not in a headset, whose view is its own and zooms by cg_fov;
+	// and only wider than 4:3 - narrower, this would narrow the view)
+	if ( cg_fovAspectAdjust.integer && !CG_VR() && cgs.glconfig.vidWidth * 3 > cgs.glconfig.vidHeight * 4 ) {
 		// Based on LordHavoc's code for Darkplaces
 		// http://www.quakeworld.nu/forum/topic/53/what-does-your-qw-look-like/page/30
 		const float baseAspect = 0.75f; // 3/4
@@ -1781,7 +1783,7 @@ void CG_DrawSkyBoxPortal(const char *cstr)
 		}
 	}
 
-	if (cg_fovAspectAdjust.integer) {
+	if (cg_fovAspectAdjust.integer && !CG_VR() && cgs.glconfig.vidWidth * 3 > cgs.glconfig.vidHeight * 4) {	// (OpenJK VR: as CG_CalcFov)
 		// Based on LordHavoc's code for Darkplaces
 		// http://www.quakeworld.nu/forum/topic/53/what-does-your-qw-look-like/page/30
 		const float baseAspect = 0.75f; // 3/4
@@ -2272,15 +2274,23 @@ void CG_DrawAutoMap(void)
 	w = r_autoMapW.value;
 	h = r_autoMapH.value;
 
-	refdef.x = x*hScale;
+	// OpenJK VR: widescreen 2D - the map at the right edge in proportion, and
+	// rendered where its frame is drawn
+	CG_Anchor2D( ANCHOR2D_RIGHT );
+	{
+		float mapX = x, mapW = w;
+		CG_AnchorRect( &mapX, &mapW );
+		refdef.x = mapX*hScale;
+		refdef.width = mapW*hScale;
+	}
 	refdef.y = y*vScale;
-	refdef.width = w*hScale;
 	refdef.height = h*vScale;
 
 	CG_DrawPic(x-SIDEFRAME_WIDTH, y, SIDEFRAME_WIDTH, h, cgs.media.wireframeAutomapFrame_left);
 	CG_DrawPic(x+w, y, SIDEFRAME_WIDTH, h, cgs.media.wireframeAutomapFrame_right);
 	CG_DrawPic(x-SIDEFRAME_WIDTH, y-SIDEFRAME_HEIGHT, w+(SIDEFRAME_WIDTH*2), SIDEFRAME_HEIGHT, cgs.media.wireframeAutomapFrame_top);
 	CG_DrawPic(x-SIDEFRAME_WIDTH, y+h, w+(SIDEFRAME_WIDTH*2), SIDEFRAME_HEIGHT, cgs.media.wireframeAutomapFrame_bottom);
+	CG_Anchor2D( ANCHOR2D_STRETCH );
 
 	refdef.time = cg.time;
 

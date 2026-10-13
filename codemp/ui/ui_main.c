@@ -43,6 +43,7 @@ USER INTERFACE MAIN
 #include "cgame/animtable.h" //we want this to be compiled into the module because we access it in the shared module.
 #include "game/bg_saga.h"
 #include "ui_shared.h"
+#include "qcommon/vr_public.h"	// OpenJK VR: VR_ENGINE_TAG
 
 NORETURN_PTR void (*Com_Error)( int level, const char *error, ... );
 void (*Com_Printf)( const char *msg, ... );
@@ -1465,6 +1466,8 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	// OpenJK VR: the voice chat settings, on the Sound page of Setup (with
 	// menudef.h's definitions still loaded)
 	UI_VRVoice_AddSettings();
+	// OpenJK VR: display mode and the monitor's resolutions, on the Video page
+	UI_VRVideo_AddSettings();
 
 	trap->PC_RemoveAllGlobalDefines ( );
 }
@@ -4742,17 +4745,17 @@ static void UI_Update(const char *name) {
 	}
 	else if (Q_stricmp(name, "ui_r_glCustom") == 0)
 	{
+		// (OpenJK VR: the presets no longer change the resolution or the
+		// display mode - 640x480 and 800x600 fullscreen, once)
 		switch (val)
 		{
 		case 0:	// high quality
 
-			trap->Cvar_SetValue( "ui_r_fullScreen", 1 );
 			trap->Cvar_SetValue( "ui_r_subdivisions", 4 );
 			trap->Cvar_SetValue( "ui_r_lodbias", 0 );
 			trap->Cvar_SetValue( "ui_r_colorbits", 32 );
 			trap->Cvar_SetValue( "ui_r_depthbits", 24 );
 			trap->Cvar_SetValue( "ui_r_picmip", 0 );
-			trap->Cvar_SetValue( "ui_r_mode", 4 );
 			trap->Cvar_SetValue( "ui_r_texturebits", 32 );
 			trap->Cvar_SetValue( "ui_r_fastSky", 0 );
 			trap->Cvar_SetValue( "ui_r_inGameVideo", 1 );
@@ -4761,13 +4764,11 @@ static void UI_Update(const char *name) {
 			break;
 
 		case 1: // normal
-			trap->Cvar_SetValue( "ui_r_fullScreen", 1 );
 			trap->Cvar_SetValue( "ui_r_subdivisions", 4 );
 			trap->Cvar_SetValue( "ui_r_lodbias", 0 );
 			trap->Cvar_SetValue( "ui_r_colorbits", 0 );
 			trap->Cvar_SetValue( "ui_r_depthbits", 24 );
 			trap->Cvar_SetValue( "ui_r_picmip", 1 );
-			trap->Cvar_SetValue( "ui_r_mode", 3 );
 			trap->Cvar_SetValue( "ui_r_texturebits", 0 );
 			trap->Cvar_SetValue( "ui_r_fastSky", 0 );
 			trap->Cvar_SetValue( "ui_r_inGameVideo", 1 );
@@ -4777,13 +4778,11 @@ static void UI_Update(const char *name) {
 
 		case 2: // fast
 
-			trap->Cvar_SetValue( "ui_r_fullScreen", 1 );
 			trap->Cvar_SetValue( "ui_r_subdivisions", 12 );
 			trap->Cvar_SetValue( "ui_r_lodbias", 1 );
 			trap->Cvar_SetValue( "ui_r_colorbits", 0 );
 			trap->Cvar_SetValue( "ui_r_depthbits", 0 );
 			trap->Cvar_SetValue( "ui_r_picmip", 2 );
-			trap->Cvar_SetValue( "ui_r_mode", 3 );
 			trap->Cvar_SetValue( "ui_r_texturebits", 0 );
 			trap->Cvar_SetValue( "ui_r_fastSky", 1 );
 			trap->Cvar_SetValue( "ui_r_inGameVideo", 0 );
@@ -4793,12 +4792,10 @@ static void UI_Update(const char *name) {
 
 		case 3: // fastest
 
-			trap->Cvar_SetValue( "ui_r_fullScreen", 1 );
 			trap->Cvar_SetValue( "ui_r_subdivisions", 20 );
 			trap->Cvar_SetValue( "ui_r_lodbias", 2 );
 			trap->Cvar_SetValue( "ui_r_colorbits", 16 );
 			trap->Cvar_SetValue( "ui_r_depthbits", 16 );
-			trap->Cvar_SetValue( "ui_r_mode", 3 );
 			trap->Cvar_SetValue( "ui_r_picmip", 3 );
 			trap->Cvar_SetValue( "ui_r_texturebits", 16 );
 			trap->Cvar_SetValue( "ui_r_fastSky", 1 );
@@ -4903,6 +4900,7 @@ void UI_UpdateVideoSetup ( void )
 	trap->Cvar_Set ( "r_allowExtensions", UI_Cvar_VariableString ( "ui_r_allowExtensions" ) );
 	trap->Cvar_Set ( "cg_shadows", UI_Cvar_VariableString ( "ui_cg_shadows" ) );
 	trap->Cvar_Set ( "ui_r_modified", "0" );
+	UI_VRVideo_UpdateSetup();	// OpenJK VR: display mode, resolution
 
 	trap->Cmd_ExecuteText( EXEC_APPEND, "vid_restart;" );
 }
@@ -4954,6 +4952,7 @@ void UI_GetVideoSetup ( void )
 	trap->Cvar_Set ( "ui_r_allowExtensions",			UI_Cvar_VariableString ( "r_allowExtensions" ) );
 	trap->Cvar_Set ( "ui_cg_shadows",					UI_Cvar_VariableString ( "cg_shadows" ) );
 	trap->Cvar_Set ( "ui_r_modified",					"0" );
+	UI_VRVideo_GetSetup();	// OpenJK VR: display mode, resolution
 }
 
 // If the game type is siege, hide the addbot button. I would have done a cvar text on that item,
@@ -6432,6 +6431,9 @@ static void UI_RunMenuScript(char **args)
 			UI_UpdateForcePowers();
 		} else if (Q_stricmp(name, "glCustom") == 0) {
 			trap->Cvar_Set("ui_r_glCustom", "4");
+		}
+		else if ( UI_VRVideo_Script( name ) )	// OpenJK VR: the Video page's Custom Resolution row
+		{
 		}
 		else if (Q_stricmp(name, "setMovesListDefault") == 0)
 		{
@@ -10014,6 +10016,52 @@ void UI_Init( qboolean inGameLoad ) {
 }
 
 #define	UI_FPS_FRAMES	4
+/*
+================================================================================
+OpenJK VR: widescreen 2D
+
+On a window wider than 4:3 the menus are kept in proportion in the middle of
+it rather than stretched across it (the renderer's Anchor2D through
+uiImport_t.ext, r_aspectCorrect2D); pictures across the whole screen - the
+backgrounds - are still stretched across it. The mouse needs nothing: kept
+in proportion, the cursor goes as far across the screen as up it. Not with
+an engine that can't (one other than this build's).
+================================================================================
+*/
+
+static float uiAnchor2D = VR_ANCHOR2D_STRETCH;
+
+static qboolean UI_Widescreen( void ) {
+	static int supported = -1;
+
+	if ( supported < 0 ) {
+		char tag[64];
+		trap->Cvar_VariableStringBuffer( "vr_engine", tag, sizeof( tag ) );
+		supported = ( !strcmp( tag, VR_ENGINE_TAG ) && trap->ext.R_Anchor2D && trap->ext.R_Aspect2D ) ? 1 : 0;
+	}
+	return supported ? qtrue : qfalse;
+}
+
+// What's drawn next is squeezed toward x (320: the middle;
+// VR_ANCHOR2D_STRETCH: stretched).
+void UI_Anchor2D( float anchorX ) {
+	uiAnchor2D = anchorX;
+	if ( UI_Widescreen() ) {
+		trap->ext.R_Anchor2D( anchorX );
+	}
+}
+
+// A box something is rendered into other than by the 2D (a model in a menu),
+// where it would be drawn now.
+void UI_AnchorRect( float *x, float *w ) {
+	const float squeeze = UI_Widescreen() ? trap->ext.R_Aspect2D() : 1.0f;
+
+	if ( uiAnchor2D > VR_ANCHOR2D_STRETCH && squeeze < 1.0f && !( *x <= 0.0f && *x + *w >= SCREEN_WIDTH ) ) {
+		*x = uiAnchor2D + ( *x - uiAnchor2D ) * squeeze;
+		*w *= squeeze;
+	}
+}
+
 void UI_Refresh( int realtime )
 {
 	static int index;
@@ -10047,9 +10095,13 @@ void UI_Refresh( int realtime )
 
 	UI_UpdateCvars();
 
+	UI_Anchor2D( 320.0f );	// OpenJK VR: in proportion in the middle (the engine stretches what's after)
+
 	if (Menu_Count() > 0) {
-		// OpenJK VR: the voice chat settings follow what's chosen
+		// OpenJK VR: the voice chat settings follow what's chosen, and the
+		// Video page's Custom Resolution row
 		UI_VRVoice_Frame();
+		UI_VRVideo_Frame();
 		// paint all the menus
 		Menu_PaintAll();
 		// refresh server browser list
@@ -10366,6 +10418,7 @@ void UI_DrawConnectScreen( qboolean overlay ) {
 
 	menuDef_t *menu = Menus_FindByName("Connect");
 
+	UI_Anchor2D( 320.0f );	// OpenJK VR: in proportion in the middle (the engine stretches what's after)
 
 	if ( !overlay && menu ) {
 		Menu_Paint(menu, qtrue);

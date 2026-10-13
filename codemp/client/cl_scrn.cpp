@@ -408,6 +408,14 @@ void SCR_Init( void ) {
 
 //=======================================================
 
+// OpenJK VR: what a module has drawn kept in proportion on a widescreen (the
+// renderer's Anchor2D), what's drawn after it stretched again, as always
+static void SCR_Stretch2D( void ) {
+	if ( re->ext.Anchor2D ) {
+		re->ext.Anchor2D( VR_ANCHOR2D_STRETCH );
+	}
+}
+
 /*
 ==================
 SCR_DrawScreenField
@@ -449,20 +457,24 @@ void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 			// refresh to update the time
 			UIVM_Refresh( cls.realtime );
 			UIVM_DrawConnectScreen( qfalse );
+			SCR_Stretch2D();
 			break;
 		case CA_LOADING:
 		case CA_PRIMED:
 			// draw the game information screen and loading progress
 			CL_CGameRendering( stereoFrame );
+			SCR_Stretch2D();
 
 			// also draw the connection information, so it doesn't
 			// flash away too briefly on local or lan games
 			// refresh to update the time
 			UIVM_Refresh( cls.realtime );
 			UIVM_DrawConnectScreen( qtrue );
+			SCR_Stretch2D();
 			break;
 		case CA_ACTIVE:
 			CL_CGameRendering( stereoFrame );
+			SCR_Stretch2D();
 			SCR_DrawDemoRecording();
 			break;
 		}
@@ -471,6 +483,7 @@ void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 	// the menu draws next
 	if ( Key_GetCatcher( ) & KEYCATCH_UI && cls.uiStarted ) {
 		UIVM_Refresh( cls.realtime );
+		SCR_Stretch2D();
 	}
 
 	// Engine internal menu

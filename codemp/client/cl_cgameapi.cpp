@@ -1924,6 +1924,8 @@ void CL_BindCGame( void ) {
 		cgi.G2API_GetSurfaceName				= CL_G2API_GetSurfaceName;
 
 		cgi.ext.R_Font_StrLenPixels				= re->ext.Font_StrLenPixels;
+		cgi.ext.R_Anchor2D						= re->ext.Anchor2D;		// OpenJK VR: widescreen 2D
+		cgi.ext.R_Aspect2D						= re->ext.Aspect2D;
 #ifdef OPENJK_VR
 		cgi.ext.VR_GetClientState				= VR_GetClientState;
 		cgi.ext.VR_G2SetModelHidden				= CL_VR_G2SetModelHidden;

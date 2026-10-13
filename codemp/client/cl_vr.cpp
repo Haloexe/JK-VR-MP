@@ -1810,8 +1810,9 @@ static void VR_ApplyComfortDefaults( void ) {
 
 	// Every session (not archived by the game): no lagging third-person camera.
 	Cvar_Set( "cg_thirdPersonCameraDamp", "1" );
-	// The headset decides the field of view; keep the cgame's fov plain.
-	Cvar_Set( "cg_fovAspectAdjust", "0" );
+	// (The headset decides the field of view: the cgame never widens it for a
+	// widescreen in one - cg_fovAspectAdjust - so that's left as it is, for
+	// playing on the monitor.)
 	// The headset paces frames; vsync on the desktop mirror would cap VR at
 	// the monitor's refresh rate.
 	Cvar_Set( "r_swapInterval", "0" );

@@ -32,9 +32,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "../rd-common/tr_vr.h"
 
 // OpenJK VR: refimport_t gained VR_GetRenderState and refexport_t.ext gained
-// G2API_SetModelNoRender and G2API_SetBoneVRTransform, so a VR renderer must
-// not be paired with a stock engine or an older VR engine (or vice versa).
-#define	REF_API_VERSION 1011
+// G2API_SetModelNoRender and G2API_SetBoneVRTransform (1011), then Anchor2D
+// and Aspect2D (1012), so a VR renderer must not be paired with a stock
+// engine or an older VR engine (or vice versa).
+#define	REF_API_VERSION 1012
 
 //
 // these are the functions exported by the refresh module
@@ -251,6 +252,15 @@ typedef struct refexport_s {
 		// OpenJK VR (NULL in renderers without them)
 		qboolean			(*G2API_SetModelNoRender)				( CGhoul2Info_v &ghoul2, int modelIndex, qboolean noRender );
 		qboolean			(*G2API_SetBoneVRTransform)				( CGhoul2Info_v &ghoul2, int modelIndex, const char *boneName, const mdxaBone_t *matrix );
+		// OpenJK VR: widescreen 2D. What's drawn next in the 640x480 space is
+		// kept in proportion on a window wider than 4:3, squeezed toward x =
+		// anchorX (0: the left edge, 320: the middle, 640: the right edge);
+		// VR_ANCHOR2D_STRETCH (qcommon/vr_public.h) stretches it over the
+		// window again, as always. Aspect2D: how much narrower that draws
+		// things (1: it doesn't - a 4:3 window, r_aspectCorrect2D 0, or a
+		// headset).
+		void				(*Anchor2D)								( float anchorX );
+		float				(*Aspect2D)								( void );
 	} ext;
 
 } refexport_t;

@@ -141,13 +141,23 @@ void CG_DrawInformation( void ) {
 	info = CG_ConfigString( CS_SERVERINFO );
 	sysInfo = CG_ConfigString( CS_SYSTEMINFO );
 
+	CG_Anchor2D( ANCHOR2D_MIDDLE );	// OpenJK VR: widescreen 2D (stretched again at the end)
+
 	s = Info_ValueForKey( info, "mapname" );
 	levelshot = trap->R_RegisterShaderNoMip( va( "levelshots/%s", s ) );
 	if ( !levelshot ) {
 		levelshot = trap->R_RegisterShaderNoMip( "menu/art/unknownmap_mp" );
 	}
 	trap->R_SetColor( NULL );
-	CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, levelshot );
+	{
+		// OpenJK VR: widescreen 2D - the picture kept in proportion across the
+		// screen (its top and bottom cut off) rather than stretched, and what's
+		// on it in the middle
+		const float cut = ( 1.0f - CG_Aspect2D() ) * 0.5f;
+		CG_Anchor2D( ANCHOR2D_STRETCH );
+		trap->R_DrawStretchPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, cut, 1, 1 - cut, levelshot );
+		CG_Anchor2D( ANCHOR2D_MIDDLE );
+	}
 
 	CG_LoadBar();
 
@@ -365,6 +375,7 @@ void CG_DrawInformation( void ) {
 	default:
 		break;
 	}
+	CG_Anchor2D( ANCHOR2D_STRETCH );	// OpenJK VR
 }
 
 /*

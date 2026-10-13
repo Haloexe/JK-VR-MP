@@ -561,6 +561,10 @@ if(BuildMPEngine)
 			"${MPDir}/win32/openjk.rc"
 			"${SharedDir}/sys/win_manifest.manifest"
 			)
+		if(MINGW)
+			# (MSVC's linker embeds the .manifest itself; MinGW needs it as a resource)
+			set(MPEngineWin32Files ${MPEngineWin32Files} "${MPDir}/win32/openjk_manifest.rc")
+		endif()
 
 		set(MPEngineFiles ${MPEngineFiles} ${MPEngineWin32Files})
 		source_group("win32" FILES ${MPEngineWin32Files})

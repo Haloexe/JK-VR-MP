@@ -48,6 +48,17 @@ void UI_Report( void );
 void UI_Load( void );
 void UI_LoadMenus( const char *menuFile, qboolean reset );
 
+// ui_main.c (OpenJK VR: the menus kept in proportion on a widescreen)
+void		UI_Anchor2D( float anchorX );
+void		UI_AnchorRect( float *x, float *w );
+
+// ui_vrvideo.c (OpenJK VR: display mode and resolutions on the Video page)
+void		UI_VRVideo_AddSettings( void );
+void		UI_VRVideo_GetSetup( void );
+void		UI_VRVideo_UpdateSetup( void );
+void		UI_VRVideo_Frame( void );
+qboolean	UI_VRVideo_Script( const char *name );
+
 // ui_vrvoice.c (OpenJK VR: the voice chat settings)
 void		UI_VRVoice_AddSettings( void );
 void		UI_VRVoice_Frame( void );

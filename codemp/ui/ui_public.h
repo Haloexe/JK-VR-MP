@@ -375,6 +375,13 @@ typedef struct uiImport_s {
 		float			(*R_Font_StrLenPixels)					( const char *text, const int iFontIndex, const float scale );
 		void			(*AddCommand)							( const char *cmd_name );
 		void			(*RemoveCommand)						( const char *cmd_name );
+		// OpenJK VR (only when the cvar "vr_engine" is VR_ENGINE_TAG): widescreen
+		// 2D - what's drawn next is kept in proportion on a window wider than
+		// 4:3, squeezed toward x = anchorX (320: the middle; VR_ANCHOR2D_STRETCH:
+		// stretched over the window as always), and how much narrower that
+		// draws things (1: not at all). Every frame starts stretched.
+		void			(*R_Anchor2D)							( float anchorX );
+		float			(*R_Aspect2D)							( void );
 	} ext;
 } uiImport_t;
 

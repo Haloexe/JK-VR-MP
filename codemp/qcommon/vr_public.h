@@ -19,11 +19,18 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-7"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-8"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
 												//     ext.VR_GetAvatar (cgame)
+												// -8: ext.R_Anchor2D, ext.R_Aspect2D (cgame, ui:
+												//     widescreen 2D)
+
+// ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
+// drawn is stretched across the window again, as always (any other x is a
+// place to squeeze toward, off the screen too: a point in the world there)
+#define VR_ANCHOR2D_STRETCH		-100000.0f
 
 /*
 --------------------------------------------------------------------------------

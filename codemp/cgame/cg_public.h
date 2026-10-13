@@ -740,6 +740,13 @@ typedef struct cgameImport_s {
 		// of that server time (from a server running this build; offsets
 		// from their origin in that snapshot) - qfalse if they had none
 		qboolean		(*VR_GetAvatar)							( int serverTime, int clientNum, vrAvatar_t *avatar );
+		// OpenJK VR: widescreen 2D - what's drawn next is kept in proportion on
+		// a window wider than 4:3, squeezed toward x = anchorX (0: the left
+		// edge, 320: the middle, 640: the right edge; VR_ANCHOR2D_STRETCH:
+		// stretched over the window as always), and how much narrower that
+		// draws things (1: not at all). Every frame starts stretched.
+		void			(*R_Anchor2D)							( float anchorX );
+		float			(*R_Aspect2D)							( void );
 	} ext;
 } cgameImport_t;
 

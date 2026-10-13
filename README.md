@@ -18,6 +18,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   where they stand.
 - **Guns in your hand:** aim with your hand, with a 3D aim dot.
 - **Dedicated server** for Windows and Linux, so you can run your own.
+- **Plays on a monitor too:** without a headset you get a borderless window,
+  every resolution your monitor has (widescreen and ultrawide included) or a
+  custom one, and a HUD, menus and field of view made for widescreen.
 
 VR players and players without VR can share a server. On ordinary servers the
 VR client still works, with the game's usual animated saber combat.

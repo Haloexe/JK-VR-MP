@@ -165,6 +165,7 @@ cvar_t	*r_debugSort;
 cvar_t	*r_marksOnTriangleMeshes;
 
 cvar_t	*r_aspectCorrectFonts;
+cvar_t	*r_aspectCorrect2D;
 
 // the limits apply to the sum of all scenes in a frame --
 // the main view, all the 3D icons, etc
@@ -1672,6 +1673,7 @@ void R_Register( void )
 	r_shadowRange						= ri.Cvar_Get( "r_shadowRange",					"1000",						CVAR_NONE, "" );
 	r_marksOnTriangleMeshes				= ri.Cvar_Get( "r_marksOnTriangleMeshes",			"0",						CVAR_ARCHIVE_ND, "" );
 	r_aspectCorrectFonts				= ri.Cvar_Get( "r_aspectCorrectFonts",				"0",						CVAR_ARCHIVE, "" );
+	r_aspectCorrect2D					= ri.Cvar_Get( "r_aspectCorrect2D",					"1",						CVAR_ARCHIVE, "Keep the HUD and menus in proportion on a widescreen (0: stretch them across it)" );
 	r_maxpolys							= ri.Cvar_Get( "r_maxpolys",						XSTRING( DEFAULT_MAX_POLYS ),		CVAR_NONE, "" );
 	r_maxpolyverts						= ri.Cvar_Get( "r_maxpolyverts",					XSTRING( DEFAULT_MAX_POLYVERTS ),	CVAR_NONE, "" );
 /*
@@ -2160,6 +2162,8 @@ Q_EXPORT refexport_t* QDECL GetRefAPI( int apiVersion, refimport_t *rimp ) {
 	re.ext.Font_StrLenPixels				= RE_Font_StrLenPixelsNew;
 	re.ext.G2API_SetModelNoRender			= G2API_SetModelNoRender;
 	re.ext.G2API_SetBoneVRTransform			= G2API_SetBoneVRTransform;
+	re.ext.Anchor2D							= RE_Anchor2D;
+	re.ext.Aspect2D							= RE_Aspect2D;
 
 	return &re;
 }

@@ -2543,6 +2543,16 @@ Ghoul2 Insert End
 
 	CG_RegisterCvars();
 
+	// OpenJK VR: on a widescreen, a wider view rather than one cut down at the
+	// top and bottom (cg_fovAspectAdjust, now on by default) - for configs
+	// saved before then too, once
+	if ( !cg_widescreenDefaults.integer ) {
+		trap->Cvar_Set( "cg_fovAspectAdjust", "1" );
+		trap->Cvar_Set( "cg_widescreenDefaults", "1" );
+		trap->Cvar_Update( &cg_fovAspectAdjust );
+		trap->Cvar_Update( &cg_widescreenDefaults );
+	}
+
 	CG_InitConsoleCommands();
 
 	cg.renderingThirdPerson = cg_thirdPerson.integer;

@@ -369,6 +369,9 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 		displayAspect = (float)desktopMode.w / (float)desktopMode.h;
 
 		Com_Printf( "Display aspect: %.3f\n", displayAspect );
+
+		// OpenJK VR: what "r_mode -2" gives, for the Video settings
+		Cvar_Set( "r_desktopResolution", va( "%dx%d", desktopMode.w, desktopMode.h ) );
 	}
 	else
 	{
@@ -420,10 +423,45 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 
 	if( screen != NULL )
 	{
+		const Uint32 oldFlags = SDL_GetWindowFlags( screen );
+
 		SDL_GetWindowPosition( screen, &x, &y );
 		Com_DPrintf( "Existing window at %dx%d before being destroyed\n", x, y );
+
+		// OpenJK VR: from fullscreen or a borderless window to one with a title
+		// bar: in the middle of the display, not where the edgeless one was
+		// (from the top left corner, its title bar would be off the screen)
+		if( !fullscreen && !noborder && ( oldFlags & ( SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS ) ) )
+		{
+			x = SDL_WINDOWPOS_CENTERED_DISPLAY( display >= 0 ? display : 0 );
+			y = SDL_WINDOWPOS_CENTERED_DISPLAY( display >= 0 ? display : 0 );
+		}
+
 		SDL_DestroyWindow( screen );
 		screen = NULL;
+	}
+
+	// OpenJK VR: a borderless window goes on the display it was on - covering
+	// it from its top left corner when it's that display's size or bigger
+	// (borderless fullscreen: "r_noborder 1" with "r_mode -2"), else in the
+	// middle of it
+	if( !fullscreen && noborder && display >= 0 )
+	{
+		SDL_Rect bounds;
+
+		if( SDL_GetDisplayBounds( display, &bounds ) == 0 && bounds.w > 0 && bounds.h > 0 )
+		{
+			if( glConfig->vidWidth >= bounds.w && glConfig->vidHeight >= bounds.h )
+			{
+				x = bounds.x;
+				y = bounds.y;
+			}
+			else
+			{
+				x = bounds.x + ( bounds.w - glConfig->vidWidth ) / 2;
+				y = bounds.y + ( bounds.h - glConfig->vidHeight ) / 2;
+			}
+		}
 	}
 
 	if( fullscreen )
@@ -761,6 +799,7 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 	r_ignorehwgamma		= Cvar_Get( "r_ignorehwgamma",		"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
 	r_ext_multisample	= Cvar_Get( "r_ext_multisample",	"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
 	Cvar_Get( "r_availableModes", "", CVAR_ROM );
+	Cvar_Get( "r_desktopResolution", "", CVAR_ROM );	// OpenJK VR: the display's own, e.g. "2560x1440"
 
 #ifdef OPENJK_VR
 	// The desktop window only mirrors the headset view, and a multisampled

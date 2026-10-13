@@ -356,6 +356,23 @@ VR setup. Start the VR game first and host, then in the desktop copy:
 then click to follow the next player (jump stops following). With a saber
 out you see them from behind; with a gun type  cg_thirdPerson 1.
 
+Playing on a monitor (the desktop copy, or vr_enabled 0): Setup > Video has
+  Display Mode       Windowed, Fullscreen, or Borderless Window (a window
+                     covering the screen, with no edges: switching away
+                     from the game is instant)
+  Video Mode         Desktop (your monitor's own resolution - best with a
+                     borderless window), every resolution your monitor
+                     has (widescreen and ultrawide too), or Custom
+  Custom Resolution  the size Custom is: click it and type one, e.g.
+                     2560x1080
+then Apply Changes. On a widescreen the HUD and menus keep their shape
+(r_aspectCorrect2D 1; 0 stretches them across the screen as the original
+game did), and you see more to the sides rather than less above and below
+(cg_fovAspectAdjust 1, at your cg_fov). In the console: r_mode -2 is the
+desktop's resolution, r_mode -1 uses r_customwidth and r_customheight,
+r_fullscreen 1 is fullscreen, r_noborder 1 (with r_fullscreen 0) a
+borderless window - then vid_restart.
+
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
                which weight, one or two hands - every cut and clash, every

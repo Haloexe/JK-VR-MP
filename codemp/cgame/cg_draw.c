@@ -176,6 +176,55 @@ void CG_Text_Paint(float x, float y, float scale, vec4_t color, const char *text
 							);
 }
 
+// OpenJK VR: widescreen 2D - where a HUD menu belongs: the left edge, the
+// right edge or the middle, whichever third of the screen all its items are
+// in the middle of (so a menu is never torn apart, wherever the HUD files put
+// it)
+static float CG_AnchorForMenu( const menuDef_t *menu ) {
+	float left = SCREEN_WIDTH, right = 0.0f, mid;
+	int i;
+
+	if ( !menu ) {
+		return ANCHOR2D_MIDDLE;
+	}
+	for ( i = 0; i < menu->itemCount; i++ ) {
+		const rectDef_t *r = &menu->items[i]->window.rect;
+		const float x0 = ( r->w < 0.0f ) ? r->x + r->w : r->x, x1 = ( r->w < 0.0f ) ? r->x : r->x + r->w;
+		if ( r->w == 0.0f && r->h == 0.0f ) {
+			continue;
+		}
+		left = ( x0 < left ) ? x0 : left;
+		right = ( x1 > right ) ? x1 : right;
+	}
+	if ( right < left ) {
+		left = menu->window.rect.x;
+		right = left + menu->window.rect.w;
+	}
+	mid = ( left + right ) * 0.5f;
+	return ( mid < SCREEN_WIDTH / 3.0f ) ? ANCHOR2D_LEFT : ( mid > SCREEN_WIDTH * 2.0f / 3.0f ) ? ANCHOR2D_RIGHT : ANCHOR2D_MIDDLE;
+}
+
+// OpenJK VR: a scope's mask across the screen, kept round on a widescreen -
+// in the middle 4:3 of it, black either side (its other pieces are squeezed
+// toward the middle with it)
+static void CG_DrawZoomMaskPic( qhandle_t mask, const vec4_t color ) {
+	const float squeeze = CG_Aspect2D();
+
+	if ( squeeze < 1.0f && CG_Anchored() > ANCHOR2D_STRETCH ) {
+		const float was = CG_Anchored();
+		const float w = SCREEN_WIDTH * squeeze, x = ( SCREEN_WIDTH - w ) * 0.5f;
+		CG_Anchor2D( ANCHOR2D_STRETCH );
+		CG_DrawPic( x, 0, w, SCREEN_HEIGHT, mask );
+		trap->R_SetColor( colorTable[CT_BLACK] );
+		CG_DrawPic( 0, 0, x, SCREEN_HEIGHT, cgs.media.whiteShader );
+		CG_DrawPic( x + w, 0, SCREEN_WIDTH - ( x + w ), SCREEN_HEIGHT, cgs.media.whiteShader );
+		trap->R_SetColor( color );
+		CG_Anchor2D( was );
+	} else {
+		CG_DrawPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, mask );
+	}
+}
+
 /*
 ================
 CG_DrawZoomMask
@@ -273,7 +322,7 @@ static void CG_DrawZoomMask( void )
 		color1[3] = 1.0f;
 		trap->R_SetColor( color1 );
 
-		CG_DrawPic( 0, 0, 640, 480, cgs.media.binocularMask );
+		CG_DrawZoomMaskPic( cgs.media.binocularMask, color1 );	// OpenJK VR: round on a widescreen
 
 		CG_DrawPic( 4, 282 - level, 16, 16, cgs.media.binocularArrow );
 
@@ -312,7 +361,7 @@ static void CG_DrawZoomMask( void )
 
 		// Draw target mask
 		trap->R_SetColor( colorTable[CT_WHITE] );
-		CG_DrawPic( 0, 0, 640, 480, cgs.media.disruptorMask );
+		CG_DrawZoomMaskPic( cgs.media.disruptorMask, colorTable[CT_WHITE] );	// OpenJK VR: round on a widescreen
 
 		// apparently 99.0f is the full zoom level
 		if ( level >= 99 )
@@ -509,6 +558,7 @@ void CG_DrawFlagModel( float x, float y, float w, float h, int team, qboolean fo
 	qhandle_t		handle;
 
 	if ( !force2D && cg_draw3DIcons.integer ) {
+		CG_AnchorRect( &x, &w );	// OpenJK VR: widescreen 2D
 		x *= cgs.screenXScale;
 		y *= cgs.screenYScale;
 		w *= cgs.screenXScale;
@@ -1335,10 +1385,12 @@ void CG_DrawHUD(centity_t	*cent)
 
 		if (cg.predictedPlayerState.pm_type != PM_SPECTATOR)
 		{
+			CG_Anchor2D( ANCHOR2D_LEFT );	// OpenJK VR: widescreen 2D
 			CG_DrawProportionalString( x+16, y+40, va( "%i", cg.snap->ps.stats[STAT_HEALTH] ), UI_SMALLFONT|UI_DROPSHADOW, colorTable[CT_HUD_RED] );
 
 			CG_DrawProportionalString( x+18+14, y+40+14, va( "%i", cg.snap->ps.stats[STAT_ARMOR] ), UI_SMALLFONT|UI_DROPSHADOW, colorTable[CT_HUD_GREEN] );
 
+			CG_Anchor2D( ANCHOR2D_RIGHT );
 			CG_DrawSimpleForcePower( cent );
 
 			if ( cent->currentState.weapon == WP_SABER )
@@ -1356,6 +1408,7 @@ void CG_DrawHUD(centity_t	*cent)
 	{
 		// Draw the left HUD
 		menuHUD = Menus_FindByName("lefthud");
+		CG_Anchor2D( CG_AnchorForMenu( menuHUD ) );	// OpenJK VR: widescreen 2D
 		Menu_Paint( menuHUD, qtrue );
 
 		if (menuHUD)
@@ -1438,6 +1491,7 @@ void CG_DrawHUD(centity_t	*cent)
 		}
 
 		menuHUD = Menus_FindByName("righthud");
+		CG_Anchor2D( CG_AnchorForMenu( menuHUD ) );	// OpenJK VR: widescreen 2D
 		Menu_Paint( menuHUD, qtrue );
 
 		if (menuHUD)
@@ -2691,6 +2745,8 @@ qboolean CG_DrawVehicleHud( const centity_t *cent )
 		return qtrue;	// Draw player HUD
 	}
 
+	CG_Anchor2D( CG_AnchorForMenu( menuHUD ) );	// OpenJK VR: widescreen 2D
+
 	CG_DrawVehicleTurboRecharge( menuHUD, veh );
 	CG_DrawVehicleWeaponsLinked( menuHUD, veh );
 
@@ -2757,13 +2813,17 @@ qboolean CG_DrawVehicleHud( const centity_t *cent )
 	// If he's hidden, he must be in a vehicle
 	if (veh->m_pVehicle->m_pVehicleInfo->hideRider)
 	{
+		const float vehAnchor = CG_Anchored();	// OpenJK VR: widescreen 2D (each where its menu is)
+		CG_Anchor2D( CG_AnchorForMenu( Menus_FindByName( "vehicledamagehud" ) ) );
 		CG_DrawVehicleDamageHUD(veh,cg.predictedVehicleState.brokenLimbs,shieldPerc,"vehicledamagehud",1.0f);
 
 		// Has he targeted an enemy?
 		if (CG_CheckTargetVehicle( &veh, &alpha ))
 		{
+			CG_Anchor2D( CG_AnchorForMenu( Menus_FindByName( "enemyvehicledamagehud" ) ) );
 			CG_DrawVehicleDamageHUD(veh,veh->currentState.brokenLimbs,((float)veh->currentState.activeForcePass/10.0f),"enemyvehicledamagehud",alpha);
 		}
+		CG_Anchor2D( vehAnchor );
 
 		return qfalse;	// Don't draw player HUD
 	}
@@ -4249,6 +4309,8 @@ static void CG_DrawDisconnect( void ) {
 	const char		*s;
 	int			w;  // bk010215 - FIXME char message[1024];
 
+	CG_Anchor2D( ANCHOR2D_MIDDLE );	// OpenJK VR: widescreen 2D (the words)
+
 	if (cg.mMapChange)
 	{
 		s = CG_GetStringEdString("MP_INGAME", "SERVER_CHANGING_MAPS");	// s = "Server Changing Maps";
@@ -4282,6 +4344,7 @@ static void CG_DrawDisconnect( void ) {
 	x = 640 - 48;
 	y = 480 - 48;
 
+	CG_Anchor2D( ANCHOR2D_RIGHT );	// OpenJK VR: widescreen 2D
 	CG_DrawPic( x, y, 48, 48, trap->R_RegisterShader("gfx/2d/net.tga" ) );
 }
 
@@ -4912,6 +4975,7 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 	vec4_t		ecolor = {0,0,0,0};
 	centity_t	*crossEnt = NULL;
 	float		chX, chY;
+	float		was2D;
 
 	if ( worldPoint )
 	{
@@ -5235,6 +5299,8 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 
 	chX = x + cg.refdef.x + 0.5 * (640 - w);
 	chY = y + cg.refdef.y + 0.5 * (480 - h);
+	was2D = CG_Anchored();
+	CG_AnchorAt( chX + w * 0.5f );	// OpenJK VR: widescreen 2D, on what it points at
 	trap->R_DrawStretchPic( chX, chY, w, h, 0, 0, 1, 1, hShader );
 
 	//draw a health bar directly under the crosshair if we're looking at something
@@ -5274,7 +5340,10 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 
 	if (cg_genericTimerBar > cg.time)
 	{ //draw generic timing bar, can be used for whatever
+		const float atCrosshair = CG_Anchored();
+		CG_Anchor2D( ( was2D > ANCHOR2D_STRETCH ) ? ANCHOR2D_RIGHT : ANCHOR2D_STRETCH );	// OpenJK VR (it's at the right)
 		CG_DrawGenericTimerBar();
+		CG_Anchor2D( atCrosshair );
 	}
 
 	if ( corona ) // drawing extra bits
@@ -5294,6 +5363,7 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 	}
 
 	trap->R_SetColor( NULL );
+	CG_Anchor2D( was2D );
 }
 
 qboolean CG_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float *x, float *y)
@@ -5349,6 +5419,7 @@ void CG_SaberClashFlare( void )
 	int x,y;
 	float v, len;
 	trace_t tr;
+	float was2D, sx;
 
 	t = cg.time - cg_saberFlashTime;
 
@@ -5399,9 +5470,15 @@ void CG_SaberClashFlare( void )
 	VectorSet4( color, 0.8f, 0.8f, 0.8f, 1.0f );
 	trap->R_SetColor( color );
 
-	CG_DrawPic( x - ( v * 300 ), y - ( v * 300 ),
-				v * 600, v * 600,
+	// OpenJK VR: widescreen 2D - in proportion on the clash, however big
+	// (squeezed here: one bigger than the screen isn't a background)
+	was2D = CG_Anchored();
+	sx = ( was2D > ANCHOR2D_STRETCH ) ? CG_Aspect2D() : 1.0f;
+	CG_Anchor2D( ANCHOR2D_STRETCH );
+	CG_DrawPic( x - ( v * 300 * sx ), y - ( v * 300 ),
+				v * 600 * sx, v * 600,
 				trap->R_RegisterShader( "gfx/effects/saberFlare" ));
+	CG_Anchor2D( was2D );
 }
 
 void CG_DottedLine( float x1, float y1, float x2, float y2, float dotSize, int numDots, vec4_t color, float alpha )
@@ -5425,6 +5502,7 @@ void CG_DottedLine( float x1, float y1, float x2, float y2, float dotSize, int n
 		x = x1 + (xStep*dotNum) - (dotSize*0.5f);
 		y = y1 + (yStep*dotNum) - (dotSize*0.5f);
 
+		CG_AnchorAt( x + dotSize * 0.5f );	// OpenJK VR: widescreen 2D, each dot where it is
 		CG_DrawPic( x, y, dotSize, dotSize, cgs.media.whiteShader );
 	}
 }
@@ -5532,6 +5610,8 @@ void CG_BracketEntity( centity_t *cent, float radius )
 	//always visible width
 	lineWidth = 1.0f;
 
+	CG_AnchorAt( x );	// OpenJK VR: widescreen 2D, on what's bracketed
+
 	x -= (size*0.5f);
 	y -= (size*0.5f);
 
@@ -5609,6 +5689,7 @@ void CG_BracketEntity( centity_t *cent, float radius )
 								CG_DottedLine( x, y, leadX, leadY, 1, 10, g_color_table[ColorIndex(COLOR_RED)], 0.5f );
 								//now draw the lead indicator
 								trap->R_SetColor ( g_color_table[ColorIndex(COLOR_RED)] );
+								CG_AnchorAt( leadX );	// OpenJK VR: widescreen 2D
 								CG_DrawPic( leadX-8, leadY-8, 16, 16, trap->R_RegisterShader( "gfx/menus/radar/lead" ) );
 							}
 						}
@@ -5653,11 +5734,13 @@ qboolean CG_InATST( void )
 
 void CG_DrawBracketedEntities( void )
 {
+	const float was2D = CG_Anchored();	// OpenJK VR: (each on what it brackets)
 	int i;
 	for ( i = 0; i < cg.bracketedEntityCount; i++ )
 	{
 		centity_t *cent = &cg_entities[cg.bracketedEntities[i]];
 		CG_BracketEntity( cent, CG_RadiusForCent( cent ) );
+		CG_Anchor2D( was2D );
 	}
 }
 
@@ -5777,6 +5860,7 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 	//FIXME: if in a vehicle, use the vehicle's lockOnTime...
 	int dif = (cg.time - cg.snap->ps.rocketLockTime)/lockTimeInterval;
 	int i;
+	float was2D;
 
 	if (!cg.snap->ps.rocketLockTime)
 	{
@@ -5946,6 +6030,9 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 
 		oldDif = dif;
 
+		was2D = CG_Anchored();
+		CG_AnchorAt( (float)cx );	// OpenJK VR: widescreen 2D, on the target
+
 		for ( i = 0; i < dif; i++ )
 		{
 			color[0] = 1.0f;
@@ -5969,6 +6056,7 @@ static void CG_DrawRocketLocking( int lockEntNum, int lockTime )
 
 			CG_DrawPic( cx - sz, cy - sz * 2, sz * 2, sz * 2, trap->R_RegisterShaderNoMip( "gfx/2d/lock" ));
 		}
+		CG_Anchor2D( was2D );
 	}
 }
 
@@ -6455,11 +6543,15 @@ static void CG_DrawSpectator(void)
 		}
 		CG_Text_Paint ( 320 - CG_Text_Width ( text, 1.0f, 3 ) / 2, 420, 1.0f, colorWhite, text, 0, 0, 0, 3 );
 
+		// (OpenJK VR: widescreen 2D - the first duelist at the left edge, the
+		// others at the right)
 		trap->R_SetColor( colorTable[CT_WHITE] );
+		CG_Anchor2D( ANCHOR2D_LEFT );
 		if ( cgs.clientinfo[cgs.duelist1].modelIcon )
 		{
 			CG_DrawPic( 10, SCREEN_HEIGHT-(size*1.5), size, size, cgs.clientinfo[cgs.duelist1].modelIcon );
 		}
+		CG_Anchor2D( ANCHOR2D_RIGHT );
 		if ( cgs.clientinfo[cgs.duelist2].modelIcon )
 		{
 			CG_DrawPic( SCREEN_WIDTH-size-10, SCREEN_HEIGHT-(size*1.5), size, size, cgs.clientinfo[cgs.duelist2].modelIcon );
@@ -6470,7 +6562,9 @@ static void CG_DrawSpectator(void)
 		{
 			if ( cgs.showDuelHealths >= 1)
 			{	// draw the healths on the two guys - how does this interact with power duel, though?
+				CG_Anchor2D( ANCHOR2D_LEFT );
 				CG_DrawDuelistHealth ( 10, SCREEN_HEIGHT-(size*1.5) - 12, 64, 8, 1 );
+				CG_Anchor2D( ANCHOR2D_RIGHT );
 				CG_DrawDuelistHealth ( SCREEN_WIDTH-size-10, SCREEN_HEIGHT-(size*1.5) - 12, 64, 8, 2 );
 			}
 		}
@@ -6478,9 +6572,11 @@ static void CG_DrawSpectator(void)
 		if (cgs.gametype != GT_POWERDUEL)
 		{
 			Com_sprintf(text, sizeof(text), "%i/%i", cgs.clientinfo[cgs.duelist1].score, cgs.fraglimit );
+			CG_Anchor2D( ANCHOR2D_LEFT );
 			CG_Text_Paint( 42 - CG_Text_Width( text, 1.0f, 2 ) / 2, SCREEN_HEIGHT-(size*1.5) + 64, 1.0f, colorWhite, text, 0, 0, 0, 2 );
 
 			Com_sprintf(text, sizeof(text), "%i/%i", cgs.clientinfo[cgs.duelist2].score, cgs.fraglimit );
+			CG_Anchor2D( ANCHOR2D_RIGHT );
 			CG_Text_Paint( SCREEN_WIDTH-size+22 - CG_Text_Width( text, 1.0f, 2 ) / 2, SCREEN_HEIGHT-(size*1.5) + 64, 1.0f, colorWhite, text, 0, 0, 0, 2 );
 		}
 
@@ -6488,9 +6584,11 @@ static void CG_DrawSpectator(void)
 		{
 			if ( cgs.clientinfo[cgs.duelist3].modelIcon )
 			{
+				CG_Anchor2D( ANCHOR2D_RIGHT );
 				CG_DrawPic( SCREEN_WIDTH-size-10, SCREEN_HEIGHT-(size*2.8), size, size, cgs.clientinfo[cgs.duelist3].modelIcon );
 			}
 		}
+		CG_Anchor2D( ANCHOR2D_MIDDLE );
 	}
 	else
 	{
@@ -7204,6 +7302,7 @@ static void CG_DrawSiegeTimer(int timeRemaining, qboolean isMyTeam)
 	{
 		return;
 	}
+	CG_Anchor2D( CG_AnchorForMenu( menuHUD ) );	// OpenJK VR: widescreen 2D
 
 	item = Menu_FindItemByName(menuHUD, "frame");
 
@@ -7267,6 +7366,7 @@ static void CG_DrawSiegeDeathTimer( int timeRemaining )
 	{
 		return;
 	}
+	CG_Anchor2D( CG_AnchorForMenu( menuHUD ) );	// OpenJK VR: widescreen 2D
 
 	item = Menu_FindItemByName(menuHUD, "frame");
 
@@ -7948,7 +8048,7 @@ static void CG_Draw2DScreenTints( void )
 	}
 }
 
-static void CG_Draw2D( void ) {
+static void CG_Draw2D_HUD( void ) {
 	float			inTime = cg.invenSelectTime+WEAPON_SELECT_TIME;
 	float			wpTime = cg.weaponSelectTime+WEAPON_SELECT_TIME;
 	float			fallTime;
@@ -7991,6 +8091,7 @@ static void CG_Draw2D( void ) {
 
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
+		CG_Anchor2D( ANCHOR2D_LEFT );
 		CG_ChatBox_DrawStrings();
 		return;
 	}
@@ -8002,6 +8103,7 @@ static void CG_Draw2D( void ) {
 		CG_DrawRocketLocking( cg.snap->ps.rocketLockIndex, cg.snap->ps.rocketLockTime );
 	}
 
+	CG_Anchor2D( ANCHOR2D_LEFT );
 	if (cg.snap->ps.holocronBits)
 	{
 		CG_DrawHolocronIcons();
@@ -8011,6 +8113,7 @@ static void CG_Draw2D( void ) {
 		CG_DrawActivePowers();
 	}
 
+	CG_Anchor2D( ANCHOR2D_RIGHT );
 	if (cg.snap->ps.jetpackFuel < 100)
 	{ //draw it as long as it isn't full
         CG_DrawJetpackFuel();
@@ -8028,6 +8131,7 @@ static void CG_Draw2D( void ) {
 			CG_DrawEWebHealth();
 		}
 	}
+	CG_Anchor2D( ANCHOR2D_MIDDLE );
 
 	// Draw this before the text so that any text won't get clipped off
 	CG_DrawZoomMask();
@@ -8099,17 +8203,22 @@ static void CG_Draw2D( void ) {
 				//Powerups now done with upperright stuff
 				//CG_DrawPowerupIcons();
 
+				CG_Anchor2D( ANCHOR2D_LEFT );
 				CG_DrawFlagStatus();
+				CG_Anchor2D( ANCHOR2D_MIDDLE );
 			}
 
 			CG_SaberClashFlare();
 
 			if (cg_drawStatus.integer)
 			{
-				CG_DrawStats();
+				CG_DrawStats();	// (OpenJK VR: each HUD menu where it belongs, CG_AnchorForMenu)
+				CG_Anchor2D( ANCHOR2D_MIDDLE );
 			}
 
+			CG_Anchor2D( ANCHOR2D_RIGHT );
 			CG_DrawPickupItem();
+			CG_Anchor2D( ANCHOR2D_MIDDLE );
 			//Do we want to use this system again at some point?
 			//CG_DrawReward();
 		}
@@ -8155,15 +8264,20 @@ static void CG_Draw2D( void ) {
 		}
 	}
 
+	CG_Anchor2D( ANCHOR2D_LEFT );
 	CG_DrawVote();
 	CG_DrawTeamVote();
 
+	CG_Anchor2D( ANCHOR2D_RIGHT );
 	CG_DrawLagometer();
+	CG_Anchor2D( ANCHOR2D_MIDDLE );
 
 
 	if (!cl_paused.integer) {
 		CG_DrawBracketedEntities();
+		CG_Anchor2D( ANCHOR2D_RIGHT );
 		CG_DrawUpperRight();
+		CG_Anchor2D( ANCHOR2D_MIDDLE );
 	}
 
 	if ( !CG_DrawFollow() ) {
@@ -8248,7 +8362,9 @@ static void CG_Draw2D( void ) {
 
 		if (cgSiegeEntityRender)
 		{ //render the objective item model since this client has it
+			CG_Anchor2D( ANCHOR2D_LEFT );
 			CG_DrawSiegeHUDItem();
+			CG_Anchor2D( ANCHOR2D_MIDDLE );
 		}
 
 		if (team1Timed)
@@ -8314,6 +8430,7 @@ static void CG_Draw2D( void ) {
 			}
 
 			CG_DrawSiegeTimer(timeRemaining, isMyTeam);
+			CG_Anchor2D( ANCHOR2D_MIDDLE );
 		}
 	}
 	else
@@ -8337,6 +8454,7 @@ static void CG_Draw2D( void ) {
 		}
 
 		CG_DrawSiegeDeathTimer( timeRemaining );
+		CG_Anchor2D( ANCHOR2D_MIDDLE );
 	}
 
 	// don't draw center string if scoreboard is up
@@ -8346,7 +8464,16 @@ static void CG_Draw2D( void ) {
 	}
 
 	// always draw chat
+	CG_Anchor2D( ANCHOR2D_LEFT );
 	CG_ChatBox_DrawStrings();
+}
+
+// OpenJK VR: the HUD kept in proportion on a widescreen (cg_drawtools.c),
+// starting in the middle; what's drawn after it stretched as always
+static void CG_Draw2D( void ) {
+	CG_Anchor2D( ANCHOR2D_MIDDLE );
+	CG_Draw2D_HUD();
+	CG_Anchor2D( ANCHOR2D_STRETCH );
 }
 
 qboolean CG_CullPointAndRadius( const vec3_t pt, float radius);

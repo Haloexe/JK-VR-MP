@@ -1283,6 +1283,7 @@ extern	cvar_t	*r_debugSort;
 extern	cvar_t	*r_marksOnTriangleMeshes;
 
 extern	cvar_t	*r_aspectCorrectFonts;
+extern	cvar_t	*r_aspectCorrect2D;
 
 /*
 Ghoul2 Insert Start
@@ -1838,6 +1839,7 @@ typedef struct rotatePicCommand_s {
 	float	s1, t1;
 	float	s2, t2;
 	float	a;
+	float	squeezeX, squeeze;	// OpenJK VR: widescreen 2D (RE_Anchor2D), once rotated
 } rotatePicCommand_t;
 
 typedef struct drawSurfsCommand_s {
@@ -1903,6 +1905,9 @@ void RE_RotatePic ( float x, float y, float w, float h,
 					  float s1, float t1, float s2, float t2,float a, qhandle_t hShader );
 void RE_RotatePic2 ( float x, float y, float w, float h,
 					  float s1, float t1, float s2, float t2,float a, qhandle_t hShader );
+// OpenJK VR: widescreen 2D (tr_cmds.cpp)
+void	RE_Anchor2D( float anchorX );
+float	RE_Aspect2D( void );
 void RE_BeginFrame( stereoFrame_t stereoFrame );
 void RE_EndFrame( int *frontEndMsec, int *backEndMsec );
 void RE_TakeVideoFrame( int width, int height, byte *captureBuffer, byte *encodeBuffer, qboolean motionJpeg );

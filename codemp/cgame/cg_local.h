@@ -1721,6 +1721,17 @@ Ghoul2 Insert End
 //
 // cg_drawtools.c
 //
+// OpenJK VR: widescreen 2D - the HUD kept in proportion on a window wider
+// than 4:3, squeezed toward the anchor (x in the 640 wide screen)
+#define ANCHOR2D_STRETCH	VR_ANCHOR2D_STRETCH	// (stretched across the window, as always)
+#define ANCHOR2D_LEFT		0.0f
+#define ANCHOR2D_MIDDLE		320.0f
+#define ANCHOR2D_RIGHT		640.0f
+void	CG_Anchor2D( float anchorX );
+float	CG_Anchored( void );
+void	CG_AnchorAt( float x );
+float	CG_Aspect2D( void );
+void	CG_AnchorRect( float *x, float *w );
 void CG_FillRect( float x, float y, float width, float height, const float *color );
 void CG_DrawPic( float x, float y, float width, float height, qhandle_t hShader );
 void CG_DrawRotatePic( float x, float y, float width, float height,float angle, qhandle_t hShader );

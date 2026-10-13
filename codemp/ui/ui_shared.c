@@ -3465,6 +3465,11 @@ void Item_TextField_Paste( itemDef_t *item ) {
 }
 #endif
 
+// OpenJK VR: whether a field is being typed in (ui_vrvideo.c)
+qboolean Item_TextField_Editing( const itemDef_t *item ) {
+	return ( g_editingField && item && g_editItem == item ) ? qtrue : qfalse;
+}
+
 qboolean Item_TextField_HandleKey(itemDef_t *item, int key) {
 	char buff[2048];
 	int len;
@@ -5332,6 +5337,9 @@ void Item_Model_Paint(itemDef_t *item)
 	y = item->window.rect.y+1;
 	w = item->window.rect.w-2;
 	h = item->window.rect.h-2;
+#ifdef UI_BUILD
+	UI_AnchorRect( &x, &w );	// OpenJK VR: in proportion with the menu around it on a widescreen
+#endif
 
 	refdef.x = x * DC->xscale;
 	refdef.y = y * DC->yscale;

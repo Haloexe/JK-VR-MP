@@ -1418,6 +1418,11 @@ CFontInfo *GetFont(int index)
 	return pFont;
 }
 
+// OpenJK VR: true while rd-vanilla is keeping the 2D in proportion on a
+// widescreen (RE_Anchor2D), which narrows text itself: r_aspectCorrectFonts
+// would then narrow it twice.
+qboolean g_bFont2DSqueezed = qfalse;
+
 float RE_Font_StrLenPixelsNew( const char *psText, const int iFontHandle, const float fScaleIn ) {
 	float fScale = fScaleIn;
 	CFontInfo *curfont = GetFont(iFontHandle);
@@ -1455,17 +1460,18 @@ float RE_Font_StrLenPixelsNew( const char *psText, const int iFontHandle, const 
 
 			float fValue = iPixelAdvance * ((uiLetter > (unsigned)g_iNonScaledCharRange) ? fScaleAsian : fScale);
 
-			if ( r_aspectCorrectFonts->integer == 1 ) {
+			const int aspectCorrect = g_bFont2DSqueezed ? 0 : r_aspectCorrectFonts->integer;	// OpenJK VR
+			if ( aspectCorrect == 1 ) {
 				fValue *= ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth));
 			}
-			else if ( r_aspectCorrectFonts->integer == 2 ) {
+			else if ( aspectCorrect == 2 ) {
 				fValue = ceilf(
 					fValue * ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth))
 				);
 			}
 			thisLineWidth += curfont->mbRoundCalcs
 				? roundf( fValue )
-				: (r_aspectCorrectFonts->integer == 2)
+				: (aspectCorrect == 2)
 					? ceilf( fValue )
 					: fValue;
 			if ( thisLineWidth > maxLineWidth ) {
@@ -1727,11 +1733,11 @@ void RE_Font_DrawString(int ox, int oy, const char *psText, const float *rgba, c
 								//lastcolour.c,
 								hShader							// qhandle_t hShader
 								);
-				if ( r_aspectCorrectFonts->integer == 1 ) {
+				if ( r_aspectCorrectFonts->integer == 1 && !g_bFont2DSqueezed ) {	// (OpenJK VR: not twice)
 					fx += fAdvancePixels
 						* ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth));
 				}
-				else if ( r_aspectCorrectFonts->integer == 2 ) {
+				else if ( r_aspectCorrectFonts->integer == 2 && !g_bFont2DSqueezed ) {
 					fx += ceilf( fAdvancePixels
 						* ((float)(SCREEN_WIDTH * glConfig.vidHeight) / (float)(SCREEN_HEIGHT * glConfig.vidWidth)) );
 				}

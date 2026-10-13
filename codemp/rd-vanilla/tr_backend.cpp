@@ -1416,6 +1416,16 @@ const void *RB_StretchPic ( const void *data ) {
 }
 
 
+// OpenJK VR: widescreen 2D (RE_Anchor2D) - a rotated picture's corners,
+// squeezed toward x once it's rotated
+static void RB_Squeeze2D( int firstVert, float x, float squeeze ) {
+	if ( squeeze != 1.0f ) {
+		for ( int i = firstVert; i < firstVert + 4; i++ ) {
+			tess.xyz[i][0] = x + ( tess.xyz[i][0] - x ) * squeeze;
+		}
+	}
+}
+
 /*
 =============
 RB_DrawRotatePic
@@ -1503,6 +1513,8 @@ const void *RB_RotatePic ( const void *data )
 
 		tess.texCoords[ numVerts + 3 ][0][0] = cmd->s1;
 		tess.texCoords[ numVerts + 3 ][0][1] = cmd->t2;
+
+		RB_Squeeze2D( numVerts, cmd->squeezeX, cmd->squeeze );	// OpenJK VR
 
 		return (const void *)(cmd + 1);
 
@@ -1602,6 +1614,8 @@ const void *RB_RotatePic2 ( const void *data )
 
 			tess.texCoords[ numVerts + 3 ][0][0] = cmd->s1;
 			tess.texCoords[ numVerts + 3 ][0][1] = cmd->t2;
+
+			RB_Squeeze2D( numVerts, cmd->squeezeX, cmd->squeeze );	// OpenJK VR
 
 			return (const void *)(cmd + 1);
 
