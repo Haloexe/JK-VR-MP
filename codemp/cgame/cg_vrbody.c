@@ -226,6 +226,8 @@ typedef struct vrbState_s {
 		int			time;
 		vec3_t		dir;			// the blade as drawn, in your room
 		vec3_t		vel;			// how it turns (rad/s, axis * rate)
+		vec3_t		hand;			// where the hand pointed it last frame, in your room
+		float		behind;			// how far it trails the hand now (0..1 of as far as it can)
 		int			holdUntil;		// stopped on another blade until then
 		vec3_t		out;			// the blade as drawn this frame (world)
 		int			outTime;
@@ -2025,23 +2027,31 @@ done:
 =================
 CG_VRB_BladeInertia
 
-The blade in your hand. By default it is locked to your fist (the playtest
-said any trailing feels like the hilt floating in the hand). With
-cg_vrSaberLag above 0 it follows your hand through a spring instead: a
-light one keeps up with the quickest flick, a heavy one trails a fast swing
-and carries on a touch when your hand stops, and two hands on it hold it
-closer. It runs in your room, so turning and walking never swing it.
-Either way another blade stops it dead for a moment, and cutting through
-someone drags it (CG_VRB_BladeImpulse).
+The blade in your hand - and the hand with it (the arm turns your fist to
+hold it, so the hilt never leaves the fist). A light blade turns as fast
+as your hand does. A heavier one has a top speed and takes a moment to get
+going and to turn back: medium a little, heavy (strong style) much - swing
+faster than that and the blade, and the fist holding it, fall behind the
+controller (you feel them strain, CG_VRB_Heft), catching up as you slow.
+Slow, careful moves stay exact, and it never carries on past where your
+hand stops; only turning it back fast, its weight carries it on a little
+first. Two hands on it turn it faster. It runs in your room, so turning
+and walking never swing it. cg_vrSaberInertia scales all of it (1; 0 = the
+blade exactly where the controller points it; up to 3: slower still).
+Another blade stops it dead for a moment, and cutting through someone drags
+it (CG_VRB_BladeImpulse).
 =================
 */
 
 #define VRB_BLADE_STEP		0.002f	// s: integration step
-#define VRB_BLADE_DAMPING	0.75f	// (a little overshoot when the hand stops)
+#define VRB_BLADE_FOLLOW	0.006f	// s: how closely it keeps to a hand turning slower than it can
+#define VRB_BLADE_STRAIN	25.0f	// falling well behind, it's dragged faster by this much (rad/s per rad)
+#define VRB_BLADE_TWOHANDS	1.2f	// two hands on it turn it this much faster
 
-static const float	vrbBladeOmega[3] = { 160.0f, 80.0f, 48.0f };	// rad/s: light, medium, heavy
-static const float	vrbBladeMaxLag[3] = { 20.0f, 35.0f, 50.0f };	// degrees behind the hand at most
-static const int	vrbBladeHold[3] = { 35, 55, 75 };				// ms another blade stops it for
+static const float	vrbBladeMaxRate[3] = { 2600.0f, 900.0f, 550.0f };		// deg/s it turns at most: light, medium, heavy
+static const float	vrbBladeMaxAccel[3] = { 150000.0f, 18000.0f, 10000.0f };	// deg/s/s it gets going (or turns back) at most
+static const float	vrbBladeMaxLag[3] = { 20.0f, 45.0f, 60.0f };			// degrees behind the hand at most
+static const int	vrbBladeHold[3] = { 35, 55, 75 };						// ms another blade stops it for
 
 // world yaw minus room (tracking) yaw
 static float CG_VRB_RoomYaw( const vrClientState_t *vr ) {
@@ -2051,8 +2061,8 @@ static float CG_VRB_RoomYaw( const vrClientState_t *vr ) {
 static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t want, int weight, qboolean twoHands,
 	vec3_t out ) {
 	const float yaw = CG_VRB_RoomYaw( vr );
-	const float scale = cg_vrSaberLag.value;
-	float omega, maxLag, t, ang;
+	const float inertia = Com_Clamp( 0.0f, 3.0f, cg_vrSaberInertia.value );
+	const float dt = ( cg.time - vrb.blade[h].time ) * 0.001f;
 	vec3_t target, axis;
 
 	VRB_RotZ( want, -yaw, target );
@@ -2060,44 +2070,74 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 		VectorCopy( want, out );
 		return;
 	}
-	if ( !vrb.blade[h].valid || cg.time - vrb.blade[h].time < 0 || cg.time - vrb.blade[h].time > 200 ) {
+	if ( !vrb.blade[h].valid || dt < 0.0f || dt > 0.2f ) {
 		VectorCopy( target, vrb.blade[h].dir );
+		VectorCopy( target, vrb.blade[h].hand );
 		VectorClear( vrb.blade[h].vel );
+		vrb.blade[h].behind = 0.0f;
 		vrb.blade[h].holdUntil = 0;
 		vrb.blade[h].valid = qtrue;
-	} else {
-		if ( scale > 0.0f ) {
-			omega = vrbBladeOmega[weight] / Com_Clamp( 0.1f, 4.0f, scale );
-			maxLag = vrbBladeMaxLag[weight] * Com_Clamp( 0.5f, 2.0f, scale );
+	} else if ( dt > 0.0f ) {
+		const float maxLag = DEG2RAD( vrbBladeMaxLag[weight] );
+		float maxRate, maxAccel, handRate, ang;
+		vec3_t handVel;
+		int n, k;
+
+		if ( inertia > 0.0f ) {
+			maxRate = DEG2RAD( vrbBladeMaxRate[weight] ) / inertia;
+			maxAccel = DEG2RAD( vrbBladeMaxAccel[weight] ) / inertia;
 		} else {
-			omega = 400.0f;	// locked to the fist: only clashes and cuts show
-			maxLag = vrbBladeMaxLag[VRB_LIGHT];
+			maxRate = maxAccel = 1.0e5f;	// as the controller points it: only clashes and cuts show
 		}
 		if ( twoHands ) {
-			omega *= 1.4f;
+			maxRate *= VRB_BLADE_TWOHANDS;
+			maxAccel *= VRB_BLADE_TWOHANDS;
 		}
-		omega = Q_min( omega, 400.0f );
+
+		// how the hand turned it since the last frame (steadily, through it)
+		CrossProduct( vrb.blade[h].hand, target, handVel );
+		handRate = atan2f( VectorNormalize( handVel ), DotProduct( vrb.blade[h].hand, target ) ) / dt;
+		VectorScale( handVel, handRate, handVel );
 
 		if ( cg.time - vrb.blade[h].holdUntil < 0 ) {
 			VectorClear( vrb.blade[h].vel );	// stopped on the other blade
 		} else {
-			for ( t = ( cg.time - vrb.blade[h].time ) * 0.001f; t > 0.0f; t -= VRB_BLADE_STEP ) {
-				const float step = Q_min( t, VRB_BLADE_STEP );
-				vec3_t acc;
-				float sn, rate;
-				CrossProduct( vrb.blade[h].dir, target, axis );
-				sn = VectorNormalize( axis );
-				ang = atan2f( sn, DotProduct( vrb.blade[h].dir, target ) );
-				VectorScale( axis, omega * omega * ang, acc );
-				VectorMA( acc, -2.0f * VRB_BLADE_DAMPING * omega, vrb.blade[h].vel, acc );
-				VectorMA( vrb.blade[h].vel, step, acc, vrb.blade[h].vel );
+			n = Q_max( 1, (int)ceilf( dt / VRB_BLADE_STEP ) );
+			for ( k = 1; k <= n; k++ ) {
+				const float step = dt / n;
+				vec3_t tgt, wWant, dw;
+				float e, close, lim, rate, d;
+
+				VRB_Slerp( vrb.blade[h].hand, target, (float)k / n, tgt );
+				CrossProduct( vrb.blade[h].dir, tgt, axis );
+				e = atan2f( VectorNormalize( axis ), DotProduct( vrb.blade[h].dir, tgt ) );
+				// keep up with the hand and close the gap - at once while it's
+				// small, and no faster than lets it stop where the hand is
+				// (braking a little short of as hard as it can)...
+				close = Q_min( e / VRB_BLADE_FOLLOW, sqrtf( 1.6f * maxAccel * e ) );
+				VectorMA( handVel, close, axis, wWant );
+				// ...no faster than a blade this heavy turns (dragged faster as
+				// it falls far behind)...
+				lim = maxRate + VRB_BLADE_STRAIN * Q_max( 0.0f, e - 0.6f * maxLag );
+				rate = VectorLength( wWant );
+				if ( rate > lim ) {
+					VectorScale( wWant, lim / rate, wWant );
+				}
+				// ...and getting to that speed no quicker than it can
+				VectorSubtract( wWant, vrb.blade[h].vel, dw );
+				d = VectorLength( dw );
+				if ( d > maxAccel * step ) {
+					VectorMA( vrb.blade[h].vel, maxAccel * step / d, dw, vrb.blade[h].vel );
+				} else {
+					VectorCopy( wWant, vrb.blade[h].vel );
+				}
 				VectorMA( vrb.blade[h].vel, -DotProduct( vrb.blade[h].vel, vrb.blade[h].dir ), vrb.blade[h].dir,
 					vrb.blade[h].vel );	// (it doesn't spin about itself)
 				rate = VectorLength( vrb.blade[h].vel );
 				if ( rate > 1e-5f ) {
-					vec3_t k;
-					VectorScale( vrb.blade[h].vel, 1.0f / rate, k );
-					VRB_Rotate( vrb.blade[h].dir, k, rate * step, vrb.blade[h].dir );
+					vec3_t kAxis;
+					VectorScale( vrb.blade[h].vel, 1.0f / rate, kAxis );
+					VRB_Rotate( vrb.blade[h].dir, kAxis, rate * step, vrb.blade[h].dir );
 					VectorNormalize( vrb.blade[h].dir );
 				}
 			}
@@ -2106,12 +2146,14 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 		// never further behind than this: past it the hand drags it along
 		CrossProduct( vrb.blade[h].dir, target, axis );
 		ang = atan2f( VectorNormalize( axis ), DotProduct( vrb.blade[h].dir, target ) );
-		if ( ang > DEG2RAD( maxLag ) ) {
-			VRB_Rotate( vrb.blade[h].dir, axis, ang - DEG2RAD( maxLag ), vrb.blade[h].dir );
+		if ( ang > maxLag ) {
+			VRB_Rotate( vrb.blade[h].dir, axis, ang - maxLag, vrb.blade[h].dir );
 			VectorNormalize( vrb.blade[h].dir );
-			ang = DEG2RAD( maxLag );
+			ang = maxLag;
 		}
+		vrb.blade[h].behind = ( inertia > 0.0f ) ? ang / maxLag : 0.0f;
 		vrb.swing.lag = Q_max( vrb.swing.lag, RAD2DEG( ang ) );	// (for the log)
+		VectorCopy( target, vrb.blade[h].hand );
 	}
 	vrb.blade[h].time = cg.time;
 	VRB_RotZ( vrb.blade[h].dir, yaw, out );
@@ -3985,13 +4027,13 @@ static void CG_VRB_TouchFeel( void ) {
 =================
 CG_VRB_Heft
 
-The blade's weight in your hand as it swings (the hilt stays locked in your
-fist: this is the only way its weight can reach you). The faster it goes,
-the harder it pulls - a heavy blade a deep, rough rumble, a medium one
-less, a light one hardly at all - and a fast swing stopped short, or turned
-back, lands its weight in your hand with a thud. Not while it's in someone
-or against another blade, or just after: those are felt as such.
-cg_vrSaberWeight scales it (0: weightless; up to 2).
+The blade's weight in your hand as it swings. The faster it goes, the
+harder it pulls - a heavy blade a deep, rough rumble, a medium one less, a
+light one hardly at all; swung faster than it can go, it strains as it
+falls behind your hand (CG_VRB_BladeInertia); and a fast swing stopped
+short, or turned back, lands its weight in your hand with a thud. Not while
+it's in someone or against another blade, or just after: those are felt as
+such. cg_vrSaberWeight scales it (0: weightless; up to 2).
 =================
 */
 
@@ -4003,6 +4045,7 @@ cg_vrSaberWeight scales it (0: weightless; up to 2).
 static const float	vrbHeftPull[3] = { 0.08f, 0.30f, 0.48f };	// at full speed: light, medium, heavy
 static const float	vrbHeftStop[3] = { 0.12f, 0.38f, 0.60f };	// a full-speed swing stopped short
 static const float	vrbHeftGrain[3] = { 0.0f, 0.25f, 0.4f };	// rougher the heavier
+static const float	vrbHeftStrain[3] = { 0.0f, 0.30f, 0.45f };	// as far behind your hand as it can fall
 
 static void CG_VRB_Heft( void ) {
 	const float scale = Com_Clamp( 0.0f, 2.0f, cg_vrSaberWeight.value );
@@ -4027,9 +4070,13 @@ static void CG_VRB_Heft( void ) {
 		quiet = (qboolean)( vrbHands.touching[h] || vrbHands.inEnt[h] >= 0 ||
 			cg.time - vrbHands.knockTime[h] < VRB_HEFT_QUIET_MS || cg.time - vrbHands.blowTime[h] < VRB_HEFT_QUIET_MS );
 
-		// the pull of it moving: little at first, most at full speed
+		// the pull of it moving: little at first, most at full speed; and
+		// the strain of it falling behind your hand
 		pull = Com_Clamp( 0.0f, 1.0f, ( v - VRB_HEFT_FROM ) / ( full - VRB_HEFT_FROM ) );
 		pull = vrbHeftPull[weight] * pull * sqrtf( pull ) * scale;
+		if ( vrb.blade[h].valid && vrb.blade[h].outTime == cg.time ) {
+			pull = Q_max( pull, vrbHeftStrain[CG_VRB_Weight( qfalse )] * Com_Clamp( 0.0f, 1.0f, vrb.blade[h].behind ) * scale );
+		}
 		if ( pull > 0.0f && !quiet ) {
 			CG_VRB_FeelSteady( h, Q_min( 1.0f, pull ), vrbHeftGrain[weight] );
 		}

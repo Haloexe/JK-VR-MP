@@ -191,15 +191,24 @@ server running this build: your real blade is the weapon.
     staff it switches the second blade off (click again for both). Held
     with both hands (above), a saber or staff swings one weight heavier.
   * The weight is something you feel, not just numbers:
+      - a heavier blade can't be whipped about like a light one: it has a
+        top speed (heavy, the strong style, turns at most 550 degrees a
+        second; medium 900; light as fast as your hand) and takes a
+        moment to get going and to turn back. Swing faster than that
+        and the blade - and your character's hand, which keeps hold of it
+        - falls behind your real hand, catching up as you slow. Slow,
+        careful moves stay exact, and it never carries on past where your
+        hand stops; only swung back hard, its weight carries it on a
+        little first. Two hands on it turn it a fifth faster.
+        cg_vrSaberInertia sets how much (1; 0 = the blade exactly where
+        the controller points it; 2 or 3 = heavier still)
       - swinging it, your hands feel the blade's weight: the faster it
-        goes, the harder it pulls - a heavy blade (strong style) a deep,
-        rough rumble, a medium one less, a light one hardly at all - and
-        a fast swing stopped short, or turned back, lands in your hand
-        with a thud. cg_vrSaberWeight sets how heavy it feels (0
-        weightless, 1 normal, up to 2)
-      - the hilt stays locked in your fist; if you want the blade itself
-        to drag behind a fast swing (a light one hardly, a heavy one
-        more), set cg_vrSaberLag 1 (0 = locked, the default)
+        goes, the harder it pulls - a heavy blade a deep, rough rumble, a
+        medium one less, a light one hardly at all; swung faster than it
+        can go, it strains as it falls behind your hand; and a fast swing
+        stopped short, or turned back, lands in your hand with a thud.
+        cg_vrSaberWeight sets how heavy it feels (0 weightless, 1 normal,
+        up to 2)
       - swings whoosh, deeper and heavier the heavier the style (other
         players hear your swings too)
       - another blade stops yours dead for a moment; cutting through
@@ -377,8 +386,9 @@ SETTINGS (console cvars, saved automatically)
                          up to 2)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
                          vibration of its weight: 0 none, up to 2)
-  cg_vrSaberLag 0        1 = the blade drags behind fast swings by its
-                         weight (0 = locked in your fist)
+  cg_vrSaberInertia 1    how much a medium or heavy blade resists being
+                         whipped about (0 = none: exactly where the
+                         controller points it; up to 3)
   cg_vrLog 1             0 = don't write vrdebug.log
   cg_vrTwoHandLever 0.7  how much the line between your hands steers a
                          two-handed blade when they are far apart
