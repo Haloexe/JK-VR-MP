@@ -28,6 +28,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     see PLAYING WITH OTHERS)
   * Proximity voice chat: talk to the players near you and hear them from
     where they are; pick your microphone in Setup > Sound (see VOICE CHAT)
+  * A dedicated server to run your own servers with all of the above, on
+    Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
 
 Not yet: shots leaving the gun barrel (they leave from your eye, toward
 where you aim), two-handed guns (two-handed sabers work).
@@ -321,6 +323,9 @@ time. In Free For All you can challenge someone to a private duel: look at
 them and use engage_duel, and they accept by doing the same back within 5
 seconds. Put it on a button first, in Controls or in the console, e.g. the
 left stick click:  bind AUX24 engage_duel  (that button walks otherwise).
+A server that runs on its own, for others to join whenever (on this PC
+or a rented Linux server): "Launch OpenJK VR Server.bat", see
+README-SERVER.txt.
 
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own
@@ -495,7 +500,9 @@ for the gun in your hand and your body). It works on ordinary servers.
 Servers running this build (base\jampgamex86_64.dll and the engine) also
 fight with the VR player's real blades: the client sends the blade poses
 with every usercmd (clc_moveVR, only to servers whose systeminfo has
-sv_vrx), and the game module sweeps them for cuts and clashes. Source files:
+sv_vrx), and the game module sweeps them for cuts and clashes. The dedicated
+server (openjkded.x86_64.exe) is the same server code and game module, with
+no client. Source files:
 
   codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim,
                                controllers, menu pointer
@@ -516,6 +523,7 @@ sv_vrx), and the game module sweeps them for cuts and clashes. Source files:
   codemp/ui/ui_vrvoice.c       the voice chat settings (base\ui\vr_voice.menu)
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
+  vr/build-linux-server.sh     the Linux dedicated server (vr/server/)
 
 The arm IK re-aims the upper arm and forearm with Ghoul2 bone overrides
 after the game's animation, and turns the hand at the wrist with a new
