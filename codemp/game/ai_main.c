@@ -5911,7 +5911,6 @@ int BotWeaponBlockable(int weapon)
 	}
 }
 
-void Cmd_EngageDuel_f(gentity_t *ent);
 void Cmd_ToggleSaber_f(gentity_t *ent);
 
 //movement overrides
@@ -6002,6 +6001,17 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		bs->wpDestination = NULL;
 		bs->wpDirection = 0;
 		return;
+	}
+
+	// OpenJK VR: a private duel this bot has been challenged to, taken up
+	// (bot_acceptDuels, g_vrduel.c) - its opponent, from then on
+	{
+		gentity_t *opponent = G_BotTakeUpDuel( &g_entities[bs->client] );
+		if ( opponent )
+		{
+			bs->currentEnemy = opponent;
+			bs->enemySeenTime = level.time + ENEMY_FORGET_MS;
+		}
 	}
 
 
@@ -6515,7 +6525,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 						bs->currentEnemy->client->ps.duelTime > level.time &&
 						!bs->cur_ps.duelInProgress)
 					{
-						Cmd_EngageDuel_f(&g_entities[bs->client]);
+						G_EngageDuel( &g_entities[bs->client], bs->currentEnemy );	// (OpenJK VR: g_vrduel.c)
 					}
 				}
 

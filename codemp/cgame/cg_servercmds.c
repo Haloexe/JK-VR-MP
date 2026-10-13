@@ -1479,6 +1479,7 @@ static void CG_RestoreClientGhoul_f( void ) {
 static void CG_CenterPrint_f( void ) {
 	char strEd[MAX_STRINGED_SV_STRING] = {0};
 
+	CG_VR_DuelCentrePrint( CG_Argv( 1 ) );	// OpenJK VR: a challenge to a duel, felt (cg_vrduel.c)
 	CG_CheckSVStringEdRef( strEd, CG_Argv( 1 ) );
 	CG_CenterPrint( strEd, SCREEN_HEIGHT * 0.30, BIGCHAR_WIDTH );
 }

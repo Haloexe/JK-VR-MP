@@ -337,14 +337,26 @@ then the server. Others connect with  connect <your address>  in the
 console (Shift+~); for players over the internet forward UDP port 29070 to
 your PC. To see VR players as they move, the others need this build too:
 give them this whole OpenJK-VR folder (it goes in their own GameData
-folder, as above). The Duel game type is the simplest way to fight one at a
-time. In Free For All you can challenge someone to a private duel: look at
-them and use engage_duel, and they accept by doing the same back within 5
-seconds. Put it on a button first, in Controls or in the console, e.g. the
-left stick click:  bind AUX24 engage_duel  (that button walks otherwise).
-A server that runs on its own, for others to join whenever (on this PC
-or a rented Linux server): "Launch OpenJK VR Server.bat", see
-README-SERVER.txt.
+folder, as above). A server that runs on its own, for others to join
+whenever (on this PC or a rented Linux server): "Launch OpenJK VR
+Server.bat", see README-SERVER.txt.
+
+Duels: the Duel game type is the simplest way to fight one at a time. In
+Free For All you can also challenge someone to a private duel the Jedi
+way: salute them. Hold your lit blade upright close in front of your face,
+in one hand, and keep it there while you look at them. A light tick says
+it's being read as a salute (move if you didn't mean one), and a moment
+later the challenge goes out, felt in that hand. When someone challenges
+you, you feel it in both hands and see who: accept by saluting them back
+within 10 seconds (5 on other servers). Both sabers go off, and on again
+two seconds later, when the duel starts. From then on nobody else can hurt
+either of you, nor can you hurt them, until one of you is down or you're
+far apart. On a server of this build any number of duels go on at once,
+and bots accept a challenge. To challenge someone else, lower the blade
+and salute them (a few seconds after the last). Players without VR use
+engage_duel (look at them, press it); you can put it on a button too, e.g.
+the left stick click:  bind AUX24 engage_duel  (that button walks
+otherwise). cg_vrDuelSalute 0 turns the salute off.
 
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own

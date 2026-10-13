@@ -4156,6 +4156,22 @@ void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t
 	VectorMA( base, length, bp->dir, vrbSaber.tip[saberNum][bladeNum] );
 }
 
+// A blade lit in your VR hand this frame (saber 0 in the right hand, 1 in
+// the left), and where it is: for the salute that challenges to a duel
+// (cg_vrduel.c).
+qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qboolean *twoHanded ) {
+	if ( vrbSaber.time != cg.time || saberNum < 0 || saberNum >= VR_POSE_MAX_SABERS || bladeNum < 0 ||
+		bladeNum >= VR_POSE_MAX_BLADES || !( vrbSaber.pose.bladeMask[saberNum] & ( 1 << bladeNum ) ) ) {
+		return qfalse;
+	}
+	VectorCopy( vrbSaber.base[saberNum][bladeNum], base );
+	VectorCopy( vrbSaber.tip[saberNum][bladeNum], tip );
+	if ( twoHanded ) {
+		*twoHanded = vrbSaber.pose.twoHanded[saberNum];	// (the other hand on it too)
+	}
+	return qtrue;
+}
+
 // Whether the left hand holds the right hand's saber too (lately).
 static qboolean CG_VRB_TwoHanded( void ) {
 	return (qboolean)( vrb.twoHand && cg.time - vrb.twoHandTime >= 0 && cg.time - vrb.twoHandTime < 300 );
@@ -4261,6 +4277,36 @@ static void CG_VRB_HandsInit( void ) {
 		vrbHands.blowEnt[0] = vrbHands.blowEnt[1] = -1;
 		vrbHands.init = qtrue;
 	}
+}
+
+// A feel in one hand from elsewhere (cg_vrduel.c), mixed with the rest: peak
+// for hold ms, then from tail down to nothing over decay ms (cg_vrHaptics
+// scales it, as all of them).
+void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay ) {
+	CG_VRB_Feel( hand, peak, hold, tail, decay, 0.0f );
+}
+
+// When your blade last met another blade or went into someone, as you saw it
+// or the game said (cg.time; 0: not yet) - for the salute (cg_vrduel.c): no
+// challenges in the middle of a fight.
+int CG_VR_BladeFightTime( void ) {
+	int t = 0, h;
+
+	if ( !vrbHands.init ) {
+		return 0;
+	}
+	for ( h = 0; h < 2; h++ ) {
+		if ( vrbHands.touching[h] ) {
+			return cg.time;
+		}
+		if ( vrbHands.knockTime[h] > t ) {
+			t = vrbHands.knockTime[h];
+		}
+		if ( vrbHands.blowTime[h] > t ) {
+			t = vrbHands.blowTime[h];
+		}
+	}
+	return t;
 }
 
 // the other players' blades near you this frame (and last frame)

@@ -1908,6 +1908,12 @@ void CG_VR_BodyEndFrame( void );
 void CG_VR_NetStats( void );
 qboolean CG_VR_Engine( void );
 void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
+qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qboolean *twoHanded );
+int CG_VR_BladeFightTime( void );
+void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
+// cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
+void CG_VR_DuelFrame( void );
+void CG_VR_DuelCentrePrint( const char *text );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );

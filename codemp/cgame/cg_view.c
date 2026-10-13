@@ -2725,7 +2725,9 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	}
 
 	// OpenJK VR: the scene is built; put your entity back where it really is
+	// (and with the blades in your hands known, a salute to challenge someone)
 	CG_VR_BodyEndFrame();
+	CG_VR_DuelFrame();
 
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );

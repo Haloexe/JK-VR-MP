@@ -105,6 +105,10 @@ GOOD TO KNOW
 ------------
 * Bots: bot_minplayers in server.cfg keeps bots in the game until enough
   people join (2 by default, so there is always someone to fight).
+* Private duels (Free For All): any number at once, each pair on its own.
+  A challenge stands for 10 seconds; bots accept the ones put to them
+  (bot_acceptDuels 0: they don't). g_privateDuel 0 turns them off (VR
+  players' salutes too).
 * The log games.log keeps every VR swing, cut and clash (g_vrSaberLog). It
   only grows: delete it now and then, or set g_vrSaberLog 0.
 * A VR player's blade is judged as they saw the others (lag compensation,

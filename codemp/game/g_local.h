@@ -793,6 +793,8 @@ struct gclient_s {
 		int		drainDebounce;
 		int		lightningDebounce;
 	} force;
+
+	int			vrDuelChallenge;	// OpenJK VR (g_vrduel.c): level.time this player challenged ps.duelIndex (0: hasn't)
 };
 
 //Interest points
@@ -1031,7 +1033,13 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir );
 void Cmd_SaberAttackCycle_f(gentity_t *ent);
 int G_ItemUsable(playerState_t *ps, int forcedUse);
 void Cmd_ToggleSaber_f(gentity_t *ent);
-void Cmd_EngageDuel_f(gentity_t *ent);
+// g_vrduel.c (OpenJK VR: private duels, any number at a time)
+void		G_PrivateDuelInit( void );
+void		G_PrivateDuelPublish( void );
+void		G_EngageDuel( gentity_t *ent, gentity_t *challenged );
+void		Cmd_VRDuel_f( gentity_t *ent );
+void		G_PrivateDuelThink( gentity_t *ent, usercmd_t *ucmd );
+gentity_t	*G_BotTakeUpDuel( gentity_t *bot );
 
 //
 // g_items.c

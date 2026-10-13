@@ -35,6 +35,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #endif
 
 XCVAR_DEF( bg_fighterAltControl,		"0",			NULL,						CVAR_SYSTEMINFO,								qtrue )
+XCVAR_DEF( bot_acceptDuels,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: bots take up private duel challenges
 XCVAR_DEF( capturelimit,				"8",			NULL,						CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( com_optvehtrace,				"0",			NULL,						CVAR_NONE,										qtrue )
 XCVAR_DEF( d_altRoutes,					"0",			NULL,						CVAR_CHEAT,										qfalse )
@@ -126,7 +127,7 @@ XCVAR_DEF( g_npcspskill,				"0",			NULL,						CVAR_ARCHIVE|CVAR_INTERNAL,						q
 XCVAR_DEF( g_password,					"",				NULL,						CVAR_NONE,										qfalse )
 XCVAR_DEF( g_powerDuelEndHealth,		"90",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_powerDuelStartHealth,		"150",			NULL,						CVAR_ARCHIVE,									qtrue )
-XCVAR_DEF( g_privateDuel,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )
+XCVAR_DEF( g_privateDuel,				"1",			CVU_PrivateDuel,			CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_randFix,					"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_restarted,					"0",			NULL,						CVAR_ROM,										qfalse )
 XCVAR_DEF( g_saberBladeFaces,			"1",			NULL,						CVAR_NONE,										qtrue )

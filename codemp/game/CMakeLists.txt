@@ -117,6 +117,7 @@ set(MPGameGameFiles
 	"${MPDir}/game/w_force.c"
 	"${MPDir}/game/w_saber.c"
 	"${MPDir}/game/g_vrsaber.c"
+	"${MPDir}/game/g_vrduel.c"
 	"${MPDir}/game/WalkerNPC.c"
 	"${MPDir}/game/ai.h"
 	"${MPDir}/game/ai_main.h"

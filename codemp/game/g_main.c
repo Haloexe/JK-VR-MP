@@ -297,6 +297,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// OpenJK VR: physical lightsaber
 	G_VRSaberInit();
+	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 
 	NPC_InitGame();
 

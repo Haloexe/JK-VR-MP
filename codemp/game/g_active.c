@@ -2402,133 +2402,8 @@ void ClientThink_real( gentity_t *ent ) {
 		}
 	}
 
-	if (ent->client->ps.duelInProgress)
-	{
-		gentity_t *duelAgainst = &g_entities[ent->client->ps.duelIndex];
-
-		//Keep the time updated, so once this duel ends this player can't engage in a duel for another
-		//10 seconds. This will give other people a chance to engage in duels in case this player wants
-		//to engage again right after he's done fighting and someone else is waiting.
-		ent->client->ps.fd.privateDuelTime = level.time + 10000;
-
-		if (ent->client->ps.duelTime < level.time)
-		{
-			//Bring out the sabers
-			if (ent->client->ps.weapon == WP_SABER
-				&& ent->client->ps.saberHolstered
-				&& ent->client->ps.duelTime )
-			{
-				ent->client->ps.saberHolstered = 0;
-
-				if (ent->client->saber[0].soundOn)
-				{
-					G_Sound(ent, CHAN_AUTO, ent->client->saber[0].soundOn);
-				}
-				if (ent->client->saber[1].soundOn)
-				{
-					G_Sound(ent, CHAN_AUTO, ent->client->saber[1].soundOn);
-				}
-
-				G_AddEvent(ent, EV_PRIVATE_DUEL, 2);
-
-				ent->client->ps.duelTime = 0;
-			}
-
-			if (duelAgainst
-				&& duelAgainst->client
-				&& duelAgainst->inuse
-				&& duelAgainst->client->ps.weapon == WP_SABER
-				&& duelAgainst->client->ps.saberHolstered
-				&& duelAgainst->client->ps.duelTime)
-			{
-				duelAgainst->client->ps.saberHolstered = 0;
-
-				if (duelAgainst->client->saber[0].soundOn)
-				{
-					G_Sound(duelAgainst, CHAN_AUTO, duelAgainst->client->saber[0].soundOn);
-				}
-				if (duelAgainst->client->saber[1].soundOn)
-				{
-					G_Sound(duelAgainst, CHAN_AUTO, duelAgainst->client->saber[1].soundOn);
-				}
-
-				G_AddEvent(duelAgainst, EV_PRIVATE_DUEL, 2);
-
-				duelAgainst->client->ps.duelTime = 0;
-			}
-		}
-		else
-		{
-			client->ps.speed = 0;
-			client->ps.basespeed = 0;
-			ucmd->forwardmove = 0;
-			ucmd->rightmove = 0;
-			ucmd->upmove = 0;
-		}
-
-		if (!duelAgainst || !duelAgainst->client || !duelAgainst->inuse ||
-			duelAgainst->client->ps.duelIndex != ent->s.number)
-		{
-			ent->client->ps.duelInProgress = 0;
-			G_AddEvent(ent, EV_PRIVATE_DUEL, 0);
-		}
-		else if (duelAgainst->health < 1 || duelAgainst->client->ps.stats[STAT_HEALTH] < 1)
-		{
-			ent->client->ps.duelInProgress = 0;
-			duelAgainst->client->ps.duelInProgress = 0;
-
-			G_AddEvent(ent, EV_PRIVATE_DUEL, 0);
-			G_AddEvent(duelAgainst, EV_PRIVATE_DUEL, 0);
-
-			//Winner gets full health.. providing he's still alive
-			if (ent->health > 0 && ent->client->ps.stats[STAT_HEALTH] > 0)
-			{
-				if (ent->health < ent->client->ps.stats[STAT_MAX_HEALTH])
-				{
-					ent->client->ps.stats[STAT_HEALTH] = ent->health = ent->client->ps.stats[STAT_MAX_HEALTH];
-				}
-
-				if (g_spawnInvulnerability.integer)
-				{
-					ent->client->ps.eFlags |= EF_INVULNERABLE;
-					ent->client->invulnerableTimer = level.time + g_spawnInvulnerability.integer;
-				}
-			}
-
-			/*
-			trap->SendServerCommand( ent-g_entities, va("print \"%s %s\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELWINNER")) );
-			trap->SendServerCommand( duelAgainst-g_entities, va("print \"%s %s\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELWINNER")) );
-			*/
-			//Private duel announcements are now made globally because we only want one duel at a time.
-			if (ent->health > 0 && ent->client->ps.stats[STAT_HEALTH] > 0)
-			{
-				trap->SendServerCommand( -1, va("cp \"%s %s %s!\n\"", ent->client->pers.netname, G_GetStringEdString("MP_SVGAME", "PLDUELWINNER"), duelAgainst->client->pers.netname) );
-			}
-			else
-			{ //it was a draw, because we both managed to die in the same frame
-				trap->SendServerCommand( -1, va("cp \"%s\n\"", G_GetStringEdString("MP_SVGAME", "PLDUELTIE")) );
-			}
-		}
-		else
-		{
-			vec3_t vSub;
-			float subLen = 0;
-
-			VectorSubtract(ent->client->ps.origin, duelAgainst->client->ps.origin, vSub);
-			subLen = VectorLength(vSub);
-
-			if (subLen >= 1024)
-			{
-				ent->client->ps.duelInProgress = 0;
-				duelAgainst->client->ps.duelInProgress = 0;
-
-				G_AddEvent(ent, EV_PRIVATE_DUEL, 0);
-				G_AddEvent(duelAgainst, EV_PRIVATE_DUEL, 0);
-
-				trap->SendServerCommand( -1, va("print \"%s\n\"", G_GetStringEdString("MP_SVGAME", "PLDUELSTOP")) );
-			}
-		}
-	}
+	// OpenJK VR: a private duel - one of any number at a time (g_vrduel.c)
+	G_PrivateDuelThink( ent, ucmd );
 
 	if (ent->client->doingThrow > level.time)
 	{
@@ -3129,7 +3004,7 @@ void ClientThink_real( gentity_t *ent ) {
 			}
 			else
 			{
-				Cmd_EngageDuel_f(ent);
+				G_EngageDuel( ent, NULL );	// OpenJK VR (g_vrduel.c): at whoever they're looking at
 			}
 			break;
 		case GENCMD_FORCE_HEAL:

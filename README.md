@@ -14,6 +14,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Multiplayer that shows it:** other players see you as you really move
   (head, arms, hands and saber), and lag compensation judges blades as each
   player saw them.
+- **Duels with a salute:** challenge someone to a private duel by saluting
+  them with your lit saber; they accept by saluting back. Any number of duels
+  can go on at once, each pair on its own, and bots accept challenges too.
 - **Proximity voice chat:** talk to the players near you and hear them from
   where they stand.
 - **Guns in your hand:** aim with your hand, with a 3D aim dot.
