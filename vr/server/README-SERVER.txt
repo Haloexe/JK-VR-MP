@@ -112,4 +112,5 @@ GOOD TO KNOW
   away still meet what they swing at; a server close to its players still
   plays best.
 * Running the server and playing on the same PC is fine: the server takes
-  little of the PC.
+  little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
+  upload with 8 players (VR bodies and voices included).
