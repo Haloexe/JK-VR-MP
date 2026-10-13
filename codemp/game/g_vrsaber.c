@@ -175,21 +175,30 @@ enum {
 	VRS_NUM_ALL_WEIGHTS
 };
 
-// (the defaults of g_vrSaberLight / Medium / Heavy: 1.8 5.3 40 150 and so on)
+// (the defaults of g_vrSaberLight / Medium / Heavy: 1.8 5.3 25 150 and so on.
+// A full-speed heavy blow takes 60 of a player's 100-125 health and armour:
+// it takes two or three of those, or more slower cuts, to bring someone down.)
 static const vrSaberWeight_t vrSaberDefaults[VRS_NUM_WEIGHTS] = {
-	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE,  40.0f, 150, 1 },
-	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
+	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE, 25.0f, 150, 1 },
+	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE, 40.0f, 220, 2 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 60.0f, 300, 3 },
 };
 static vrSaberWeight_t vrSaberWeights[VRS_NUM_ALL_WEIGHTS] = {
-	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE,  40.0f, 150, 1 },
-	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE,  65.0f, 220, 2 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 3 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 100.0f, 300, 4 },
+	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE, 25.0f, 150, 1 },
+	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE, 40.0f, 220, 2 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 60.0f, 300, 3 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 60.0f, 300, 4 },
 };
 
+// The cvars' defaults (as g_xcvar.h has them), and what they were before,
+// when blows did two thirds more and a full-speed heavy one killed: a config
+// that saved the old ones gets today's.
+static const char *vrSaberCvarNames[VRS_NUM_WEIGHTS] = { "g_vrSaberLight", "g_vrSaberMedium", "g_vrSaberHeavy" };
+static const char *vrSaberCvarDefaults[VRS_NUM_WEIGHTS] = { "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 60 300" };
+static const char *vrSaberOldDefaults[VRS_NUM_WEIGHTS] = { "1.8 5.3 40 150", "2.5 7.1 65 220", "3.2 8.8 100 300" };
+
 // The server's g_vrSaberLight / Medium / Heavy changed: "cut from (m/s)
-// full damage at (m/s) max damage recover (ms)", e.g. "2.5 7.1 65 220".
+// full damage at (m/s) max damage recover (ms)", e.g. "2.5 7.1 40 220".
 void G_VRSaberWeightsChanged( void ) {
 	const vmCvar_t *cv[VRS_NUM_WEIGHTS] = { &g_vrSaberLight, &g_vrSaberMedium, &g_vrSaberHeavy };
 	int i;
@@ -200,6 +209,11 @@ void G_VRSaberWeightsChanged( void ) {
 
 		vrSaberWeights[i] = vrSaberDefaults[i];
 		if ( !cv[i]->string[0] ) {
+			continue;
+		}
+		if ( !strcmp( cv[i]->string, vrSaberOldDefaults[i] ) ) {
+			// the old default, saved in a config: today's instead
+			trap->Cvar_Set( vrSaberCvarNames[i], vrSaberCvarDefaults[i] );
 			continue;
 		}
 		if ( sscanf( cv[i]->string, "%f %f %f %d", &cutFrom, &fullAt, &maxDamage, &recover ) != 4 ||

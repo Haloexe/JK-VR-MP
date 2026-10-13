@@ -177,11 +177,14 @@ server running this build: your real blade is the weapon.
     way (their automatic block). g_vrSaberBotGuard 0 turns it off, 0.5
     makes it half as likely, 2 makes them guard every swing, faster.
   * Saber styles are the blade's weight (right stick click cycles them):
-      light  (fast style)    small quick swings cut, up to 40 damage,
+      light  (fast style)    small quick swings cut, up to 25 damage,
                              recovers quickly after a clash
-      medium (medium style)  up to 65 damage
-      heavy  (strong style)  needs big swings, up to 100 damage, breaks
+      medium (medium style)  up to 40 damage
+      heavy  (strong style)  needs big swings, up to 60 damage, breaks
                              through guards at full speed, recovers slowly
+    Slower swings cut for less (a quarter at the slowest). A player starts
+    with 100 health (125, and 25 armour, outside duels), so it takes two or
+    three full-speed heavy blows to bring someone down, or more lighter cuts.
     Dual sabers are two medium blades, and the staff is medium too. With
     dual sabers the right stick click switches the left one off instead;
     the right one is then a light saber, as in the normal game. With the
@@ -214,12 +217,13 @@ Servers fighting this way show "vrSaber 1" in their server info.
 Server settings: g_vrSaber (1; 0 = the old animated combat),
 g_vrSaberLight / g_vrSaberMedium / g_vrSaberHeavy (each "cut-from
 full-damage-at max-damage recover": swing speeds in m/s, recovery after a
-clash in ms; defaults "1.8 5.3 40 150", "2.5 7.1 65 220", "3.2 8.8 100
+clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 60
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
-weight), g_vrSaberDamageScale (1), g_vrSaberUnlag (1: blades judged as
-the VR player saw them, below), g_vrSaberDebug 1 (prints every cut's speed
-and damage, and how every clash ended, to the console), and the stock
-g_dismember 100 if you want limbs to come off.
+weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
+half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
+below), g_vrSaberDebug 1 (prints every cut's speed and damage, and how
+every clash ended, to the console), and the stock g_dismember 100 if you
+want limbs to come off.
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
