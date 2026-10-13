@@ -4,9 +4,10 @@
 lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJK).
 
 - **Real lightsaber combat:** your blade cuts, blocks and clashes where you
-  actually swing it, harder the faster you swing. Saber styles become the
-  blade's weight (light, medium, heavy), you can grip a saber with both hands,
-  and the controllers rumble with every hit.
+  actually swing it, harder the faster you swing. Blades are solid: yours
+  rests on another blade and slides along it instead of passing through. Saber
+  styles become the blade's weight (light, medium, heavy), you can grip a saber
+  with both hands, and the controllers rumble with every hit.
 - **Your body in VR:** you see your character's body under you. Its arms,
   elbows and shoulders follow your controllers naturally, and it works with any
   player model on the standard skeleton, custom models included.
@@ -60,7 +61,7 @@ settings and commands. Players need the same OpenJK VR version as the server.
 
 The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
 `cl_voice.cpp`), the renderer (`codemp/rd-vanilla`), the client game
-(`codemp/cgame/cg_vrbody.c`: body, arms and haptics) and the server game
+(`codemp/cgame/cg_vrbody.c`: body, arms, solid blades and haptics) and the server game
 (`codemp/game/g_vrsaber.c`: saber combat). The "HOW IT WORKS" section of
 `vr/README-VR.txt` has the details.
 

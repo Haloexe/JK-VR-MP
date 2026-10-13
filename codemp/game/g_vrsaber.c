@@ -120,6 +120,7 @@ typedef struct vrSaberState_s {
 	int				recoverTime;		// after a clash the blades cut nothing until then
 	int				clashEnt;			// last clash (sparks are debounced)
 	int				clashTime;
+	int				clashSeen;			// (a VR blade's) last level.time the blades were seen together
 	int				throughEnt;			// last guard a heavy blow broke through
 	int				throughTime;
 	struct {
@@ -1292,8 +1293,8 @@ static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, ve
 	const vrSaberWeight_t *w = VRS_Weight( self );
 	const vrSaberWeight_t *ow = VRS_Weight( other );
 	const int strength = VRS_Strength( w, speed );
-	vrSaberState_t *ovs = VRS_State( other );
-	const float theirSpeed = VRS_BladeSpeedAt( ovs, ob, point );
+	vrSaberState_t *ovs = VRS_State( other );	// (NULL: an NPC - a jedi's own block, VRS_Hit)
+	const float theirSpeed = ovs ? VRS_BladeSpeedAt( ovs, ob, point ) : 0.0f;
 	const int theirs = VRS_Strength( ow, theirSpeed );
 	vrsClash_t result;
 	int recover;
@@ -1314,7 +1315,7 @@ static vrsClash_t VRS_ClashReact( gentity_t *self, const vrsOtherBlade_t *ob, ve
 		result = VRS_CLASH_LOST;
 		recover = ow->recover / 2;
 	}
-	if ( ovs->recoverTime < level.time + recover ) {
+	if ( ovs && ovs->recoverTime < level.time + recover ) {
 		ovs->recoverTime = level.time + recover;
 	}
 	return result;
@@ -1332,15 +1333,20 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 	vrsClash_t result;
 	int recover = 0;
 
-	if ( vs->clashEnt == other->s.number && level.time - vs->clashTime < 150 ) {
-		// the same clash going on (blades held together only spark now and
-		// then); a blow that broke through keeps going
-		return (qboolean)( vs->throughEnt == other->s.number && level.time - vs->throughTime < VR_SABER_THROUGH_MS );
+	if ( vs->clashEnt == other->s.number && level.time - vs->clashSeen < 150 ) {
+		// the same clash going on: the blades held together - a VR blade
+		// rests on the other one (cg_vrbody.c), sparking in the hand that
+		// holds it - quietly, until a swing from there makes a new clash; a
+		// blow that broke through keeps going
+		vs->clashSeen = level.time;
+		if ( !swing || level.time - vs->clashTime < 150 ) {
+			return (qboolean)( vs->throughEnt == other->s.number && level.time - vs->throughTime < VR_SABER_THROUGH_MS );
+		}
 	}
 
 	// sparks, unless the other VR player's sweep already reported this
-	ovs = VRS_State( other );
-	if ( ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
+	ovs = VRS_State( other );	// (NULL: an NPC)
+	if ( !ovs || ovs->clashEnt != self->s.number || level.time - ovs->clashTime >= 150 ) {
 		gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
 		VectorCopy( point, te->s.origin );
 		VectorScale( moveDir, -1.0f, te->s.angles );
@@ -1354,7 +1360,7 @@ static qboolean VRS_Clash( gentity_t *self, int s, int b, const vrsOtherBlade_t 
 		WP_SaberBounceSound( self, s, b );
 	}
 	vs->clashEnt = other->s.number;
-	vs->clashTime = level.time;
+	vs->clashTime = vs->clashSeen = level.time;
 
 	if ( !swing ) {
 		if ( g_vrSaberDebug.integer ) {
@@ -1473,7 +1479,7 @@ static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other,
 	vrsMet[other->s.number][saberNum].vrSwing = swing;
 	vrsMet[other->s.number][saberNum].vrGoesOn = qfalse;
 	vs->clashEnt = other->s.number;
-	vs->clashTime = level.time;
+	vs->clashTime = vs->clashSeen = level.time;
 
 	// sparks, told as the swinging blade's (the VR player feels it in that hand)
 	{

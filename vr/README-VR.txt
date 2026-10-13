@@ -16,7 +16,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     controller points
   * Physical saber combat in games you host (and on servers running this
     build): your real blade cuts, blocks and clashes, harder the faster you
-    swing; saber styles are the blade's weight
+    swing; blades are solid - yours rests on another blade and slides along
+    it rather than passing through; saber styles are the blade's weight
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen; point at the
@@ -189,6 +190,22 @@ server running this build: your real blade is the weapon.
     swing that meets your blade held still bounces off it (a much stronger
     guard knocks it away; a much stronger swing jars your guard for a
     moment); one that misses your blade lands.
+  * Blades are solid. Yours can't go through another blade as you see it:
+    swung or pushed into one, it stops there and rests on it - the cores
+    touching, sparking where they meet - and slides along it as you move
+    your hand along it; take your hand back, or round its end, and it comes
+    away. Your real hand can go on past (nothing pushes it back), so your
+    character's hand turns to keep hold of the blade where it rests, and
+    you feel it pressed on harder the further your hand goes. Push on far
+    enough - 60 degrees through (up to 75 if a heavy blade was trailing a
+    fast swing as it met the other one) - and it slips by. A heavy blow
+    that breaks a guard (above) goes on through. Only your own blade is
+    stopped: a blade swung into yours doesn't shove it (in its owner's
+    game it stops on yours). Teammates' blades and other people's duels
+    aren't in the way, and walls and floors never are - the blade sinks
+    into them, sparking, as it always has. cg_vrSaberSolid 0 lets blades
+    pass through each other again (the game still stops them where they
+    met).
   * Bots fight back with their guard: they see your swing coming and raise
     their saber into its path - how often and how quickly goes with their
     saber defence. It still has to meet your blade to stop it: change the
@@ -240,8 +257,10 @@ server running this build: your real blade is the weapon.
           through them for as long as the blade is in them;
           the game saying it cut: a deeper rumble right after, longer the
           heavier the blade; a kill: a long, heavy one;
-          blades meeting: a hard knock (longer the heavier), a grind while
-          they're pressed together; a grind when it scrapes a wall;
+          blades meeting: a knock, harder the faster your swing (longer
+          the heavier the blade), then a grind while they rest together,
+          harder the harder you push, and a sharp give if it slips by; a
+          grind when it scrapes a wall;
           getting cut: a jolt in both hands.
         Holding the saber with both hands, both feel it. cg_vrHaptics
         sets how strong it all is (0 off, 1 normal, up to 2).
@@ -406,6 +425,8 @@ SETTINGS (console cvars, saved automatically)
   cg_vrBodyWrist 1       0 = stiff wrists (the forearm turns the hand)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
+  cg_vrSaberSolid 1      0 = blades pass through each other (the game
+                         still stops them where they met)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2)
@@ -451,6 +472,10 @@ KNOWN LIMITATIONS
     a moment later on their screen; with much lag (over a quarter second)
     it lands anyway. Between two VR players blades meet where the server
     has them, so those blocks are the most exact with a low ping.
+  * Solid blades stop only your own blade. Another player's blade is drawn
+    where they had it a moment ago; one swung fast into yours can pass
+    through it on your screen (it stopped on yours in their game, or the
+    server parried it).
   * Demos recorded with this build in games hosted with it (record, or
     the server's svrecord / sv_autoDemo of players running it) keep the VR
     bodies, so they play back in this build only (the normal game and
@@ -512,7 +537,8 @@ no client. Source files:
   codemp/rd-vanilla/tr_main.cpp    asymmetric per-eye projection
   codemp/cgame/cg_vr.c         hands, aim dot
   codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK; the
-                               blade poses sent to the server, haptics
+                               blade's weight and solid blades; the blade
+                               poses sent to the server, haptics
   codemp/qcommon/vr_net.h      blade poses on the wire
   codemp/game/g_vrsaber.c      physical saber combat on the server
   codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,

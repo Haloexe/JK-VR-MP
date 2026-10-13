@@ -243,6 +243,19 @@ typedef struct vrbState_s {
 		int			holdUntil;		// stopped on another blade until then
 		vec3_t		out;			// the blade as drawn this frame (world)
 		int			outTime;
+		// solid blades (CG_VRB_BladeSolid)
+		vec3_t		pivot;			// last frame: the controller's grip (world)...
+		vec3_t		last;			// ...where the blade pointed (world, as it was let)...
+		float		lastYaw;		// ...and the room's turn (CG_VRB_RoomYaw)
+		int			lastTime;		// (cg.time; 0: none)
+		int			heldTime;		// cg.time it last rested on another blade...
+		int			heldEnt;		// ...whose...
+		vec3_t		heldPoint;		// ...where they touch (on the other one, world)...
+		vec3_t		heldNormal;		// ...and the way from there to yours
+		float		pressLag;		// degrees it trailed your hand by as it met it
+		float		press;			// 0..1: how hard it's pressed on, toward slipping by (felt)
+		int			slipUntil;		// it slipped by: no blade stops it until then
+		int			brokeTime;		// (the log: a heavy blow went through one then)
 	}			blade[2];
 
 	// the whoosh of your swings (CG_VRB_SwingSound)
@@ -299,6 +312,7 @@ static struct {
 // what your hands feel (below)
 static void CG_VRB_Feel( int hand, float peak, int hold, float tail, int decay, float grain );
 static void CG_VRB_NoteOtherBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
+static void CG_VRB_BladeSolid( int h, const vrClientState_t *vr, const vec3_t pivot, const vec3_t want, vec3_t out );
 static void CG_VRB_TouchFeel( void );
 static void CG_VRB_Heft( void );
 static void CG_VRB_FeelFrame( void );
@@ -2171,7 +2185,8 @@ first. Two hands on it turn it faster. It runs in your room, so turning
 and walking never swing it. cg_vrSaberInertia scales all of it (1; 0 = the
 blade exactly where the controller points it; up to 3: slower still).
 Another blade stops it dead for a moment, and cutting through someone drags
-it (CG_VRB_BladeImpulse).
+it (CG_VRB_BladeImpulse) - and it can't go through another blade, it rests
+on it (CG_VRB_BladeSolid).
 =================
 */
 
@@ -2310,6 +2325,7 @@ static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
 		CG_VRB_Grip( cent, h, &grip );
 		if ( grip.kind != VRB_GRIP_SABER || !vr->handValid[h] ) {
 			vrb.blade[h].valid = qfalse;
+			vrb.blade[h].lastTime = 0;
 			continue;
 		}
 		CG_VRB_Controller( vr, h, pos, ax );
@@ -2320,6 +2336,7 @@ static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
 			VectorCopy( tmp, want );
 		}
 		CG_VRB_BladeSpring( h, vr, want, weight, (qboolean)( twoHands && h == VR_HAND_RIGHT ), out );
+		CG_VRB_BladeSolid( h, vr, pos, want, out );	// (another blade in the way stops it)
 		VectorCopy( out, vrb.blade[h].out );
 		vrb.blade[h].outTime = cg.time;
 
@@ -4527,6 +4544,413 @@ static qboolean CG_VRB_Teammate( int ent ) {
 
 /*
 =================
+CG_VRB_BladeSolid
+
+Blades are solid to each other. Yours can't go through another one as you
+see it: swung or pushed into it, it stops there and rests on it, the white
+cores touching, and slides along it as your hand moves along it; take your
+hand back, or round an end of it, and it comes away. Your real hand can go
+on past - nothing pushes it back - so the arm turns your fist to hold the
+blade where it rests, and you feel it pressed on harder the further your
+hand goes; go far enough on through it (60 degrees, more if the blade was
+trailing your hand as it met the other one, up to 75) and it slips by. A blow the game lets break through goes through: a heavy blade swung
+at full speed, two or more stronger (VRS_Breaks). Only your blade moves:
+one swung into yours (as you see it) doesn't shove it - in its owner's
+game it stops on yours. Teammates' blades and other people's duels aren't
+in the way (the game lets those pass too), nor are thrown sabers; and
+walls and floors never are: a lightsaber cuts them. cg_vrSaberSolid 0:
+blades pass through each other (the game still stops them where they met).
+
+It works from the blades as drawn last frame. From the hold on the hilt
+(the controller's grip, where the arm puts it - CG_VRB_SolveArm) your blade
+lies along where it points, from its emitter to its tip, and turns about
+that hold. The hold and another blade's line make a plane: when your blade
+goes over from one side of it to the other, and where it crosses is on
+both blades, it went through - so it's turned back, as little as it takes,
+to rest on the other blade on the side it came from. (Their blade where it
+was last seen: yours is drawn before theirs.)
+=================
+*/
+
+#define VRB_SOLID_GAP		2.0f	// blades rest this far apart: their white cores touching (the game has them meet within 3)...
+#define VRB_SOLID_TOUCH		1.15f	// ...and up to this many times as far apart they still rest on each other
+#define VRB_SOLID_NEAR		4.0f	// another blade by your hand (nearer than this along your blade) doesn't stop it
+#define VRB_SOLID_MIN		8.0f	// blades shorter than this (lighting up) aren't solid yet
+#define VRB_SOLID_JUMP		32.0f	// the hand moved further than this in a frame (teleported)...
+#define VRB_SOLID_SNAP		5.0f	// ...or the room turned this many degrees (a snap turn): it didn't sweep there
+#define VRB_SOLID_SLIP		60.0f	// degrees your hand can go on through the other blade before yours slips by...
+#define VRB_SOLID_SLIP_MORE	30.0f	// ...or this much more than it already had as they met (a heavy blade trailing it)...
+#define VRB_SOLID_SLIP_MAX	75.0f	// ...up to this (the drawn wrist bends that far)
+#define VRB_SOLID_SLIP_MS	150		// slipped by: no blade stops it for this long (it goes on through)
+#define VRB_SOLID_CONTACT	100		// ms: resting on one again this soon is the same contact
+
+// another blade in the way
+typedef struct {
+	int			ent;			// whose
+	vec3_t		P, e;			// its base, and the way it points
+	float		L;				// its length
+	qboolean	before;			// where it was the frame before:
+	vec3_t		P0, e0;
+} vrbSolidOther_t;
+
+// your blade resting on another
+typedef struct {
+	vec3_t		point;			// where they touch (on the other blade)
+	vec3_t		normal;			// the way from there to yours
+	float		push;			// degrees your hand points on past it, through the other blade
+} vrbSolidContact_t;
+
+// one of the blades in your hand, as drawn last frame
+typedef struct {
+	int			index;			// which blade of the saber
+	float		sgn;			// it points the way the hilt does (1) or the other way (-1: a staff's second blade)
+	float		a, len;			// from the hold on the hilt, along it: where it starts, and how long it is
+	vec3_t		ofs;			// the hold from the controller's grip (world)
+	vec3_t		H0, u0;			// last frame: the hold, and where the blade pointed
+} vrbSolidMine_t;
+
+typedef struct {
+	vec3_t		m;				// across the plane through your hold and the other blade's line
+	float		c;				// how far your blade points out of that plane (the sine)
+	vec3_t		vp;				// the way it points in it
+	qboolean	vpOk;
+	qboolean	cross;			// it crosses the other blade's line there...
+	float		k, w;			// ...this far along yours from the hold, and along theirs from its base
+} vrbSolidGeom_t;
+
+// Your blade, from the hold H pointing v, against the line of another one
+// from P pointing e. qfalse: the hold is on that line.
+static qboolean CG_VRB_SolidGeom( const vec3_t H, const vec3_t v, const vec3_t P, const vec3_t e, vrbSolidGeom_t *g ) {
+	vec3_t r, x, t;
+	float denom;
+
+	VectorSubtract( H, P, r );
+	CrossProduct( e, r, g->m );
+	if ( VectorNormalize( g->m ) < 0.5f ) {
+		return qfalse;
+	}
+	g->c = DotProduct( v, g->m );
+	VectorMA( v, -g->c, g->m, g->vp );
+	g->vpOk = (qboolean)( VectorNormalize( g->vp ) > 0.05f );
+	g->cross = qfalse;
+	g->k = g->w = 0.0f;
+	if ( !g->vpOk ) {
+		return qtrue;	// (pointing straight out of the plane)
+	}
+	// H + k vp = P + w e, in the plane
+	CrossProduct( g->vp, e, x );
+	denom = DotProduct( x, g->m );
+	if ( fabsf( denom ) < 0.05f ) {
+		return qtrue;	// (alongside the other blade: they don't cross)
+	}
+	VectorScale( r, -1.0f, r );
+	CrossProduct( r, e, t );
+	g->k = DotProduct( t, g->m ) / denom;
+	CrossProduct( r, g->vp, t );
+	g->w = DotProduct( t, g->m ) / denom;
+	g->cross = qtrue;
+	return qtrue;
+}
+
+// Is where it crosses the other blade's line on both blades?
+static qboolean CG_VRB_SolidOn( const vrbSolidGeom_t *g, const vrbSolidMine_t *m, float L ) {
+	return (qboolean)( g->cross && g->k >= Q_max( m->a, VRB_SOLID_NEAR ) && g->k <= m->a + m->len + 0.5f * VRB_SOLID_GAP &&
+		g->w >= -0.5f * VRB_SOLID_GAP && g->w <= L + 0.5f * VRB_SOLID_GAP );
+}
+
+// Your blade m, from the hold H, along sgn * d, against another one: d
+// turned as little as keeps it from going through - on the side it was on
+// last frame, the cores touching. But no further out than it was if the
+// other blade moved into it: one moving into yours (as you see it) doesn't
+// shove it. qtrue if it rests on it (turned onto it, or just touching it),
+// and how (*c; your hand pointing want).
+static qboolean CG_VRB_SolidPair( const vrbSolidMine_t *m, const vec3_t H, const vrbSolidOther_t *o, const vec3_t want,
+	vec3_t d, vrbSolidContact_t *c ) {
+	vrbSolidGeom_t g, g0, gx;
+	vec3_t v;
+	float side, k, w, s, hand;
+
+	VectorScale( d, m->sgn, v );
+	if ( !CG_VRB_SolidGeom( H, v, o->P, o->e, &g ) || !g.vpOk || !CG_VRB_SolidGeom( m->H0, m->u0, o->P, o->e, &g0 ) ||
+		fabsf( g0.c ) < 0.01f ) {
+		return qfalse;	// (or in line with it last frame: whichever side it's on now)
+	}
+	side = ( g0.c > 0.0f ) ? 1.0f : -1.0f;
+	if ( side * g.c < 0.0f ) {
+		// it went over since: through the other blade, or round an end of it?
+		const float f = g0.c / ( g0.c - g.c );
+		vec3_t hx, vx;
+		VectorSubtract( H, m->H0, hx );
+		VectorMA( m->H0, f, hx, hx );
+		VectorSubtract( v, m->u0, vx );
+		VectorMA( m->u0, f, vx, vx );
+		if ( VectorNormalize( vx ) < 0.1f || !CG_VRB_SolidGeom( hx, vx, o->P, o->e, &gx ) || !CG_VRB_SolidOn( &gx, m, o->L ) ) {
+			return qfalse;	// round it
+		}
+		if ( CG_VRB_SolidOn( &g, m, o->L ) ) {
+			k = g.k;
+			w = g.w;
+		} else {
+			k = gx.k;
+			w = gx.w;
+		}
+	} else if ( CG_VRB_SolidOn( &g, m, o->L ) ) {
+		k = g.k;
+		w = g.w;
+	} else {
+		return qfalse;
+	}
+	k = Com_Clamp( Q_max( m->a, VRB_SOLID_NEAR ), Q_max( m->a + m->len, VRB_SOLID_NEAR ), k );
+	s = VRB_SOLID_GAP / k;
+	if ( o->before ) {
+		vrbSolidGeom_t gb;
+		if ( CG_VRB_SolidGeom( m->H0, m->u0, o->P0, o->e0, &gb ) && side * gb.c > side * g0.c + 0.001f ) {
+			s = Q_min( s, side * g0.c );	// (it came nearer yours since: yours stays where it was)
+		}
+	}
+	if ( side * g.c >= VRB_SOLID_TOUCH * s ) {
+		return qfalse;	// on its side, clear of it
+	}
+	if ( side * g.c < s ) {
+		VectorScale( g.vp, sqrtf( 1.0f - s * s ), v );
+		VectorMA( v, side * s, g.m, v );
+		VectorScale( v, m->sgn, d );
+	} else {
+		s = side * g.c;	// (resting on it as it is)
+	}
+	VectorMA( o->P, Com_Clamp( 0.0f, o->L, w ), o->e, c->point );
+	VectorScale( g.m, side, c->normal );
+	// how far on through it your hand points (its way across the other
+	// blade, not along it: a blade trailing your hand along it isn't pushed)
+	hand = m->sgn * DotProduct( want, g.m );
+	c->push = RAD2DEG( asinf( s ) - asinf( Com_Clamp( -1.0f, 1.0f, side * hand ) ) );
+	return qtrue;
+}
+
+// Can your blade meet that one, as the game has it? Not a teammate's (a
+// friendly blade passes), not someone else's in a duel, not a thrown one.
+static qboolean CG_VRB_SolidFoe( const vrbOtherBlade_t *o ) {
+	const centity_t *c;
+
+	if ( o->ent < 0 || o->ent >= MAX_GENTITIES ) {
+		return qfalse;
+	}
+	c = &cg_entities[o->ent];
+	if ( ( c->currentState.eFlags & EF_DEAD ) || CG_VRB_Teammate( o->ent ) ) {
+		return qfalse;
+	}
+	if ( o->saber == 0 && c->currentState.saberInFlight ) {
+		return qfalse;	// (thrown: the game blocks those its own way)
+	}
+	if ( cg.predictedPlayerState.duelInProgress ) {
+		return (qboolean)( o->ent == cg.predictedPlayerState.duelIndex );
+	}
+	return (qboolean)( o->ent >= MAX_CLIENTS || !c->currentState.bolt1 );	// (bolt1: they're in a duel)
+}
+
+// Would a blow of the blade in hand h go on through that one, as the game
+// reckons it (VRS_Breaks)? A heavy blade swung at full speed, two or more
+// stronger than the other (its weight, and one more if it moves as fast as
+// it hits hardest) - and the faster of the two.
+static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbOtherBlade_t *o ) {
+	const float speed = vrb.swing.handSpeed[h];
+	int mine, theirs, theirWeight;
+
+	if ( CG_VRB_Weight( qtrue ) != VRB_HEAVY || speed < vrbFullAt[VRB_HEAVY] ) {
+		return qfalse;
+	}
+	mine = VRB_HEAVY + 2;	// (heavy, and one for full speed)
+	if ( CG_VRB_Weight( qfalse ) == VRB_HEAVY && CG_VRB_TwoHanded() ) {
+		mine++;				// (heavy held with both hands)
+	}
+	switch ( cg_entities[o->ent].currentState.fireflag ) {	// (their saber style)
+	case SS_FAST:
+	case SS_TAVION:
+		theirWeight = VRB_LIGHT;
+		break;
+	case SS_STRONG:
+	case SS_DESANN:
+		theirWeight = VRB_HEAVY;
+		break;
+	default:
+		theirWeight = VRB_MEDIUM;
+		break;
+	}
+	theirs = theirWeight + 1;
+	if ( o->ent >= 0 && o->ent < MAX_CLIENTS && vrbOthers[o->ent].avatarValid && cg.time - vrbOthers[o->ent].avatarTime < 100 &&
+		vrbOthers[o->ent].avatar.hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ) {
+		theirs++;	// (a VR player's held with both hands)
+	}
+	if ( o->prevTime && o->time - o->prevTime > 0 && vr->worldScale > 0.0f ) {
+		vec3_t p0, p1, rel;
+		float v;
+		VectorSubtract( o->tip, o->base, rel );
+		VectorMA( o->base, 0.66f, rel, p1 );
+		VectorSubtract( o->prevTip, o->prevBase, rel );
+		VectorMA( o->prevBase, 0.66f, rel, p0 );
+		v = Distance( p0, p1 ) / ( ( o->time - o->prevTime ) * 0.001f ) / vr->worldScale;
+		if ( v >= speed ) {
+			return qfalse;	// (theirs is the faster: their blow decides)
+		}
+		if ( v >= vrbFullAt[theirWeight] ) {
+			theirs++;
+		}
+	}
+	return (qboolean)( mine >= theirs + 2 );
+}
+
+// The blade in hand h, pointing out (world) as its weight lets it
+// (CG_VRB_BladeSpring), from the controller's grip at pivot, which points it
+// want: out kept from going through other blades.
+static void CG_VRB_BladeSolid( int h, const vrClientState_t *vr, const vec3_t pivot, const vec3_t want, vec3_t out ) {
+	const int s = ( h == VR_HAND_LEFT ) ? 1 : 0;	// (the hand's saber: dual sabers' left one)
+	const float yaw = CG_VRB_RoomYaw( vr );
+	// last frame's blade - and the hand got here from there, not by a
+	// teleport or a snap turn
+	const qboolean kept = (qboolean)( vrb.blade[h].lastTime && vrb.blade[h].lastTime == vrbSaber.time &&
+		cg.time - vrb.blade[h].lastTime > 0 && cg.time - vrb.blade[h].lastTime < 100 &&
+		DistanceSquared( pivot, vrb.blade[h].pivot ) < Square( VRB_SOLID_JUMP ) &&
+		fabsf( AngleNormalize180( yaw - vrb.blade[h].lastYaw ) ) < VRB_SOLID_SNAP );
+	vrbSolidMine_t mine[VR_POSE_MAX_BLADES];
+	vrbSolidOther_t others[VRB_OTHER_BLADES];
+	vrbSolidContact_t rest;
+	int numMine = 0, numOthers = 0, held = -1, i, b, pass;
+	float push = 0.0f;
+	vec3_t loose, d;
+
+	VectorCopy( out, loose );	// (where it would be)
+	VectorCopy( out, d );
+	memset( &rest, 0, sizeof( rest ) );
+
+	if ( kept && cg_vrSaberSolid.integer && cg.time - vrb.blade[h].slipUntil >= 0 ) {
+		// the hand's blades as drawn last frame, from the hold on the hilt -
+		// and where that has them pointing as they were let last frame
+		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+			vrbSolidMine_t *m = &mine[numMine];
+			vec3_t u, rel;
+			if ( !( vrbSaber.pose.bladeMask[s] & ( 1 << b ) ) ) {
+				continue;
+			}
+			VectorSubtract( vrbSaber.tip[s][b], vrbSaber.base[s][b], u );
+			m->len = VectorNormalize( u );
+			if ( m->len < VRB_SOLID_MIN ) {
+				continue;
+			}
+			m->index = b;
+			m->sgn = ( DotProduct( u, vrb.blade[h].last ) >= 0.0f ) ? 1.0f : -1.0f;
+			VectorSubtract( vrbSaber.base[s][b], vrb.blade[h].pivot, rel );
+			m->a = DotProduct( rel, u );
+			VectorMA( vrbSaber.base[s][b], -m->a, u, m->H0 );	// (the hold: its line's point by the grip)
+			VectorSubtract( m->H0, vrb.blade[h].pivot, m->ofs );
+			if ( VectorLengthSquared( m->ofs ) > Square( 16.0f ) ) {
+				continue;	// (the hand isn't holding it there: the animation is)
+			}
+			VectorScale( vrb.blade[h].last, m->sgn, m->u0 );
+			numMine++;
+		}
+		// the other blades in the way
+		for ( i = 0; i < VRB_OTHER_BLADES && numMine; i++ ) {
+			const vrbOtherBlade_t *o = &vrbOtherBlades[i];
+			vrbSolidOther_t *x = &others[numOthers];
+			if ( o->time != vrb.blade[h].lastTime || !CG_VRB_SolidFoe( o ) ) {
+				continue;	// (not drawn last frame: put away, gone)
+			}
+			VectorCopy( o->base, x->P );
+			VectorSubtract( o->tip, o->base, x->e );
+			x->L = VectorNormalize( x->e );
+			if ( x->L < VRB_SOLID_MIN ) {
+				continue;
+			}
+			x->before = qfalse;
+			if ( o->prevTime && o->time - o->prevTime > 0 ) {
+				VectorCopy( o->prevBase, x->P0 );
+				VectorSubtract( o->prevTip, o->prevBase, x->e0 );
+				x->before = (qboolean)( VectorNormalize( x->e0 ) > 1.0f );
+			}
+			if ( CG_VRB_SolidBreaks( h, vr, o ) ) {
+				if ( cg.time - vrb.blade[h].brokeTime > 300 ) {
+					CG_VRB_Log( "solid: a heavy blow at %.1f m/s goes through %i's blade\n", vrb.swing.handSpeed[h], o->ent );
+				}
+				vrb.blade[h].brokeTime = cg.time;
+				continue;
+			}
+			x->ent = o->ent;
+			numOthers++;
+		}
+		// each blade turned as little as keeps it out of each other one
+		// (twice round: resting on one can push it into another)
+		for ( pass = 0; pass < 2; pass++ ) {
+			for ( b = 0; b < numMine; b++ ) {
+				vec3_t H;
+				VectorAdd( pivot, mine[b].ofs, H );
+				for ( i = 0; i < numOthers; i++ ) {
+					vrbSolidContact_t c;
+					if ( !CG_VRB_SolidPair( &mine[b], H, &others[i], want, d, &c ) ) {
+						continue;
+					}
+					if ( held < 0 || c.push > push ) {
+						held = others[i].ent;
+						push = c.push;
+						rest = c;
+					}
+				}
+			}
+		}
+	}
+
+	if ( held >= 0 ) {
+		float slipAt;
+
+		if ( !vrb.blade[h].heldTime || cg.time - vrb.blade[h].heldTime > VRB_SOLID_CONTACT ) {
+			// it has just met the other blade: how far your hand was on past it
+			// already (a heavy blade trails a fast swing)
+			vrb.blade[h].pressLag = Q_max( 0.0f, push );
+			CG_VRB_Log( "solid: your blade rests on %i's (your hand %.0f deg on through it)\n", held, push );
+		}
+		vrb.blade[h].heldEnt = held;
+		VectorCopy( rest.point, vrb.blade[h].heldPoint );
+		VectorCopy( rest.normal, vrb.blade[h].heldNormal );
+		slipAt = Com_Clamp( VRB_SOLID_SLIP, VRB_SOLID_SLIP_MAX, vrb.blade[h].pressLag + VRB_SOLID_SLIP_MORE );
+		if ( push > slipAt ) {
+			// your hand went on too far: it slips by
+			vrb.blade[h].slipUntil = cg.time + VRB_SOLID_SLIP_MS;
+			vrb.blade[h].heldTime = 0;
+			vrb.blade[h].press = 0.0f;
+			CG_VRB_FeelBlade( h, 0.7f, 25, 0.35f, 90, 0.3f );
+			CG_VRB_Log( "solid: your blade slipped by %i's (your hand %.0f deg on)\n", held, push );
+		} else {
+			vec3_t room, axis;
+
+			vrb.blade[h].press = Com_Clamp( 0.0f, 1.0f, ( push - vrb.blade[h].pressLag ) / Q_max( 1.0f, slipAt - vrb.blade[h].pressLag ) );
+			vrb.blade[h].heldTime = cg.time;
+			// the blade's weight goes on from where it rests...
+			VRB_RotZ( d, -yaw, room );
+			if ( VectorNormalize( room ) > 0.5f ) {
+				VectorCopy( room, vrb.blade[h].dir );
+			}
+			// ...its turn into the other blade stopped (along it, it goes on)
+			CrossProduct( loose, d, axis );
+			if ( VectorNormalize( axis ) > 1e-4f ) {
+				float into;
+				VRB_RotZ( axis, -yaw, room );
+				into = DotProduct( vrb.blade[h].vel, room );
+				if ( into < 0.0f ) {
+					VectorMA( vrb.blade[h].vel, -into, room, vrb.blade[h].vel );
+				}
+			}
+			VectorCopy( d, out );
+		}
+	}
+
+	// (for the next frame)
+	VectorCopy( pivot, vrb.blade[h].pivot );
+	VectorCopy( out, vrb.blade[h].last );
+	vrb.blade[h].lastYaw = yaw;
+	vrb.blade[h].lastTime = cg.time;
+}
+
+/*
+=================
 CG_VRB_TouchFeel
 
 Once a frame, after the scene is built (others where they're drawn): does
@@ -4538,6 +4962,9 @@ static void CG_VRB_TouchFeel( void ) {
 	const int weight = CG_VRB_Weight( qtrue );
 	const float speed = vrb.swing.speed;	// (m/s, two thirds along the blade: about where it meets them)
 	const qboolean havePrev = (qboolean)( vrbHands.prevTime && cg.time - vrbHands.prevTime > 0 && cg.time - vrbHands.prevTime < 100 );
+	// (your blade only cuts where the server fights with it - "vrSaber 1" in
+	// its serverinfo; elsewhere the game's swing animations do)
+	const qboolean cuts = (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), "vrSaber" ) ) > 0 );
 	int in[2] = { -1, -1 }, s, b, h, i;
 	qboolean met[2] = { qfalse, qfalse };
 
@@ -4545,7 +4972,9 @@ static void CG_VRB_TouchFeel( void ) {
 		return;
 	}
 	CG_VRB_HandsInit();
-	if ( !CG_VR() || vrbSaber.time != cg.time || !vrbSaber.pose.valid ) {
+	// (a saber in your VR hands, drawn there this frame - as the pose sent
+	// at the end of the frame will say: CG_VR_BodyEndFrame)
+	if ( !CG_VR() || vrbSaber.time != cg.time || !CG_VRB_SaberHands() ) {
 		vrbHands.inEnt[0] = vrbHands.inEnt[1] = -1;
 		vrbHands.touching[0] = vrbHands.touching[1] = qfalse;
 		vrbHands.prevTime = 0;
@@ -4563,10 +4992,10 @@ static void CG_VRB_TouchFeel( void ) {
 
 			// a body: along the blade now (and halfway back to where it was,
 			// for an arm a fast swing could skip)
-			if ( in[h] < 0 ) {
+			if ( in[h] < 0 && cuts ) {
 				in[h] = CG_VRB_BladeInBody( base, tip );
 			}
-			if ( in[h] < 0 && swept ) {
+			if ( in[h] < 0 && cuts && swept ) {
 				vec3_t midBase, midTip;
 				VectorAdd( base, vrbHands.prevBase[s][b], midBase );
 				VectorScale( midBase, 0.5f, midBase );
@@ -4623,16 +5052,29 @@ static void CG_VRB_TouchFeel( void ) {
 			vrbHands.inEnt[h] = -1;
 		}
 
-		// against another blade: a knock as they meet (harder the heavier
-		// yours), a grind while they're pressed together
-		if ( met[h] ) {
-			if ( !vrbHands.touching[h] && cg.time - vrbHands.knockTime[h] > 100 ) {
-				static const int knock[3] = { 60, 75, 90 }, decay[3] = { 85, 105, 130 };
-				CG_VRB_FeelBlade( h, 1.0f, knock[weight], 0.55f, decay[weight], 0.0f );
-				vrbHands.knockTime[h] = cg.time;
-				CG_VRB_Log( "feel: your %s blade met another\n", vrbWeightNames[weight] );
+		// against another blade: a knock as they meet (harder the faster
+		// and the heavier yours), a grind while they're pressed together -
+		// resting on it (CG_VRB_BladeSolid), harder the harder you push
+		{
+			const qboolean resting = (qboolean)( vrb.blade[h].heldTime == cg.time );
+			if ( resting ) {
+				met[h] = qtrue;
 			}
-			CG_VRB_FeelSteady( h, 0.4f, 0.5f );
+			if ( met[h] ) {
+				if ( !vrbHands.touching[h] && cg.time - vrbHands.knockTime[h] > 100 ) {
+					static const int knock[3] = { 60, 75, 90 }, decay[3] = { 85, 105, 130 };
+					const float hard = Com_Clamp( 0.0f, 1.0f, vrb.swing.handSpeed[h] / vrbFullAt[weight] );
+					CG_VRB_FeelBlade( h, 0.45f + 0.55f * hard, knock[weight], 0.25f + 0.3f * hard, decay[weight], 0.0f );
+					vrbHands.knockTime[h] = cg.time;
+					CG_VRB_Log( "feel: your %s blade met another at %.1f m/s\n", vrbWeightNames[weight], vrb.swing.handSpeed[h] );
+				}
+				CG_VRB_FeelSteady( h, resting ? 0.3f + 0.5f * vrb.blade[h].press : 0.4f, 0.5f );
+			}
+			if ( resting ) {
+				// and sparks where they touch, as a blade held to a wall throws
+				// (the game is quiet about blades held together: only you see these)
+				trap->FX_PlayEffectID( cgs.effects.mSparks, vrb.blade[h].heldPoint, vrb.blade[h].heldNormal, -1, -1, qfalse );
+			}
 		}
 		vrbHands.touching[h] = met[h];
 	}
