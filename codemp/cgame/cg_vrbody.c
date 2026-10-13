@@ -58,6 +58,13 @@ static const char *const vrbArmBones[2][VRB_NUM_ARM_BONES] = {
 	{ "rhumerus", "rradius", "rhand", "r_d1_j1", "r_d2_j1", "r_d4_j1", "*r_hand" },	// VR_HAND_RIGHT
 };
 
+// The collarbone (from the top of the breastbone; the upper arm doesn't hang
+// off it in this skeleton, so it is moved along with it), and the forearm's
+// twist bone, halfway down it (the game's animations give it half the hand's
+// twist).
+static const char *const vrbClavicle[2] = { "lclavical", "rclavical" };
+static const char *const vrbForearmTwist[2] = { "lradiusX", "rradiusX" };
+
 // Everything that makes up a hand; the first one is the hand bone itself.
 #define VRB_MAX_HAND_BONES	17
 static const char *const vrbHandBones[2][VRB_MAX_HAND_BONES] = {
@@ -82,9 +89,6 @@ static const int vrbFingerJ1[VRB_FINGERS] = { 2, 5, 11 };	// r_d1_j1, r_d2_j1, r
 // hand land where it was sent (see CG_VRB_Arms), so a wrong guess here can
 // only cost a few frames, never leave the arms twisted.
 #define VRB_NUM_CONVENTIONS	3
-
-// how strongly elbows are pulled down/out, against following the hand's turn
-static float vrbElbowPull = 0.4f;
 
 typedef float vrbMat_t[3][3];		// rotation, row-major, acts on column vectors
 
@@ -127,6 +131,8 @@ typedef struct {
 	vec3_t		tagAxis[3];
 	float		reachExcess;		// wanted shoulder->wrist distance minus the arm's reach
 	vec3_t		reachDir;			// shoulder -> wrist
+	float		wristFlex, wristRadial, pronation;	// (the log: your real hand against the forearm drawn, degrees)
+	float		elbowUp;			// (the log: elbow above the shoulder, per upper arm length)
 } vrbArmResult_t;
 
 typedef struct vrbState_s {
@@ -172,12 +178,18 @@ typedef struct vrbState_s {
 	int			curlGeoTime[2];			// (...next time to log the hand round the hilt in full)
 
 	// per arm
-	vec3_t		pole[2];			// smoothed elbow direction, body-local
+	vec3_t		pole[2];			// smoothed elbow direction, chest-local
 	qboolean	poleValid[2];
 	int			poleTime[2];		// cg.time it was last advanced
+	vec3_t		elbowLocal[2];		// where the elbow was then, from the shoulder (chest-local)
 	vec3_t		hinge[2];			// elbow hinge axis in the upper arm's frame
 	qboolean	hingeValid[2];
 	int			hingeConvention[2];
+	float		girdle[2][2];		// the shoulder girdle: lifted, brought forward (radians, eased)
+	qboolean	girdleValid[2];
+	int			girdleTime[2];
+	void		*extraG2;			// the shoulders / forearm twist bones were moved on this instance
+	int			armLogTime;			// (the log: the arms, now and then)
 
 	// bone axis convention (see above); -1 while still checking
 	int			convention;
@@ -542,9 +554,60 @@ static void VRB_Mul( vrbMat_t a, vrbMat_t b, vrbMat_t out ) {
 	memcpy( out, t, sizeof( t ) );
 }
 
+// out = a * b^T (b undone, then a)
+static void VRB_MulT( vrbMat_t a, vrbMat_t b, vrbMat_t out ) {
+	vrbMat_t t;
+	int r, c;
+	for ( r = 0; r < 3; r++ ) {
+		for ( c = 0; c < 3; c++ ) {
+			t[r][c] = a[r][0] * b[c][0] + a[r][1] * b[c][1] + a[r][2] * b[c][2];
+		}
+	}
+	memcpy( out, t, sizeof( t ) );
+}
+
 static void VRB_Identity( vrbMat_t q ) {
 	memset( q, 0, sizeof( vrbMat_t ) );
 	q[0][0] = q[1][1] = q[2][2] = 1.0f;
+}
+
+// How far R turns about the unit axis k - its twist about k, the rest of it
+// a swing off k (radians, -pi..pi).
+static float VRB_TwistAngle( vrbMat_t R, const vec3_t k ) {
+	const float tr = R[0][0] + R[1][1] + R[2][2];
+	float w, v[3], s;
+
+	// R as a quaternion (w, v)
+	if ( tr > 0.0f ) {
+		s = 2.0f * sqrtf( 1.0f + tr );
+		w = 0.25f * s;
+		v[0] = ( R[2][1] - R[1][2] ) / s;
+		v[1] = ( R[0][2] - R[2][0] ) / s;
+		v[2] = ( R[1][0] - R[0][1] ) / s;
+	} else if ( R[0][0] > R[1][1] && R[0][0] > R[2][2] ) {
+		s = 2.0f * sqrtf( Q_max( 1e-12f, 1.0f + R[0][0] - R[1][1] - R[2][2] ) );
+		w = ( R[2][1] - R[1][2] ) / s;
+		v[0] = 0.25f * s;
+		v[1] = ( R[0][1] + R[1][0] ) / s;
+		v[2] = ( R[0][2] + R[2][0] ) / s;
+	} else if ( R[1][1] > R[2][2] ) {
+		s = 2.0f * sqrtf( Q_max( 1e-12f, 1.0f + R[1][1] - R[0][0] - R[2][2] ) );
+		w = ( R[0][2] - R[2][0] ) / s;
+		v[0] = ( R[0][1] + R[1][0] ) / s;
+		v[1] = 0.25f * s;
+		v[2] = ( R[1][2] + R[2][1] ) / s;
+	} else {
+		s = 2.0f * sqrtf( Q_max( 1e-12f, 1.0f + R[2][2] - R[0][0] - R[1][1] ) );
+		w = ( R[1][0] - R[0][1] ) / s;
+		v[0] = ( R[0][2] + R[2][0] ) / s;
+		v[1] = ( R[1][2] + R[2][1] ) / s;
+		v[2] = 0.25f * s;
+	}
+	if ( w < 0.0f ) {
+		w = -w;		// (the same turn, the short way round)
+		VectorScale( v, -1.0f, v );
+	}
+	return 2.0f * atan2f( DotProduct( v, k ), w );
 }
 
 // the rotation taking orthonormal frame "from" onto "to" (from[i] -> to[i])
@@ -820,7 +883,28 @@ static void CG_VRB_ResetArms( void *g2 ) {
 		if ( vrb.wristG2 == g2 && vrb.probeG2 == g2 ) {
 			CG_VRB_SetHandBones( g2, h, &identity );
 		}
+		if ( vrb.extraG2 == g2 && trap->ext.VR_G2SetBoneTransform ) {
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbClavicle[h], &identity );
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbArmBones[h][VRB_UPPER], &identity );
+			trap->ext.VR_G2SetBoneTransform( g2, 0, vrbForearmTwist[h], &identity );
+		}
 	}
+}
+
+// ...and for good: the shoulders and forearm twist bones back to the game's.
+static void CG_VRB_ClearExtra( void *g2 ) {
+	int h;
+
+	if ( vrb.extraG2 != g2 || !g2 || !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	for ( h = 0; h < 2; h++ ) {
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbClavicle[h], NULL );
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbArmBones[h][VRB_UPPER], NULL );
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbForearmTwist[h], NULL );
+		vrb.girdleValid[h] = qfalse;
+	}
+	vrb.extraG2 = NULL;
 }
 
 /*
@@ -2269,6 +2353,406 @@ static void CG_VRB_BladeImpulse( int h, qboolean clash, float strength ) {
 }
 
 /*
+=============================================================================
+
+where the elbows and shoulders go
+
+The hand is placed exactly; the elbow can be anywhere on a circle round the
+line from the shoulder to the wrist. A real one goes where holding the hand
+like that is easiest: it hangs (its weight), a raised arm goes up out to the
+side and a little forward (the shoulder blade's plane), it keeps out of the
+body, and it goes no further than the wrist and forearm can't take up: a
+wrist bends only so far each way, a forearm turns palm up or down only so
+far. So the elbow follows your hand's turn when it has to and hangs when it
+doesn't - your real hand's turn, on the controller, not the drawn one (a
+heavy blade lagging behind it, or the other hand levering it, turns that
+one, and that's the wrist's to take up, not the elbow's).
+
+The shoulder girdle helps too: the collarbone lifts the shoulder as the hand
+goes up and brings it forward as the hand reaches out or across.
+
+=============================================================================
+*/
+
+// the chest the arms hang from
+typedef struct {
+	vec3_t		F, L, U;			// forward, left, up
+	vec3_t		spine;				// the spine at the chest (thoracic bone)
+	float		scale;				// this body's size against the humanoid's
+} vrbChest_t;
+
+#define VRB_SHOULDER_WIDTH	11.88f	// the humanoid's: shoulder joint to shoulder joint
+#define VRB_TORSO_BOTTOM	-17.0f	// its torso from this far below the thoracic bone...
+#define VRB_TORSO_TOP		2.0f	// ...to this far above it,
+#define VRB_TORSO_FWD		0.3f	// round it a little forward of the spine,
+#define VRB_TORSO_DEPTH		6.3f	// this far to the front and back (with an arm's thickness)
+#define VRB_TORSO_WIDTH		7.3f	// and to the sides
+
+#define VRB_ELBOW_SAMPLES	48		// places round the circle the elbow is tried at
+#define VRB_ELBOW_EASE		0.05f	// seconds an elbow takes to settle where it's going...
+#define VRB_ELBOW_RATE		900.0f	// ...no faster than this round the circle (deg/s)
+#define VRB_TWIST_SHARE		0.5f	// the forearm's twist bone takes this much of the hand's twist
+#define VRB_GIRDLE_EASE		0.08f	// seconds the shoulders take to follow
+
+// what makes holding the hand somewhere hard (per arm length, per radian)
+static const struct {
+	float	grav;					// the elbow up from hanging
+	float	across, acrossFrom;		// the upper arm pointing in across the chest, past this
+	float	plane, planeAz;			// a raised upper arm out of the shoulder blade's plane (deg forward of out)
+	float	back, backFrom;			// the elbow far behind the body
+	float	body;					// the elbow or forearm inside the torso
+	float	wrist, wrist0;			// the wrist bent past its easy range; any bend
+	float	twist, twist0;			// the forearm turned past its easy range; any turn
+	float	still;					// the elbow moving from where it was (per arm length, squared)
+	float	flex, ext, rad, uln;	// the wrist's easy range (deg): to the palm, the back, the thumb, the little finger
+	float	pron, sup;				// the forearm's (deg): palm down, palm up
+} vrbComfort = {
+	1.0f,
+	1.0f, 0.35f,
+	0.6f, 35.0f,
+	3.0f, 0.35f,
+	40.0f,
+	4.0f, 0.6f,
+	3.0f, 0.1f,
+	2.0f,
+	55.0f, 45.0f, 15.0f, 30.0f,
+	60.0f, 70.0f
+};
+
+// the shoulder girdle: lifted up to this as the hand goes up, forward as it
+// reaches out or across, back as it goes behind (degrees)
+#define VRB_GIRDLE_UP		20.0f
+#define VRB_GIRDLE_REACH	14.0f
+#define VRB_GIRDLE_ACROSS	12.0f
+#define VRB_GIRDLE_BACK		12.0f
+
+static void VRB_ToChest( const vrbChest_t *ch, const vec3_t w, vec3_t out ) {
+	vec3_t t;
+	t[0] = DotProduct( w, ch->F );
+	t[1] = DotProduct( w, ch->L );
+	t[2] = DotProduct( w, ch->U );
+	VectorCopy( t, out );
+}
+
+static void VRB_FromChest( const vrbChest_t *ch, const vec3_t c, vec3_t out ) {
+	vec3_t t;
+	VectorScale( ch->F, c[0], t );
+	VectorMA( t, c[1], ch->L, t );
+	VectorMA( t, c[2], ch->U, out );
+}
+
+// The chest, from the skeleton as animated: across from shoulder to
+// shoulder, up along the spine. (Without them: the way the body faces.)
+static void CG_VRB_Chest( centity_t *cent, float bodyYaw, vrbChest_t *ch ) {
+	vrbBone_t l, r, t, c;
+	vec3_t lat, up;
+	float width;
+
+	VectorSet( ch->F, cosf( DEG2RAD( bodyYaw ) ), sinf( DEG2RAD( bodyYaw ) ), 0.0f );
+	VectorSet( ch->L, -ch->F[1], ch->F[0], 0.0f );
+	VectorSet( ch->U, 0.0f, 0.0f, 1.0f );
+	VectorCopy( cent->lerpOrigin, ch->spine );
+	ch->scale = 1.0f;
+	if ( !CG_VRB_Bone( cent, vrbArmBones[VR_HAND_LEFT][VRB_UPPER], 1, &l ) ||
+		!CG_VRB_Bone( cent, vrbArmBones[VR_HAND_RIGHT][VRB_UPPER], 1, &r ) ) {
+		return;
+	}
+	VectorSubtract( l.origin, r.origin, lat );
+	width = VectorNormalize( lat );
+	if ( width < 1.0f ) {
+		return;
+	}
+	ch->scale = Com_Clamp( 0.5f, 2.0f, width / VRB_SHOULDER_WIDTH );
+	if ( CG_VRB_Bone( cent, "thoracic", 1, &t ) && CG_VRB_Bone( cent, "cervical", 1, &c ) ) {
+		VectorSubtract( c.origin, t.origin, up );
+		VectorCopy( t.origin, ch->spine );
+	} else {
+		VectorSet( up, 0.0f, 0.0f, 1.0f );
+		VectorAdd( l.origin, r.origin, ch->spine );
+		VectorScale( ch->spine, 0.5f, ch->spine );
+		ch->spine[2] -= 3.0f * ch->scale;
+	}
+	VectorMA( up, -DotProduct( up, lat ), lat, up );
+	if ( VectorNormalize( up ) < 0.1f ) {
+		return;
+	}
+	VectorCopy( lat, ch->L );
+	VectorCopy( up, ch->U );
+	CrossProduct( ch->L, ch->U, ch->F );
+}
+
+// how far inside the torso p is (0 outside, up to 1 at its middle)
+static float VRB_TorsoInside( const vrbChest_t *ch, const vec3_t p ) {
+	vec3_t d;
+	float x, y, z, e;
+
+	VectorSubtract( p, ch->spine, d );
+	z = DotProduct( d, ch->U ) / ch->scale;
+	if ( z < VRB_TORSO_BOTTOM - 2.0f || z > VRB_TORSO_TOP + 2.0f ) {
+		return 0.0f;
+	}
+	x = ( DotProduct( d, ch->F ) / ch->scale - VRB_TORSO_FWD ) / VRB_TORSO_DEPTH;
+	y = DotProduct( d, ch->L ) / ch->scale / VRB_TORSO_WIDTH;
+	e = sqrtf( x * x + y * y );
+	if ( e >= 1.0f ) {
+		return 0.0f;
+	}
+	return ( 1.0f - e ) * VRB_SmoothStep( VRB_TORSO_BOTTOM - 2.0f, VRB_TORSO_BOTTOM, z ) *
+		( 1.0f - VRB_SmoothStep( VRB_TORSO_TOP, VRB_TORSO_TOP + 2.0f, z ) );
+}
+
+// The wrist's bend: the hand (knuckles, toward the thumb, [0] x [1]) against
+// the forearm running f: toward the palm (+) and toward the thumb (+), radians.
+static void VRB_WristBend( int h, const vec3_t f, vec3_t hand[3], float *flex, float *radial ) {
+	const float x = DotProduct( f, hand[0] );
+	// ([2] comes out of the back of a right hand, the palm of a left one)
+	const float palm = ( h == VR_HAND_RIGHT ) ? DotProduct( f, hand[2] ) : -DotProduct( f, hand[2] );
+
+	*flex = atan2f( palm, x );
+	*radial = atan2f( -DotProduct( f, hand[1] ), x );
+}
+
+// How far the forearm (upper arm u, forearm f) is turned palm down (+) or up
+// (-) from its middle, where the thumb points away from the upper arm - up,
+// with the upper arm hanging and the forearm forward. Radians.
+static float VRB_Pronation( int h, const vec3_t u, const vec3_t f, const vec3_t thumb ) {
+	vec3_t tn, ta, c;
+	float ang;
+
+	VectorMA( u, -DotProduct( u, f ), f, tn );
+	VectorScale( tn, -1.0f, tn );
+	VectorMA( thumb, -DotProduct( thumb, f ), f, ta );
+	if ( VectorNormalize( tn ) < 1e-4f || VectorNormalize( ta ) < 1e-4f ) {
+		return 0.0f;
+	}
+	CrossProduct( tn, ta, c );
+	ang = atan2f( DotProduct( c, f ), DotProduct( tn, ta ) );
+	return ( h == VR_HAND_RIGHT ) ? -ang : ang;	// (palm down turns a right thumb in, a left one the other way)
+}
+
+static float VRB_Past( float x, float below, float above ) {
+	if ( x > above ) {
+		return x - above;
+	}
+	if ( x < -below ) {
+		return x + below;
+	}
+	return 0.0f;
+}
+
+typedef struct {
+	int					h;
+	const vrbChest_t	*ch;
+	vec3_t				S, Wt;		// shoulder, wrist
+	vec3_t				out;		// outward, this arm's side
+	vec3_t				hand[3];	// your hand as it really is (VRB_WristBend)
+	qboolean			havePrev;
+	vec3_t				prevE;		// where the elbow was last frame
+	float				a;			// upper arm length
+} vrbElbowJob_t;
+
+// How hard it is to hold the hand with the elbow at E.
+static float CG_VRB_ElbowCost( const vrbElbowJob_t *j, const vec3_t E ) {
+	const vrbChest_t *ch = j->ch;
+	vec3_t u, f, hz, pref, p;
+	float c, up, fl, rd, pr, e1, e2, e3, in, t;
+	int k;
+
+	VectorSubtract( E, j->S, u );
+	if ( VectorNormalize( u ) < 1e-4f ) {
+		return 1e6f;
+	}
+	VectorSubtract( j->Wt, E, f );
+	if ( VectorNormalize( f ) < 1e-4f ) {
+		return 1e6f;
+	}
+	up = DotProduct( u, ch->U );
+
+	// its weight
+	c = vrbComfort.grav * ( up + 1.0f );
+	// pointing in across the chest
+	t = Q_max( 0.0f, -DotProduct( u, j->out ) - vrbComfort.acrossFrom );
+	c += vrbComfort.across * t * t;
+	// raised, out of the shoulder blade's plane
+	VectorMA( u, -up, ch->U, hz );
+	if ( VectorNormalize( hz ) > 1e-3f ) {
+		const float az = DEG2RAD( vrbComfort.planeAz );
+		VectorScale( j->out, cosf( az ), pref );
+		VectorMA( pref, sinf( az ), ch->F, pref );
+		c += vrbComfort.plane * VRB_SmoothStep( -0.6f, 0.3f, up ) * ( 1.0f - DotProduct( hz, pref ) );
+	}
+	// far behind
+	t = Q_max( 0.0f, -DotProduct( u, ch->F ) - vrbComfort.backFrom );
+	c += vrbComfort.back * t * t;
+	// inside the body: the upper arm's middle and the elbow, and along the forearm
+	for ( k = 0, t = 0.0f; k < 4; k++ ) {
+		static const float along[4] = { 0.5f, 1.0f, 0.33f, 0.66f };
+		if ( k < 2 ) {
+			VectorSubtract( E, j->S, p );
+			VectorMA( j->S, along[k], p, p );
+		} else {
+			VectorSubtract( j->Wt, E, p );
+			VectorMA( E, along[k], p, p );
+		}
+		in = VRB_TorsoInside( ch, p );
+		t += in * in;
+	}
+	c += vrbComfort.body * t;
+	// the wrist's bend and the forearm's turn, for your hand as it is
+	VRB_WristBend( j->h, f, (vec3_t *)j->hand, &fl, &rd );
+	e1 = VRB_Past( fl, DEG2RAD( vrbComfort.ext ), DEG2RAD( vrbComfort.flex ) );
+	e2 = VRB_Past( rd, DEG2RAD( vrbComfort.uln ), DEG2RAD( vrbComfort.rad ) );
+	c += vrbComfort.wrist * ( e1 * e1 + e2 * e2 ) + vrbComfort.wrist0 * ( fl * fl + rd * rd );
+	pr = VRB_Pronation( j->h, u, f, j->hand[1] );
+	e3 = VRB_Past( pr, DEG2RAD( vrbComfort.sup ), DEG2RAD( vrbComfort.pron ) );
+	c += vrbComfort.twist * e3 * e3 + vrbComfort.twist0 * pr * pr;
+	// and not jumping about
+	if ( j->havePrev ) {
+		t = Distance( E, j->prevE ) / j->a;
+		c += vrbComfort.still * t * t;
+	}
+	return c;
+}
+
+// The easiest place for the elbow round its circle (centre S + a cosA u,
+// radius a sinA): v, the way from the circle's centre to it.
+static void CG_VRB_ChooseElbow( const vrbElbowJob_t *j, const vec3_t u, float cosA, float sinA, vec3_t v ) {
+	vec3_t e1, e2, centre, E, dir;
+	float cost[VRB_ELBOW_SAMPLES], best = 0.0f, ph, c0, c1, c2, den, off = 0.0f;
+	int i, bi = 0;
+
+	VectorScale( j->ch->U, -1.0f, e1 );
+	VectorMA( e1, -DotProduct( e1, u ), u, e1 );
+	if ( VectorNormalize( e1 ) < 1e-3f ) {
+		VectorScale( j->ch->F, -1.0f, e1 );
+		VectorMA( e1, -DotProduct( e1, u ), u, e1 );
+		VectorNormalize( e1 );
+	}
+	CrossProduct( u, e1, e2 );
+	VectorMA( j->S, j->a * cosA, u, centre );
+	for ( i = 0; i < VRB_ELBOW_SAMPLES; i++ ) {
+		ph = 2.0f * M_PI * i / VRB_ELBOW_SAMPLES;
+		VectorScale( e1, cosf( ph ), dir );
+		VectorMA( dir, sinf( ph ), e2, dir );
+		VectorMA( centre, j->a * sinA, dir, E );
+		cost[i] = CG_VRB_ElbowCost( j, E );
+		if ( !i || cost[i] < best ) {
+			best = cost[i];
+			bi = i;
+		}
+	}
+	// (between the samples)
+	c0 = cost[( bi + VRB_ELBOW_SAMPLES - 1 ) % VRB_ELBOW_SAMPLES];
+	c1 = cost[bi];
+	c2 = cost[( bi + 1 ) % VRB_ELBOW_SAMPLES];
+	den = c0 - 2.0f * c1 + c2;
+	if ( den > 1e-9f ) {
+		off = Com_Clamp( -0.5f, 0.5f, 0.5f * ( c0 - c2 ) / den );
+	}
+	ph = 2.0f * M_PI * ( bi + off ) / VRB_ELBOW_SAMPLES;
+	VectorScale( e1, cosf( ph ), v );
+	VectorMA( v, sinf( ph ), e2, v );
+}
+
+/*
+=================
+CG_VRB_Girdle
+
+The shoulder girdle for arm h: the collarbone turned about its root, lifting
+the shoulder as the hand goes up, bringing it forward as the hand reaches
+out or across, back as it goes behind - eased, like the rest of the body.
+The collarbone carries the shoulder's flesh; the upper arm (which doesn't
+hang off it in this skeleton) is turned with it, so the arm goes along.
+Before the arm is solved: it then reaches from the shoulder where it is now.
+=================
+*/
+static void CG_VRB_Girdle( centity_t *cent, int h, const vrbChest_t *ch, const vec3_t hand, qboolean commit ) {
+	vrbBone_t clav, upper;
+	vec3_t d, out, r0, axis;
+	vrbMat_t Re, Rp, C;
+	mdxaBone_t m;
+	float reach, hz, hf, ho, want[2], cur[2], k, dt;
+	int i;
+
+	if ( !trap->ext.VR_G2SetBoneTransform || !CG_VRB_Bone( cent, vrbClavicle[h], 1, &clav ) ||
+		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_UPPER], 1, &upper ) ) {
+		return;
+	}
+	VectorSubtract( upper.origin, clav.origin, r0 );
+	if ( VectorLength( r0 ) < 1.0f ) {
+		return;		// (no collarbone to speak of)
+	}
+
+	// where the hand is, from the shoulder, in arm lengths
+	reach = 19.66f * ch->scale;
+	VectorScale( ch->L, ( h == VR_HAND_RIGHT ) ? -1.0f : 1.0f, out );
+	VectorSubtract( hand, upper.origin, d );
+	hz = DotProduct( d, ch->U ) / reach;
+	hf = DotProduct( d, ch->F ) / reach;
+	ho = DotProduct( d, out ) / reach;
+	want[0] = DEG2RAD( VRB_GIRDLE_UP ) * VRB_SmoothStep( -0.1f, 0.9f, hz );
+	want[1] = DEG2RAD( VRB_GIRDLE_REACH ) * VRB_SmoothStep( 0.3f, 0.95f, hf ) +
+		DEG2RAD( VRB_GIRDLE_ACROSS ) * VRB_SmoothStep( 0.0f, 0.7f, -ho ) -
+		DEG2RAD( VRB_GIRDLE_BACK ) * VRB_SmoothStep( 0.15f, 0.6f, -hf );
+
+	// eased (with time: both eyes the same)
+	dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.girdleTime[h] ) * 0.001f );
+	if ( !vrb.girdleValid[h] || cg.time - vrb.girdleTime[h] > 500 || cg.time < vrb.girdleTime[h] ) {
+		cur[0] = want[0];
+		cur[1] = want[1];
+	} else {
+		k = 1.0f - expf( -dt / VRB_GIRDLE_EASE );
+		for ( i = 0; i < 2; i++ ) {
+			cur[i] = vrb.girdle[h][i] + k * ( want[i] - vrb.girdle[h][i] );
+		}
+	}
+	if ( commit ) {
+		vrb.girdle[h][0] = cur[0];
+		vrb.girdle[h][1] = cur[1];
+		vrb.girdleValid[h] = qtrue;
+		vrb.girdleTime[h] = cg.time;
+	}
+
+	// lift (the shoulder toward up), then forward (toward the front)
+	CrossProduct( r0, ch->U, axis );
+	if ( VectorNormalize( axis ) < 1e-3f ) {
+		return;
+	}
+	VRB_AxisAngle( axis, cur[0], Re );
+	CrossProduct( r0, ch->F, axis );
+	if ( VectorNormalize( axis ) < 1e-3f ) {
+		return;
+	}
+	VRB_AxisAngle( axis, cur[1], Rp );
+	VRB_Mul( Rp, Re, C );
+	CG_VRB_ModelTurn( cent, C, clav.origin, &m );
+	if ( trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbClavicle[h], &m ) ) {
+		vrb.extraG2 = cent->ghoul2;
+	}
+	if ( trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbArmBones[h][VRB_UPPER], &m ) ) {
+		vrb.extraG2 = cent->ghoul2;
+	}
+}
+
+// The hand's twist about the forearm (in D, the turn at the wrist), part of
+// it given to the forearm's twist bone halfway down it - as in the game's
+// own animations - so a forearm turned palm up or down twists along its
+// length, not all at the wrist or the elbow.
+static void CG_VRB_TwistForearm( centity_t *cent, int h, vrbMat_t D, const vec3_t axis, const vec3_t elbow ) {
+	vrbMat_t R;
+	mdxaBone_t m;
+
+	if ( !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	VRB_AxisAngle( axis, VRB_TWIST_SHARE * VRB_TwistAngle( D, axis ), R );
+	CG_VRB_ModelTurn( cent, R, elbow, &m );
+	if ( trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbForearmTwist[h], &m ) ) {
+		vrb.extraG2 = cent->ghoul2;
+	}
+}
+
+/*
 =================
 CG_VRB_SolveArm
 
@@ -2280,17 +2764,16 @@ smoothing/hinge state (only the pass that is finally drawn does).
 =================
 */
 static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int h, int convention,
-	float bodyYaw, qboolean commit, const vrbGrip_t *grip, vrbArmResult_t *res ) {
+	const vrbChest_t *ch, qboolean commit, const vrbGrip_t *grip, vrbArmResult_t *res ) {
 	vrbBone_t b[VRB_NUM_ARM_BONES];
 	qboolean have[VRB_NUM_ARM_BONES];
 	vec3_t gripO, gA[3];
 	vec3_t S, E0, W0, kmid, Ah[3], Ad[3], anchor, Wt, u, v, E, u0, u1, f0, f1, n0, n1, c0, c1, tmp;
-	vec3_t bodyFwd, bodyLeft, outward, hint, down = { 0.0f, 0.0f, -1.0f };
 	vec3_t F0[3], F1[3], want[3], cur[3];
 	vrbMat_t Y0, Y, Q1, A, X;
 	vec3_t holdO, holdDir, sentDir;
 	float a, len2, d, dmin, dmax, cosA, sinA, w, pitch, handLen = 0.0f;
-	qboolean haveHinge = qfalse, anatomy = qfalse, inFist;
+	qboolean haveHinge = qfalse, anatomy = qfalse, inFist, wristTurns;
 	int i;
 
 	memset( res, 0, sizeof( *res ) );
@@ -2341,19 +2824,20 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		grip->saberModel >= 1 && grip->saberModel <= MAX_SABERS &&
 		!( cgs.clientinfo[cent->currentState.number].saber[grip->saberModel - 1].saberFlags & SFL_BOLT_TO_WRIST ) ) ) );
 
-	// Y0 turns the animated hand to lie on the controller like a real one:
-	// OpenXR's grip pose runs its -Z through the fist from the little finger
-	// to the thumb, its +Y back toward the wrist (Quake axes: gA[0] = -Z,
-	// gA[2] = +Y).
+	// Your hand as it really is, lying on the controller (Ad: knuckles, toward
+	// the thumb, [0] x [1]): OpenXR's grip pose runs its -Z through the fist
+	// from the little finger to the thumb, its +Y back toward the wrist (Quake
+	// axes: gA[0] = -Z, gA[2] = +Y). Y0 turns the animated hand onto it. (The
+	// elbow goes by this one, not the hand as drawn below.)
+	VectorScale( gA[2], -1.0f, Ad[0] );
+	VectorCopy( gA[0], Ad[1] );
+	pitch = vrbRemote ? 0.0f : cg_vrHandPitch.value;	// (another player's avatar has theirs in already)
+	if ( pitch != 0.0f ) {
+		RotatePointAroundVector( tmp, Ad[1], Ad[0], -pitch );
+		VectorCopy( tmp, Ad[0] );
+	}
+	CrossProduct( Ad[0], Ad[1], Ad[2] );
 	if ( anatomy ) {
-		VectorScale( gA[2], -1.0f, Ad[0] );
-		VectorCopy( gA[0], Ad[1] );
-		pitch = vrbRemote ? 0.0f : cg_vrHandPitch.value;	// (another player's avatar has theirs in already)
-		if ( pitch != 0.0f ) {
-			RotatePointAroundVector( tmp, Ad[1], Ad[0], -pitch );
-			VectorCopy( tmp, Ad[0] );
-		}
-		CrossProduct( Ad[0], Ad[1], Ad[2] );
 		VRB_FrameMap( Ah, Ad, Y0 );
 	} else {
 		VRB_Identity( Y0 );
@@ -2469,64 +2953,92 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	cosA = Com_Clamp( -1.0f, 1.0f, ( a * a + d * d - len2 * len2 ) / ( 2.0f * a * d ) );
 	sinA = sqrtf( 1.0f - cosA * cosA );
 
-	// Which way the elbow points: where the forearm would be if the wrist
-	// kept its animated bend, plus a pull down and out (elbows hang).
-	VectorSet( bodyFwd, cosf( DEG2RAD( bodyYaw ) ), sinf( DEG2RAD( bodyYaw ) ), 0.0f );
-	VectorSet( bodyLeft, -bodyFwd[1], bodyFwd[0], 0.0f );
-	VectorScale( bodyLeft, ( h == VR_HAND_RIGHT ) ? -1.0f : 1.0f, outward );
 	VectorSubtract( W0, E0, f0 );
 	VectorNormalize( f0 );
-	VRB_Apply( Y, f0, tmp );
-	VectorMA( Wt, -len2, tmp, E );		// "natural" elbow
-	VectorSubtract( E, S, hint );
-	VectorNormalize( hint );
-	VectorMA( down, 0.5f, outward, tmp );
-	VectorNormalize( tmp );
-	VectorMA( hint, vrbElbowPull, tmp, hint );
-	VectorMA( hint, -DotProduct( hint, u ), u, v );
-	if ( VectorLength( v ) < 1e-3f ) {
-		VectorMA( down, -DotProduct( down, u ), u, v );
-		if ( VectorLength( v ) < 1e-3f ) {
-			VectorMA( outward, -DotProduct( outward, u ), u, v );
-		}
-	}
-	VectorNormalize( v );
 
-	// smooth the elbow direction a little (body-local, so turning doesn't drag it)
+	// Which way the elbow points: where holding your hand like that is
+	// easiest (CG_VRB_ChooseElbow), eased round the shoulder-wrist line from
+	// where it was (chest-local, so turning doesn't drag it; with time, not
+	// per call: both eyes get the same elbow).
 	{
-		vec3_t local, prev;
-		// (advances with time, not per call: both eyes get the same elbow)
-		const float k = 1.0f - expf( -Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.poleTime[h] ) * 0.001f ) / 0.05f );
-		local[0] = DotProduct( v, bodyFwd );
-		local[1] = DotProduct( v, bodyLeft );
-		local[2] = v[2];
-		if ( vrb.poleValid[h] ) {
-			VectorScale( vrb.pole[h], 1.0f - k, prev );
-			VectorMA( prev, k, local, prev );
-			if ( VectorNormalize( prev ) > 0.1f ) {
-				vec3_t world;
-				VectorScale( bodyFwd, prev[0], world );
-				VectorMA( world, prev[1], bodyLeft, world );
-				world[2] += prev[2];
-				VectorMA( world, -DotProduct( world, u ), u, world );
-				if ( VectorNormalize( world ) > 0.1f ) {
-					VectorCopy( world, v );
-					local[0] = DotProduct( v, bodyFwd );
-					local[1] = DotProduct( v, bodyLeft );
-					local[2] = v[2];
+		const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.poleTime[h] ) * 0.001f );
+		vec3_t prev, chosen;
+		qboolean havePrev = qfalse;
+
+		if ( vrb.poleValid[h] && cg.time - vrb.poleTime[h] <= 500 && cg.time >= vrb.poleTime[h] ) {
+			VRB_FromChest( ch, vrb.pole[h], prev );
+			VectorMA( prev, -DotProduct( prev, u ), u, prev );
+			havePrev = ( VectorNormalize( prev ) > 1e-3f ) ? qtrue : qfalse;
+		}
+		if ( havePrev && dt <= 0.0f ) {
+			VectorCopy( prev, v );		// (the second eye)
+		} else {
+			vrbElbowJob_t job;
+			memset( &job, 0, sizeof( job ) );
+			job.h = h;
+			job.ch = ch;
+			job.a = a;
+			VectorCopy( S, job.S );
+			VectorCopy( Wt, job.Wt );
+			VectorScale( ch->L, ( h == VR_HAND_RIGHT ) ? -1.0f : 1.0f, job.out );
+			if ( grip->kind != VRB_GRIP_GUN ) {
+				for ( i = 0; i < 3; i++ ) {
+					VectorCopy( Ad[i], job.hand[i] );
 				}
+			} else if ( anatomy ) {
+				// (a gun: the hand on it as drawn, which everyone who sees it draws the same)
+				for ( i = 0; i < 3; i++ ) {
+					VRB_Apply( Y, Ah[i], job.hand[i] );
+				}
+			} else {
+				// (...and without finger bones, a hand straight on its forearm)
+				vec3_t k, r;
+				VectorCopy( f0, k );
+				VectorSubtract( S, E0, r );
+				VectorMA( r, -DotProduct( r, k ), k, r );
+				if ( VectorNormalize( r ) < 1e-3f ) {
+					PerpendicularVector( r, k );
+				}
+				VRB_Apply( Y, k, job.hand[0] );
+				VRB_Apply( Y, r, job.hand[1] );
+				CrossProduct( job.hand[0], job.hand[1], job.hand[2] );
+			}
+			if ( havePrev ) {
+				VRB_FromChest( ch, vrb.elbowLocal[h], tmp );
+				VectorAdd( S, tmp, job.prevE );
+				job.havePrev = qtrue;
+			}
+			CG_VRB_ChooseElbow( &job, u, cosA, sinA, chosen );
+			if ( havePrev ) {
+				// round the circle toward it, eased, and no faster than an arm
+				// swings an elbow round (a jump across it is a quick swing)
+				const float k = 1.0f - expf( -dt / VRB_ELBOW_EASE );
+				const float cap = DEG2RAD( VRB_ELBOW_RATE ) * dt;
+				float ang;
+				CrossProduct( prev, chosen, tmp );
+				ang = k * atan2f( DotProduct( tmp, u ), DotProduct( prev, chosen ) );
+				VRB_Rotate( prev, u, Com_Clamp( -cap, cap, ang ), v );
+				VectorMA( v, -DotProduct( v, u ), u, v );
+				if ( VectorNormalize( v ) < 1e-3f ) {
+					VectorCopy( chosen, v );
+				}
+			} else {
+				VectorCopy( chosen, v );
 			}
 		}
+
+		VectorScale( u, a * cosA, E );
+		VectorMA( E, a * sinA, v, E );
+		VectorAdd( S, E, E );
+
 		if ( commit ) {
-			VectorCopy( local, vrb.pole[h] );
+			VRB_ToChest( ch, v, vrb.pole[h] );
+			VectorSubtract( E, S, tmp );
+			VRB_ToChest( ch, tmp, vrb.elbowLocal[h] );
 			vrb.poleValid[h] = qtrue;
 			vrb.poleTime[h] = cg.time;
 		}
 	}
-
-	VectorScale( u, a * cosA, E );
-	VectorMA( E, a * sinA, v, E );
-	VectorAdd( S, E, E );
 
 	VectorSubtract( E, S, u1 );
 	VectorNormalize( u1 );
@@ -2584,12 +3096,22 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		memcpy( Q1, A, sizeof( Q1 ) );
 	}
 
-	// Forearm (the hand rides on it): the hand's turn, corrected by the least
-	// turn that points the forearm at the wrist. The twist stays in the
-	// forearm, like a real one.
-	VRB_Apply( Y, f0, tmp );
-	VRB_Arc( tmp, f1, A );
-	VRB_Mul( A, Y, X );
+	// Forearm: the elbow is a hinge, so the forearm turns only about it -
+	// carried along by the upper arm (Q1), then bent onto the wrist. The
+	// hand's twist (palm up or down) is the wrist's, below, shared along the
+	// forearm by its twist bone, as in the game's own animations. (Where the
+	// hand can't be turned at the wrist, the forearm takes all of its turn.)
+	wristTurns = ( cg_vrBodyWrist.integer && vrb.wristOk[h] && vrb.probeG2 == cent->ghoul2 &&
+		trap->ext.VR_G2SetBoneTransform ) ? qtrue : qfalse;
+	if ( wristTurns ) {
+		VRB_Apply( Q1, f0, tmp );
+		VRB_Arc( tmp, f1, A );
+		VRB_Mul( A, Q1, X );
+	} else {
+		VRB_Apply( Y, f0, tmp );
+		VRB_Arc( tmp, f1, A );
+		VRB_Mul( A, Y, X );
+	}
 
 	// overrides: upper arm first, then the forearm relative to its new parent
 	VRB_RotateFrame( Q1, b[VRB_UPPER].axis, want );
@@ -2598,16 +3120,18 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	VRB_RotateFrame( X, b[VRB_FORE].axis, want );
 	CG_VRB_SetBone( cent->ghoul2, vrbArmBones[h][VRB_FORE], cur, want );
 
-	// Wrist: the bend that's left (Y = D X), about the wrist
+	// Wrist: the turn that's left (Y = D X) - its bend, and its twist about
+	// the forearm, which the forearm's twist bone shares - about the wrist
 	{
 		static const mdxaBone_t identity = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } } };
 		mdxaBone_t H = identity;
-		if ( cg_vrBodyWrist.integer ) {
+		if ( wristTurns ) {
 			vrbMat_t D;
-			VRB_Apply( Y, f0, tmp );
-			VRB_Arc( f1, tmp, D );
+			VRB_MulT( Y, X, D );
 			if ( !CG_VRB_TurnWrist( cent, h, D, Wt, &H ) ) {
 				H = identity;
+			} else {
+				CG_VRB_TwistForearm( cent, h, D, f1, E );
 			}
 		}
 
@@ -2642,16 +3166,12 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		// it holds, and the controller it lies on with the hand's pitch in
 		vrAvatarHand_t *sent = &vrb.sent[h];
 		memset( sent, 0, sizeof( *sent ) );
+		// (the controller with your hand on it: its pitch in, so their elbow
+		// goes where yours does, whatever the model)
 		VectorCopy( gripO, sent->origin );
-		if ( anatomy ) {
-			VectorCopy( Ad[1], sent->axis[0] );
-			VectorScale( Ad[0], -1.0f, sent->axis[2] );
-			CrossProduct( sent->axis[2], sent->axis[0], sent->axis[1] );
-		} else {
-			VectorCopy( gA[0], sent->axis[0] );
-			VectorCopy( gA[1], sent->axis[1] );
-			VectorCopy( gA[2], sent->axis[2] );
-		}
+		VectorCopy( Ad[1], sent->axis[0] );
+		VectorScale( Ad[0], -1.0f, sent->axis[2] );
+		CrossProduct( sent->axis[2], sent->axis[0], sent->axis[1] );
 		switch ( grip->kind ) {
 		case VRB_GRIP_GUN:
 			sent->grip = VR_GRIP_GUN;
@@ -2683,6 +3203,14 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	res->exact = ( sinA > 0.3f ) ? qtrue : qfalse;
 	VectorCopy( E, res->elbow );
 	VectorCopy( Wt, res->wrist );
+	{
+		float fl, rd;
+		VRB_WristBend( h, f1, Ad, &fl, &rd );
+		res->wristFlex = RAD2DEG( fl );
+		res->wristRadial = RAD2DEG( rd );
+		res->pronation = RAD2DEG( VRB_Pronation( h, u1, f1, Ad[1] ) );
+		res->elbowUp = DotProduct( u1, ch->U );
+	}
 	return qtrue;
 }
 
@@ -2713,16 +3241,26 @@ static float CG_VRB_ArmError( centity_t *cent, vrbArmResult_t res[2], qboolean *
 static int CG_VRB_SolveArms( centity_t *cent, const vrClientState_t *vr, int convention, float bodyYaw,
 	qboolean commit, vrbArmResult_t res[2] ) {
 	vrbGrip_t grip;
+	vrbChest_t ch;
+	vec3_t hand, ax[3];
 	int h, n = 0;
 
 	CG_VRB_ResetArms( cent->ghoul2 );
+	CG_VRB_Chest( cent, bodyYaw, &ch );
 	for ( h = 0; h < 2; h++ ) {
 		memset( &res[h], 0, sizeof( res[h] ) );
 		if ( !vr->handValid[h] ) {
 			continue;
 		}
 		CG_VRB_Grip( cent, h, &grip );
-		if ( CG_VRB_SolveArm( cent, vr, h, convention, bodyYaw, commit, &grip, &res[h] ) ) {
+		// the shoulder first: the arm then reaches from where it is
+		if ( grip.kind == VRB_GRIP_HILT ) {
+			VectorCopy( grip.origin, hand );
+		} else {
+			CG_VRB_Controller( vr, h, hand, ax );
+		}
+		CG_VRB_Girdle( cent, h, &ch, hand, commit );
+		if ( CG_VRB_SolveArm( cent, vr, h, convention, &ch, commit, &grip, &res[h] ) ) {
 			n++;
 		}
 	}
@@ -2771,6 +3309,30 @@ static void CG_VRB_UpdateLean( vrbArmResult_t res[2], float bodyYaw ) {
 	}
 	// measured with this frame's lean already in (want < 0: reach to spare)
 	vrb.leanTarget = ( want > -1e5f ) ? Com_Clamp( 0.0f, Q_max( 0.0f, cg_vrBodyBack.value ), vrb.lean + want ) : 0.0f;
+}
+
+// The log, now and then: how your arms were drawn - for working out what
+// looks wrong. Per arm: the elbow's height (above the shoulder, in upper arm
+// lengths), how your real hand is turned against the forearm drawn (wrist
+// bent to the palm / to the thumb, forearm turned palm down), and the shoulder.
+static void CG_VRB_LogArms( vrbArmResult_t res[2] ) {
+	char text[2][128];
+	int h;
+
+	if ( vrbRemote || !cg_vrLog.integer || cg.time - vrb.armLogTime < 2000 ) {
+		return;
+	}
+	vrb.armLogTime = cg.time;
+	for ( h = 0; h < 2; h++ ) {
+		if ( !res[h].solved ) {
+			Q_strncpyz( text[h], "-", sizeof( text[h] ) );
+			continue;
+		}
+		Com_sprintf( text[h], sizeof( text[h] ), "elbow %+.2f, wrist %+.0f %+.0f, turned %+.0f, shoulder up %.0f fwd %+.0f",
+			res[h].elbowUp, res[h].wristFlex, res[h].wristRadial, res[h].pronation,
+			RAD2DEG( vrb.girdle[h][0] ), RAD2DEG( vrb.girdle[h][1] ) );
+	}
+	CG_VRB_Log( "arms: right %s | left %s\n", text[VR_HAND_RIGHT], text[VR_HAND_LEFT] );
 }
 
 /*
@@ -2857,6 +3419,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	CG_VRB_SolveArms( cent, vr, vrb.convention, bodyYaw, qtrue, res );
 	if ( !vrbRemote ) {
 		CG_VRB_UpdateLean( res, bodyYaw );
+		CG_VRB_LogArms( res );
 	}
 
 	// occasional re-check (a model with a different skeleton could need another convention)
@@ -4287,6 +4850,7 @@ static void CG_VRB_Restore( centity_t *cent ) {
 		vrb.armsG2 = NULL;
 		vrb.poleValid[0] = vrb.poleValid[1] = qfalse;
 	}
+	CG_VRB_ClearExtra( cent->ghoul2 );
 	if ( vrb.wristG2 == cent->ghoul2 ) {
 		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_LEFT, NULL );
 		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_RIGHT, NULL );

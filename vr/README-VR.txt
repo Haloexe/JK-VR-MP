@@ -111,6 +111,17 @@ running, crouching, getting hurt and the Force still play the game's own
 animations. Everyone running this build sees you that way, and in games
 hosted with it blades hit that body.
 
+Your arms move like real ones. Each elbow goes where holding your hand
+the way you hold it is easiest: it hangs when it can, a raised arm goes
+up out to the side, it keeps out of your body, and it moves only as far
+as your wrist and forearm can't bend or turn. It follows your real hand
+on the controller, so a heavy blade lagging behind your swing turns the
+hand and wrist, not the elbow. The elbow only bends; a hand turned palm
+up or down twists the forearm along its length, so the elbow never wrings
+like a towel. Your shoulders lift as you raise a hand overhead and come
+forward as you reach out or across. Other players running this build see
+your arms the same way.
+
 LIGHTSABER: with the saber out you stay in first person. The hilt is
 locked in your right fist (a second saber in your left), the fingers closed
 round it whatever your body is doing, and the blade points along your fist
@@ -328,10 +339,13 @@ LOGS for working out what feels off (both on by default):
                guard raised against you (bots, players without VR), and
                every cut on you your blade stopped as you saw it ("blocked")
   vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, the
-               animation and fingers of the hand holding the saber, and
-               every 10 s how smoothly the game arrives ("net:" - snapshots
-               a second, ping, and how often others had to stand still
-               because the next snapshot was late)
+               animation and fingers of the hand holding the saber, every
+               2 s how your arms are drawn ("arms:" - each elbow's height,
+               how your real wrist is bent and your forearm turned against
+               the arm drawn, and the shoulder), and every 10 s how
+               smoothly the game arrives ("net:" - snapshots a second,
+               ping, and how often others had to stand still because the
+               next snapshot was late)
 Both are in Documents\My Games\OpenJK-VR\base.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
