@@ -2846,6 +2846,7 @@ void G_UpdateClientAnims(gentity_t *self, float animSpeedScale)
 
 	torsoAnim = (self->client->ps.torsoAnim);
 	legsAnim = (self->client->ps.legsAnim);
+	G_VRSaberBodyAnim( self, &legsAnim, &torsoAnim );	// OpenJK VR: posed as their body is drawn
 
 	if (self->client->ps.saberLockFrame)
 	{

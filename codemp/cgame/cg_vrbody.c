@@ -1459,38 +1459,86 @@ qboolean CG_VR_BodyActive( centity_t *cent ) {
 // are. The game itself still flips and rolls you.
 extern qboolean BG_InRollES( entityState_t *ps, int anim );
 
+// The game's poses for standing still - most of them the saber stances. Those
+// crouch, legs bent and back hunched: the model's eyes come 6 to 8 units
+// under the camera (its head is at 36 over the origin, theirs at 28 to 30),
+// so hands held where your real ones are - measured from your eyes - sit high
+// on its body: hands at your waist at its chest.
+static qboolean CG_VRB_StandingAnim( const clientInfo_t *ci, int anim ) {
+	switch ( anim ) {
+	case BOTH_STAND1:
+	case BOTH_STAND1IDLE1:
+	case BOTH_STAND2:
+	case BOTH_STAND2IDLE1:
+	case BOTH_STAND2IDLE2:
+	case BOTH_STAND1TO2:
+	case BOTH_STAND2TO1:
+	case BOTH_SABERFAST_STANCE:
+	case BOTH_SABERSLOW_STANCE:
+	case BOTH_SABERDUAL_STANCE:
+	case BOTH_SABERSTAFF_STANCE:
+		return qtrue;
+	default:
+		// (a saber's own stance, from its .sab)
+		return (qboolean)( ci && ( ( ci->saber[0].readyAnim != -1 && anim == ci->saber[0].readyAnim ) ||
+			( ci->saber[1].readyAnim != -1 && anim == ci->saber[1].readyAnim ) ) );
+	}
+}
+
+// The body's animation, before it is drawn: a VR body stays upright through
+// flips and rolls, as you do in your headset; and standing still it stands up
+// straight, as you do (its eyes then where yours are, so your hands sit on it
+// where they are on you - the arms are on the controllers anyway). Whatever
+// else the game plays - running, crouching, pain, Force gestures - stays.
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
-	const animation_t *anims;
-	qboolean roll;
+	const animation_t *anims = bgAllAnims[cent->localAnimIndex].anims;
+	const clientInfo_t *ci = NULL;
+	qboolean roll, arms;
 	int anim;
 
 	if ( cent->currentState.number != cg.clientNum ) {
-		// (another VR player stays upright in their headset too)
+		// (another VR player: their avatar's hands hold their arms)
 		if ( !CG_VRB_OtherUsable( cent ) ) {
 			return;
 		}
 		roll = BG_InRollES( &cent->currentState, *legsAnim );
+		arms = qtrue;
 	} else if ( CG_VRB_BodyUsable( cent ) ) {
 		roll = BG_InRoll( (playerState_t *)ps, *legsAnim );
+		arms = (qboolean)( cg_vrBodyArms.integer != 0 );
 	} else {
 		return;
 	}
-	if ( roll ) {
-		anim = BOTH_CROUCH1IDLE;
-	} else if ( BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
-		anim = BOTH_FORCEINAIR1;
-	} else {
+	if ( !anims ) {
 		return;
 	}
-	anims = bgAllAnims[cent->localAnimIndex].anims;
-	if ( !anims || !anims[anim].numFrames ) {
-		anim = BOTH_INAIR1;
-		if ( !anims || !anims[anim].numFrames ) {
-			return;
+	if ( roll || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
+		anim = roll ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
+		if ( !anims[anim].numFrames ) {
+			anim = BOTH_INAIR1;
+			if ( !anims[anim].numFrames ) {
+				return;
+			}
 		}
+		*legsAnim = *torsoAnim = anim;
+		return;
 	}
-	*legsAnim = *torsoAnim = anim;
+
+	// standing up straight (STAND5: "back straight", its eyes at 36)
+	anim = anims[BOTH_STAND5].numFrames ? BOTH_STAND5 : BOTH_STAND1;
+	if ( !anims[anim].numFrames ) {
+		return;
+	}
+	if ( cent->currentState.number >= 0 && cent->currentState.number < MAX_CLIENTS ) {
+		ci = &cgs.clientinfo[cent->currentState.number];
+	}
+	if ( CG_VRB_StandingAnim( ci, *legsAnim ) ) {
+		*legsAnim = anim;
+	}
+	if ( arms && CG_VRB_StandingAnim( ci, *torsoAnim ) ) {
+		*torsoAnim = anim;
+	}
 }
 
 extern qboolean BG_SabersOff( playerState_t *ps );

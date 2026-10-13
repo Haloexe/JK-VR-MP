@@ -599,6 +599,76 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	vrsAvatarSet[clientNum] = qtrue;
 }
 
+// The game's poses for standing still - most of them the saber stances, which
+// crouch (the model's eyes 6 to 8 units under the eye point).
+static qboolean VRS_StandingAnim( const gclient_t *cl, int anim ) {
+	switch ( anim ) {
+	case BOTH_STAND1:
+	case BOTH_STAND1IDLE1:
+	case BOTH_STAND2:
+	case BOTH_STAND2IDLE1:
+	case BOTH_STAND2IDLE2:
+	case BOTH_STAND1TO2:
+	case BOTH_STAND2TO1:
+	case BOTH_SABERFAST_STANCE:
+	case BOTH_SABERSLOW_STANCE:
+	case BOTH_SABERDUAL_STANCE:
+	case BOTH_SABERSTAFF_STANCE:
+		return qtrue;
+	default:
+		// (a saber's own stance, from its .sab)
+		return (qboolean)( ( cl->saber[0].readyAnim != -1 && anim == cl->saber[0].readyAnim ) ||
+			( cl->saber[1].readyAnim != -1 && anim == cl->saber[1].readyAnim ) );
+	}
+}
+
+// How the model hit tests use (G_UpdateClientAnims) is posed for a VR player
+// whose body everyone draws from their avatar: as cg_vrbody.c's
+// CG_VR_BodyAnim draws it - upright through flips and rolls, as they are in
+// their headset, and standing up straight while they stand still (its head
+// where theirs is, hands on it where theirs are) - so blades meet the body
+// where it's seen.
+void G_VRSaberBodyAnim( gentity_t *ent, int *legsAnim, int *torsoAnim ) {
+	const gclient_t *cl = ent->client;
+	const animation_t *anims;
+	int n = ent->s.number, anim;
+	qboolean roll;
+
+	if ( !cl || n < 0 || n >= MAX_CLIENTS || !vrsAvatarSet[n] || !VRS_AvatarShown( ent ) ) {
+		return;
+	}
+	if ( cl->ps.m_iVehicleNum || cl->ps.weapon == WP_EMPLACED_GUN || ( cl->ps.eFlags2 & EF2_HELD_BY_MONSTER ) ||
+		ent->s.heldByClient ) {
+		return;	// (the game's own posing wins, as it does where the body is drawn)
+	}
+	anims = ( ent->localAnimIndex >= 0 ) ? bgAllAnims[ent->localAnimIndex].anims : NULL;
+	if ( !anims || ent->localAnimIndex > 1 ) {
+		return;	// (not a humanoid)
+	}
+	roll = BG_InRoll( (playerState_t *)&cl->ps, *legsAnim );
+	if ( roll || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
+		anim = roll ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
+		if ( !anims[anim].numFrames ) {
+			anim = BOTH_INAIR1;
+			if ( !anims[anim].numFrames ) {
+				return;
+			}
+		}
+		*legsAnim = *torsoAnim = anim;
+		return;
+	}
+	anim = anims[BOTH_STAND5].numFrames ? BOTH_STAND5 : BOTH_STAND1;
+	if ( !anims[anim].numFrames ) {
+		return;
+	}
+	if ( VRS_StandingAnim( cl, *legsAnim ) ) {
+		*legsAnim = anim;
+	}
+	if ( VRS_StandingAnim( cl, *torsoAnim ) ) {
+		*torsoAnim = anim;
+	}
+}
+
 // Once a frame, after everyone moved: animated blades' cuts on VR players
 // that waited for their moves land (or were blocked); where everyone and
 // their animated blades are now is kept (lag compensation); and avatars of

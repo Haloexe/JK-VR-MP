@@ -104,6 +104,12 @@ small or a tall model, the stock characters or a custom one all get arms
 that fit. A gun sits in the right hand exactly the way the game holds it
 in third person, fingers around the grip. When you reach further than your
 character's arm, the body leans in a little so the hand still gets there.
+Standing still, your character stands up straight, as you do (the game's
+saber stances crouch, which put your hands up at its chest), so its head
+is where yours is and your hands sit on its body where they are on yours;
+running, crouching, getting hurt and the Force still play the game's own
+animations. Everyone running this build sees you that way, and in games
+hosted with it blades hit that body.
 
 LIGHTSABER: with the saber out you stay in first person. The hilt is
 locked in your right fist (a second saber in your left), the fingers closed
