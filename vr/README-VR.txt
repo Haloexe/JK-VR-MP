@@ -197,9 +197,17 @@ server running this build: your real blade is the weapon.
         someone drags it
       - a medium blow nudges whoever it hits, a heavy one shoves them back,
         and a heavy one near full speed knocks them off their feet
-      - the buzz in your hand: a sharp tick for a light blade, a thump for
-        a heavy one, a hard knock on a clash (longer the heavier), a grind
-        when it scrapes a wall, both hands when you get cut.
+      - your hands feel it, the moment it happens as you see it:
+          your blade going into someone: a solid blow, as hard as your
+          swing (a light touch when it's slow), then the drag of cutting
+          through them for as long as the blade is in them;
+          the game saying it cut: a deeper rumble right after, longer the
+          heavier the blade; a kill: a long, heavy one;
+          blades meeting: a hard knock (longer the heavier), a grind while
+          they're pressed together; a grind when it scrapes a wall;
+          getting cut: a jolt in both hands.
+        Holding the saber with both hands, both feel it. cg_vrHaptics
+        sets how strong it all is (0 off, 1 normal, up to 2).
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
@@ -353,6 +361,8 @@ SETTINGS (console cvars, saved automatically)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
+  cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
+                         up to 2)
   cg_vrSaberLag 0        1 = the blade drags behind fast swings by its
                          weight (0 = locked in your fist)
   cg_vrLog 1             0 = don't write vrdebug.log

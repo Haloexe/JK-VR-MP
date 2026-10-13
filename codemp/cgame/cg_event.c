@@ -3345,6 +3345,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_OBITUARY:
 		DEBUGNAME("EV_OBITUARY");
+		CG_VR_KillFeel( es );	// OpenJK VR: a kill with your saber, felt
 		CG_Obituary( es );
 		break;
 
