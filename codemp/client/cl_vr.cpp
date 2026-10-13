@@ -1985,6 +1985,8 @@ Per-frame tracking
 ================================================================================
 */
 
+// The menus, console and loading screens go on the floating screen (after
+// JKXR's VR_UseScreenLayer, JKXR_SurfaceView.cpp, by Team Beef).
 static qboolean VR_UseScreenLayer( void ) {
 	if ( cls.state != CA_ACTIVE ) {
 		return qtrue;

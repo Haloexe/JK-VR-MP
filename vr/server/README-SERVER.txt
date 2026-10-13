@@ -114,3 +114,11 @@ GOOD TO KNOW
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).
+
+
+CREDITS
+-------
+Built on OpenJK (the JACoders and its contributors, GPLv2), the Jedi Academy
+source code Raven Software released, and id Software's id Tech 3. The VR
+side started from Team Beef's JKXR (DrBeef, Baggyg, Bummser). Full credits:
+README-VR.txt, or the project's page on GitHub.

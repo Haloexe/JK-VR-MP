@@ -64,18 +64,49 @@ The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
 (`codemp/game/g_vrsaber.c`: saber combat). The "HOW IT WORKS" section of
 `vr/README-VR.txt` has the details.
 
-## Credits and licence
+## Credits
 
-- Based on [OpenJK](https://github.com/JACoders/OpenJK) by the JACoders
-  community, licensed under GPLv2 ([`LICENSE.txt`](LICENSE.txt)). OpenJK's own
-  readme is in [`README-OpenJK.md`](README-OpenJK.md).
-- The OpenXR session code started from Team Beef's
-  [JKXR](https://github.com/Team-Beef-Studios/JKXR) (GPLv2).
-- OpenXR headers and loader: Khronos Group, "Apache-2.0 OR MIT", used here
-  under MIT ([`lib/openxr/LICENSE-MIT`](lib/openxr/LICENSE-MIT)).
-- Voice chat uses the [Opus](https://opus-codec.org) codec (BSD,
-  [`lib/opus/COPYING`](lib/opus/COPYING)).
+OpenJK VR was made by Haloexe, developed with Claude (Anthropic). It stands
+on the work of many others:
 
-This is a fan project. It is not affiliated with or endorsed by Lucasfilm,
-Disney, Raven Software or Activision. Star Wars and Jedi Academy are
-trademarks of their respective owners.
+- **[OpenJK](https://github.com/JACoders/OpenJK)** by the JACoders and every
+  OpenJK contributor: the engine and game code this is built on (GPLv2).
+  OpenJK's own readme is in [`README-OpenJK.md`](README-OpenJK.md).
+- **Raven Software**, who made Jedi Academy and released its source code under
+  the GPLv2, and **id Software**, whose id Tech 3 (Quake III Arena) engine it
+  grew from.
+- **[Team Beef](https://www.patreon.com/teambeef)** (DrBeef, Baggyg and
+  Bummser) for **[JKXR](https://github.com/Team-Beef-Studios/JKXR)**, their VR
+  port of Jedi Outcast and Jedi Academy (GPLv2; lead programmer DrBeef,
+  additional development by MuadDib and BaggyG). OpenJK VR's OpenXR session,
+  swapchain and frame handling started from JKXR's `TBXR_Common.cpp`, and its
+  floating screen for menus, the console and loading follows JKXR's
+  `VR_UseScreenLayer`. JKXR showed what Jedi Knight can be in VR, with a
+  motion-controlled lightsaber, guns in your hands and the game's menus in a
+  headset, and this multiplayer version follows its lead. Please support their
+  work.
+- **The Khronos Group** for the OpenXR SDK: its headers and loader are
+  "Apache-2.0 OR MIT", used here under MIT
+  ([`lib/openxr/LICENSE-MIT`](lib/openxr/LICENSE-MIT)). The loader includes
+  **JsonCpp** by Baptiste Lepilleur and the JsonCpp Authors.
+- **[Opus](https://opus-codec.org)** by Xiph.Org, Skype, Jean-Marc Valin,
+  Timothy B. Terriberry, Koen Vos and the other Opus authors, for voice chat
+  (BSD, [`lib/opus/COPYING`](lib/opus/COPYING)).
+- The libraries that come with OpenJK: **SDL2** (Sam Lantinga and the SDL
+  contributors), **zlib** (Jean-loup Gailly and Mark Adler), **minizip**
+  (Gilles Vollant), **libpng** (Cosmin Truta and the libpng authors),
+  **libjpeg** (the Independent JPEG Group) and **gsl-lite** (Martin Moene).
+  This software is based in part on the work of the Independent JPEG Group.
+- **[llvm-mingw](https://github.com/mstorsjo/llvm-mingw)** by Martin Storsjö,
+  with LLVM and mingw-w64, which builds the Windows version.
+
+## Licence
+
+OpenJK VR is licensed under the GPLv2 ([`LICENSE.txt`](LICENSE.txt)), like
+OpenJK and JKXR. The libraries above keep their own licences, in their folders
+under [`lib/`](lib/). Jedi Academy's own game files are not included: you need
+your own copy of the game.
+
+This is a fan project. It is not made, distributed or supported by Activision,
+Raven Software, Lucasfilm or Disney. Star Wars, Jedi and Jedi Knight are
+trademarks of Lucasfilm Ltd. and Disney.

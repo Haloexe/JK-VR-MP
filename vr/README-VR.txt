@@ -536,8 +536,42 @@ Build (Windows, Visual Studio 2022): run CreateVisualStudio2022Projects.bat,
 build the "openjk.x86_64" project (x64, Release), and copy
 lib/openxr/bin/x64/libopenxr_loader.dll next to the exe.
 
-Licence: GPLv2 (OpenJK). The OpenXR session code started from Team Beef's
-JKXR (GPLv2). The OpenXR headers and loader are Khronos' (Apache-2.0 OR
-MIT), used here under MIT (LICENSE-OpenXR-loader.txt, lib/openxr/LICENSE-MIT).
-Voice chat uses the Opus codec (BSD licence, LICENSE-Opus.txt). Jedi
-Academy's own files are not included: you need the game.
+
+CREDITS
+-------
+OpenJK VR was made by Haloexe, developed with Claude (Anthropic). It stands
+on the work of many others:
+
+  * OpenJK (https://github.com/JACoders/OpenJK) by the JACoders and every
+    OpenJK contributor: the engine and game code this is built on (GPLv2).
+  * Raven Software, who made Jedi Academy and released its source code under
+    the GPLv2, and id Software, whose id Tech 3 (Quake III Arena) engine it
+    grew from.
+  * Team Beef (DrBeef, Baggyg and Bummser) for JKXR, their VR port of Jedi
+    Outcast and Jedi Academy (https://github.com/Team-Beef-Studios/JKXR,
+    GPLv2; lead programmer DrBeef, additional development by MuadDib and
+    BaggyG). OpenJK VR's OpenXR session, swapchain and frame handling started
+    from JKXR's TBXR_Common.cpp, and its floating screen for menus, the
+    console and loading follows JKXR's VR_UseScreenLayer. JKXR showed what
+    Jedi Knight can be in VR, with a motion-controlled lightsaber, guns in
+    your hands and the game's menus in a headset, and this multiplayer
+    version follows its lead. Support them: https://www.patreon.com/teambeef
+  * The Khronos Group for the OpenXR SDK. Its headers and loader are
+    "Apache-2.0 OR MIT", used here under MIT (LICENSE-OpenXR-loader.txt);
+    the loader includes JsonCpp by Baptiste Lepilleur and the JsonCpp
+    Authors.
+  * Opus by Xiph.Org, Skype, Jean-Marc Valin, Timothy B. Terriberry, Koen Vos
+    and the other Opus authors, for voice chat (BSD, LICENSE-Opus.txt).
+  * The libraries that come with OpenJK: SDL2 (Sam Lantinga and the SDL
+    contributors), zlib (Jean-loup Gailly and Mark Adler), minizip (Gilles
+    Vollant), libpng (Cosmin Truta and the libpng authors), libjpeg (the
+    Independent JPEG Group) and gsl-lite (Martin Moene). This software is
+    based in part on the work of the Independent JPEG Group.
+  * llvm-mingw by Martin Storsjö, with LLVM and mingw-w64, which builds the
+    Windows version.
+
+Licence: GPLv2 (LICENSE-OpenJK-GPLv2.txt), like OpenJK and JKXR. Jedi
+Academy's own files are not included: you need the game. This is a fan
+project, not made, distributed or supported by Activision, Raven Software,
+Lucasfilm or Disney. Star Wars, Jedi and Jedi Knight are trademarks of
+Lucasfilm Ltd. and Disney.
