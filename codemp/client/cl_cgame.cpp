@@ -226,6 +226,11 @@ void CL_ConfigstringModified( void ) {
 	if ( !strcmp( old, s ) ) {
 		return;		// unchanged
 	}
+	if ( !s[0] && index >= CS_PLAYERS && index < CS_PLAYERS + MAX_CLIENTS ) {
+		// OpenJK VR: a player left - whoever takes their place starts afresh
+		// in voice chat (not muted; a new voice)
+		CL_VoiceSpeakerGone( index - CS_PLAYERS );
+	}
 
 	// build the new gameState_t
 	oldGs = cl.gameState;

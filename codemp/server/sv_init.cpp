@@ -608,6 +608,8 @@ Ghoul2 Insert End
 	// OpenJK VR: the saber pose protocol this server reads (a server we were
 	// connected to before may have set our copy of it through its systeminfo)
 	Cvar_Set( "sv_vrx", va( "%i", VR_POSE_PROTOCOL ) );
+	// and the voice chat it relays (the same)
+	Cvar_Set( "sv_voice", sv_voiceChat->integer ? va( "%i", VOICE_PROTOCOL ) : "0" );
 
 	time( &sv.realMapTimeStarted );
 	sv.demosPruned = qfalse;
@@ -1022,6 +1024,14 @@ void SV_Init (void) {
 	// up from a server, so a stock engine never has it.)
 	Cvar_Get( "vr_engine", VR_ENGINE_TAG, CVAR_ROM, "OpenJK VR engine interface version" );
 	Cvar_Set( "vr_engine", VR_ENGINE_TAG );
+	// OpenJK VR: proximity voice chat - clients send their voice to a server
+	// whose systeminfo has sv_voice, and it goes on to the players near them
+	// (the spectators to each other) who asked for it
+	sv_voiceChat = Cvar_Get( "sv_voiceChat", "1", CVAR_ARCHIVE_ND, "Relay voice chat between players (OpenJK VR clients)" );
+	sv_voiceRange = Cvar_Get( "sv_voiceRange", "1600", CVAR_ARCHIVE_ND, "How far away players hear each other in voice chat (0: everywhere)" );
+	sv_voice = Cvar_Get( "sv_voice", "0", CVAR_SYSTEMINFO | CVAR_ROM, "Voice chat protocol this server relays (0: none)" );
+	Cvar_Set( "sv_voice", sv_voiceChat->integer ? va( "%i", VOICE_PROTOCOL ) : "0" );
+	sv_voiceChat->modified = qfalse;
 
 	sv_banFile = Cvar_Get( "sv_banFile", "serverbans.dat", CVAR_ARCHIVE, "File to use to store bans and exceptions" );
 

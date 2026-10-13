@@ -362,6 +362,19 @@ if(BuildMPEngine)
 		# The OpenXR loader DLL is loaded at runtime (no import library needed)
 		set(MPEngineLibraries ${MPEngineLibraries} "opengl32")
 		install(FILES "${OpenJKLibDir}/openxr/bin/x64/libopenxr_loader.dll" DESTINATION "${JKAInstallDir}")
+
+		# Proximity voice chat: the Opus codec (lib/opus, BSD licence), built
+		# into the client only - servers relay voice without decoding it
+		set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+		set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+		set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+		set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+		set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+		set(BUILD_TESTING OFF)
+		add_subdirectory("${OpenJKLibDir}/opus" "${CMAKE_BINARY_DIR}/opus" EXCLUDE_FROM_ALL)
+		set(MPEngineDefines ${MPEngineDefines} "OPENJK_VOICE")
+		set(MPEngineLibraries ${MPEngineLibraries} opus)
+		set(MPEngineIncludeDirectories ${MPEngineIncludeDirectories} ${OpenJKLibDir}/opus/include)
 	endif()
 
 	#    Dependencies
@@ -450,6 +463,7 @@ if(BuildMPEngine)
 		"${MPDir}/client/cl_ui.cpp"
 		"${MPDir}/client/cl_vr.cpp"
 		"${MPDir}/client/cl_vr.h"
+		"${MPDir}/client/cl_voice.cpp"
 		"${MPDir}/client/cl_uiapi.cpp"
 		"${MPDir}/client/cl_uiapi.h"
 		"${MPDir}/client/FXExport.cpp"
@@ -469,6 +483,7 @@ if(BuildMPEngine)
 		"${MPDir}/client/snd_local.h"
 		"${MPDir}/client/snd_mem.cpp"
 		"${MPDir}/client/snd_mix.cpp"
+		"${MPDir}/client/snd_voice.cpp"
 		"${MPDir}/client/snd_mp3.cpp"
 		"${MPDir}/client/snd_mp3.h"
 		"${MPDir}/client/snd_music.cpp"

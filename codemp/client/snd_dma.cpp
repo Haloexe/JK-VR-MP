@@ -1855,6 +1855,8 @@ void S_StopAllSounds(void) {
 	S_StopBackgroundTrack();
 
 	S_StopSounds();
+
+	S_VoiceClear();	// OpenJK VR
 }
 
 /*
@@ -2366,6 +2368,9 @@ void S_UpdateEntityPosition( int entityNum, const vec3_t origin )
 #endif
 
 	VectorCopy( origin, s_entityPosition[entityNum] );
+	if ( entityNum < MAX_CLIENTS ) {
+		S_VoiceEntityMoved( entityNum );	// OpenJK VR: (a player in sight, for their voice)
+	}
 }
 
 
@@ -2730,6 +2735,8 @@ void S_DoLipSynchs( const unsigned s_oldpaintedtime )
 	if (next_amplitude < s_soundtime)	{
 		next_amplitude = s_soundtime + 800;
 	}
+
+	S_VoiceLipSync();	// OpenJK VR: players talking move their lips too
 }
 
 /*
@@ -3095,6 +3102,8 @@ void S_Update_(void) {
 		// clear any sound effects that end before the current time,
 		// and start any new sounds
 		S_ScanChannelStarts();
+
+		S_VoiceSpatialize();	// OpenJK VR: where the players talking are
 
 		// mix ahead of current position
 		endtime = (int)(s_soundtime + s_mixahead->value * dma.speed);

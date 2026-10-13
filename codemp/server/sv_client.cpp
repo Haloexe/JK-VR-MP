@@ -1068,6 +1068,12 @@ void SV_UserinfoChanged( client_t *cl ) {
 	// name for C code
 	Q_strncpyz( cl->name, Info_ValueForKey (cl->userinfo, "name"), sizeof(cl->name) );
 
+	// OpenJK VR: it asks for the others' voices (and reads svc_voice)
+	cl->voiceListener = (qboolean)( atoi( Info_ValueForKey( cl->userinfo, "cl_voiceProtocol" ) ) == VOICE_PROTOCOL );
+	if ( !cl->voiceListener ) {
+		cl->voiceQueued = 0;
+	}
+
 	// rate command
 
 	// if the client is on the same subnet as the server and we aren't running an
@@ -1468,6 +1474,105 @@ SV_ExecuteClientMessage
 Parse a client packet
 ===================
 */
+/*
+===========================================================================
+
+OpenJK VR: proximity voice chat (vr_voice.h)
+
+===========================================================================
+*/
+
+#define SV_VOICE_BURST		10		// frames a client may send at once beyond real time (bunched packets)
+#define SV_VOICE_BYTES		( VOICE_BITRATE / 8 * 2 )		// bytes a second a client may send: twice a voice's...
+#define SV_VOICE_BURST_BYTES	( VOICE_MAX_PACKET_BYTES * 2 )	// ...and at once beyond that
+
+// Is this player out of the game (spectating, following someone)?
+static qboolean SV_VoiceSpectator( const playerState_t *ps ) {
+	return (qboolean)( ps->persistant[PERS_TEAM] == TEAM_SPECTATOR || ps->pm_type == PM_SPECTATOR || ( ps->pm_flags & PMF_FOLLOW ) );
+}
+
+// Does the listener hear the speaker? Players hear the players near where
+// they are (a spectator: where it watches from); spectators talk among
+// themselves.
+static qboolean SV_VoiceHeard( int speaker, int listener ) {
+	const playerState_t *sps = SV_GameClientNum( speaker );
+	const playerState_t *lps = SV_GameClientNum( listener );
+	const float range = sv_voiceRange->value;
+
+	if ( SV_VoiceSpectator( sps ) ) {
+		return SV_VoiceSpectator( lps );
+	}
+	if ( range <= 0.0f ) {
+		return qtrue;
+	}
+	return (qboolean)( DistanceSquared( sps->origin, lps->origin ) <= range * range );
+}
+
+static void SV_QueueVoice( client_t *listener, int speaker, const vec3_t origin, const voicePacket_t *p ) {
+	if ( listener->voiceQueued == SV_VOICE_QUEUE ) {
+		// (its snapshots aren't going out, or not fast enough: the oldest goes)
+		memmove( &listener->voiceQueue[0], &listener->voiceQueue[1], sizeof( listener->voiceQueue[0] ) * ( SV_VOICE_QUEUE - 1 ) );
+		memmove( &listener->voiceQueueSpeaker[0], &listener->voiceQueueSpeaker[1], sizeof( listener->voiceQueueSpeaker[0] ) * ( SV_VOICE_QUEUE - 1 ) );
+		memmove( &listener->voiceQueueOrigin[0], &listener->voiceQueueOrigin[1], sizeof( listener->voiceQueueOrigin[0] ) * ( SV_VOICE_QUEUE - 1 ) );
+		listener->voiceQueued--;
+	}
+	listener->voiceQueue[listener->voiceQueued] = *p;
+	listener->voiceQueueSpeaker[listener->voiceQueued] = speaker;
+	VectorCopy( origin, listener->voiceQueueOrigin[listener->voiceQueued] );
+	listener->voiceQueued++;
+}
+
+/*
+==================
+SV_UserVoice
+
+A clc_voice: on to everyone who hears this player (with their next
+snapshot), no faster than real time (in frames, and in bytes: twice what a
+voice takes). qfalse if it made no sense (then nothing after it in the
+message can be read).
+==================
+*/
+static qboolean SV_UserVoice( client_t *cl, msg_t *msg ) {
+	const int speaker = cl - svs.clients;
+	voicePacket_t p;
+	float elapsed;
+	int bytes, i;
+
+	if ( !Voice_ReadPacket( msg, &p ) ) {
+		return qfalse;
+	}
+	if ( !sv_voiceChat->integer || cl->state != CS_ACTIVE ) {
+		return qtrue;
+	}
+	elapsed = (float)( svs.time - cl->voiceAllowanceTime );
+	cl->voiceAllowanceTime = svs.time;
+	cl->voiceAllowance += elapsed * ( 1.0f / VOICE_FRAME_MS );
+	cl->voiceByteAllowance += elapsed * ( SV_VOICE_BYTES / 1000.0f );
+	if ( !( cl->voiceAllowance <= SV_VOICE_BURST ) ) {
+		cl->voiceAllowance = SV_VOICE_BURST;
+	}
+	if ( !( cl->voiceByteAllowance <= SV_VOICE_BURST_BYTES ) ) {
+		cl->voiceByteAllowance = SV_VOICE_BURST_BYTES;
+	}
+	bytes = 6 + p.length;	// (as it goes on: the packet and its header)
+	if ( cl->voiceAllowance < p.frames || cl->voiceByteAllowance < bytes ) {
+		return qtrue;	// (more than anyone can say: dropped)
+	}
+	cl->voiceAllowance -= p.frames;
+	cl->voiceByteAllowance -= bytes;
+
+	for ( i = 0; i < sv_maxclients->integer; i++ ) {
+		client_t *other = &svs.clients[i];
+		if ( i == speaker || other->state != CS_ACTIVE || !other->voiceListener || other->netchan.remoteAddress.type == NA_BOT ) {
+			continue;
+		}
+		if ( SV_VoiceHeard( speaker, i ) ) {
+			SV_QueueVoice( other, speaker, SV_GameClientNum( speaker )->origin, &p );
+		}
+	}
+	return qtrue;
+}
+
 void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 	int			c;
 	int			serverId;
@@ -1547,6 +1652,15 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 			return;	// disconnect command
 		}
 	} while ( 1 );
+
+	// OpenJK VR: what they said since their last packet (voice chat)
+	while ( c == clc_voice ) {
+		if ( !SV_UserVoice( cl, msg ) ) {
+			Com_DPrintf( "%s: bad voice data\n", cl->name );
+			return;
+		}
+		c = MSG_ReadByte( msg );
+	}
 
 	// read the usercmd_t
 	if ( c == clc_move ) {

@@ -502,6 +502,9 @@ void S_PaintChannels( int endtime ) {
 			}
 		}
 */
+		// OpenJK VR: the players talking (voice chat)
+		S_PaintVoice( s_paintedtime, end );
+
 		// transfer out according to DMA format
 		S_TransferPaintBuffer( end );
 		s_paintedtime = end;

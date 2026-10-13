@@ -47,6 +47,15 @@ qboolean UI_FeederSelection( float feederID, int index, itemDef_t *item );
 void UI_Report( void );
 void UI_Load( void );
 void UI_LoadMenus( const char *menuFile, qboolean reset );
+
+// ui_vrvoice.c (OpenJK VR: the voice chat settings)
+void		UI_VRVoice_AddSettings( void );
+void		UI_VRVoice_Frame( void );
+int			UI_VRVoice_FeederCount( void );
+const char	*UI_VRVoice_FeederText( int index );
+qboolean	UI_VRVoice_FeederSelection( int index );
+void		UI_VRVoice_DrawMeter( float x, float y, float w, float h, float textY, float special, float scale, vec4_t color, int textStyle, int iMenuFont );
+qboolean	UI_VRVoice_MeterKey( int key );
 void UI_LoadArenas( void );
 void UI_LoadForceConfig_List( void );
 

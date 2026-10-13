@@ -1,0 +1,129 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: VOICE CHAT SETTINGS
+//
+//	The game's menu code (ui_vrvoice.c) puts these on the Sound page of Setup - in the main
+//	menu and in game - below the sound settings already there, and lays them out: where they
+//	go, and the font, size and colour of their text, follow those settings. So only what they
+//	are is here.
+//
+//	feeder 64:		the microphones there are (cl_voiceMic)
+//	ownerdraw 400:	how loud the microphone is, and how loud you must be to be heard
+//					(cl_voiceThreshold: click or drag along it)
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name				"vr_voice"
+
+		itemDef
+		{
+			name			vr_voicechat
+			group			sound
+			type			ITEM_TYPE_MULTI
+			text			"Voice Chat"
+			cvar			"cl_voice"
+			cvarFloatList	{ @MENUS_OFF 0 @MENUS_ON 1 }
+			descText		"Talk to the players near you, and hear them (where the server has it)"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicevolume
+			group			sound
+			type			ITEM_TYPE_SLIDER
+			text			"Voice Chat Volume"
+			cvarfloat		"cl_voiceVolume" 1 0 2
+			descText		"How loud the other players' voices are"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicemiclabel
+			group			sound
+			type			ITEM_TYPE_TEXT
+			text			"Microphone"
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vr_voicemic
+			group			sound
+			type			ITEM_TYPE_LISTBOX
+			style			WINDOW_STYLE_FILLED
+			elementtype		LISTBOX_TEXT
+			elementwidth	150
+			elementheight	14
+			feeder			64
+			border			1
+			bordersize		1
+			bordercolor		0.45 0.45 0.9 1
+			backcolor		0 0 0.2 0.5
+			outlinecolor	0.3 0.45 1 0.45
+			descText		"The microphone you talk into (green: the one in use)"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicemode
+			group			sound
+			type			ITEM_TYPE_MULTI
+			text			"Input Mode"
+			cvar			"cl_voiceMode"
+			cvarFloatList	{ "Voice Activity" 0 "Push to Talk" 1 }
+			descText		"Voice Activity: you're heard when you speak. Push to Talk: while +voice is held"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicelevel
+			group			sound
+			ownerdraw		400
+			text			"Voice Activation"
+			descText		"How loud you are now; you're heard when you go past the mark - click or drag to move it"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vr_voicegain
+			group			sound
+			type			ITEM_TYPE_SLIDER
+			text			"Mic Boost"
+			cvarfloat		"cl_voiceGain" 1 0.5 4
+			descText		"Makes your microphone louder (or quieter) for everyone"
+			visible			0
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+	}
+}

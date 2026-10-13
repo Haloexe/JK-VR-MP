@@ -26,6 +26,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     other VR players as they do - arms, hands, head and saber (in games
     hosted with this build, for everyone running it, in a headset or not;
     see PLAYING WITH OTHERS)
+  * Proximity voice chat: talk to the players near you and hear them from
+    where they are; pick your microphone in Setup > Sound (see VOICE CHAT)
 
 Not yet: shots leaving the gun barrel (they leave from your eye, toward
 where you aim), two-handed guns (two-handed sabers work).
@@ -61,7 +63,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Right stick L/R      turn (snap 45 degrees; vr_turnMode 1 = smooth)
   Right stick up/down  next / previous weapon
   Right stick click    change saber style
-  Right trigger        attack
+  Right trigger        attack (saber in your hand, where blades are real:
+                       switch it on and off)
   Left trigger         alternate attack
   Right grip           use (doors, switches, pick-ups)
   Left grip            use the selected Force power (or, at your saber's
@@ -147,8 +150,8 @@ server running this build: your real blade is the weapon.
     blade out doesn't cut either). You cut the same opponent at most every
     0.3 s, whichever blade it is: two sabers, or a staff's two ends, don't
     double up. Walls stop your blade, even where your real hand goes
-    through them. The trigger lights the saber; it no longer starts the
-    game's canned swings - your arm swings.
+    through them. The trigger switches the saber on and off; it no longer
+    starts the game's canned swings - your arm swings.
   * Block with it. Only what your blade physically stops is blocked, thrown
     sabers included (no automatic blocks, saber locks or disarms while you
     hold it). Blades meet only where their cores really touch, at the same
@@ -232,6 +235,35 @@ for your moves of that moment - if your blade met that swing of theirs
 first, or cut them down first, the cut never lands. (Between two VR
 players, blades meet where the server has them. Server setting
 g_vrSaberUnlag 0 turns it off.)
+
+VOICE CHAT: talk to the players near you, and hear them from where they
+are - louder near, quieter further off, from the side they're on, their
+lips moving as they talk. It works in games hosted with this build, for
+everyone running it (in a headset or not). Set it up in Setup > Sound:
+  Voice Chat          on or off
+  Voice Chat Volume   how loud the others are
+  Microphone          click the one you talk into (the green one is in
+                      use; "System default" is the one Windows uses). A
+                      Quest's own microphone, over Link or Air Link, is
+                      "Headset Microphone (Oculus Virtual Audio Device)".
+  Input Mode          Voice Activity: you're heard when you speak.
+                      Push to Talk: only while +voice is held - put it on
+                      a button first, e.g. the left stick click:
+                      bind AUX24 +voice   (that button walks otherwise)
+  Voice Activation    how loud you are now: the bar turns green when you'd
+                      be heard, and you're heard when it goes past the
+                      orange mark. Click or drag along the bar to move the
+                      mark (just above the bar's level when you're quiet).
+  Mic Boost           if the others say you're too quiet
+Everyone within about 45 m hears you (sv_voiceRange 1600 game units);
+spectators hear the players near them (or near whoever they follow) and
+other spectators. Console: voice_mics and voice_mic <number> list and pick
+microphones; voice_mute <name or number> silences someone (voice_unmute
+<name>, or voice_unmute all). If others hear themselves echo, the headset's
+speakers are reaching its microphone: raise the orange mark, or use
+headphones. Your settings: cl_voice, cl_voiceVolume, cl_voiceMic,
+cl_voiceMode, cl_voiceThreshold, cl_voiceGain. Hosting: sv_voiceChat 0
+turns it off on your server; sv_voiceRange 0 lets everyone hear everyone.
 
 Hosting: start a game from the menu the way you do with bots; your PC is
 then the server. Others connect with  connect <your address>  in the
@@ -390,6 +422,12 @@ KNOWN LIMITATIONS
   * On emplaced guns and vehicles the game limits how far you can turn;
     head yaw beyond that limit is ignored.
   * Video recording (/video) records black frames in VR.
+  * Voice chat works only in games hosted with this build (others don't
+    pass voices on), between players running it. There's no echo
+    cancelling: in a game where you hear others through speakers next to
+    your microphone, use headphones or raise the voice activation mark.
+    A mod's own menus (fs_game) with a fuller Sound page may have no room
+    for the voice chat settings; the cl_voice settings still work there.
   * Mods that ship their own client DLL (cgame) need an x86_64 build of it;
     servers running server-side mods (JA+, base, etc.) work.
   * rd-vanilla only (the experimental rend2 renderer has no VR support).
@@ -416,6 +454,12 @@ sv_vrx), and the game module sweeps them for cuts and clashes. Source files:
                                blade poses sent to the server, haptics
   codemp/qcommon/vr_net.h      blade poses on the wire
   codemp/game/g_vrsaber.c      physical saber combat on the server
+  codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,
+                               receiving (clc_voice / svc_voice, only with
+                               servers whose systeminfo has sv_voice)
+  codemp/client/snd_voice.cpp  voices played from where the players are
+  codemp/server/sv_client.cpp  the server passing voices on to those near
+  codemp/ui/ui_vrvoice.c       the voice chat settings (base\ui\vr_voice.menu)
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
 
@@ -431,4 +475,5 @@ build the "openjk.x86_64" project (x64, Release), and copy
 lib/openxr/bin/x64/libopenxr_loader.dll next to the exe.
 
 Licence: GPLv2 (OpenJK). The OpenXR session code started from Team Beef's
-JKXR (GPLv2). The OpenXR loader is Apache-2.0 (lib/openxr/LICENSE).
+JKXR (GPLv2). The OpenXR loader is Apache-2.0 (lib/openxr/LICENSE). Voice
+chat uses the Opus codec (BSD licence, LICENSE-Opus.txt).

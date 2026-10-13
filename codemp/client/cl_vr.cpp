@@ -2414,9 +2414,38 @@ void VR_SetUserPose( const vrUserPose_t *pose ) {
 	vrUserPoseTime = cls.realtime;
 }
 
+// The trigger and the saber, where the server fights with your real blade:
+// with the saber lit in your hands the trigger switches it off (the game's
+// own switch, as the saber's weapon key does); with it off, the trigger
+// lights it (the attack button, as in the normal game: predicted, so the
+// blade is there at once).
+static qboolean		vrAttackHeld;		// the attack button was down for the last command
+static qboolean		vrAttackSwallowed;	// ...and switched the saber off: it does nothing more until let go
+static qboolean		vrSaberSwitchQueued;	// switching it off waits for a command with no other generic command
+
 void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
+	const qboolean attack = ( cmd->buttons & BUTTON_ATTACK ) ? qtrue : qfalse;
+	const qboolean pressed = ( attack && !vrAttackHeld ) ? qtrue : qfalse;
+
+	vrAttackHeld = attack;
+	if ( !attack ) {
+		vrAttackSwallowed = qfalse;
+	}
 	Com_Memset( out, 0, sizeof( *out ) );
-	if ( !VR_IsRunning() || cls.state != CA_ACTIVE || ( !vrUserPose.valid && !vrUserPose.avatar.valid ) ) {
+	if ( !VR_IsRunning() || cls.state != CA_ACTIVE ) {
+		vrSaberSwitchQueued = qfalse;
+		return;
+	}
+	if ( vrAttackSwallowed ) {
+		// the press that switched the saber off: holding on doesn't light it
+		// again once the switch has gone through
+		cmd->buttons &= ~BUTTON_ATTACK;
+	}
+	if ( vrSaberSwitchQueued && !cmd->generic_cmd ) {
+		cmd->generic_cmd = GENCMD_SABERSWITCH;
+		vrSaberSwitchQueued = qfalse;
+	}
+	if ( !vrUserPose.valid && !vrUserPose.avatar.valid ) {
 		return;	// no VR body drawn (and so no lit saber in your VR hands)
 	}
 	const int age = cls.realtime - vrUserPoseTime;
@@ -2435,12 +2464,23 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 
 	// When the server's game fights with your real blade ("vrSaber 1" in its
 	// serverinfo), your swings are the attacks: the trigger doesn't also
-	// start the game's canned swing animations. (Elsewhere it still does.)
-	// The server does the same with every command that has a pose.
+	// start the game's canned swing animations, it switches the saber off.
+	// (Elsewhere it still swings.) The server drops the attack button from
+	// every command that has a pose, too.
 	if ( clc.vrPoseExt && out->valid ) {
 		const char *serverInfo = cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO];
 		if ( atoi( Info_ValueForKey( serverInfo, "vrSaber" ) ) > 0 ) {
 			cmd->buttons &= ~BUTTON_ATTACK;
+			if ( pressed && !cl.snap.ps.saberInFlight ) {
+				// (with the saber thrown, the game's switch would knock it out
+				// of the air instead)
+				if ( !cmd->generic_cmd ) {
+					cmd->generic_cmd = GENCMD_SABERSWITCH;
+				} else {
+					vrSaberSwitchQueued = qtrue;	// (a Force power went in this one)
+				}
+				vrAttackSwallowed = qtrue;
+			}
 		}
 	}
 }

@@ -1462,6 +1462,10 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 
 	trap->PC_FreeSource( handle );
 
+	// OpenJK VR: the voice chat settings, on the Sound page of Setup (with
+	// menudef.h's definitions still loaded)
+	UI_VRVoice_AddSettings();
+
 	trap->PC_RemoveAllGlobalDefines ( );
 }
 
@@ -3001,6 +3005,9 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 
   switch (ownerDraw)
   {
+    case UI_VR_VOICE_METER:	// OpenJK VR
+      UI_VRVoice_DrawMeter(x, y, w, h, text_y, special, scale, color, textStyle, iMenuFont);
+      break;
     case UI_HANDICAP:
       UI_DrawHandicap(&rect, scale, color, textStyle, iMenuFont);
       break;
@@ -4164,6 +4171,8 @@ static qboolean UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, 
 	int findex, iUse = 0;
 
   switch (ownerDraw) {
+    case UI_VR_VOICE_METER:	// OpenJK VR
+      return UI_VRVoice_MeterKey(key);
     case UI_HANDICAP:
       return UI_Handicap_HandleKey(flags, special, key);
       break;
@@ -7893,6 +7902,9 @@ static int UI_FeederCount(float feederID)
 
 	switch ( (int)feederID )
 	{
+		case FEEDER_VR_MICS:	// OpenJK VR
+			return UI_VRVoice_FeederCount();
+
 		case FEEDER_SABER_SINGLE_INFO:
 
 			for (i=0;i<MAX_SABER_HILTS;i++)
@@ -8178,7 +8190,11 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	static int lastTime = 0;
 	*handle1 = *handle2 = *handle3 = -1;
 
-	if (feederID == FEEDER_SABER_SINGLE_INFO)
+	if (feederID == FEEDER_VR_MICS)	// OpenJK VR
+	{
+		return UI_VRVoice_FeederText(index);
+	}
+	else if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
 		//char *saberProperName=0;
 		UI_SaberProperNameForSaber( saberSingleHiltInfo[index], info );
@@ -8764,6 +8780,11 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 {
 	static char info[MAX_STRING_CHARS];
 	const int feederID = feederFloat;
+
+	if (feederID == FEEDER_VR_MICS)	// OpenJK VR
+	{
+		return UI_VRVoice_FeederSelection(index);
+	}
 
 	if (feederID == FEEDER_Q3HEADS)
 	{
@@ -10027,6 +10048,8 @@ void UI_Refresh( int realtime )
 	UI_UpdateCvars();
 
 	if (Menu_Count() > 0) {
+		// OpenJK VR: the voice chat settings follow what's chosen
+		UI_VRVoice_Frame();
 		// paint all the menus
 		Menu_PaintAll();
 		// refresh server browser list

@@ -186,6 +186,12 @@ typedef struct wavinfo_s {
 extern	channel_t   s_channels[MAX_CHANNELS];
 
 extern	int		s_paintedtime;
+
+// OpenJK VR: voice chat (snd_voice.cpp), from the mixer
+void S_VoiceSpatialize( void );
+void S_VoiceEntityMoved( int entityNum );
+void S_PaintVoice( int start, int end );
+void S_VoiceLipSync( void );
 extern	int		s_rawend;
 extern	vec3_t	listener_origin;
 extern	dma_t	dma;

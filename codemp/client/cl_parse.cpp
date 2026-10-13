@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #ifdef OPENJK_VR
 #include "qcommon/vr_net.h"	// OpenJK VR: svc_vrAvatars
 #endif
+#include "qcommon/vr_voice.h"	// OpenJK VR: voice chat
 #include "cl_cgameapi.h"
 #include "qcommon/stringed_ingame.h"
 
@@ -53,6 +54,7 @@ char *svc_strings[256] = {
 	"svc_mapchange",
 	"svc_EOF",
 	"svc_vrAvatars",	// OpenJK VR
+	"svc_voice",		// OpenJK VR
 };
 
 void SHOWNET( msg_t *msg, char *s) {
@@ -452,6 +454,8 @@ void CL_SystemInfoChanged( void ) {
 	// the server reads saber poses along with the usercmds (clc_moveVR)
 	clc.vrPoseExt = (qboolean)( atoi( Info_ValueForKey( systemInfo, "sv_vrx" ) ) == VR_POSE_PROTOCOL );
 #endif
+	// OpenJK VR: the server relays voice chat (clc_voice)
+	clc.voiceExt = (qboolean)( atoi( Info_ValueForKey( systemInfo, "sv_voice" ) ) == VOICE_PROTOCOL );
 
 	// don't set any vars when playing a demo
 	if ( clc.demoplaying ) {
@@ -946,6 +950,9 @@ void CL_ParseServerMessage( msg_t *msg ) {
 			CL_ParseVRAvatars( msg );
 			break;
 #endif
+		case svc_voice:	// OpenJK VR (only to clients that asked for it)
+			CL_ParseVoice( msg );
+			break;
 		}
 	}
 }

@@ -69,6 +69,9 @@ cvar_t	*sv_autoDemoBots;
 cvar_t	*sv_autoDemoMaxMaps;
 cvar_t	*sv_legacyFixes;
 cvar_t	*sv_vrx;
+cvar_t	*sv_voice;			// OpenJK VR: (systeminfo) the voice chat protocol relayed, 0 none
+cvar_t	*sv_voiceChat;		// OpenJK VR: relay voice chat
+cvar_t	*sv_voiceRange;		// OpenJK VR: how far players are heard (0: everywhere)
 cvar_t	*sv_banFile;
 cvar_t	*sv_maxOOBRate;
 cvar_t	*sv_maxOOBRateIP;
@@ -1199,6 +1202,12 @@ void SV_Frame( int msec ) {
 		sv.restartTime = 0;
 		Cbuf_AddText( "map_restart 0\n" );
 		return;
+	}
+
+	// OpenJK VR: voice chat turned on or off: clients send it, or don't
+	if ( sv_voiceChat->modified ) {
+		sv_voiceChat->modified = qfalse;
+		Cvar_Set( "sv_voice", sv_voiceChat->integer ? va( "%i", VOICE_PROTOCOL ) : "0" );
 	}
 
 	// update infostrings if anything has been changed

@@ -65,6 +65,14 @@ void S_Respatialize( int entityNum, const vec3_t head, matrix3_t axis, int inwat
 // let the sound system know where an entity currently is
 void S_UpdateEntityPosition( int entityNum, const vec3_t origin );
 
+// OpenJK VR: voice chat (snd_voice.cpp) - more of a player's voice (mono, 16
+// bits), how loud they are talking now (0..1, -1 not talking), nobody talks
+void S_VoiceSamples( int speaker, int samples, int rate, const short *data );
+void S_VoiceSpeakerOrigin( int speaker, const vec3_t origin );
+void S_VoiceSpeakerReset( int speaker );
+float S_VoiceLevel( int speaker );
+void S_VoiceClear( void );
+
 void S_Update( void );
 
 void S_DisableSounds( void );

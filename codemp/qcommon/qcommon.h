@@ -243,7 +243,11 @@ enum svc_ops_e {
 
 	// OpenJK VR, only to clients that sent clc_moveVR: the VR avatars of the
 	// players in the snapshot just before it (vr_net.h)
-	svc_vrAvatars
+	svc_vrAvatars,
+
+	// OpenJK VR, only to clients whose userinfo has cl_voiceProtocol: another
+	// player's voice (vr_voice.h)
+	svc_voice
 };
 
 
@@ -261,7 +265,11 @@ enum clc_ops_e {
 	// OpenJK VR, only to servers whose systeminfo has sv_vrx: like clc_move
 	// and clc_moveNoDelta, with a saber pose after each usercmd (vr_net.h)
 	clc_moveVR,
-	clc_moveNoDeltaVR
+	clc_moveNoDeltaVR,
+
+	// OpenJK VR, only to servers whose systeminfo has sv_voice, before the
+	// usercmds: the player's voice (vr_voice.h)
+	clc_voice
 };
 
 /*

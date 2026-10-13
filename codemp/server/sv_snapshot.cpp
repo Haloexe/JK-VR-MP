@@ -819,6 +819,43 @@ static void SV_WriteVRAvatars( client_t *client, msg_t *msg ) {
 }
 
 /*
+==================
+SV_WriteVoice
+
+OpenJK VR: after the snapshot, the voices that came in for this client
+since the last one (svc_voice; only to clients that asked: voiceListener).
+==================
+*/
+static void SV_WriteVoice( client_t *client, msg_t *msg ) {
+	// voices may take about half of what this client takes a snapshot (at
+	// least one packet goes, though); the rest waits for the next one
+	const int budget = Com_Clampi( 200, 4000, client->rate * Q_max( 1, client->snapshotMsec ) / 2000 );
+	int n, used = 0;
+
+	if ( !client->voiceListener ) {
+		client->voiceQueued = 0;
+		return;
+	}
+	for ( n = 0; n < client->voiceQueued; n++ ) {
+		const int bytes = 9 + 6 + client->voiceQueue[n].length;	// (svc_voice, speaker, origin; the packet)
+		if ( ( n && used + bytes > budget ) || msg->cursize + bytes + 64 > msg->maxsize ) {
+			break;
+		}
+		MSG_WriteByte( msg, svc_voice );
+		MSG_WriteByte( msg, client->voiceQueueSpeaker[n] );
+		Voice_WriteOrigin( msg, client->voiceQueueOrigin[n] );
+		Voice_WritePacket( msg, &client->voiceQueue[n] );
+		used += bytes;
+	}
+	if ( n < client->voiceQueued ) {
+		memmove( &client->voiceQueue[0], &client->voiceQueue[n], sizeof( client->voiceQueue[0] ) * ( client->voiceQueued - n ) );
+		memmove( &client->voiceQueueSpeaker[0], &client->voiceQueueSpeaker[n], sizeof( client->voiceQueueSpeaker[0] ) * ( client->voiceQueued - n ) );
+		memmove( &client->voiceQueueOrigin[0], &client->voiceQueueOrigin[n], sizeof( client->voiceQueueOrigin[0] ) * ( client->voiceQueued - n ) );
+	}
+	client->voiceQueued -= n;
+}
+
+/*
 =======================
 SV_SendClientSnapshot
 
@@ -904,6 +941,9 @@ void SV_SendClientSnapshot( client_t *client ) {
 
 	// OpenJK VR: where the VR players in it are
 	SV_WriteVRAvatars( client, &msg );
+
+	// OpenJK VR: and what the players near them said
+	SV_WriteVoice( client, &msg );
 
 	// Add any download data if the client is downloading
 	SV_WriteDownloadToClient( client, &msg );

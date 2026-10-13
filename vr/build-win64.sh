@@ -38,12 +38,16 @@ rm -rf "$OUT"
 mkdir -p "$OUT/base"
 cp "$BUILD/openjk.x86_64.exe" "$BUILD/rd-vanilla_x86_64.dll" "$OUT/"
 cp "$BUILD/cgamex86_64.dll" "$BUILD/uix86_64.dll" "$BUILD/jampgamex86_64.dll" "$OUT/base/"
+# the voice chat settings for the Sound page of Setup (ui_vrvoice.c reads it)
+mkdir -p "$OUT/base/ui"
+cp "$ROOT/vr/ui/vr_voice.menu" "$OUT/base/ui/"
 cp "$ROOT/lib/SDL2/bin/x64/SDL2.dll" "$ROOT/lib/openxr/bin/x64/libopenxr_loader.dll" "$OUT/"
 cp "$ROOT/vr/Launch OpenJK VR.bat" "$ROOT/vr/Launch OpenJK Desktop.bat" "$ROOT/vr/README-VR.txt" "$OUT/"
 cp "$ROOT/LICENSE.txt" "$OUT/LICENSE-OpenJK-GPLv2.txt"
 cp "$ROOT/lib/openxr/LICENSE" "$OUT/LICENSE-OpenXR-loader.txt"
+cp "$ROOT/lib/opus/COPYING" "$OUT/LICENSE-Opus.txt"
 # Windows line endings for the files people open in Notepad / cmd
-for f in "$OUT/Launch OpenJK VR.bat" "$OUT/Launch OpenJK Desktop.bat" "$OUT/README-VR.txt"; do
+for f in "$OUT/Launch OpenJK VR.bat" "$OUT/Launch OpenJK Desktop.bat" "$OUT/README-VR.txt" "$OUT/LICENSE-Opus.txt"; do
 	sed -i 's/\r*$/\r/' "$f"
 done
 echo "Built $OUT"

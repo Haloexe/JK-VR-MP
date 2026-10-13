@@ -5772,7 +5772,10 @@ void Item_ListBox_Paint(itemDef_t *item) {
 					sizeHeight -= listPtr->elementHeight;
 					if (sizeHeight < listPtr->elementHeight)
 					{
-						listPtr->drawPadding = listPtr->elementHeight - sizeHeight;
+						// OpenJK VR: the space left under the last row (as for the
+						// other lists), not a row less of it: the last row could only
+						// be clicked near its top, and below that picked the row above
+						listPtr->drawPadding = sizeHeight;
 						break;
 					}
 					y += listPtr->elementHeight;
@@ -5873,7 +5876,7 @@ void Item_ListBox_Paint(itemDef_t *item) {
 				sizeHeight -= listPtr->elementHeight;
 				if (sizeHeight < listPtr->elementHeight)
 				{
-					listPtr->drawPadding = listPtr->elementHeight - sizeHeight;
+					listPtr->drawPadding = sizeHeight;	// OpenJK VR: (as above)
 					break;
 				}
 				listPtr->endPos++;

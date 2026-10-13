@@ -27,6 +27,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "qcommon/qcommon.h"
 #include "game/g_public.h"
 #include "game/bg_public.h"
+#include "qcommon/vr_voice.h"	// OpenJK VR: voice chat
+
+#define SV_VOICE_QUEUE		16	// OpenJK VR: voice packets waiting for a client's next snapshot
 #include "rd-common/tr_public.h"
 
 //=============================================================================
@@ -200,6 +203,18 @@ typedef struct client_s {
 	qboolean		vrViewer;
 	vrAvatar_t		vrAvatar;
 	int				vrAvatarTime;
+	// OpenJK VR: voice chat (vr_voice.h) - this client reads svc_voice (its
+	// userinfo has cl_voiceProtocol); the other players' voice waiting for
+	// its next snapshots, whose, and where they were; how much voice it may
+	// still send (frames and bytes, growing back in real time; svs.time then)
+	qboolean		voiceListener;
+	voicePacket_t	voiceQueue[SV_VOICE_QUEUE];
+	int				voiceQueueSpeaker[SV_VOICE_QUEUE];
+	vec3_t			voiceQueueOrigin[SV_VOICE_QUEUE];
+	int				voiceQueued;
+	float			voiceAllowance;
+	float			voiceByteAllowance;
+	int				voiceAllowanceTime;
 } client_t;
 
 //=============================================================================
@@ -283,6 +298,9 @@ extern	cvar_t	*sv_autoDemoBots;
 extern	cvar_t	*sv_autoDemoMaxMaps;
 extern	cvar_t	*sv_legacyFixes;
 extern	cvar_t	*sv_vrx;
+extern	cvar_t	*sv_voice;
+extern	cvar_t	*sv_voiceChat;
+extern	cvar_t	*sv_voiceRange;
 extern	cvar_t	*sv_banFile;
 extern	cvar_t	*sv_maxOOBRate;
 extern	cvar_t	*sv_maxOOBRateIP;

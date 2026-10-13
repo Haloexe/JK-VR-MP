@@ -807,6 +807,7 @@ void CL_Disconnect( qboolean showMainMenu ) {
 
 	SCR_StopCinematic ();
 	S_ClearSoundBuffer();
+	CL_VoiceDisconnect();	// OpenJK VR
 
 	// send a disconnect message to the server
 	// send it a few times in case one is dropped
@@ -2248,6 +2249,9 @@ void CL_Frame ( int msec ) {
 	VR_BeginFrame();
 #endif
 
+	// OpenJK VR: the microphone (voice chat), before the packet goes
+	CL_VoiceFrame();
+
 	// send intentions now
 	CL_SendCmd();
 
@@ -2750,6 +2754,7 @@ void CL_Init( void ) {
 #ifdef OPENJK_VR
 	VR_Init();
 #endif
+	CL_VoiceInit();	// OpenJK VR: voice chat
 
 	//
 	// register our variables
@@ -2960,6 +2965,7 @@ void CL_Shutdown( void ) {
 #ifdef OPENJK_VR
 	VR_Shutdown();
 #endif
+	CL_VoiceShutdown();	// OpenJK VR
 
 	Cmd_RemoveCommand ("cmd");
 	Cmd_RemoveCommand ("configstrings");

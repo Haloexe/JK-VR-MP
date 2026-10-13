@@ -1552,6 +1552,10 @@ void CL_WritePacket( void ) {
 		MSG_WriteString( &buf, clc.reliableCommands[ i & (MAX_RELIABLE_COMMANDS-1) ] );
 	}
 
+	// OpenJK VR: what the player said since the last packet (voice chat;
+	// only to servers that relay it: clc.voiceExt)
+	CL_VoiceWritePackets( &buf );
+
 	// we want to send all the usercmds that were generated in the last
 	// few packet, so even if a couple packets are dropped in a row,
 	// all the cmds will make it to the server

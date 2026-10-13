@@ -166,13 +166,13 @@ qboolean SNDDMA_Init(int sampleFrequencyInKHz)
 
 	Com_Printf( "SDL_Init( SDL_INIT_AUDIO )... " );
 
-	if (!SDL_WasInit(SDL_INIT_AUDIO))
+	// (always: SNDDMA_Shutdown's SDL_QuitSubSystem undoes exactly this, so
+	// SDL's audio stays up for whatever else holds it - OpenJK VR: voice
+	// chat's microphone - through a snd_restart)
+	if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
 	{
-		if (SDL_Init(SDL_INIT_AUDIO) == -1)
-		{
-			Com_Printf( "FAILED (%s)\n", SDL_GetError( ) );
-			return qfalse;
-		}
+		Com_Printf( "FAILED (%s)\n", SDL_GetError( ) );
+		return qfalse;
 	}
 
 	Com_Printf( "OK\n" );

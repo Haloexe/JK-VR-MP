@@ -214,6 +214,7 @@ typedef struct clientConnection_s {
 #ifdef OPENJK_VR
 	qboolean	vrPoseExt;					// the server reads a saber pose after each usercmd (sv_vrx)
 #endif
+	qboolean	voiceExt;					// OpenJK VR: the server relays voice chat (sv_voice)
 
 	// these are our reliable messages that go to the server
 	int			reliableSequence;
@@ -538,6 +539,17 @@ extern int cl_connectedToCheatServer;
 
 void CL_SystemInfoChanged( void );
 void CL_ParseServerMessage( msg_t *msg );
+
+//
+// cl_voice.cpp (OpenJK VR: proximity voice chat)
+//
+void CL_VoiceInit( void );
+void CL_VoiceShutdown( void );
+void CL_VoiceFrame( void );
+void CL_VoiceWritePackets( msg_t *msg );
+void CL_ParseVoice( msg_t *msg );
+void CL_VoiceSpeakerGone( int speaker );
+void CL_VoiceDisconnect( void );
 #ifdef OPENJK_VR
 qboolean CL_VR_GetAvatar( int serverTime, int clientNum, vrAvatar_t *avatar );
 #endif

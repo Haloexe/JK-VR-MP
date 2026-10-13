@@ -212,6 +212,8 @@ int SV_BotAllocateClient(void) {
 	Com_Memset( &cl->vrPose, 0, sizeof( cl->vrPose ) );
 	Com_Memset( &cl->vrAvatar, 0, sizeof( cl->vrAvatar ) );
 	cl->vrAvatarTime = 0;
+	cl->voiceListener = qfalse;	// (nor what they heard)
+	cl->voiceQueued = 0;
 
 	// cannot start recording auto demos here since bot's name is not set yet
 	return i;
