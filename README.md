@@ -1,105 +1,81 @@
-# OpenJK
+# OpenJK VR
 
-OpenJK is a community effort to maintain and improve the game and engine powering Jedi Academy and Jedi Outcast, while maintaining _full backwards compatibility_ with the existing games and mods.  
-This project does not intend to add major features, rebalance, or otherwise modify core gameplay.
+**Star Wars Jedi Knight: Jedi Academy multiplayer in a PC VR headset**, with a
+lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJK).
 
-Our aims are to:
+- **Real lightsaber combat:** your blade cuts, blocks and clashes where you
+  actually swing it, harder the faster you swing. Saber styles become the
+  blade's weight (light, medium, heavy), you can grip a saber with both hands,
+  and the controllers rumble with every hit.
+- **Your body in VR:** you see your character's body under you. Its arms,
+  elbows and shoulders follow your controllers naturally, and it works with any
+  player model on the standard skeleton, custom models included.
+- **Multiplayer that shows it:** other players see you as you really move
+  (head, arms, hands and saber), and lag compensation judges blades as each
+  player saw them.
+- **Proximity voice chat:** talk to the players near you and hear them from
+  where they stand.
+- **Guns in your hand:** aim with your hand, with a 3D aim dot.
+- **Dedicated server** for Windows and Linux, so you can run your own.
 
-- Improve the stability of the engine by fixing bugs and improving performance.
-- Support more hardware (x86_64, Arm, Apple Silicon) and software platforms (Linux, macOS)
-- Provide a clean base from which new code modifications can be made.
+VR players and players without VR can share a server. On ordinary servers the
+VR client still works, with the game's usual animated saber combat.
 
-[![discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/dPNCfeQ)
-[![forum](https://img.shields.io/badge/forum-JKHub.org%20OpenJK-brightgreen.svg)](https://jkhub.org/forums/forum/49-openjk/)
+## Requirements
 
-[![build](https://github.com/JACoders/OpenJK/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/JACoders/OpenJK/actions/workflows/build.yml?query=branch%3Amaster)
-[![coverity](https://scan.coverity.com/projects/1153/badge.svg)](https://scan.coverity.com/projects/1153)
+- Jedi Academy (for example from [Steam](https://store.steampowered.com/app/6020/)
+  or [GOG](https://www.gog.com/game/star_wars_jedi_knight_jedi_academy)). The
+  game's own files are not included here.
+- Windows 10 or 11 (64-bit) and a PC VR headset with an OpenXR runtime:
+  SteamVR, Meta Quest Link / Air Link, or Virtual Desktop. Windows Mixed
+  Reality headsets need SteamVR.
 
-## Supported Games
+## Install
 
-| Game | Single Player | Multi Player |
-| - | - | - |
-| Jedi Academy | ✅ Stable | ✅ Stable |
-| Jedi Outcast | 😧 Works, needs attention | 🙅 Not supported - consider [JK2MV](https://jk2mv.org) |
+1. Download `OpenJK-VR.zip` from [Releases](../../releases).
+2. Extract it into Jedi Academy's `GameData` folder, so you end up with
+   `GameData/OpenJK-VR/`. The original game files are not touched; to
+   uninstall, delete that folder.
+3. Start your headset's PC software, then run **`Launch OpenJK VR.bat`**.
 
-Please direct support queries, discussions and feature requests to the JKHub sub-forum or Discord linked above.
+Controls, settings and everything else are in
+[`vr/README-VR.txt`](vr/README-VR.txt), which is also in the download.
 
-## License
+## Run a server
 
-OpenJK is licensed under GPLv2 as free software. You are free to use, modify and redistribute OpenJK following the terms in [LICENSE.txt](https://github.com/JACoders/OpenJK/blob/master/LICENSE.txt)
+- **Windows:** run `Launch OpenJK VR Server.bat` from the same folder.
+- **Linux (x86_64, glibc 2.34+, e.g. Ubuntu 22.04 or newer):** download
+  `OpenJK-VR-Server-linux.tar.gz` from [Releases](../../releases) and add your
+  own `assets0.pk3` to `assets3.pk3`.
 
-## For players
+See [`vr/server/README-SERVER.txt`](vr/server/README-SERVER.txt) for ports,
+settings and commands. Players need the same OpenJK VR version as the server.
 
-To install OpenJK, you will first need Jedi Academy installed. If you don't already own the game you can buy it from online stores such as [Steam](https://store.steampowered.com/app/6020/), [Amazon](https://www.amazon.com/Star-Wars-Jedi-Knight-Academy-Pc/dp/B0000A2MCN) or [GOG](https://www.gog.com/game/star_wars_jedi_knight_jedi_academy).
+## Build
 
-Download the [latest build](https://github.com/JACoders/OpenJK/releases/tag/latest) ([alt link](https://builds.openjk.org)) for your operating system.
+- **Windows client and server**, cross-compiled from Linux with
+  [llvm-mingw](https://github.com/mstorsjo/llvm-mingw):
+  `LLVM_MINGW=/opt/llvm-mingw vr/build-win64.sh`
+- **Linux server:** `vr/build-linux-server.sh`
 
-Installing and running OpenJK:
+The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
+`cl_voice.cpp`), the renderer (`codemp/rd-vanilla`), the client game
+(`codemp/cgame/cg_vrbody.c`: body, arms and haptics) and the server game
+(`codemp/game/g_vrsaber.c`: saber combat). The "HOW IT WORKS" section of
+`vr/README-VR.txt` has the details.
 
-1. Extract the contents of the file into the Jedi Academy `GameData/` folder. For Steam users, this will be in `<Steam Folder>/steamapps/common/Jedi Academy/GameData/`.
-1. Run `openjk.x86.exe` (Windows), `openjk.i386` (Linux 32-bit), `openjk.x86_64` (Linux 64-bit) or the `OpenJK` app bundle (macOS), depending on your operating system.
+## Credits and licence
 
-### Linux Instructions
+- Based on [OpenJK](https://github.com/JACoders/OpenJK) by the JACoders
+  community, licensed under GPLv2 ([`LICENSE.txt`](LICENSE.txt)). OpenJK's own
+  readme is in [`README-OpenJK.md`](README-OpenJK.md).
+- The OpenXR session code started from Team Beef's
+  [JKXR](https://github.com/Team-Beef-Studios/JKXR) (GPLv2).
+- OpenXR headers and loader: Khronos Group, "Apache-2.0 OR MIT", used here
+  under MIT ([`lib/openxr/LICENSE-MIT`](lib/openxr/LICENSE-MIT)).
+- Voice chat uses the [Opus](https://opus-codec.org) codec (BSD,
+  [`lib/opus/COPYING`](lib/opus/COPYING)).
 
-If you do not have an existing JKA installation and need to download the base game:
-
-1. Download and Install SteamCMD [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD#Linux).
-1. Set the download path using steamCMD: `force_install_dir /path/to/install/jka/`
-1. Using SteamCMD Set the platform to windows to download any windows game on steam. @sSteamCmdForcePlatformType "windows"
-1. Using SteamCMD download the game, `app_update 6020`.
-
-Extract the contents of the file into the Jedi Academy `GameData/` folder. For Steam users, this will be in `<Steam Folder>/steamapps/common/Jedi Academy/GameData/`.
-
-### macOS Instructions
-
-If you have the Mac App Store Version of Jedi Academy, follow these steps to get OpenJK runnning under macOS:
-
-1. Install [Homebrew](https://brew.sh/) if you don't have it.
-1. Open the Terminal app, and enter the command `brew install sdl2`.
-1. Extract the contents of the OpenJK DMG into the game directory `/Applications/Star Wars Jedi Knight: Jedi Academy.app/Contents/`
-1. Run `OpenJK.app` or `OpenJK SP.app`
-1. Savegames, Config Files and Log Files are stored in `/Users/$USER/Library/Application Support/OpenJK/`
-
-## For Developers
-
-### Building OpenJK
-
-- [Compilation guide](https://github.com/JACoders/OpenJK/wiki/Compilation-guide)
-- [Debugging guide](https://github.com/JACoders/OpenJK/wiki/Debugging)
-
-### Contributing to OpenJK
-
-- [Fork](https://github.com/JACoders/OpenJK/fork) the project on GitHub
-- Create a new branch and make your changes
-- Send a [pull request](https://help.github.com/articles/creating-a-pull-request) to upstream (JACoders/OpenJK)
-
-### Using OpenJK as a base for a new mod
-
-- [Fork](https://github.com/JACoders/OpenJK/fork) the project on GitHub
-- Change the JK_VERSION define in codemp/qcommon/game_version.h from "OpenJK" to your project name
-- If you make a nice change, please consider back-porting to upstream via pull request as described above. This is so everyone benefits without having to reinvent the wheel for every project.
-
-## Maintainers (full list: [@JACoders](https://github.com/orgs/JACoders/people))
-
-Leads:
-
-- [Ensiform](https://github.com/ensiform)
-- [razor](https://github.com/Razish)
-- [Xycaleth](https://github.com/xycaleth)
-
-## Significant contributors ([full list](https://github.com/JACoders/OpenJK/graphs/contributors))
-
-- [bibendovsky](https://github.com/bibendovsky) (save games, platform support)
-- [BobaFett](https://github.com/Lrns123)
-- [BSzili](https://github.com/BSzili) (JK2, platform support)
-- [Cat](https://github.com/deepy) (infra)
-- [Didz](https://github.com/dionrhys)
-- [eezstreet](https://github.com/eezstreet)
-- exidl (SDL2, platform support)
-- [ImperatorPrime](https://github.com/ImperatorPrime) (JK2)
-- [mrwonko](https://github.com/mrwonko)
-- [redsaurus](https://github.com/redsaurus)
-- [Scooper](https://github.com/xScooper)
-- [Sil](https://github.com/TheSil)
-- [smcv](https://github.com/smcv) (debian packaging)
-- [Tristamus](https://tristamus.com>) (icon)
+This is a fan project. It is not affiliated with or endorsed by Lucasfilm,
+Disney, Raven Software or Activision. Star Wars and Jedi Academy are
+trademarks of their respective owners.

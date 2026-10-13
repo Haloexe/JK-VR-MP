@@ -48,7 +48,7 @@ cp "$ROOT/vr/Launch OpenJK VR.bat" "$ROOT/vr/Launch OpenJK Desktop.bat" "$ROOT/v
 cp "$ROOT/vr/Launch OpenJK VR Server.bat" "$ROOT/vr/server/README-SERVER.txt" "$OUT/"
 cp "$ROOT/vr/server/server.cfg" "$OUT/base/"
 cp "$ROOT/LICENSE.txt" "$OUT/LICENSE-OpenJK-GPLv2.txt"
-cp "$ROOT/lib/openxr/LICENSE" "$OUT/LICENSE-OpenXR-loader.txt"
+cp "$ROOT/lib/openxr/LICENSE-MIT" "$OUT/LICENSE-OpenXR-loader.txt"
 cp "$ROOT/lib/opus/COPYING" "$OUT/LICENSE-Opus.txt"
 # Windows line endings for the files people open in Notepad / cmd
 for f in "$OUT/Launch OpenJK VR.bat" "$OUT/Launch OpenJK Desktop.bat" "$OUT/Launch OpenJK VR Server.bat" \

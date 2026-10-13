@@ -537,5 +537,7 @@ build the "openjk.x86_64" project (x64, Release), and copy
 lib/openxr/bin/x64/libopenxr_loader.dll next to the exe.
 
 Licence: GPLv2 (OpenJK). The OpenXR session code started from Team Beef's
-JKXR (GPLv2). The OpenXR loader is Apache-2.0 (lib/openxr/LICENSE). Voice
-chat uses the Opus codec (BSD licence, LICENSE-Opus.txt).
+JKXR (GPLv2). The OpenXR headers and loader are Khronos' (Apache-2.0 OR
+MIT), used here under MIT (LICENSE-OpenXR-loader.txt, lib/openxr/LICENSE-MIT).
+Voice chat uses the Opus codec (BSD licence, LICENSE-Opus.txt). Jedi
+Academy's own files are not included: you need the game.
