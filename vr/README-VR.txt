@@ -197,7 +197,7 @@ server running this build: your real blade is the weapon.
       light  (fast style)    small quick swings cut, up to 25 damage,
                              recovers quickly after a clash
       medium (medium style)  up to 40 damage
-      heavy  (strong style)  needs big swings, up to 60 damage, breaks
+      heavy  (strong style)  needs big swings, up to 50 damage, breaks
                              through guards at full speed, recovers slowly
     Slower swings cut for less (a quarter at the slowest). A player starts
     with 100 health (125, and 25 armour, outside duels), so it takes two or
@@ -210,7 +210,7 @@ server running this build: your real blade is the weapon.
   * The weight is something you feel, not just numbers:
       - a heavier blade can't be whipped about like a light one: it has a
         top speed (heavy, the strong style, turns at most 550 degrees a
-        second; medium 900; light as fast as your hand) and takes a
+        second; medium 750; light as fast as your hand) and takes a
         moment to get going and to turn back. Swing faster than that
         and the blade - and your character's hand, which keeps hold of it
         - falls behind your real hand, catching up as you slow. Slow,
@@ -221,8 +221,8 @@ server running this build: your real blade is the weapon.
         the controller points it; 2 or 3 = heavier still)
       - swinging it, your hands feel the blade's weight: the faster it
         goes, the harder it pulls - a heavy blade a deep, rough rumble, a
-        medium one less, a light one hardly at all; swung faster than it
-        can go, it strains as it falls behind your hand; and a fast swing
+        medium one a little less, a light one a light buzz; swung faster
+        than it can go, it strains as it falls behind your hand; and a fast swing
         stopped short, or turned back, lands in your hand with a thud.
         cg_vrSaberWeight sets how heavy it feels (0 weightless, 1 normal,
         up to 2)
@@ -249,7 +249,7 @@ Servers fighting this way show "vrSaber 1" in their server info.
 Server settings: g_vrSaber (1; 0 = the old animated combat),
 g_vrSaberLight / g_vrSaberMedium / g_vrSaberHeavy (each "cut-from
 full-damage-at max-damage recover": swing speeds in m/s, recovery after a
-clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 60
+clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 50
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
 weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
 half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
