@@ -191,6 +191,12 @@ server running this build: your real blade is the weapon.
     staff it switches the second blade off (click again for both). Held
     with both hands (above), a saber or staff swings one weight heavier.
   * The weight is something you feel, not just numbers:
+      - swinging it, your hands feel the blade's weight: the faster it
+        goes, the harder it pulls - a heavy blade (strong style) a deep,
+        rough rumble, a medium one less, a light one hardly at all - and
+        a fast swing stopped short, or turned back, lands in your hand
+        with a thud. cg_vrSaberWeight sets how heavy it feels (0
+        weightless, 1 normal, up to 2)
       - the hilt stays locked in your fist; if you want the blade itself
         to drag behind a fast swing (a light one hardly, a heavy one
         more), set cg_vrSaberLag 1 (0 = locked, the default)
@@ -369,6 +375,8 @@ SETTINGS (console cvars, saved automatically)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2)
+  cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
+                         vibration of its weight: 0 none, up to 2)
   cg_vrSaberLag 0        1 = the blade drags behind fast swings by its
                          weight (0 = locked in your fist)
   cg_vrLog 1             0 = don't write vrdebug.log
