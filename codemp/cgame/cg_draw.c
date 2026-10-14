@@ -7499,12 +7499,9 @@ void CG_ChatBox_AddString(char *chatStr)
 
 	memset(chat, 0, sizeof(chatBoxItem_t));
 
-	if (strlen(chatStr) > sizeof(chat->string))
-	{ //too long, terminate at proper len.
-		chatStr[sizeof(chat->string)-1] = 0;
-	}
-
-	strcpy(chat->string, chatStr);
+	// OpenJK VR: room left for the line breaks put in below (it overran the
+	// string by one of those, and its last character, before)
+	Q_strncpyz( chat->string, chatStr, sizeof( chat->string ) - 32 );
 	chat->time = cg.time + cg_chatBox.integer;
 
 	chat->lines = 1;
@@ -8473,6 +8470,8 @@ static void CG_Draw2D_HUD( void ) {
 static void CG_Draw2D( void ) {
 	CG_Anchor2D( ANCHOR2D_MIDDLE );
 	CG_Draw2D_HUD();
+	CG_Anchor2D( ANCHOR2D_MIDDLE );
+	CG_RP_Draw();		// (roleplay: speech bubbles, the card of who you look at: cg_vrrp.c)
 	CG_Anchor2D( ANCHOR2D_MIDDLE );
 	CG_DrawPoseWheel();	// (over it all, when it's up: cg_vrpose.c)
 	CG_Anchor2D( ANCHOR2D_STRETCH );

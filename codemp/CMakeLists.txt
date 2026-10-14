@@ -463,6 +463,7 @@ if(BuildMPEngine)
 		"${MPDir}/client/cl_ui.cpp"
 		"${MPDir}/client/cl_vr.cpp"
 		"${MPDir}/client/cl_vr.h"
+		"${MPDir}/client/cl_vrkeyboard.cpp"
 		"${MPDir}/client/cl_voice.cpp"
 		"${MPDir}/client/cl_uiapi.cpp"
 		"${MPDir}/client/cl_uiapi.h"

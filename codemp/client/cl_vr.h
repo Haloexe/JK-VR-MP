@@ -79,6 +79,20 @@ void		VR_Haptic( int hand, float seconds, float amplitude );
 // of pressing its key (cgameImport_t.ext.VR_SetGrabZones, every frame).
 void		VR_SetGrabZones( int handMask );
 
+// What goes over everything on the menu screen (the keyboard), drawn last
+// by SCR_DrawScreenField.
+void		VR_DrawOverlay( void );
+
+// The headset's keyboard (cl_vrkeyboard.cpp): whether something takes
+// typing now (the chat line, the console, a menu's field); the trigger
+// pulled pointing at x, y on the menu screen (qtrue: the keyboard's, not a
+// click for what's under it) and let go; every frame; drawn.
+qboolean	VRK_Wanted( void );
+qboolean	VRK_Press( float x, float y );
+void		VRK_Release( void );
+void		VRK_Frame( void );
+void		VRK_Draw( float x, float y, qboolean pointing );
+
 #else // !OPENJK_VR
 
 static inline qboolean VR_IsRunning( void ) { return qfalse; }

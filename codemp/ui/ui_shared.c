@@ -3470,6 +3470,41 @@ qboolean Item_TextField_Editing( const itemDef_t *item ) {
 	return ( g_editingField && item && g_editItem == item ) ? qtrue : qfalse;
 }
 
+// OpenJK VR: the field being typed in, if one is (the headset's keyboard)
+const itemDef_t *Item_TextField_Typing( void ) {
+	return g_editingField ? g_editItem : NULL;
+}
+
+// OpenJK VR: a field taken to type in: the cursor at the end of what's there
+// (as End puts it: the headset's keyboard has no keys to move it, and what's
+// typed goes on after what was).
+static void Item_TextField_Begin( itemDef_t *item ) {
+	editFieldDef_t *editPtr = item->typeData.edit;
+	char buff[1024];
+	int len = 0;
+
+	if ( item->cvar ) {
+		DC->getCVarString( item->cvar, buff, sizeof( buff ) );
+		len = (int)strlen( buff );
+		if ( editPtr && editPtr->maxChars && len > editPtr->maxChars ) {
+			len = editPtr->maxChars;
+		}
+	}
+	item->cursorPos = len;
+	if ( editPtr ) {
+		editPtr->paintOffset = ( editPtr->maxPaintChars > 0 && len > editPtr->maxPaintChars ) ? len - editPtr->maxPaintChars : 0;
+	}
+}
+
+// OpenJK VR: typing in a field stopped (the field's gone from the screen).
+void Item_TextField_Stop( void ) {
+	if ( g_editingField && g_editItem ) {
+		Leaving_EditField( g_editItem );
+	}
+	g_editingField = qfalse;
+	g_editItem = NULL;
+}
+
 qboolean Item_TextField_HandleKey(itemDef_t *item, int key) {
 	char buff[2048];
 	int len;
@@ -4338,7 +4373,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 					if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory))
 					{
 						Item_Action(item);
-						item->cursorPos = 0;
+						Item_TextField_Begin( item );	// OpenJK VR: the cursor at the end (was at the start)
 						g_editingField = qtrue;
 						g_editItem = item;
 						//DC->setOverstrikeMode(qtrue);
@@ -4407,7 +4442,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 		case A_ENTER:
 			if (item) {
 				if (item->type == ITEM_TYPE_EDITFIELD || item->type == ITEM_TYPE_NUMERICFIELD) {
-					item->cursorPos = 0;
+					Item_TextField_Begin( item );	// OpenJK VR: the cursor at the end (was at the start)
 					g_editingField = qtrue;
 					g_editItem = item;
 					//DC->setOverstrikeMode(qtrue);
@@ -4711,6 +4746,52 @@ void Item_Text_Paint(itemDef_t *item) {
 	}
 }
 
+// OpenJK VR: the width of the first len letters of text.
+static int Item_TextField_Width( const itemDef_t *item, const char *text, int len ) {
+	char part[1024];
+
+	Q_strncpyz( part, text, Com_Clampi( 1, (int)sizeof( part ), len + 1 ) );
+	return DC->textWidth( part, item->textscale, item->iMenuFont );
+}
+
+// OpenJK VR ("clipToBox"): of an edit field's value, what fits between x and
+// the field's right edge - from its start, or, while it's typed in, from as
+// near its start as keeps the cursor in view (*cursor moved to match).
+static void Item_TextField_Clip( const itemDef_t *item, const char *text, float x, qboolean typing, int *cursor, char *out, int size ) {
+	const float room = item->window.rect.x + item->window.rect.w - x - 4.0f;
+	const int len = (int)strlen( text );
+	int start = 0, lo, hi;
+
+	*cursor = Com_Clampi( 0, len, *cursor );
+	if ( typing ) {
+		// the fewest letters dropped at the front that leave the cursor (and the letter at it) in view
+		lo = 0;
+		hi = *cursor;
+		while ( lo < hi ) {
+			const int mid = ( lo + hi ) / 2;
+			if ( Item_TextField_Width( item, text + mid, *cursor - mid + 1 ) <= room ) {
+				hi = mid;
+			} else {
+				lo = mid + 1;
+			}
+		}
+		start = lo;
+	}
+	// as many from there as fit
+	lo = 0;
+	hi = len - start;
+	while ( lo < hi ) {
+		const int mid = ( lo + hi + 1 ) / 2;
+		if ( Item_TextField_Width( item, text + start, mid ) <= room ) {
+			lo = mid;
+		} else {
+			hi = mid - 1;
+		}
+	}
+	Q_strncpyz( out, text + start, Com_Clampi( 1, size, lo + 1 ) );
+	*cursor -= start;
+}
+
 void Item_TextField_Paint(itemDef_t *item) {
 	char buff[1024];
 	vec4_t newColor, lowLight;
@@ -4724,9 +4805,15 @@ void Item_TextField_Paint(itemDef_t *item) {
 
 	if (item->cvar) {
 		DC->getCVarString(item->cvar, buff, sizeof(buff));
-		if (buff[0] == '@')	// string reference
+		if (buff[0] == '@' && !editPtr->password)	// string reference
 		{
 			trap->SE_GetStringTextString( &buff[1], buff, sizeof(buff));
+		}
+	}
+	if ( editPtr->password ) {	// OpenJK VR: a password, as *s (as long, so the cursor's where it was)
+		int i;
+		for ( i = 0; buff[i]; i++ ) {
+			buff[i] = '*';
 		}
 	}
 
@@ -4743,6 +4830,19 @@ void Item_TextField_Paint(itemDef_t *item) {
 	}
 
 	offset = (item->text && *item->text) ? 8 : 0;
+	if ( editPtr->clipToBox ) {	// OpenJK VR: no further than the box
+		const qboolean typing = (qboolean)( ( item->window.flags & WINDOW_HASFOCUS ) && g_editingField );
+		const float x = item->textRect.x + item->textRect.w + offset;
+		char shown[1024];
+		int cursor = item->cursorPos;
+		Item_TextField_Clip( item, buff, x, typing, &cursor, shown, sizeof( shown ) );
+		if ( typing ) {
+			DC->drawTextWithCursor( x, item->textRect.y, item->textscale, newColor, shown, cursor, DC->getOverstrikeMode() ? '_' : '|', item->window.rect.w, item->textStyle, item->iMenuFont );
+		} else {
+			DC->drawText( x, item->textRect.y, item->textscale, newColor, shown, 0, item->window.rect.w, item->textStyle, item->iMenuFont );
+		}
+		return;
+	}
 	if (item->window.flags & WINDOW_HASFOCUS && g_editingField) {
 		char cursor = DC->getOverstrikeMode() ? '_' : '|';
 		DC->drawTextWithCursor(item->textRect.x + item->textRect.w + offset, item->textRect.y, item->textscale, newColor, buff + editPtr->paintOffset, item->cursorPos - editPtr->paintOffset , cursor, item->window.rect.w, item->textStyle, item->iMenuFont);
@@ -5496,6 +5596,7 @@ void Item_TextScroll_Paint(itemDef_t *item)
 		DC->getCVarString(item->cvar, cvartext, sizeof(cvartext));
 		item->text = cvartext;
 		Item_TextScroll_BuildLines ( item );
+		item->text = NULL;	// (cvartext goes when this returns: its lines are kept)
 	}
 
 	// adjust size for item painting
@@ -8016,6 +8117,32 @@ qboolean ItemParse_maxChars( itemDef_t *item, int handle ) {
 	return qtrue;
 }
 
+// OpenJK VR: password - an edit field whose text shows as *s
+qboolean ItemParse_password( itemDef_t *item, int handle ) {
+	editFieldDef_t *editPtr;
+
+	Item_ValidateTypeData( item );
+	editPtr = (editFieldDef_t *)item->typeData.edit;
+	if ( !editPtr ) {
+		return qfalse;
+	}
+	editPtr->password = qtrue;
+	return qtrue;
+}
+
+// OpenJK VR: clipToBox - an edit field whose text's drawn no further than its box
+qboolean ItemParse_clipToBox( itemDef_t *item, int handle ) {
+	editFieldDef_t *editPtr;
+
+	Item_ValidateTypeData( item );
+	editPtr = (editFieldDef_t *)item->typeData.edit;
+	if ( !editPtr ) {
+		return qfalse;
+	}
+	editPtr->clipToBox = qtrue;
+	return qtrue;
+}
+
 qboolean ItemParse_maxPaintChars( itemDef_t *item, int handle ) {
 	editFieldDef_t *editPtr;
 
@@ -8369,6 +8496,7 @@ keywordHash_t itemParseKeywords[] = {
 	{"bordercolor",		ItemParse_bordercolor,		NULL	},
 	{"bordersize",		ItemParse_bordersize,		NULL	},
 	{"cinematic",		ItemParse_cinematic,		NULL	},
+	{"clipToBox",		ItemParse_clipToBox,		NULL	},	// OpenJK VR
 	{"columns",			ItemParse_columns,			NULL	},
 	{"cvar",			ItemParse_cvar,				NULL	},
 	{"cvarFloat",		ItemParse_cvarFloat,		NULL	},
@@ -8418,6 +8546,7 @@ keywordHash_t itemParseKeywords[] = {
 	{"onFocus",			ItemParse_onFocus,			NULL	},
 	{"outlinecolor",	ItemParse_outlinecolor,		NULL	},
 	{"ownerdraw",		ItemParse_ownerdraw,		NULL	},
+	{"password",		ItemParse_password,			NULL	},	// OpenJK VR
 	{"ownerdrawFlag",	ItemParse_ownerdrawFlag,	NULL	},
 	{"rect",			ItemParse_rect,				NULL	},
 	{"rectcvar",		ItemParse_rectcvar,			NULL	},
@@ -8595,7 +8724,7 @@ static void Item_TextScroll_BuildLines ( itemDef_t* item )
 	// new asian-aware line breaker...  (pasted from elsewhere late @ night, hence aliasing-vars ;-)
 	//
 	textScrollDef_t* scrollPtr = item->typeData.textscroll;
-	const char *psText = item->text;	// for copy/paste ease
+	const char *psText = item->text ? item->text : "";	// for copy/paste ease (none: a cvar's, read when it's painted)
 	int iBoxWidth = item->window.rect.w - SCROLLBAR_SIZE - 10;
 
 	// this could probably be simplified now, but it was converted from something else I didn't originally write,

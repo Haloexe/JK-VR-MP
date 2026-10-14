@@ -39,9 +39,11 @@ rm -rf "$OUT"
 mkdir -p "$OUT/base"
 cp "$BUILD/openjk.x86_64.exe" "$BUILD/rd-vanilla_x86_64.dll" "$BUILD/openjkded.x86_64.exe" "$OUT/"
 cp "$BUILD/cgamex86_64.dll" "$BUILD/uix86_64.dll" "$BUILD/jampgamex86_64.dll" "$OUT/base/"
-# the voice chat settings for the Sound page of Setup (ui_vrvoice.c reads it)
+# the voice chat settings for the Sound page of Setup (ui_vrvoice.c reads it),
+# and the Roleplay menu (ui_vrrp.c)
 mkdir -p "$OUT/base/ui"
 cp "$ROOT/vr/ui/vr_voice.menu" "$OUT/base/ui/"
+cp "$ROOT/vr/ui/vr_rp.menu" "$OUT/base/ui/"
 cp "$ROOT/lib/SDL2/bin/x64/SDL2.dll" "$ROOT/lib/openxr/bin/x64/libopenxr_loader.dll" "$OUT/"
 cp "$ROOT/vr/Launch OpenJK VR.bat" "$ROOT/vr/Launch OpenJK Desktop.bat" "$ROOT/vr/README-VR.txt" "$OUT/"
 # the dedicated server: its launcher, settings and notes

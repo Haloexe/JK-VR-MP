@@ -695,7 +695,12 @@ void Con_DrawInput (void) {
 
 	re->SetColor( con.color );
 
-	Field_Draw( &g_consoleField, 2 * con.charWidth, y, qtrue, qtrue );
+	{	// OpenJK VR: a password in it shown as '*'s
+		static field_t shown;
+		shown = g_consoleField;
+		Con_HideSecret( g_consoleField.buffer, shown.buffer, sizeof( shown.buffer ), qtrue );
+		Field_Draw( &shown, 2 * con.charWidth, y, qtrue, qtrue );
+	}
 
 	SCR_DrawSmallChar( con.charWidth, y, CONSOLE_PROMPT_CHAR );
 
@@ -842,7 +847,14 @@ void Con_DrawNotify (void)
 			skip = strlen(chattext)+1;
 		}
 
-		Field_BigDraw( &chatField, skip * BIGCHAR_WIDTH, v, qtrue, qtrue );
+		{	// OpenJK VR: a command typed there, a password in it shown as '*'s
+			static field_t shown;
+			shown = chatField;
+			if ( chatField.buffer[0] == '/' || chatField.buffer[0] == '\\' ) {
+				Con_HideSecret( chatField.buffer, shown.buffer, sizeof( shown.buffer ), qtrue );
+			}
+			Field_BigDraw( &shown, skip * BIGCHAR_WIDTH, v, qtrue, qtrue );
+		}
 
 		v += BIGCHAR_HEIGHT;
 	}

@@ -60,6 +60,12 @@ extern field_t		chatField;
 extern qboolean		chat_team;
 extern int			chat_playerNum;
 
+// OpenJK VR: a command line with a password in it (/login, /new,
+// /changepassword, rp password, rconpassword...) as it may be shown: the
+// password as '*'s, one a character (sameLength: as it's typed) or eight
+// (echoed). qfalse: there's none in it (out is the line).
+qboolean Con_HideSecret		( const char *line, char *out, int size, qboolean sameLength );
+
 void	Field_KeyDownEvent	( field_t *edit, int key );
 void	Field_CharEvent		( field_t *edit, int ch );
 void	Field_Draw			( field_t *edit, int x, int y, qboolean showCursor, qboolean noColorEscape );

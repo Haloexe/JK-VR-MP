@@ -5212,6 +5212,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 		client->damage_armor += asave;
 		client->damage_blood += take;
+		if ( take + asave > 0 ) {
+			client->rpHurtTime = level.time;	// OpenJK VR: roleplay waits on fighting (g_vrrp.c)
+		}
 		client->damage_knockback += knockback;
 		if ( dir ) {
 			VectorCopy ( dir, client->damage_from );

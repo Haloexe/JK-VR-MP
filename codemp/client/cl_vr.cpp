@@ -1167,6 +1167,9 @@ static void VR_SetKey( int key, qboolean down ) {
 	}
 
 	if ( !down ) {
+		if ( key == VR_KEY_TRIGGER_R || key == VR_KEY_TRIGGER_L ) {
+			VRK_Release();	// (Backspace stops repeating)
+		}
 		// the release goes wherever the press went, even if the menu
 		// opened or closed in between
 		if ( vr.keySent[key] ) {
@@ -1176,6 +1179,12 @@ static void VR_SetKey( int key, qboolean down ) {
 		return;
 	}
 
+	if ( ( key == VR_KEY_TRIGGER_R || key == VR_KEY_TRIGGER_L ) && vr.pointerMode && vr.pointerHit &&
+		!VR_Clicking() && VRK_Press( vr.pointerX, vr.pointerY ) ) {
+		vr.keySent[key] = 0;	// typed on the keyboard: no click for what's under it
+		VR_Pulse( vr.pointerLastHand, 0.02f, 0.5f );
+		return;
+	}
 	int code = VR_ButtonKeyCode( key );
 	for ( int k = 0; k < VR_NUM_BUTTONS && code; k++ ) {
 		if ( k != key && vr.keySent[k] == code ) {
@@ -1315,10 +1324,14 @@ void VR_UICursorMoved( int dx, int dy ) {
 }
 
 // Whether a controller drives the menu cursor right now: a menu (or the
-// engine's download prompt) is on the menu screen, and the console isn't.
+// engine's download prompt) is on the menu screen, and the console isn't;
+// or there's typing to do on the keyboard.
 static qboolean VR_MenuPointerWanted( void ) {
 	if ( !vr.lastScreenLayer || !VR_UseScreenLayer() ) {
 		return qfalse;	// no menu screen (or it hasn't been placed yet)
+	}
+	if ( VRK_Wanted() ) {
+		return qtrue;
 	}
 	const int catcher = Key_GetCatcher();
 	if ( catcher & KEYCATCH_CONSOLE ) {
@@ -2093,12 +2106,13 @@ Per-frame tracking
 */
 
 // The menus, console and loading screens go on the floating screen (after
-// JKXR's VR_UseScreenLayer, JKXR_SurfaceView.cpp, by Team Beef).
+// JKXR's VR_UseScreenLayer, JKXR_SurfaceView.cpp, by Team Beef), and the
+// chat line, to type on the keyboard there (cl_vrkeyboard.cpp).
 static qboolean VR_UseScreenLayer( void ) {
 	if ( cls.state != CA_ACTIVE ) {
 		return qtrue;
 	}
-	if ( Key_GetCatcher() & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) ) {
+	if ( Key_GetCatcher() & ( KEYCATCH_UI | KEYCATCH_CONSOLE | KEYCATCH_MESSAGE ) ) {
 		return qtrue;
 	}
 	if ( cls.uiStarted && UIVM_IsFullscreen() ) {
@@ -2421,6 +2435,14 @@ static void VR_StartFrame( qboolean topOfFrame ) {
 void VR_BeginFrame( void ) {
 	VR_StartFrame( qtrue );
 	VR_ApplyMenuPointer();
+	VRK_Frame();	// (the keyboard's Backspace, held)
+}
+
+void VR_DrawOverlay( void ) {
+	if ( !vrRender.active || !vrRender.screenLayer || !VRK_Wanted() ) {
+		return;	// (the desktop's own window, or nothing to type)
+	}
+	VRK_Draw( vr.pointerX, vr.pointerY, (qboolean)( vr.pointerMode && vr.pointerHit ) );
 }
 
 /*
@@ -2984,6 +3006,7 @@ void VR_SetUserPose( const vrUserPose_t *pose ) {}
 void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) { Com_Memset( out, 0, sizeof( *out ) ); }
 void VR_Haptic( int hand, float seconds, float amplitude ) {}
 void VR_SetGrabZones( int handMask ) {}
+void VR_DrawOverlay( void ) {}
 
 #endif // _WIN32
 

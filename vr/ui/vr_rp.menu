@@ -1,0 +1,2199 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: ROLEPLAY
+//
+//	The Roleplay menu (vr_rp), opened from the wheel's Roleplay ring, the ROLEPLAY tab under the
+//	in-game bar, or "ui_openmenu vr_rp". Its pages - Characters, Editor, People, Chat & cards,
+//	Help, Server - are the items' groups (rp_...): the game's menu code (ui_vrrp.c) shows the
+//	page picked and, on it, what fits (logged in or not, playing a character or not...), fills
+//	the lists and the ui_rp... cvars the text shows, and runs what the buttons ask (uiScript
+//	vrRP ...) - what needs the server goes through the game ("rpui ...", cg_vrrp.c).
+//
+//	vr_rp_tab and vr_rp_create are never shown themselves: their items go on the in-game bar
+//	(under it) and on Create game's settings (a free row), where the menus have room for them.
+//
+//	feeder 65:	your characters		feeder 66:	the people here
+//	"password" (an edit field): what's typed shows as *s
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name                "vr_rp"
+		visible             0
+		fullScreen          0
+		rect                20 58 600 410
+		focusColor          1 1 1 1
+		descX               270
+		descY               446
+		descScale           0.8
+		descColor           1 .682 0 .8
+		descAlignment       ITEM_ALIGN_CENTER
+
+		onOpen
+		{
+			uiScript		vrRP opened
+		}
+		onClose
+		{
+			uiScript		vrRP closed
+		}
+		onESC
+		{
+			play			"sound/interface/esc.wav" ;
+			uiScript		vrRP close
+		}
+
+		// the backdrop
+		itemDef
+		{
+			name            rp_back
+			group           none
+			style           WINDOW_STYLE_SHADER
+			rect            0 0 600 410
+			background      "gfx/menus/menu_box_ingame"
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_back2
+			group           none
+			style           WINDOW_STYLE_FILLED
+			rect            4 4 592 402
+			backcolor       0 0 .06 .55
+			visible         1
+			decoration
+		}
+
+		// the title, and where you stand (ui_rpStatus)
+		itemDef
+		{
+			name            rp_title
+			group           none
+			style           WINDOW_STYLE_EMPTY
+			rect            0 4 600 24
+			text            "ROLEPLAY"
+			font            3
+			textscale       0.9
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      300
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_status
+			group           none
+			rect            10 30 580 18
+			cvar            "ui_rpStatus"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      290
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		// the pages' tabs (the one shown, lit)
+		itemDef
+		{
+			name            rp_tab0
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            12 52 92 22
+			text            "Characters"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 0 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab0 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab0 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_tab1
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            108 52 92 22
+			text            "Editor"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 1 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab1 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab1 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_tab2
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            204 52 92 22
+			text            "People"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 2 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab2 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab2 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_tab3
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            300 52 92 22
+			text            "Chat & cards"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 3 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab3 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab3 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_tab4
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            396 52 92 22
+			text            "Help"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 4 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab4 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab4 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_tab5
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            492 52 92 22
+			text            "Server"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      46
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 5 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab5 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab5 backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Characters, not logged in: log in, or make an account
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_out_l1
+			group           rp_out
+			rect            40 86 520 18
+			text            "Log in to your roleplay account on this server, or make one."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_out_l2
+			group           rp_out
+			rect            40 104 520 18
+			text            "Your password becomes a key on this PC: the password itself is never sent."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_out_account
+			group           rp_out
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 130 520 22
+			text            "Account:"
+			cvar            "ui_rpLoginAccount"
+			maxChars        20
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      150
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "3 to 20 letters, numbers, _ or -"
+			mouseEnter
+			{
+				setitemcolor	rp_out_account bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_out_account bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_out_password
+			group           rp_out
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 156 520 22
+			text            "Password:"
+			cvar            "ui_rpLoginPassword"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      150
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			mouseEnter
+			{
+				setitemcolor	rp_out_password bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_out_password bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_new_again
+			group           rp_new
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 182 520 22
+			text            "Password again:"
+			cvar            "ui_rpLoginAgain"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      150
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "The same password again, to be sure of it"
+			mouseEnter
+			{
+				setitemcolor	rp_new_again bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_new_again bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_out_remember
+			group           rp_out
+			type            ITEM_TYPE_YESNO
+			style           WINDOW_STYLE_FILLED
+			rect            40 208 520 22
+			text            "Remember me:"
+			cvar            "cg_rpRemember"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      150
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Log in by itself next time (this PC keeps a key, not the password)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_out_remember bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_out_remember bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_login_go
+			group           rp_login
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            160 244 130 24
+			text            "Log in"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP login ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_login_go backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_login_go backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_login_new
+			group           rp_login
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            310 244 170 24
+			text            "Make an account"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      85
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP newAccount ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_login_new backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_login_new backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_new_go
+			group           rp_new
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            160 244 130 24
+			text            "Make it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP new ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_new_go backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_new_go backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_new_back
+			group           rp_new
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            310 244 130 24
+			text            "Back"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP back ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_new_back backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_new_back backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_new_l1
+			group           rp_new
+			rect            40 282 520 18
+			text            "Passwords take 4 characters or more. Keep it: the server can't tell you it."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_off_l1
+			group           rp_off
+			rect            40 86 520 18
+			cvar            "ui_rpOffLine1"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_off_l2
+			group           rp_off
+			rect            40 104 520 18
+			cvar            "ui_rpOffLine2"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Characters, logged in: your characters (feeder 65), new ones, playing one
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_in_account
+			group           rp_in
+			rect            40 84 280 18
+			cvar            "ui_rpAccountLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_in_password
+			group           rp_in
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            330 82 140 22
+			text            "New password"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      70
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP password ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_password backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_password backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_logout
+			group           rp_in
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            480 82 90 22
+			text            "Log out"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      45
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP logout ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_logout backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_logout backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_list
+			group           rp_in
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            30 110 540 150
+			elementwidth    520
+			elementheight   16
+			elementtype     LISTBOX_TEXT
+			feeder          65
+			columns         3 4 270 32  290 110 12  410 120 14
+			font            2
+			textscale       0.75
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 .2 .45
+			border          1
+			bordercolor     .35 .45 .8 .8
+			outlinecolor    .2 .45 .85 .6
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_count
+			group           rp_in
+			rect            40 262 520 18
+			cvar            "ui_rpCountLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_in_play
+			group           rp_in_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 284 110 24
+			text            "Play"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Play the character picked in the list"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP play ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_play backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_play backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_stop
+			group           rp_in_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            160 284 140 24
+			text            "Stop playing"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      70
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Be yourself, not a character"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP stop ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_stop backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_stop backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_delete
+			group           rp_in_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            460 284 110 24
+			text            "Delete"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP delete ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_delete backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_delete backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_del_line
+			group           rp_in_del
+			rect            40 287 280 18
+			cvar            "ui_rpDeleteLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 .682 0 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_del_yes
+			group           rp_in_del
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            330 284 110 24
+			text            "Delete it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP deleteYes ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_del_yes backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_del_yes backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_del_no
+			group           rp_in_del
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            460 284 110 24
+			text            "Keep it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP deleteNo ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_del_no backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_del_no backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_newname
+			group           rp_in
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 318 400 22
+			text            "New character:"
+			cvar            "ui_rpNewName"
+			maxChars        32
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "2 to 32 letters, numbers, spaces and ' - .: a title goes in the name"
+			mouseEnter
+			{
+				setitemcolor	rp_in_newname bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_newname bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_in_make
+			group           rp_in
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            460 317 110 24
+			text            "Make"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP newChar ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_in_make backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_in_make backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Characters: a new password
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_pw_l1
+			group           rp_pw
+			rect            40 112 520 18
+			text            "Your password now, then the new one twice."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_pw_now
+			group           rp_pw
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 136 520 22
+			text            "Password now:"
+			cvar            "ui_rpPassword"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      170
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			mouseEnter
+			{
+				setitemcolor	rp_pw_now bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_pw_now bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_pw_new
+			group           rp_pw
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 162 520 22
+			text            "New password:"
+			cvar            "ui_rpNewPassword"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      170
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			mouseEnter
+			{
+				setitemcolor	rp_pw_new bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_pw_new bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_pw_again
+			group           rp_pw
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 188 520 22
+			text            "New password again:"
+			cvar            "ui_rpNewAgain"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      170
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			mouseEnter
+			{
+				setitemcolor	rp_pw_again bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_pw_again bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_pw_go
+			group           rp_pw
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            160 224 140 24
+			text            "Change it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      70
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP passwordGo ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_pw_go backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_pw_go backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_pw_cancel
+			group           rp_pw
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            320 224 130 24
+			text            "Cancel"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP passwordCancel ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_pw_cancel backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_pw_cancel backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Editor: the character you play
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_none_l1
+			group           rp_edit_none
+			rect            40 120 520 18
+			text            "Play one of your characters first (on the Characters page),"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_none_l2
+			group           rp_edit_none
+			rect            40 138 520 18
+			text            "then you can change it here."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_edit_name
+			group           rp_edit
+			rect            40 86 520 18
+			cvar            "ui_rpEditLine"
+			font            2
+			textscale       0.9
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_edit_faction
+			group           rp_edit
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 112 520 22
+			text            "Faction:"
+			cvar            "ui_rpEditFaction"
+			cvarFloatList
+			{
+				"Heroes" 0 "Villains" 1 "Neutral" 2
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Who you side with: NPCs take sides by it"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_faction bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_faction bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_desc
+			group           rp_edit
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 138 520 22
+			text            "Description:"
+			cvar            "ui_rpEditDesc"
+			maxChars        60
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "One line, on your card for those who look at you"
+			mouseEnter
+			{
+				setitemcolor	rp_edit_desc bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_desc bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_bio
+			group           rp_edit
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 164 520 22
+			text            "Bio:"
+			cvar            "ui_rpEditBio"
+			maxChars        250
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "Your story, up to 250 characters: Read their bio on the wheel shows it"
+			mouseEnter
+			{
+				setitemcolor	rp_edit_bio bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_bio bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_bioshow
+			group           rp_edit
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            40 190 530 88
+			cvar            "ui_rpEditBio"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		itemDef
+		{
+			name            rp_edit_save
+			group           rp_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 288 110 24
+			text            "Save"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP save ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_save backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_save backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_undo
+			group           rp_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            160 288 150 24
+			text            "Undo changes"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      75
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP edit ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_undo backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_undo backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_look
+			group           rp_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            430 288 140 24
+			text            "Change look"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      70
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Profile: what you wear while playing it (model, colours) is the character's"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP look ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_look backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_look backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_edit_l1
+			group           rp_edit
+			rect            40 320 530 18
+			text            "What you wear while playing it (model, colours) is kept with the character."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------------
+		// People here (feeder 66), and a bio
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_people_list
+			group           rp_people
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            30 84 540 166
+			elementwidth    520
+			elementheight   16
+			elementtype     LISTBOX_TEXT
+			feeder          66
+			columns         3 4 200 24  210 90 10  305 220 40
+			font            2
+			textscale       0.75
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 .2 .45
+			border          1
+			bordercolor     .35 .45 .8 .8
+			outlinecolor    .2 .45 .85 .6
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            rp_people_bio
+			group           rp_people
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 258 120 24
+			text            "Read bio"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP bio ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_people_bio backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_people_bio backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_people_bioname
+			group           rp_people
+			rect            170 261 400 18
+			cvar            "ui_rpBioName"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_people_bioshow
+			group           rp_people
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            40 286 530 70
+			cvar            "ui_rpBioRead"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Chat & cards
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_chat_bubbles
+			group           rp_chat
+			type            ITEM_TYPE_YESNO
+			style           WINDOW_STYLE_FILLED
+			rect            40 88 520 22
+			text            "Speech bubbles:"
+			cvar            "cg_rpBubbles"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      180
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "What people near you say, over their heads"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_chat_bubbles bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_chat_bubbles bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_chat_cards
+			group           rp_chat
+			type            ITEM_TYPE_YESNO
+			style           WINDOW_STYLE_FILLED
+			rect            40 114 520 22
+			text            "Character cards:"
+			cvar            "cg_rpCards"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      180
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Who someone is, looking at them: name, faction, description"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_chat_cards bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_chat_cards bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_chat_remember
+			group           rp_chat
+			type            ITEM_TYPE_YESNO
+			style           WINDOW_STYLE_FILLED
+			rect            40 140 520 22
+			text            "Remember my login:"
+			cvar            "cg_rpRemember"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      180
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_chat_remember bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_chat_remember bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_chat_help
+			group           rp_chat
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            40 172 530 182
+			text            "With roleplay on, what you say reaches those near you (15 metres, unless the server is set otherwise): the chat key, or Say... on the wheel (hold Y), which opens the keyboard in the headset.\n/me draws a saber shows as an action: * Kael Dorn draws a saber.\nOut of character, to everyone: the team chat key, or /ooc brb. A private word: /tell, as ever.\nIn the chat line, a line starting with / is a command, as in the console.\nLook at someone near, your weapon away, and their card shows who they are; Read their bio on the wheel's Roleplay ring."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Help
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_help_text
+			group           rp_help
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            30 84 545 270
+			text            "With roleplay on you play a character: everyone sees its name, it sides with the Heroes, the Villains or the Neutral, and it has a description and a bio. Off, the game plays as ever.\nACCOUNT: make one on the Characters page (or /new name password), then log in (/login name password). Your password becomes a key on this PC and is never sent.\nCHARACTERS: make them on the Characters page and pick one to play. What you wear while playing it stays with it. Switching waits until you are out of a fight.\nEDITOR: its faction, description and bio.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions, to come. Left: Roleplay - read a bio, a duel, this menu. Rest on a ring to open it.\nCHAT: talk reaches those near you (15 m, unless the server is set otherwise); /me for actions; out of character: the team chat key or /ooc.\nSERVER: its owner turns roleplay on and off there."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Server: the owner's (rcon, unless it's your own game)
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_srv_l1
+			group           rp_server
+			rect            40 86 520 18
+			text            "For the server's owner: roleplay on or off, and how it is set up."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_srv_l2
+			group           rp_server
+			rect            40 104 520 18
+			text            "On a game you host these work straight away; on another server,"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_srv_l3
+			group           rp_server
+			rect            40 122 520 18
+			text            "type its rcon password first."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_srv_rcon
+			group           rp_srv_remote
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 146 520 22
+			text            "Rcon password:"
+			cvar            "rconPassword"
+			maxChars        64
+			clipToBox
+			password
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      170
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			mouseEnter
+			{
+				setitemcolor	rp_srv_rcon bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_rcon bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_state
+			group           rp_server
+			rect            40 176 520 18
+			cvar            "ui_rpServerLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_srv_on
+			group           rp_server
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 200 170 24
+			text            "Turn roleplay on"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      85
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server on ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_on backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_on backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_off
+			group           rp_server
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            220 200 150 24
+			text            "Turn it off"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      75
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server off ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_off backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_off backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_chars
+			group           rp_server
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 236 520 22
+			text            "Characters per account:"
+			cvar            "ui_rpSrvChars"
+			cvarFloatList
+			{
+				"1" 1 "2" 2 "3" 3 "4" 4 "5" 5 "6" 6 "7" 7 "8" 8 "9" 9 "10" 10
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_chars bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_chars bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_range
+			group           rp_server
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 262 520 22
+			text            "Talk reaches:"
+			cvar            "ui_rpSrvRange"
+			cvarFloatList
+			{
+				"5 metres" 170 "10 metres" 340 "15 metres" 510 "20 metres" 680 "30 metres" 1020 "Everyone" 0
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_range bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_range bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_apply
+			group           rp_server
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 294 110 24
+			text            "Apply"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server apply ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_apply backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_apply backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// the server's last word on what you asked (ui_rpMessage), and Close
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_message
+			group           none
+			rect            10 362 580 18
+			cvar            "ui_rpMessage"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      290
+			textaligny      0
+			forecolor       1 .85 .4 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_close
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            470 382 120 24
+			text            "Close"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP close ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_close backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_close backcolor 0 0 .3 .7
+			}
+		}
+
+	}
+
+	//------------------------------------------------------------------------------------------
+	// ROLEPLAY under the in-game bar (its items go on "ingame"; where the server has roleplay)
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_rp_tab"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name            vr_rp_tabbutton
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            5 33 104 22
+			text            "ROLEPLAY"
+			font            2
+			textscale       0.7
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      52
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .2 .75
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			cvarTest        "ui_rpServer"
+			showCvar
+			{
+				"1" ; "2"
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				open		vr_rp
+			}
+			mouseEnter
+			{
+				setitemcolor	vr_rp_tabbutton backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vr_rp_tabbutton backcolor 0 0 .2 .75
+			}
+		}
+
+	}
+
+	//------------------------------------------------------------------------------------------
+	// Roleplay on Create game (its items go on "createserver", in the free row under the
+	// server's settings: g_rp, for the game you host)
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_rp_create"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name            vr_rp_createback
+			group           none
+			style           WINDOW_STYLE_SHADER
+			rect            10 135 180 20
+			background      "gfx/menus/menu_blendbox"
+			forecolor       1 1 1 1
+			visible         0
+			decoration
+		}
+
+		itemDef
+		{
+			name            vr_rp_createrow
+			group           grpsettings
+			type            ITEM_TYPE_YESNO
+			text            "Roleplay:"
+			cvar            "g_rp"
+			rect            10 135 180 20
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      145
+			textaligny      0
+			font            4
+			textscale       1
+			forecolor       .615 .615 .956 1
+			visible         1
+			descText        "Characters, factions, local chat: players log in to theirs (OpenJK VR)"
+			action
+			{
+				play		"sound/interface/button1"
+			}
+			mouseEnter
+			{
+				show		vr_rp_createback
+			}
+			mouseExit
+			{
+				hide		vr_rp_createback
+			}
+		}
+
+	}
+}

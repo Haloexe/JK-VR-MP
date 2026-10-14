@@ -2113,7 +2113,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	const char *s=NULL;
 	char *value=NULL, userinfo[MAX_INFO_STRING], buf[MAX_INFO_STRING], oldClientinfo[MAX_INFO_STRING], model[MAX_QPATH],
 		forcePowers[DEFAULT_FORCEPOWERS_LEN], oldname[MAX_NETNAME], className[MAX_QPATH], color1[16], color2[16];
-	qboolean modelChanged = qfalse;
+	qboolean modelChanged = qfalse, rpNamed = qfalse;
 	gender_t gender = GENDER_MALE;
 
 	trap->GetUserinfo( clientNum, userinfo, sizeof( userinfo ) );
@@ -2126,6 +2126,8 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		G_LogPrintf( "Userinfo: %s\n", userinfo );
 		return qfalse;
 	}
+
+	G_RPLookSeen( clientNum, userinfo );	// OpenJK VR: what a roleplay character's player puts on is the character's (g_vrrp.c)
 
 	// check for local client
 	s = Info_ValueForKey( userinfo, "ip" );
@@ -2141,6 +2143,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	Q_strncpyz( oldname, client->pers.netname, sizeof( oldname ) );
 	s = Info_ValueForKey( userinfo, "name" );
 	ClientCleanName( s, client->pers.netname, sizeof( client->pers.netname ) );
+	rpNamed = G_RPName( clientNum, client->pers.netname, sizeof( client->pers.netname ) );	// OpenJK VR: the roleplay character they play (g_vrrp.c)
 	Q_strncpyz( client->pers.netname_nocolor, client->pers.netname, sizeof( client->pers.netname_nocolor ) );
 	Q_StripColor( client->pers.netname_nocolor );
 
@@ -2149,7 +2152,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		Q_strncpyz( client->pers.netname_nocolor, "scoreboard", sizeof( client->pers.netname_nocolor ) );
 	}
 
-	if ( client->pers.connected == CON_CONNECTED && strcmp( oldname, client->pers.netname ) ) {
+	if ( client->pers.connected == CON_CONNECTED && strcmp( oldname, client->pers.netname ) && !rpNamed ) {	// (OpenJK VR: taking up a roleplay character isn't a rename)
 		if ( client->pers.netnameTime > level.time ) {
 			trap->SendServerCommand( clientNum, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "NONAMECHANGE" ) ) );
 
@@ -2168,6 +2171,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 
 	// set model
 	Q_strncpyz( model, Info_ValueForKey( userinfo, "model" ), sizeof( model ) );
+	G_RPLookValue( clientNum, "model", model, sizeof( model ) );	// OpenJK VR: a roleplay character's own (g_vrrp.c)
 
 	if ( d_perPlayerGhoul2.integer&& Q_stricmp( model, client->modelname ) ) {
 		Q_strncpyz( client->modelname, model, sizeof( client->modelname ) );
@@ -2177,6 +2181,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	client->ps.customRGBA[0] = (value=Info_ValueForKey( userinfo, "char_color_red" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
 	client->ps.customRGBA[1] = (value=Info_ValueForKey( userinfo, "char_color_green" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
 	client->ps.customRGBA[2] = (value=Info_ValueForKey( userinfo, "char_color_blue" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
+	G_RPLookRGB( clientNum, client->ps.customRGBA );	// OpenJK VR: a roleplay character's own skin colours (g_vrrp.c)
 
 	//Prevent skins being too dark
 	if ( g_charRestrictRGB.integer && ((client->ps.customRGBA[0]+client->ps.customRGBA[1]+client->ps.customRGBA[2]) < 100) )
@@ -2306,6 +2311,8 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	// colors
 	Q_strncpyz( color1, Info_ValueForKey( userinfo, "color1" ), sizeof( color1 ) );
 	Q_strncpyz( color2, Info_ValueForKey( userinfo, "color2" ), sizeof( color2 ) );
+	G_RPLookValue( clientNum, "color1", color1, sizeof( color1 ) );	// OpenJK VR: a roleplay character's saber colours (g_vrrp.c)
+	G_RPLookValue( clientNum, "color2", color2, sizeof( color2 ) );
 
 	// gender hints
 	s = Info_ValueForKey( userinfo, "sex" );
@@ -2513,6 +2520,7 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 		G_InitSessionData( client, userinfo, isBot );
 	}
 	G_ReadSessionData( client );
+	G_RPClientConnect( clientNum, firstTime, isBot );	// OpenJK VR: a roleplay login lasts through a map change (g_vrrp.c)
 
 	if (level.gametype == GT_SIEGE &&
 		(firstTime || level.newSession))
@@ -3281,6 +3289,7 @@ void ClientSpawn(gentity_t *ent) {
 	client->ps.customRGBA[0] = (value=Info_ValueForKey( userinfo, "char_color_red" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
 	client->ps.customRGBA[1] = (value=Info_ValueForKey( userinfo, "char_color_green" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
 	client->ps.customRGBA[2] = (value=Info_ValueForKey( userinfo, "char_color_blue" ))	? Com_Clampi( 0, 255, atoi( value ) ) : 255;
+	G_RPLookRGB( index, client->ps.customRGBA );	// OpenJK VR: a roleplay character's own skin colours (g_vrrp.c)
 
 	//Prevent skins being too dark
 	if ( g_charRestrictRGB.integer && ((client->ps.customRGBA[0]+client->ps.customRGBA[1]+client->ps.customRGBA[2]) < 100) )
@@ -3915,6 +3924,7 @@ void ClientDisconnect( int clientNum ) {
 	}
 
 	G_VRSaberClientReset( clientNum );	// OpenJK VR: their VR saber and avatar go with them
+	G_RPClientDisconnect( clientNum );	// OpenJK VR: and their roleplay login
 
 	i = 0;
 

@@ -299,6 +299,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_VRSaberInit();
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 	G_VRPoseInit();			// OpenJK VR: poses (g_vrpose.c)
+	G_RPInit();				// OpenJK VR: roleplay mode (g_vrrp.c)
 
 	NPC_InitGame();
 
@@ -516,6 +517,7 @@ void G_ShutdownGame( int restart ) {
 
 	// write all the client session data so we can get it back
 	G_WriteSessionData();
+	G_RPShutdown();	// OpenJK VR: logins kept across the map change (g_vrrp.c)
 
 	trap->ROFF_Clean();
 

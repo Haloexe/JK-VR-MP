@@ -750,7 +750,7 @@ typedef struct skulltrail_s {
 #define	MAX_CHATBOX_ITEMS		5
 typedef struct chatBoxItem_s
 {
-	char	string[MAX_SAY_TEXT];
+	char	string[MAX_SAY_TEXT * 2 + 64];	// OpenJK VR: room for roleplay's lines (a name, its colours) and the breaks put in
 	int		time;
 	int		lines;
 } chatBoxItem_t;
@@ -1917,6 +1917,8 @@ void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
 // cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
 void CG_VR_DuelFrame( void );
 void CG_VR_DuelCentrePrint( const char *text );
+int CG_VR_DuelWheelTarget( void );
+void CG_VR_DuelWheel( int target );
 // cg_vrpose.c (OpenJK VR: the pose wheel)
 void		CG_PoseWheelDown_f( void );
 void		CG_PoseWheelUp_f( void );
@@ -1924,6 +1926,20 @@ qboolean	CG_PoseWheelMouse( int x, int y );
 qboolean	CG_PoseWheelKey( int key, qboolean down );
 void		CG_PoseWheelFrame( void );
 void		CG_DrawPoseWheel( void );
+// cg_vrrp.c (OpenJK VR: roleplay mode, the player's side)
+void		CG_RP_Init( void );
+void		CG_RP_Shutdown( void );
+void		CG_RP_Restart( void );
+void		CG_RP_ServerInfo( const char *info );
+qboolean	CG_RP_ServerCommand( const char *cmd );
+qboolean	CG_RP_ConsoleCommand( const char *cmd );
+void		CG_RP_AddCommands( void );
+void		CG_RP_Chat( void );
+void		CG_RP_Frame( void );
+void		CG_RP_Draw( void );
+qboolean	CG_RP_On( void );
+qboolean	CG_RP_CanReadBio( void );
+void		CG_RP_ReadBio( void );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );

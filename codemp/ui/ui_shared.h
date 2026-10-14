@@ -203,6 +203,8 @@ typedef struct editFieldDef_s {
 	int maxChars;			// for edit fields
 	int maxPaintChars;		// for edit fields
 	int paintOffset;		//
+	qboolean password;		// OpenJK VR: what's typed shows as *s ("password")
+	qboolean clipToBox;		// OpenJK VR: what's typed drawn no further than the field's box, the cursor kept in view ("clipToBox")
 } editFieldDef_t;
 
 #define MAX_MULTI_CVARS 64//32
@@ -548,6 +550,8 @@ void LerpColor(vec4_t a, vec4_t b, vec4_t c, float t);
 void Menus_CloseAll();
 void Menu_Paint(menuDef_t *menu, qboolean forcePaint);
 void Menu_SetFeederSelection(menuDef_t *menu, int feeder, int index, const char *name);
+const itemDef_t *Item_TextField_Typing( void );	// OpenJK VR: the field being typed in (NULL: none)
+void Item_TextField_Stop( void );				// OpenJK VR: ...typing in it stopped
 void Display_CacheAll();
 void Menu_SetItemBackground(const menuDef_t *menu,const char *itemName, const char *background);
 

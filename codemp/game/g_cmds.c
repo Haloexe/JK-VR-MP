@@ -1580,6 +1580,10 @@ void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText ) 
 	char		location[64];
 	char		*locMsg = NULL;
 
+	if ( G_RPChat( ent, target, mode, chatText ) ) {
+		return;	// OpenJK VR: roleplay chat - talk is local, team chat out of character (g_vrrp.c)
+	}
+
 	if ( level.gametype < GT_TEAM && mode == SAY_TEAM ) {
 		mode = SAY_ALL;
 	}
@@ -3263,6 +3267,16 @@ command_t commands[] = {
 	{ "voice_cmd",			Cmd_VoiceCommand_f,			CMD_NOINTERMISSION },
 	{ "vote",				Cmd_Vote_f,					CMD_NOINTERMISSION },
 	{ "pose",				Cmd_VRPose_f,				CMD_NOINTERMISSION|CMD_ALIVE },	// OpenJK VR (g_vrpose.c)
+	{ "me",					Cmd_VRRP_f,					0 },	// OpenJK VR: roleplay (g_vrrp.c)
+	{ "ooc",				Cmd_VRRP_f,					0 },
+	{ "rp",					Cmd_VRRP_f,					0 },
+	{ "rpbio",				Cmd_VRRP_f,					0 },
+	{ "rpcard",				Cmd_VRRP_f,					0 },
+	{ "rplogin",			Cmd_VRRP_f,					0 },
+	{ "rplogout",			Cmd_VRRP_f,					0 },
+	{ "rpnew",				Cmd_VRRP_f,					0 },
+	{ "rppass",				Cmd_VRRP_f,					0 },
+	{ "rpver",				Cmd_VRRP_f,					0 },
 	{ "vrduel",				Cmd_VRDuel_f,				CMD_NOINTERMISSION|CMD_ALIVE },	// OpenJK VR (g_vrduel.c)
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 };

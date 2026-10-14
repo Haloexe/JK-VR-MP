@@ -1468,6 +1468,8 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	UI_VRVoice_AddSettings();
 	// OpenJK VR: display mode and the monitor's resolutions, on the Video page
 	UI_VRVideo_AddSettings();
+	// OpenJK VR: the Roleplay menu, its tab under the in-game bar, its row on Create game
+	UI_VRRP_AddMenus();
 
 	trap->PC_RemoveAllGlobalDefines ( );
 }
@@ -6435,6 +6437,9 @@ static void UI_RunMenuScript(char **args)
 		else if ( UI_VRVideo_Script( name ) )	// OpenJK VR: the Video page's Custom Resolution row
 		{
 		}
+		else if ( UI_VRRP_Script( name, args ) )	// OpenJK VR: the Roleplay menu
+		{
+		}
 		else if (Q_stricmp(name, "setMovesListDefault") == 0)
 		{
 			uiInfo.movesTitleIndex = 2;
@@ -7907,6 +7912,10 @@ static int UI_FeederCount(float feederID)
 		case FEEDER_VR_MICS:	// OpenJK VR
 			return UI_VRVoice_FeederCount();
 
+		case FEEDER_VR_RPCHARS:	// OpenJK VR: roleplay
+		case FEEDER_VR_RPPEOPLE:
+			return UI_VRRP_FeederCount( (int)feederID );
+
 		case FEEDER_SABER_SINGLE_INFO:
 
 			for (i=0;i<MAX_SABER_HILTS;i++)
@@ -8195,6 +8204,10 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	if (feederID == FEEDER_VR_MICS)	// OpenJK VR
 	{
 		return UI_VRVoice_FeederText(index);
+	}
+	else if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE)	// OpenJK VR: roleplay
+	{
+		return UI_VRRP_FeederText((int)feederID, index, column);
 	}
 	else if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
@@ -8786,6 +8799,10 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 	if (feederID == FEEDER_VR_MICS)	// OpenJK VR
 	{
 		return UI_VRVoice_FeederSelection(index);
+	}
+	if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE)	// OpenJK VR: roleplay
+	{
+		return UI_VRRP_FeederSelection(feederID, index);
 	}
 
 	if (feederID == FEEDER_Q3HEADS)
@@ -10097,11 +10114,28 @@ void UI_Refresh( int realtime )
 
 	UI_Anchor2D( 320.0f );	// OpenJK VR: in proportion in the middle (the engine stretches what's after)
 
+	{	// OpenJK VR: a field being typed in, and where: the headset's keyboard
+		// comes up for it, out of its way (ui_vrTyping "1 <its middle>", or "0")
+		static char said[32];
+		const itemDef_t *field = ( trap->Key_GetCatcher() & KEYCATCH_UI ) ? Item_TextField_Typing() : NULL;
+		char now[32];
+		if ( field ) {
+			Com_sprintf( now, sizeof( now ), "1 %i", (int)( field->window.rect.y + field->window.rect.h * 0.5f ) );
+		} else {
+			Q_strncpyz( now, "0", sizeof( now ) );
+		}
+		if ( strcmp( now, said ) ) {
+			trap->Cvar_Set( "ui_vrTyping", now );
+			Q_strncpyz( said, now, sizeof( said ) );
+		}
+	}
+
 	if (Menu_Count() > 0) {
 		// OpenJK VR: the voice chat settings follow what's chosen, and the
 		// Video page's Custom Resolution row
 		UI_VRVoice_Frame();
 		UI_VRVideo_Frame();
+		UI_VRRP_Frame();	// (the Roleplay menu, as things stand)
 		// paint all the menus
 		Menu_PaintAll();
 		// refresh server browser list
@@ -10230,7 +10264,9 @@ void UI_KeyEvent( int key, qboolean down ) {
 	if (Menu_Count() > 0) {
 		menuDef_t *menu = Menu_GetFocused();
 		if (menu) {
-			if (key == A_ESCAPE && down && !Menus_AnyFullScreenVisible()) {
+			// (OpenJK VR: typing in a field, Escape stops the typing, as on a
+			// full screen menu, rather than shutting them all)
+			if (key == A_ESCAPE && down && !Menus_AnyFullScreenVisible() && !Item_TextField_Typing()) {
 				Menus_CloseAll();
 			} else {
 				Menu_HandleKey(menu, key, down );

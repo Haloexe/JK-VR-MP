@@ -655,6 +655,90 @@ void Field_CharEvent( field_t *edit, int ch ) {
 }
 
 /*
+================================================================================
+OpenJK VR: passwords typed in a command line - roleplay's /login, /new and
+/changepassword (the cgame's, cg_vrrp.c), the server's rp password, and
+the rconpassword and password cvars - are shown as '*'s where the line is
+drawn (the console's, the chat line's) and echoed, and such a line isn't
+kept in the console's history.
+================================================================================
+*/
+
+static const char *Con_SkipSpace( const char *p ) {
+	while ( *p == ' ' || *p == '\t' ) {
+		p++;
+	}
+	return p;
+}
+
+// Past the next word (in quotes or not).
+static const char *Con_SkipWord( const char *p ) {
+	p = Con_SkipSpace( p );
+	if ( *p == '"' ) {
+		for ( p++; *p && *p != '"'; p++ ) {
+		}
+		return *p ? p + 1 : p;
+	}
+	while ( *p && *p != ' ' && *p != '\t' && *p != ';' ) {
+		p++;
+	}
+	return p;
+}
+
+// Whether the next word is this one.
+static qboolean Con_WordIs( const char *p, const char *word ) {
+	const size_t n = strlen( word );
+	p = Con_SkipSpace( p );
+	return (qboolean)( !Q_stricmpn( p, word, (int)n ) && ( !p[n] || p[n] == ' ' || p[n] == '\t' || p[n] == ';' ) );
+}
+
+// Where the password in a command line starts (NULL: there's none).
+static const char *Con_SecretStart( const char *line ) {
+	const char *p = Con_SkipSpace( line );
+
+	while ( *p == '/' || *p == '\\' ) {
+		p++;
+	}
+	if ( Con_WordIs( p, "rcon" ) ) {
+		p = Con_SkipWord( p );	// (what follows, as the server's console takes it)
+	}
+	if ( Con_WordIs( p, "login" ) || Con_WordIs( p, "new" ) ) {
+		p = Con_SkipWord( Con_SkipWord( p ) );	// (the command, the account)
+	} else if ( Con_WordIs( p, "changepassword" ) || Con_WordIs( p, "rconpassword" ) || Con_WordIs( p, "password" ) ) {
+		p = Con_SkipWord( p );
+	} else if ( Con_WordIs( p, "rp" ) && Con_WordIs( Con_SkipWord( p ), "password" ) ) {
+		p = Con_SkipWord( Con_SkipWord( Con_SkipWord( p ) ) );	// (rp, password, the account)
+	} else {
+		return NULL;
+	}
+	p = Con_SkipSpace( p );
+	return *p ? p : NULL;
+}
+
+qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLength ) {
+	const char *secret = Con_SecretStart( line );
+	int at, i;
+
+	Q_strncpyz( out, line, size );
+	if ( !secret ) {
+		return qfalse;
+	}
+	at = (int)( secret - line );
+	if ( at >= size ) {
+		return qtrue;	// (cut off before it)
+	}
+	if ( sameLength ) {
+		for ( i = at; out[i]; i++ ) {
+			out[i] = '*';
+		}
+	} else {
+		out[at] = '\0';
+		Q_strcat( out, size, "********" );
+	}
+	return qtrue;
+}
+
+/*
 ====================
 Console_Key
 
@@ -682,8 +766,10 @@ void Console_Key( int key ) {
 	//	else
 	//		Field_AutoComplete( &g_consoleField );
 
-		// print executed command
-		Com_Printf( "%c%s\n", CONSOLE_PROMPT_CHAR, g_consoleField.buffer );
+		// print executed command (OpenJK VR: a password in it hidden)
+		char shown[MAX_EDIT_LINE];
+		const qboolean secret = Con_HideSecret( g_consoleField.buffer, shown, sizeof( shown ), qfalse );
+		Com_Printf( "%c%s\n", CONSOLE_PROMPT_CHAR, shown );
 
 		// check if cgame wants to eat the command...?
 		if ( cls.cgameStarted && cl.mSharedMemory ) {
@@ -713,9 +799,11 @@ void Console_Key( int key ) {
 			return; // empty lines just scroll the console without adding to history
 		}
 
-		// copy line to history buffer
-		historyEditLines[nextHistoryLine % COMMAND_HISTORY] = g_consoleField;
-		nextHistoryLine++;
+		// copy line to history buffer (OpenJK VR: not with a password in it)
+		if ( !secret ) {
+			historyEditLines[nextHistoryLine % COMMAND_HISTORY] = g_consoleField;
+			nextHistoryLine++;
+		}
 		historyLine = nextHistoryLine;
 
 		Field_Clear( &g_consoleField );
@@ -814,7 +902,12 @@ void Message_Key( int key ) {
 	}
 
 	if ( key == A_ENTER || key == A_KP_ENTER ) {
-		if ( chatField.buffer[0] && cls.state == CA_ACTIVE ) {
+		if ( ( chatField.buffer[0] == '/' || chatField.buffer[0] == '\\' ) && chatField.buffer[1] ) {
+			// OpenJK VR: a command, as the console takes it (/me waves,
+			// /login..., typed on the headset's keyboard)
+			Cbuf_AddText( chatField.buffer + 1 );
+			Cbuf_AddText( "\n" );
+		} else if ( chatField.buffer[0] && cls.state == CA_ACTIVE ) {
 				 if ( chat_playerNum != -1 )	Com_sprintf( buffer, sizeof( buffer ), "tell %i \"%s\"\n", chat_playerNum, chatField.buffer );
 			else if ( chat_team )				Com_sprintf( buffer, sizeof( buffer ), "say_team \"%s\"\n", chatField.buffer );
 			else								Com_sprintf( buffer, sizeof( buffer ), "say \"%s\"\n", chatField.buffer );

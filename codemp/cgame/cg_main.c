@@ -2554,6 +2554,7 @@ Ghoul2 Insert End
 	}
 
 	CG_InitConsoleCommands();
+	CG_RP_Init();	// OpenJK VR: roleplay (before the serverinfo's read)
 
 	cg.renderingThirdPerson = cg_thirdPerson.integer;
 
@@ -2705,6 +2706,7 @@ Called before every level change or subsystem restart
 void CG_Shutdown( void )
 {
 	CG_VR_Shutdown();	// OpenJK VR: its log
+	CG_RP_Shutdown();	// OpenJK VR: roleplay (the menus' cvars say there's none now)
 
 	BG_ClearAnimsets(); //free all dynamic allocations made through the engine
 

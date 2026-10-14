@@ -2732,6 +2732,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	CG_VR_BodyEndFrame();
 	CG_VR_DuelFrame();
 	CG_PoseWheelFrame();	// (the pose wheel, if it's up: cg_vrpose.c)
+	CG_RP_Frame();			// (roleplay: logging in, who you look at: cg_vrrp.c)
 
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );

@@ -59,6 +59,14 @@ void		UI_VRVideo_UpdateSetup( void );
 void		UI_VRVideo_Frame( void );
 qboolean	UI_VRVideo_Script( const char *name );
 
+// ui_vrrp.c (OpenJK VR: the Roleplay menu)
+void		UI_VRRP_AddMenus( void );
+void		UI_VRRP_Frame( void );
+int			UI_VRRP_FeederCount( int feeder );
+const char	*UI_VRRP_FeederText( int feeder, int index, int column );
+qboolean	UI_VRRP_FeederSelection( int feeder, int index );
+qboolean	UI_VRRP_Script( const char *name, char **args );
+
 // ui_vrvoice.c (OpenJK VR: the voice chat settings)
 void		UI_VRVoice_AddSettings( void );
 void		UI_VRVoice_Frame( void );

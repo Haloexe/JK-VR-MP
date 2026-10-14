@@ -265,6 +265,44 @@ void CG_VR_DuelFrame( void ) {
 	vrd.since = 0;
 }
 
+// The wheel's Duel (cg_vrpose.c): whom you'd challenge, looking at them
+// with your saber in hand, in the headset or not (-1: no one, or no
+// private duels here)...
+int CG_VR_DuelWheelTarget( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	const int server = CG_VRD_Server();
+	vec3_t head, axis[3];
+
+	if ( !cg.snap || cgs.gametype >= GT_TEAM || cgs.gametype == GT_DUEL || cgs.gametype == GT_POWERDUEL || server < 0 ) {
+		return -1;
+	}
+	if ( ps->duelInProgress || ps->stats[STAT_HEALTH] <= 0 || ps->pm_type != PM_NORMAL || ps->weapon != WP_SABER ||
+		ps->persistant[PERS_TEAM] == TEAM_SPECTATOR || ( cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
+		return -1;
+	}
+	if ( !CG_VR_HeadPose( head, axis ) ) {
+		VectorCopy( ps->origin, head );
+		head[2] += ps->viewheight;
+		VectorCopy( cg.refdef.viewaxis[0], axis[0] );	// (where the crosshair is, from your eyes)
+	}
+	return CG_VRD_Target( head, axis[0], server );
+}
+
+// ...and the challenge, as a salute sends it.
+void CG_VR_DuelWheel( int target ) {
+	const int server = CG_VRD_Server();
+
+	if ( target < 0 ) {
+		return;
+	}
+	if ( server > 0 ) {
+		trap->SendClientCommand( va( "vrduel %i", target ) );
+	} else {
+		trap->SendConsoleCommand( "engage_duel\n" );
+	}
+	vrd.sentTime = cg.time;
+}
+
 // A centre print from the server: one saying you've been challenged (any
 // server's reads "<name> @@@PLDUELCHALLENGE") is felt in both hands, and
 // whoever it names counts first when you salute back.

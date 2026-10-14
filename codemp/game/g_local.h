@@ -797,6 +797,7 @@ struct gclient_s {
 	int			vrDuelChallenge;	// OpenJK VR (g_vrduel.c): level.time this player challenged ps.duelIndex (0: hasn't)
 	float		vrPoseYaw;			// OpenJK VR (g_vrpose.c): which way they faced going into their pose...
 	int			vrPoseTime;			// ...then (level.time)
+	int			rpHurtTime;			// OpenJK VR (g_vrrp.c): level.time they last took damage
 };
 
 //Interest points
@@ -1048,6 +1049,20 @@ void		G_EngageDuel( gentity_t *ent, gentity_t *challenged );
 void		Cmd_VRDuel_f( gentity_t *ent );
 void		G_PrivateDuelThink( gentity_t *ent, usercmd_t *ucmd );
 gentity_t	*G_BotTakeUpDuel( gentity_t *bot );
+// g_vrrp.c (OpenJK VR: roleplay mode - the switch, accounts, characters, chat)
+void		G_RPInit( void );
+void		G_RPShutdown( void );
+void		G_RPPublish( void );
+qboolean	G_RPOn( void );
+void		G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot );
+void		G_RPClientDisconnect( int clientNum );
+qboolean	G_RPName( int clientNum, char *netname, int size );
+void		G_RPLookSeen( int clientNum, const char *userinfo );
+qboolean	G_RPLookValue( int clientNum, const char *key, char *value, int size );
+void		G_RPLookRGB( int clientNum, int *rgba );
+qboolean	G_RPChat( gentity_t *ent, gentity_t *target, int mode, const char *text );
+qboolean	G_RPConsoleCommand( void );
+void		Cmd_VRRP_f( gentity_t *ent );
 
 //
 // g_items.c

@@ -67,6 +67,10 @@ static void CVU_PrivateDuel(void) {
 	G_PrivateDuelPublish();	// OpenJK VR: the serverinfo "vrDuel" follows it
 }
 
+static void CVU_RP(void) {
+	G_RPPublish();	// OpenJK VR: roleplay on or off, at once (g_vrrp.c)
+}
+
 static void CVU_VRSaberWeights(void) {
 	G_VRSaberWeightsChanged();	// OpenJK VR: g_vrSaberLight / Medium / Heavy
 }

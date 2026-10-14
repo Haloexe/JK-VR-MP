@@ -492,6 +492,10 @@ void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 	// console draws next
 	Con_DrawConsole ();
 
+#ifdef OPENJK_VR
+	VR_DrawOverlay();	// (the headset's keyboard, over it all)
+#endif
+
 	// debug graph can be drawn on top of anything
 	if ( cl_debuggraph->integer || cl_timegraph->integer || cl_debugMove->integer ) {
 		SCR_DrawDebugGraph ();

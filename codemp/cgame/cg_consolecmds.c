@@ -342,7 +342,7 @@ qboolean CG_ConsoleCommand( void ) {
 	command = (consoleCommand_t *)Q_LinearSearch( CG_Argv( 0 ), commands, numCommands, sizeof( commands[0] ), cmdcmp );
 
 	if ( !command || !command->func )
-		return qfalse;
+		return CG_RP_ConsoleCommand( CG_Argv( 0 ) );	// OpenJK VR: roleplay's: /new, /login... (cg_vrrp.c)
 
 	command->func();
 	return qtrue;
@@ -362,9 +362,12 @@ static const char *gcmds[] = {
 	"kill",
 	"levelshot",
 	"loaddefered",
+	"me",			// OpenJK VR: roleplay (game/g_vrrp.c)
 	"noclip",
 	"notarget",
 	"NPC",
+	"ooc",			// OpenJK VR: roleplay
+	"rp",			// OpenJK VR: roleplay
 	"say",
 	"say_team",
 	"setviewpos",
@@ -395,6 +398,7 @@ void CG_InitConsoleCommands( void ) {
 
 	for ( i = 0; i < numCommands; i++ )
 		trap->AddCommand( commands[i].cmd );
+	CG_RP_AddCommands();	// OpenJK VR: roleplay's
 
 	//
 	// the game server will interpret these commands, which will be automatically

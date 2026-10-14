@@ -216,6 +216,8 @@ void CG_ParseServerinfo( void ) {
 	i = atoi( Info_ValueForKey( info, "sv_fps" ) );
 	if ( i )
 		trap->Cvar_Set( "snaps", va( "%i", i ) );
+
+	CG_RP_ServerInfo( info );	// OpenJK VR: roleplay here, on or off
 }
 
 /*
@@ -1077,6 +1079,8 @@ static void CG_MapRestart( void ) {
 
 	cg.mapRestart = qtrue;
 
+	CG_RP_Restart();	// OpenJK VR: the server's game forgot what this one is: roleplay says hello again
+
 	CG_StartMusic(qtrue);
 
 	trap->S_ClearLoopingSounds();
@@ -1504,7 +1508,7 @@ static void CG_Print_f( void ) {
 
 void CG_ChatBox_AddString(char *chatStr);
 static void CG_Chat_f( void ) {
-	char cmd[MAX_STRING_CHARS] = {0}, text[MAX_SAY_TEXT] = {0};
+	char cmd[MAX_STRING_CHARS] = {0}, text[MAX_SAY_TEXT * 2 + 64] = {0};	// OpenJK VR: roleplay's lines are longer
 
 	trap->Cmd_Argv( 0, cmd, sizeof( cmd ) );
 
@@ -1516,6 +1520,7 @@ static void CG_Chat_f( void ) {
 			CG_RemoveChatEscapeChar( text );
 			CG_ChatBox_AddString( text );
 			trap->Print( "*%s\n", text );
+			CG_RP_Chat();	// OpenJK VR: roleplay's speech bubble, over who said it
 		}
 	}
 	else if ( !strcmp( cmd, "lchat" ) ) {
@@ -1651,6 +1656,10 @@ static void CG_ServerCommand( void ) {
 
 	if ( command ) {
 		command->func();
+		return;
+	}
+
+	if ( CG_RP_ServerCommand( cmd ) ) {	// OpenJK VR: roleplay's (cg_vrrp.c)
 		return;
 	}
 
