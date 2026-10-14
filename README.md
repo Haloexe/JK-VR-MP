@@ -33,7 +33,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a
-  custom one, and a HUD, menus and field of view made for widescreen.
+  custom one, and a HUD, menus and field of view made for widescreen. With
+  more than one monitor it opens where it was last time, and it fits the
+  monitor you move it to, whatever its Windows scaling.
 
 VR players and players without VR can share a server. On ordinary servers the
 VR client still works, with the game's usual animated saber combat.

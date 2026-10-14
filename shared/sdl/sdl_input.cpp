@@ -28,6 +28,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #ifdef OPENJK_VR
 qboolean VR_IsActive( void );	// client/cl_vr.cpp
 static qboolean soundPausedUnfocused;	// the window lost focus and that paused the sound
+// sdl_window.cpp: the window on a desktop with more than one display
+void WIN_WindowEvent( const SDL_WindowEvent *e );
+void WIN_WindowFrame( qboolean loading, qboolean recording );
 #endif
 
 static cvar_t *in_keyboardDebug     = NULL;
@@ -923,6 +926,9 @@ static void IN_ProcessEvents( void )
 				break;
 
 			case SDL_WINDOWEVENT:
+#ifdef OPENJK_VR
+				WIN_WindowEvent( &e.window );
+#endif
 				switch( e.window.event )
 				{
 					case SDL_WINDOWEVENT_MINIMIZED:    Cvar_SetValue( "com_minimized", 1 ); break;
@@ -1194,6 +1200,11 @@ void IN_Frame (void) {
 		IN_ActivateMouse( );
 
 	IN_ProcessEvents( );
+
+#ifdef OPENJK_VR
+	// the window's size and display, once it's been moved
+	WIN_WindowFrame( loading, (qboolean)( clc.demorecording || CL_VideoRecording() ) );
+#endif
 }
 
 /*

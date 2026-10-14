@@ -61,6 +61,62 @@ cvar_t	*r_colorbits;
 cvar_t	*r_ignorehwgamma;
 cvar_t  *r_ext_multisample;
 
+#ifdef OPENJK_VR
+/*
+OpenJK VR: the window on a desktop with more than one display.
+
+- Its picture (the client area) is the renderer's size, exactly. With
+  per-monitor DPI awareness (the manifest) a window's frame is as thick as its
+  display's scaling makes it, but SDL 2.0.12 works frames out at the main
+  display's (AdjustWindowRectEx): on a display scaled otherwise the picture
+  came out a few pixels off, and a window dragged onto one kept its size while
+  Windows changed its frame, so the picture no longer filled it. Either is
+  put right once the window's settled (WIN_FitPicture) - a window it won't
+  take for (one across two displays, which its own new size moves from one
+  to the other) is left as it is till it's moved.
+- It opens where it was last time (vid_xpos, vid_ypos: its picture's top left
+  corner on the desktop, kept as it moves) when that's on a display now, on
+  that display whatever it is - a vid_restart makes a new window, which before
+  went back to the first display. One with a title bar goes where it was (in
+  the middle, after one that covered the display), on the display as far as it
+  fits in the part the taskbar leaves, its title bar on the screen when not.
+- One the size of its display ("Desktop", r_mode -2: windowed or borderless)
+  takes the size of the display it's moved to: a vid_restart once it's settled
+  there (after a map's loaded; not while a demo or video is being recorded).
+*/
+
+#ifdef _WIN32
+#define WIN_FRAMES	// the window's frame and place through Windows itself
+#endif
+
+#define WIN_SETTLE_MSEC		250		// a window that's moved is looked at once it's been still this long
+#define WIN_POLL_MSEC		1000	// ...and its picture's size anyway, this often
+#define WIN_FITS			3		// fix-ups of its picture's size in a row, before it's left as it is till it's moved
+#define WIN_RESTART_MSEC	5000	// a vid_restart of its own no sooner than this after the last
+#define WIN_RESTARTS		3		// ...and no more than this many in a row,
+#define WIN_RESTARTS_MSEC	60000	// ...each this soon after the one before
+
+cvar_t	*vid_xpos;
+cvar_t	*vid_ypos;
+
+static struct {
+	int			wantW, wantH;	// its picture's size, the renderer's (0: none kept - a headset's mirror)
+	qboolean	desktop;		// the size of its display (r_mode -2)
+	int			sizedFor;		// ...that display
+	int			display;		// the display it was on, when last looked at
+	int			changed;		// when it last moved or changed size (Sys_Milliseconds); 0: looked at since
+	int			polled;			// when its picture's size was last looked at anyway
+	int			fits;			// fix-ups of its picture's size in a row...
+	int			fitX, fitY;		// ...where it was (its top left corner: a fix-up keeps that)
+#ifdef WIN_FRAMES
+	HWND		hwnd;
+#endif
+} win;
+
+static int winRestarted = -WIN_RESTARTS_MSEC;	// when it last had a vid_restart of its own
+static int winRestartsClose;					// ...and how many it's had in a row
+#endif
+
 /*
 ** R_GetModeInfo
 */
@@ -230,14 +286,15 @@ static int GLimp_CompareModes( const void *a, const void *b )
 GLimp_DetectAvailableModes
 ===============
 */
-static bool GLimp_DetectAvailableModes(void)
+static bool GLimp_DetectAvailableModes( int display = -1 )	// OpenJK VR: (a display, else the window's)
 {
 	int i, j;
 	char buf[ MAX_STRING_CHARS ] = { 0 };
 	SDL_Rect *modes;
 	int numModes = 0;
 
-	int display = SDL_GetWindowDisplayIndex( screen );
+	if ( display < 0 )
+		display = SDL_GetWindowDisplayIndex( screen );
 	if ( display < 0 )
 	{
 		Com_Printf( S_COLOR_YELLOW "WARNING: Couldn't get window display index, no resolutions detected: %s\n", SDL_GetError() );
@@ -246,7 +303,15 @@ static bool GLimp_DetectAvailableModes(void)
 
 	SDL_DisplayMode windowMode;
 
-	if( SDL_GetWindowDisplayMode( screen, &windowMode ) < 0 )
+	if( SDL_GetWindowDisplayMode( screen, &windowMode ) < 0
+#ifdef OPENJK_VR
+		// (none for a window bigger than any of its display's modes - one
+		// where it was last time, on a smaller display now: the desktop's
+		// format will do, it's only that that's used. Not for fullscreen: a
+		// mode no display has fails, as ever, for r_mode 4)
+		&& ( ( SDL_GetWindowFlags( screen ) & SDL_WINDOW_FULLSCREEN ) || SDL_GetDesktopDisplayMode( display, &windowMode ) < 0 )
+#endif
+		)
 	{
 		Com_Printf( S_COLOR_YELLOW "WARNING: Couldn't get window display mode, no resolutions detected (%s).\n", SDL_GetError() );
 		return false;
@@ -317,6 +382,407 @@ static bool GLimp_DetectAvailableModes(void)
 	return true;
 }
 
+#ifdef OPENJK_VR
+// The display a point on the desktop is on (-1: none)
+static int WIN_DisplayAt( int x, int y )
+{
+	const int n = SDL_GetNumVideoDisplays();
+
+	for ( int i = 0; i < n; i++ )
+	{
+		SDL_Rect b;
+
+		if ( SDL_GetDisplayBounds( i, &b ) == 0 && x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h )
+			return i;
+	}
+	return -1;
+}
+
+// The display most of a rect on the desktop is on, as Windows has a window's
+// (-1: none of it's on one), and how much of it (*area)
+static int WIN_DisplayMostOf( const SDL_Rect *r, int *area )
+{
+	const int n = SDL_GetNumVideoDisplays();
+	int best = -1, bestArea = 0;
+
+	for ( int i = 0; i < n; i++ )
+	{
+		SDL_Rect b, on;
+
+		if ( SDL_GetDisplayBounds( i, &b ) == 0 && SDL_IntersectRect( r, &b, &on ) && on.w * on.h > bestArea )
+		{
+			best = i;
+			bestArea = on.w * on.h;
+		}
+	}
+	if ( area )
+		*area = bestArea;
+	return best;
+}
+
+// Where the window was last time (*x, *y: its picture's top left corner), if
+// that's on a display now: the display most of a window this mode's size there
+// is on - for one the size of its display (r_mode -2), a display most of a
+// window its size there would be on itself - or else the one its corner's on.
+// -1: none.
+static int WIN_SavedPlace( int mode, int *x, int *y )
+{
+	SDL_Rect r;
+	int display = -1, best = 0;
+
+	if ( !vid_xpos->string[0] || !vid_ypos->string[0] )
+		return -1;
+	*x = r.x = vid_xpos->integer;
+	*y = r.y = vid_ypos->integer;
+	if ( R_GetModeInfo( &r.w, &r.h, mode ) )
+	{
+		display = WIN_DisplayMostOf( &r, NULL );
+	}
+	else
+	{
+		for ( int i = 0; i < SDL_GetNumVideoDisplays(); i++ )
+		{
+			SDL_DisplayMode m;
+			int area;
+
+			if ( SDL_GetDesktopDisplayMode( i, &m ) != 0 )
+				continue;
+			r.w = m.w;
+			r.h = m.h;
+			if ( WIN_DisplayMostOf( &r, &area ) == i && area > best )
+			{
+				display = i;
+				best = area;
+			}
+		}
+	}
+	return display >= 0 ? display : WIN_DisplayAt( *x, *y );
+}
+
+// Whether a display has a fullscreen mode this mode's size (or bigger)
+static qboolean WIN_ModeFits( int mode, int display )
+{
+	SDL_DisplayMode m;
+	int w, h;
+
+	if ( !R_GetModeInfo( &w, &h, mode ) )
+		return qtrue;	// (the display's own size)
+	for ( int i = 0; i < SDL_GetNumDisplayModes( display ); i++ )
+	{
+		if ( SDL_GetDisplayMode( display, i, &m ) == 0 && m.w >= w && m.h >= h )
+			return qtrue;
+	}
+	return qfalse;
+}
+
+// Where SDL puts the picture of a window that size asked for at x, y: in the
+// middle of a display for SDL_WINDOWPOS_UNDEFINED or _CENTERED
+static void WIN_Resolve( int *x, int *y, int w, int h )
+{
+	const qboolean atX = (qboolean)( SDL_WINDOWPOS_ISUNDEFINED( *x ) || SDL_WINDOWPOS_ISCENTERED( *x ) );
+	const qboolean atY = (qboolean)( SDL_WINDOWPOS_ISUNDEFINED( *y ) || SDL_WINDOWPOS_ISCENTERED( *y ) );
+	SDL_Rect b;
+	int d;
+
+	if ( !atX && !atY )
+		return;
+	d = ( atX ? *x : *y ) & 0xFFFF;
+	if ( d >= SDL_GetNumVideoDisplays() )
+		d = 0;
+	if ( SDL_GetDisplayBounds( d, &b ) != 0 )
+		return;
+	if ( atX )
+		*x = b.x + ( b.w - w ) / 2;
+	if ( atY )
+		*y = b.y + ( b.h - h ) / 2;
+}
+
+// The display the window's on, and its place and size (*b): on Windows the
+// monitor most of it is on, as Windows has it (its DPI is that monitor's) -
+// -1 for one SDL doesn't know of (plugged in since SDL started); else the one
+// its middle's on, as SDL has it
+static int WIN_DisplayOfWindow( SDL_Rect *b )
+{
+	int display;
+#ifdef WIN_FRAMES
+	HMONITOR monitor = MonitorFromWindow( win.hwnd, MONITOR_DEFAULTTONEAREST );
+	MONITORINFO mi;
+
+	mi.cbSize = sizeof( mi );
+	if ( monitor && GetMonitorInfo( monitor, &mi ) && mi.rcMonitor.right > mi.rcMonitor.left && mi.rcMonitor.bottom > mi.rcMonitor.top )
+	{
+		b->x = mi.rcMonitor.left;
+		b->y = mi.rcMonitor.top;
+		b->w = mi.rcMonitor.right - mi.rcMonitor.left;
+		b->h = mi.rcMonitor.bottom - mi.rcMonitor.top;
+		return WIN_DisplayAt( b->x + b->w / 2, b->y + b->h / 2 );
+	}
+#endif
+	SDL_DisplayMode mode;
+
+	display = SDL_GetWindowDisplayIndex( screen );
+	if ( display < 0 || SDL_GetDisplayBounds( display, b ) != 0 )
+		return -1;
+	if ( SDL_GetDesktopDisplayMode( display, &mode ) == 0 && mode.w > 0 && mode.h > 0 )
+	{
+		b->w = mode.w;
+		b->h = mode.h;
+	}
+	return display;
+}
+
+// What the Video menu offers for the display the window's on
+// (r_desktopResolution, r_availableModes)
+static void WIN_DisplayCvars( int display )
+{
+	SDL_DisplayMode desktopMode;
+
+	if ( SDL_GetDesktopDisplayMode( display, &desktopMode ) == 0 && desktopMode.w > 0 && desktopMode.h > 0 )
+	{
+		displayAspect = (float)desktopMode.w / (float)desktopMode.h;
+		Cvar_Set( "r_desktopResolution", va( "%dx%d", desktopMode.w, desktopMode.h ) );
+	}
+	Cvar_Set( "r_availableModes", "" );
+	GLimp_DetectAvailableModes( display );
+}
+
+#ifdef WIN_FRAMES
+// Whether the window's picture is that size (or can't be looked at: minimized)
+static qboolean WIN_PictureIs( int w, int h )
+{
+	RECT r;
+
+	if ( !win.hwnd || IsIconic( win.hwnd ) || !GetClientRect( win.hwnd, &r ) || r.right <= r.left || r.bottom <= r.top )
+		return qtrue;
+	return (qboolean)( r.right - r.left == w && r.bottom - r.top == h );
+}
+
+// Gives the window's picture the renderer's size. Asked for a size, SDL makes
+// the window that plus the frame it works out: so, the size plus what the real
+// frame has over SDL's.
+static void WIN_FitPicture( void )
+{
+	RECT outer, client, sdlFrame = { 0, 0, 0, 0 };
+	int w, h;
+
+	if ( WIN_PictureIs( win.wantW, win.wantH ) || !GetWindowRect( win.hwnd, &outer ) || !GetClientRect( win.hwnd, &client ) )
+		return;
+	w = client.right - client.left;
+	h = client.bottom - client.top;
+	if ( !( SDL_GetWindowFlags( screen ) & SDL_WINDOW_BORDERLESS ) )
+		AdjustWindowRectEx( &sdlFrame, (DWORD)GetWindowLong( win.hwnd, GWL_STYLE ), FALSE, 0 );	// (as SDL does)
+	Com_DPrintf( "The window's picture is %dx%d, not %dx%d: fitting it\n", w, h, win.wantW, win.wantH );
+	SDL_SetWindowSize( screen,
+		win.wantW + ( outer.right - outer.left - w ) - ( sdlFrame.right - sdlFrame.left ),
+		win.wantH + ( outer.bottom - outer.top - h ) - ( sdlFrame.bottom - sdlFrame.top ) );
+}
+
+// A window with a title bar: its picture where it was asked to be (SDL puts the
+// window as if its frame were as thick as at the system's scaling)
+static void WIN_MovePicture( int x, int y )
+{
+	POINT at = { 0, 0 };
+	RECT r;
+
+	if ( !win.hwnd || !ClientToScreen( win.hwnd, &at ) || !GetWindowRect( win.hwnd, &r ) || ( at.x == x && at.y == y ) )
+		return;
+	SetWindowPos( win.hwnd, NULL, r.left + x - at.x, r.top + y - at.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+}
+
+// A window with a title bar, on its display: all of it in the part the taskbar
+// leaves when it fits there, else its top left corner there (its title bar on
+// the screen)
+static void WIN_KeepOnDisplay( int display )
+{
+	SDL_Rect area;
+	RECT r;
+	int x, y;
+
+	if ( !win.hwnd || display < 0 || SDL_GetDisplayUsableBounds( display, &area ) != 0 || area.w <= 0 || area.h <= 0
+		|| !GetWindowRect( win.hwnd, &r ) )
+		return;
+	x = ( r.right - r.left >= area.w ) ? area.x : Com_Clampi( area.x, area.x + area.w - ( r.right - r.left ), r.left );
+	y = ( r.bottom - r.top >= area.h ) ? area.y : Com_Clampi( area.y, area.y + area.h - ( r.bottom - r.top ), r.top );
+	if ( x != r.left || y != r.top )
+		SetWindowPos( win.hwnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE );
+}
+#endif
+
+// A new window (still hidden unless fullscreen): its picture the renderer's
+// size, one with a title bar where it was asked to be (its picture at x, y)
+// and kept on its display, then shown - and what's kept of it, noted
+static void WIN_Place( const glconfig_t *glConfig, int mode, qboolean fullscreen, int display, int x, int y )
+{
+	Com_Memset( &win, 0, sizeof( win ) );
+	win.sizedFor = display;
+	// (a fullscreen one too: Alt+Enter makes it a window without a new one)
+	win.wantW = glConfig->vidWidth;
+	win.wantH = glConfig->vidHeight;
+	win.desktop = (qboolean)( mode == -2 );
+#ifdef WIN_FRAMES
+	SDL_SysWMinfo info;
+	SDL_VERSION( &info.version );
+	if ( SDL_GetWindowWMInfo( screen, &info ) && info.subsystem == SDL_SYSWM_WINDOWS )
+		win.hwnd = info.info.win.window;
+#endif
+	if ( !fullscreen )
+	{
+#ifdef WIN_FRAMES
+		const qboolean titled = (qboolean)!( SDL_GetWindowFlags( screen ) & SDL_WINDOW_BORDERLESS );
+		WIN_FitPicture();
+		if ( titled )
+		{
+			WIN_MovePicture( x, y );
+			WIN_KeepOnDisplay( display );
+		}
+		// (moved onto another display than it was made on, it may have
+		// another frame: fitted again)
+		for ( int i = 0; i < 2 && !WIN_PictureIs( win.wantW, win.wantH ); i++ )
+		{
+			WIN_FitPicture();
+			if ( titled )
+				WIN_KeepOnDisplay( display );
+		}
+#endif
+		SDL_ShowWindow( screen );
+	}
+	win.display = SDL_GetWindowDisplayIndex( screen );
+}
+
+/*
+===============
+WIN_WindowEvent
+
+The window's events (sdl_input.cpp)
+===============
+*/
+void WIN_WindowEvent( const SDL_WindowEvent *e )
+{
+	if ( !screen || e->windowID != SDL_GetWindowID( screen ) )
+		return;
+
+	switch ( e->event )
+	{
+		case SDL_WINDOWEVENT_MOVED:
+			// where it is, for next time (not where a fullscreen one is - the
+			// corner of its display - but where it was before that)
+			if ( !( SDL_GetWindowFlags( screen ) & ( SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MINIMIZED ) ) )
+			{
+				Cvar_Set( "vid_xpos", va( "%d", e->data1 ) );
+				Cvar_Set( "vid_ypos", va( "%d", e->data2 ) );
+			}
+			// fall through
+		case SDL_WINDOWEVENT_RESIZED:
+		case SDL_WINDOWEVENT_SIZE_CHANGED:
+		case SDL_WINDOWEVENT_SHOWN:
+		case SDL_WINDOWEVENT_RESTORED:
+			win.changed = Q_max( 1, Sys_Milliseconds() );
+			break;
+
+		default:
+			break;
+	}
+}
+
+/*
+===============
+WIN_WindowFrame
+
+Every frame (sdl_input.cpp): once the window's settled after it's moved or
+changed size, its picture's size put right, and one the size of its display
+on a display of another size made again, that one's size.
+  loading    a map's loading or the like: that waits till it's done
+  recording  a demo or video's being recorded: that isn't done (it'd stop it)
+===============
+*/
+void WIN_WindowFrame( qboolean loading, qboolean recording )
+{
+	const int now = Sys_Milliseconds();
+	int display;
+
+	if ( !screen || !win.wantW || ( SDL_GetWindowFlags( screen ) & ( SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN ) ) )
+		return;
+
+#ifdef WIN_FRAMES
+	// (Windows can change a frame without the window moving - its display's
+	// scaling changed: a look now and then anyway)
+	if ( !win.changed && now - win.polled >= WIN_POLL_MSEC )
+	{
+		win.polled = now;
+		if ( !WIN_PictureIs( win.wantW, win.wantH ) )
+			win.changed = Q_max( 1, now - WIN_SETTLE_MSEC );
+	}
+#endif
+	if ( !win.changed || now - win.changed < WIN_SETTLE_MSEC )
+		return;
+
+	SDL_Rect b = { 0, 0, 0, 0 };
+	const int on = WIN_DisplayOfWindow( &b );
+
+	// (what the Video page offers: that display's)
+	display = on >= 0 ? on : SDL_GetWindowDisplayIndex( screen );
+	if ( display >= 0 && display != win.display )
+	{
+		win.display = display;
+		WIN_DisplayCvars( display );
+	}
+
+	if ( win.desktop )
+	{
+		if ( on != win.sizedFor && b.w > 0 && b.h > 0 && ( b.w != win.wantW || b.h != win.wantH ) )
+		{
+			if ( loading )
+				return;
+			if ( now - winRestarted >= WIN_RESTARTS_MSEC )
+				winRestartsClose = 0;
+			if ( !recording && winRestartsClose < WIN_RESTARTS )
+			{
+				if ( now - winRestarted < WIN_RESTART_MSEC )
+					return;	// (not this soon after the last: in a moment)
+				Com_Printf( "The window's on a %dx%d display now: making it that size\n", b.w, b.h );
+				// (the new window goes on the display this is the corner of -
+				// SDL knows of one plugged in since once it starts again)
+				Cvar_Set( "vid_xpos", va( "%d", b.x ) );
+				Cvar_Set( "vid_ypos", va( "%d", b.y ) );
+				winRestarted = now;
+				winRestartsClose++;
+				win.changed = 0;
+				Cbuf_AddText( "vid_restart\n" );
+				return;
+			}
+			Com_Printf( "The window's on a %dx%d display now: vid_restart makes it that size\n", b.w, b.h );
+		}
+		win.sizedFor = on;
+	}
+
+#ifdef WIN_FRAMES
+	if ( !WIN_PictureIs( win.wantW, win.wantH ) )
+	{
+		RECT r;
+
+		if ( GetWindowRect( win.hwnd, &r ) && ( r.left != win.fitX || r.top != win.fitY ) )
+		{
+			win.fitX = r.left;
+			win.fitY = r.top;
+			win.fits = 0;	// (moved since: worth trying again)
+		}
+		if ( win.fits < WIN_FITS )
+		{
+			win.fits++;
+			WIN_FitPicture();
+			win.changed = Q_max( 1, now );	// (and a look again once it's settled)
+			return;
+		}
+	}
+	else
+	{
+		win.fits = 0;
+	}
+#endif
+	win.changed = 0;
+}
+#endif
+
 /*
 ===============
 GLimp_SetMode
@@ -333,6 +799,10 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 	SDL_DisplayMode desktopMode;
 	int display = 0;
 	int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
+#ifdef OPENJK_VR
+	int savedX = 0, savedY = 0;
+	qboolean saved = qfalse;
+#endif
 
 	if ( windowDesc->api == GRAPHICS_API_OPENGL )
 	{
@@ -363,6 +833,21 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 			Com_DPrintf( "SDL_GetWindowDisplayIndex() failed: %s\n", SDL_GetError() );
 		}
 	}
+#ifdef OPENJK_VR
+	// OpenJK VR: else (a vid_restart's too: it shuts the window) the display
+	// it was on last time
+	else
+	{
+		const int savedDisplay = WIN_SavedPlace( mode, &savedX, &savedY );
+
+		// (fullscreen at a size that display hasn't: on the first, as before)
+		if ( savedDisplay >= 0 && ( !fullscreen || WIN_ModeFits( mode, savedDisplay ) ) )
+		{
+			display = savedDisplay;
+			saved = qtrue;
+		}
+	}
+#endif
 
 	if( display >= 0 && SDL_GetDesktopDisplayMode( display, &desktopMode ) == 0 )
 	{
@@ -410,9 +895,41 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 	// Center window
 	if( r_centerWindow->integer && !fullscreen )
 	{
+#ifdef OPENJK_VR
+		// (in the middle of its display: this was the size of its display,
+		// but at the first display)
+		x = SDL_WINDOWPOS_CENTERED_DISPLAY( display >= 0 ? display : 0 );
+		y = SDL_WINDOWPOS_CENTERED_DISPLAY( display >= 0 ? display : 0 );
+#else
 		x = ( desktopMode.w / 2 ) - ( glConfig->vidWidth / 2 );
 		y = ( desktopMode.h / 2 ) - ( glConfig->vidHeight / 2 );
+#endif
 	}
+#ifdef OPENJK_VR
+	// OpenJK VR: where it was last time - in the middle of the display after
+	// one that covered it (that was at its corner, where a picture with a title
+	// bar can't be) - or else (and fullscreen) on that display
+	else if( saved && !fullscreen )
+	{
+		SDL_Rect bounds;
+
+		if( !noborder && SDL_GetDisplayBounds( display, &bounds ) == 0 && savedX == bounds.x && savedY == bounds.y )
+		{
+			x = SDL_WINDOWPOS_CENTERED_DISPLAY( display );
+			y = SDL_WINDOWPOS_CENTERED_DISPLAY( display );
+		}
+		else
+		{
+			x = savedX;
+			y = savedY;
+		}
+	}
+	else if( display > 0 )
+	{
+		x = SDL_WINDOWPOS_UNDEFINED_DISPLAY( display );
+		y = SDL_WINDOWPOS_UNDEFINED_DISPLAY( display );
+	}
+#endif
 
 	// Destroy existing state if it exists
 	if( opengl_context != NULL )
@@ -478,6 +995,10 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 		if( noborder )
 			flags |= SDL_WINDOW_BORDERLESS;
 
+#ifdef OPENJK_VR
+		// (shown once it's the right size, in its place: WIN_Place)
+		flags = ( flags & ~SDL_WINDOW_SHOWN ) | SDL_WINDOW_HIDDEN;
+#endif
 		glConfig->isFullscreen = qfalse;
 	}
 
@@ -700,6 +1221,14 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 
 	SDL_FreeSurface( icon );
 
+#ifdef OPENJK_VR
+	if ( screen != NULL )
+	{
+		WIN_Resolve( &x, &y, glConfig->vidWidth, glConfig->vidHeight );
+		WIN_Place( glConfig, mode, fullscreen, display, x, y );
+	}
+#endif
+
 	if (!GLimp_DetectAvailableModes())
 	{
 		return RSERR_UNKNOWN;
@@ -800,6 +1329,10 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 	r_ext_multisample	= Cvar_Get( "r_ext_multisample",	"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
 	Cvar_Get( "r_availableModes", "", CVAR_ROM );
 	Cvar_Get( "r_desktopResolution", "", CVAR_ROM );	// OpenJK VR: the display's own, e.g. "2560x1440"
+#ifdef OPENJK_VR
+	vid_xpos			= Cvar_Get( "vid_xpos",				"",			CVAR_ARCHIVE_ND, "Where the window was: its picture's left edge on the desktop (it opens there, on that display)" );
+	vid_ypos			= Cvar_Get( "vid_ypos",				"",			CVAR_ARCHIVE_ND, "Where the window was: its picture's top edge on the desktop" );
+#endif
 
 #ifdef OPENJK_VR
 	// The desktop window only mirrors the headset view, and a multisampled
@@ -853,6 +1386,9 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 			// The headset paces the frame rate (xrWaitFrame); the desktop
 			// mirror must never block on the monitor's vsync.
 			SDL_GL_SetSwapInterval( 0 );
+			// The mirror fills the window whatever its size (VR_Mirror), and
+			// isn't made again for another display.
+			win.wantW = win.wantH = 0;
 		}
 	}
 #endif
@@ -911,6 +1447,9 @@ void WIN_Shutdown( void )
 		SDL_DestroyWindow( screen );
 		screen = NULL;
 	}
+#ifdef OPENJK_VR
+	Com_Memset( &win, 0, sizeof( win ) );
+#endif
 
 	SDL_QuitSubSystem( SDL_INIT_VIDEO );
 }

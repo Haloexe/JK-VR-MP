@@ -461,6 +461,13 @@ game did), and you see more to the sides rather than less above and below
 desktop's resolution, r_mode -1 uses r_customwidth and r_customheight,
 r_fullscreen 1 is fullscreen, r_noborder 1 (with r_fullscreen 0) a
 borderless window - then vid_restart.
+With more than one monitor the game opens on the one it was on last time,
+where it was (fullscreen too: move the window to the monitor you want, then
+choose Fullscreen). The picture always fills the window, on a monitor with
+other Windows scaling (125%, 150%) too - the window keeps its resolution -
+and a window at the Desktop resolution takes the resolution of the monitor
+it's moved to (the game restarts its display for that, once you've let go of
+it). vid_xpos and vid_ypos are where it was.
 
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,

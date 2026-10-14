@@ -1409,8 +1409,11 @@ static void G_RP_Line( gentity_t *ent, int kind, const char *rawText ) {
 		G_LogPrintf( "me: %s: %s\n", name, text );
 		break;
 	case RPCHAT_OOC:
-		Com_sprintf( line, sizeof( line ), S_COLOR_GREY "[OOC] " S_COLOR_WHITE "%s" S_COLOR_WHITE EC ": " S_COLOR_WHITE "%s",
-			rpc[ent - g_entities].playerName[0] ? rpc[ent - g_entities].playerName : name, text );
+		// (out of character: the player's own name, as everyone sees it)
+		if ( rpc[ent - g_entities].playerName[0] ) {
+			name = rpc[ent - g_entities].playerName;
+		}
+		Com_sprintf( line, sizeof( line ), S_COLOR_GREY "[OOC] " S_COLOR_WHITE "%s" S_COLOR_WHITE EC ": " S_COLOR_WHITE "%s", name, text );
 		G_LogPrintf( "ooc: %s: %s\n", name, text );
 		break;
 	default:

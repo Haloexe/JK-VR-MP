@@ -8,7 +8,8 @@ on a monitor, widescreen ones included:
                      ui_r_fullscreen 0 / 1 / 2 -> r_fullscreen, r_noborder
   Video Mode         the display's own resolution ("Desktop"), every one the
                      monitor has (r_availableModes), widescreen included, and
-                     Custom
+                     Custom - the display the window's on (listed again as
+                     the page opens, if it's been moved to another)
                      ui_r_resolution "desktop" / "WxH" / "custom" -> r_mode -2,
                      or r_mode -1 with r_customwidth / r_customheight
   Custom Resolution  the size Custom is, "1920 x 1080": click it to type a new
@@ -75,6 +76,8 @@ static struct {
 	qboolean	converted;		// a page has these items (so what they say is applied)
 	int			count;			// [0] is the desktop's (and there's room left for Custom)
 	int			w[MAX_MULTI_CVARS], h[MAX_MULTI_CVARS];
+	char		desktop[MAX_CVAR_VALUE_STRING];	// what they're from: r_desktopResolution...
+	char		modes[MAX_STRING_CHARS];		// ...and r_availableModes (the display the window's on)
 } vrdRes;
 
 static struct {
@@ -147,15 +150,18 @@ static void UI_VRD_BuildList( void ) {
 	char buf[MAX_STRING_CHARS];
 	const char *p;
 	int w, h, i, j, dw = 0, dh = 0;
+	const qboolean converted = vrdRes.converted;
 
 	memset( &vrdRes, 0, sizeof( vrdRes ) );
-	trap->Cvar_VariableStringBuffer( "r_desktopResolution", buf, sizeof( buf ) );
-	UI_VRD_ParseRes( buf, &dw, &dh );
+	vrdRes.converted = converted;
+	trap->Cvar_VariableStringBuffer( "r_desktopResolution", vrdRes.desktop, sizeof( vrdRes.desktop ) );
+	UI_VRD_ParseRes( vrdRes.desktop, &dw, &dh );
 	vrdRes.w[0] = dw;
 	vrdRes.h[0] = dh;
 	vrdRes.count = 1;
 
-	trap->Cvar_VariableStringBuffer( "r_availableModes", buf, sizeof( buf ) );
+	trap->Cvar_VariableStringBuffer( "r_availableModes", vrdRes.modes, sizeof( vrdRes.modes ) );
+	Q_strncpyz( buf, vrdRes.modes, sizeof( buf ) );
 	for ( p = buf; *p; ) {
 		while ( *p == ' ' ) {
 			p++;
@@ -566,6 +572,7 @@ Hooks (ui_main.c)
 void UI_VRVideo_AddSettings( void ) {
 	int m, i;
 
+	vrdRes.converted = qfalse;
 	UI_VRD_BuildList();
 	memset( &vrdCustom, 0, sizeof( vrdCustom ) );
 	trap->Cvar_VariableStringBuffer( "ui_r_customres", vrdCustom.typed, sizeof( vrdCustom.typed ) );
@@ -594,6 +601,31 @@ void UI_VRVideo_AddSettings( void ) {
 	}
 }
 
+// The resolutions again, if the engine's are others now: the window's been
+// moved to another display since they were listed.
+static void UI_VRD_Relist( void ) {
+	char desktop[MAX_CVAR_VALUE_STRING], modes[MAX_STRING_CHARS];
+	int m, i;
+
+	trap->Cvar_VariableStringBuffer( "r_desktopResolution", desktop, sizeof( desktop ) );
+	trap->Cvar_VariableStringBuffer( "r_availableModes", modes, sizeof( modes ) );
+	if ( !strcmp( desktop, vrdRes.desktop ) && !strcmp( modes, vrdRes.modes ) ) {
+		return;
+	}
+	UI_VRD_BuildList();
+	for ( m = 0; m < (int)ARRAY_LEN( vrdPages ); m++ ) {
+		menuDef_t *menu = Menus_FindByName( vrdPages[m] );
+		for ( i = 0; menu && i < menu->itemCount; i++ ) {
+			itemDef_t *item = menu->items[i];
+			if ( item && item->type == ITEM_TYPE_MULTI && item->typeData.multi && item->cvar
+				&& !Q_stricmp( item->cvar, "ui_r_resolution" ) ) {
+				UI_VRD_ResolutionItem( item, vrdCustom.on[m] );
+				break;
+			}
+		}
+	}
+}
+
 // Opening the Video page (UI_GetVideoSetup): what's set now.
 void UI_VRVideo_GetSetup( void ) {
 	int w, h, cw, ch;
@@ -603,6 +635,7 @@ void UI_VRVideo_GetSetup( void ) {
 	if ( !vrdRes.converted ) {
 		return;	// (pages without these items: the stock ui_r_mode and ui_r_fullscreen)
 	}
+	UI_VRD_Relist();
 
 	// the custom size: the last one set, or the size now if it's none in the list
 	cw = (int)trap->Cvar_VariableValue( "r_customwidth" );
