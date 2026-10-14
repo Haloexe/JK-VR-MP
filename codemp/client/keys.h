@@ -68,6 +68,7 @@ qboolean Con_HideSecret		( const char *line, char *out, int size, qboolean sameL
 qboolean Con_SecretCommandLine	( const char *line, char *out, int size );
 const char *Con_ChatCommand		( const char *line );
 qboolean Con_ChatLooksCommand	( const char *line );
+qboolean Con_ChatLooksLogin	( const char *line );
 qboolean Con_SecretMayForward	( const char *cmd, qboolean inGame );
 
 void	Field_KeyDownEvent	( field_t *edit, int key );

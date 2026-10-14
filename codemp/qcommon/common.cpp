@@ -1859,6 +1859,9 @@ static void PrintCvarMatches( const char *s ) {
 		char value[TRUNCATE_LENGTH] = {0};
 		const char *description = Cvar_DescriptionString( s );
 		Com_TruncateLongString( value, Cvar_VariableString( s ) );
+		if ( Q_stristr( s, "password" ) || ( !Q_stricmpn( s, "ui_rp", 5 ) && Q_stristr( s, "again" ) ) ) {
+			Q_strncpyz( value, value[0] ? "********" : "", sizeof( value ) );	// OpenJK VR: not shown (one typed in a menu, too)
+		}
 		Com_Printf( S_COLOR_GREY "Cvar  " S_COLOR_WHITE "%s = " S_COLOR_GREY "\"" S_COLOR_WHITE "%s" S_COLOR_GREY "\"" S_COLOR_WHITE "\n", s, value );
 		if ( VALIDSTRING( description ) )
 			Com_Printf( S_COLOR_GREEN "      %s" S_COLOR_WHITE "\n", description );

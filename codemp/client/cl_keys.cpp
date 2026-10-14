@@ -880,43 +880,6 @@ static qboolean Con_CommandSecret( const char *line, int len, conCommand_t *c ) 
 	return qtrue;
 }
 
-// What a /* comment does to a line is past reading here with confidence
-// (a quote in one, a '/' the console takes off before it...): in a line with
-// one (or the end of one) in [0, len), a password command's word anywhere,
-// with more after it, is taken for one - from there (-1: none).
-static int Con_CommentedSecret( const char *line, int len ) {
-	static const char *words[] = { "login", "new", "changepassword", "rconpassword", "password" };
-	int i, j, s, e;
-
-	for ( i = 0; i + 1 < len && !( ( line[i] == '/' && line[i + 1] == '*' ) || ( line[i] == '*' && line[i + 1] == '/' ) ); i++ ) {
-	}
-	if ( i + 1 >= len ) {
-		return -1;
-	}
-	i = 0;
-	while ( i < len ) {
-		while ( i < len && ( (unsigned char)line[i] <= ' ' || line[i] == ';' || line[i] == '"' ) ) {
-			i++;
-		}
-		for ( s = i; i < len && (unsigned char)line[i] > ' ' && line[i] != ';' && line[i] != '"'; i++ ) {
-		}
-		for ( e = i; s < e && ( line[s] == '/' || line[s] == '\\' || line[s] == '*' ); s++ ) {
-		}
-		for ( j = 0; j < (int)ARRAY_LEN( words ); j++ ) {
-			if ( e - s == (int)strlen( words[j] ) && !Q_stricmpn( line + s, words[j], e - s ) ) {
-				int after = e;
-				while ( after < len && (unsigned char)line[after] <= ' ' ) {
-					after++;
-				}
-				if ( after < len ) {
-					return after;
-				}
-			}
-		}
-	}
-	return -1;
-}
-
 // The first command on the line from pos with a password typed (its words
 // read in c); returns where the next starts, or -1: there's none.
 static int Con_FindSecret( const char *line, int len, int pos, conCommand_t *c ) {
@@ -934,25 +897,22 @@ static int Con_FindSecret( const char *line, int len, int pos, conCommand_t *c )
 
 // The line with its password hidden, into out (sameLength: as many '*'s,
 // else "********"): from where the first starts to the line's end. The '/'s
-// (or '\\'s) a line starts with don't count (the console's, the chat line's:
-// "//login" in the chat line is a login all the same). qtrue: there's one.
+// (or '\\'s) a line starts with don't count - not a /* comment's - (the
+// console's, the chat line's: "//login" in the chat line is a login all the
+// same). qtrue: there's one.
 qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLength ) {
 	static conCommand_t c;
 	const char *from = Con_SkipSpace( line );
-	int at, comment, i;
+	int at, i;
 
 	if ( size <= 0 ) {
 		return qfalse;
 	}
 	Q_strncpyz( out, line, size );
-	while ( *from == '/' || *from == '\\' ) {
+	while ( ( *from == '/' || *from == '\\' ) && !( from[0] == '/' && from[1] == '*' ) ) {
 		from++;
 	}
 	at = ( Con_FindSecret( from, (int)strlen( from ), 0, &c ) >= 0 ) ? (int)( from - line ) + c.at : -1;
-	comment = Con_CommentedSecret( line, (int)strlen( line ) );
-	if ( comment >= 0 && ( at < 0 || comment < at ) ) {
-		at = comment;
-	}
 	if ( at < 0 ) {
 		return qfalse;
 	}
@@ -999,34 +959,35 @@ qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
 	while ( ( pos = Con_FindSecret( line, len, pos, &c ) ) >= 0 && !c.restOfLine ) {
 		// the others': whole as typed - words apart, and in quotes, or the line's end, after the last
 		if ( c.first >= c.n ) {
-			Com_Printf( "Not run: a ; or a comment before a password (put it in quotes)\n" );
+			Com_Printf( "Not run: a ; or a comment before a password (put the password in quotes)\n" );
+			return qfalse;
+		}
+		if ( c.cmdWord > 0 && Con_WordIs( line, &c.w[c.cmdWord - 1], "rcon" ) && ( c.w[c.cmdWord - 1].quoted ||
+			c.w[c.cmdWord - 1].start > c.start + 1 || line[c.w[c.cmdWord - 1].end] != ' ' ) ) {
+			// (rcon sends what's typed from 5 characters in)
+			Com_Printf( "Not run: type it as  rcon <command>\n" );
 			return qfalse;
 		}
 		for ( i = c.first; i < c.n; i++ ) {
 			const int after = Con_WordEnd( &c.w[i] );
 			if ( i + 1 < c.n ) {
-				p = after;
-				while ( p < c.w[i + 1].start - ( c.w[i + 1].quoted ? 1 : 0 ) && ( line[p] == ' ' || line[p] == '\t' ) ) {
-					p++;
+				// (apart, by a space but for changepassword's two: the others' words are joined with one)
+				const int next = c.w[i + 1].start - ( c.w[i + 1].quoted ? 1 : 0 );
+				for ( p = after; p < next && ( line[p] == ' ' || line[p] == '\t' ); p++ ) {
 				}
-				if ( p == after || p != c.w[i + 1].start - ( c.w[i + 1].quoted ? 1 : 0 ) ) {
-					Com_Printf( "Not run: a password with \", or a comment, in it: put it in quotes\n" );
+				if ( p == after || p != next || ( !c.roleplay && ( p - after != 1 || line[after] != ' ' ) ) ) {
+					Com_Printf( "Not run: put the password in quotes (a \" or a comment in it, or more than a space)\n" );
 					return qfalse;
 				}
 			} else if ( !c.w[i].closed ) {
 				for ( p = after; p < len && ( line[p] == ' ' || line[p] == '\t' ); p++ ) {
 				}
 				if ( p < len ) {
-					Com_Printf( "Not run: a ; or a comment against a password would cut it short (put it in quotes)\n" );
+					Com_Printf( "Not run: with more after a password on the line, put the password in quotes\n" );
 					return qfalse;
 				}
 			}
 		}
-	}
-	// (login's or new's, the rest of the line, goes in quotes: what runs as it is is before it)
-	if ( Con_CommentedSecret( line, ( pos >= 0 ) ? c.start : len ) >= 0 ) {
-		Com_Printf( "Not run: a password on a line with a /* comment\n" );
-		return qfalse;
 	}
 	if ( pos < 0 ) {
 		if ( len >= size ) {
@@ -1040,11 +1001,7 @@ qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
 	// login, new: what's before them as it is, then theirs - the account and
 	// the password, the rest of the line, each in quotes
 	p = Con_WordEnd( &c.w[c.cmdWord] );
-	n = p;	// (the line up to the command's word)
-	if ( p < len && line[p] != ' ' && line[p] != '\t' ) {
-		Com_Printf( "Type it as /%s <account> <password>\n", Con_WordIs( line, &c.w[c.cmdWord], "new" ) ? "new" : "login" );
-		return qfalse;
-	}
+	n = p;	// (the line up to the command's word; what's against it - a quote, a ';' or a comment - the account's, below)
 	while ( p < len && ( line[p] == ' ' || line[p] == '\t' ) ) {
 		p++;
 	}
@@ -1102,7 +1059,46 @@ qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
 		}
 	}
 	out[n] = '\0';
+
+	// read back as the engine will: from the command's start, the last
+	// command, and its words the account and the password as they're meant
+	// (a /* comment's quote before them can turn what's in quotes about)
+	{
+		static conCommand_t back;
+		const int words = c.cmdWord + 1 + ( ( accountEnd > accountStart || accountQuoted ) ? 1 : 0 ) + ( ( pwEnd > pwStart ) ? 1 : 0 );
+		qboolean same;
+		if ( Con_NextCommand( out, n, c.start, &back.end ) != n + 1 || back.end != n ) {
+			same = qfalse;
+		} else {
+			back.n = Con_Words( out, c.start, back.end, back.w, CON_WORDS );
+			same = (qboolean)( back.n == words );
+			if ( same && words > c.cmdWord + 1 ) {
+				const conWord_t *a = &back.w[c.cmdWord + 1];
+				same = (qboolean)( a->quoted && a->closed && a->end - a->start == accountEnd - accountStart &&
+					!memcmp( out + a->start, line + accountStart, accountEnd - accountStart ) );
+			}
+			if ( same && words > c.cmdWord + 2 ) {
+				const conWord_t *pw = &back.w[c.cmdWord + 2];
+				same = (qboolean)( pw->quoted && pw->closed && pw->end - pw->start == pwEnd - pwStart &&
+					!memcmp( out + pw->start, line + pwStart, pwEnd - pwStart ) );
+			}
+		}
+		if ( !same ) {
+			Com_Printf( "Not run: the line can't be read for sure (a /* comment before the password?)\n" );
+			return qfalse;
+		}
+	}
 	return qtrue;
+}
+
+// Whether the chat line's text (no '/' first) looks like a login or a new
+// password typed without the '/' (said, it'd tell those near the password).
+qboolean Con_ChatLooksLogin( const char *line ) {
+	static conCommand_t c;
+	const int len = (int)strlen( line );
+
+	c.n = Con_Words( line, 0, len, c.w, CON_WORDS );
+	return (qboolean)( c.n >= 3 && !c.w[0].quoted && ( Con_WordIs( line, &c.w[0], "login" ) || Con_WordIs( line, &c.w[0], "changepassword" ) ) );
 }
 
 // The chat line's text a command - '/' and a letter, spaces before it no
@@ -1123,7 +1119,7 @@ const char *Con_ChatCommand( const char *line ) {
 qboolean Con_SecretMayForward( const char *cmd, qboolean inGame ) {
 	static conCommand_t c;
 	const int len = (int)strlen( cmd );
-	int i;
+	int first, s;
 
 	c.start = 0;
 	c.end = len;
@@ -1131,13 +1127,15 @@ qboolean Con_SecretMayForward( const char *cmd, qboolean inGame ) {
 	if ( !Con_CommandSecret( cmd, len, &c ) || c.at < 0 ) {
 		return qtrue;
 	}
-	for ( i = 0; i <= c.cmdWord; i++ ) {
-		if ( Con_Slashed( cmd, &c.w[i] ) ) {
-			Com_Printf( "Not sent: type it with one slash (/%.*s ...)\n", c.w[c.cmdWord].end - c.w[c.cmdWord].start, cmd + c.w[c.cmdWord].start );
-			return qfalse;
-		}
+	for ( first = 0; first < c.cmdWord && Con_OnlySlashes( cmd, &c.w[first] ); first++ ) {
 	}
-	if ( !c.roleplay || c.cmdWord > 0 ) {
+	if ( first > 0 || Con_Slashed( cmd, &c.w[first] ) ) {
+		for ( s = c.w[first].start; s < c.w[first].end && ( cmd[s] == '/' || cmd[s] == '\\' ); s++ ) {
+		}
+		Com_Printf( "Not sent: type it with one slash (/%.*s ...)\n", c.w[first].end - s, cmd + s );
+		return qfalse;
+	}
+	if ( !c.roleplay ) {
 		Com_Printf( "Not sent: that's for rcon (rcon %.*s ...)\n", c.w[c.cmdWord].end - c.w[c.cmdWord].start, cmd + c.w[c.cmdWord].start );
 		return qfalse;
 	}
@@ -1171,8 +1169,10 @@ void Console_Key( int key ) {
 	// enter finishes the line
 	if ( key == A_ENTER || key == A_KP_ENTER ) {
 		// legacy hack: strip any prepended slashes. they're not necessary anymore
+		// (OpenJK VR: not the '/' of a /* comment - it'd be a '*' word then)
 		if ( g_consoleField.buffer[0] &&
-			(g_consoleField.buffer[0] == '\\' || g_consoleField.buffer[0] == '/') ) {
+			(g_consoleField.buffer[0] == '\\' || g_consoleField.buffer[0] == '/') &&
+			!( g_consoleField.buffer[0] == '/' && g_consoleField.buffer[1] == '*' ) ) {
 			char temp[MAX_EDIT_LINE-1];
 
 			Q_strncpyz( temp, g_consoleField.buffer+1, sizeof( temp ) );
@@ -1332,6 +1332,9 @@ void Message_Key( int key ) {
 			// OpenJK VR: a command with a password in it that wouldn't run as
 			// one (a tell's line, a slash too many): not said to anyone
 			Com_Printf( "Not sent: it has a password in it. To log in, type /login <account> <password>\n" );
+		} else if ( Con_ChatLooksLogin( chatField.buffer ) ) {
+			// OpenJK VR: ...or one typed without its '/'
+			Com_Printf( "Not said: it looks like a login. To log in, type /login <account> <password>\n" );
 		} else if ( chatField.buffer[0] && cls.state == CA_ACTIVE ) {
 				 if ( chat_playerNum != -1 )	Com_sprintf( buffer, sizeof( buffer ), "tell %i \"%s\"\n", chat_playerNum, chatField.buffer );
 			else if ( chat_team )				Com_sprintf( buffer, sizeof( buffer ), "say_team \"%s\"\n", chatField.buffer );

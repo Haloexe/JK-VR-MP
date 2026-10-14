@@ -207,6 +207,16 @@ static qboolean CG_RP_AccountName( const char *in, char *out, int size ) {
 }
 
 // The arguments from n on, as typed (a password can have spaces).
+// A password's copy wiped (so the compiler can't leave that out, as it may
+// a memset of what's not read again).
+static void CG_RP_Wipe( char *p, int size ) {
+	volatile char *v = p;
+
+	while ( size-- > 0 ) {
+		*v++ = '\0';
+	}
+}
+
 static void CG_RP_ArgsFrom( int n, char *out, int size ) {
 	char arg[MAX_STRING_CHARS];
 	int i;
@@ -219,7 +229,7 @@ static void CG_RP_ArgsFrom( int n, char *out, int size ) {
 		}
 		Q_strcat( out, size, arg );
 	}
-	memset( arg, 0, sizeof( arg ) );
+	CG_RP_Wipe( arg, sizeof( arg ) );
 }
 
 /*
@@ -558,16 +568,6 @@ static qboolean CG_RP_Ready( void ) {
 		return qtrue;
 	}
 	return qfalse;
-}
-
-// A password's copy wiped (so the compiler can't leave that out, as it may
-// a memset of what's not read again).
-static void CG_RP_Wipe( char *p, int size ) {
-	volatile char *v = p;
-
-	while ( size-- > 0 ) {
-		*v++ = '\0';
-	}
 }
 
 // A password as it's taken: the spaces before and after it out (one slips in
