@@ -397,6 +397,8 @@ typedef struct vrState_s {
 	int						keySent[VR_NUM_BUTTONS];	// key each held button sent when pressed (0 = none)
 	qboolean				keyBlocked[VR_NUM_BUTTONS];	// held through a focus loss: ignored until let go
 	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
+	int						wheelState;		// Y: VR_WHEEL_* (tapped, or held for the pose wheel)
+	int						wheelPressTime;	// ...pressed then (ms)
 	int						grabZones;		// hands the cgame says could grab now (bit per hand)...
 	int						grabZoneTime;	// ...as of this cls.realtime
 	qboolean				topOfFrame;		// this poll runs at the top of CL_Frame (not nested)
@@ -1196,9 +1198,82 @@ static void VR_TapKey( int key ) {
 	VR_SetKey( key, qfalse );
 }
 
+/*
+Y: tapped, it's what it's bound to (the next Force power), as it's let go;
+held, it's the pose wheel (the cgame's +posewheel) until it's let go -
+meanwhile the right stick picks in the wheel. Bound to something that's
+held itself (a +command), or in the menu, it's an ordinary button.
+*/
+#define VR_WHEEL_HOLD_MS	300		// held this long: the wheel
+enum {
+	VR_WHEEL_IDLE,
+	VR_WHEEL_PENDING,		// pressed: a tap, or the wheel?
+	VR_WHEEL_OPEN
+};
+
+struct cmd_function_s *Cmd_FindCommand( const char *cmd_name );	// (cmd.cpp)
+
+static qboolean VR_YIsPlain( void ) {
+	const char *b;
+
+	if ( vr.pointerMode || cls.state != CA_ACTIVE || !cls.cgameStarted || !Cmd_FindCommand( "+posewheel" ) ) {
+		return qtrue;	// (in the menu, not in a game, a game without the wheel)
+	}
+	b = Key_GetBinding( VR_FIRST_KEY + VR_KEY_Y );
+	return ( b && b[0] == '+' ) ? qtrue : qfalse;
+}
+
+// The wheel shut - what it points at taken (the cgame's -posewheel), or not
+// (the menu came up over it, the headset came off) - or a press that hadn't
+// decided dropped. Y counts again once it's let go.
+static void VR_DropWheel( qboolean take ) {
+	if ( vr.wheelState == VR_WHEEL_OPEN && cls.cgameStarted ) {
+		Cbuf_AddText( take ? "-posewheel\n" : "-posewheel cancel\n" );
+	}
+	if ( vr.wheelState != VR_WHEEL_IDLE ) {
+		vr.keyBlocked[VR_KEY_Y] = qtrue;
+	}
+	vr.wheelState = VR_WHEEL_IDLE;
+	vr.turnLatched = vr.weapLatched = qtrue;	// (a stick still held as it shuts doesn't turn or switch)
+}
+
+static void VR_WheelButton( qboolean down ) {
+	if ( vr.wheelState == VR_WHEEL_IDLE ) {
+		if ( !down || vr.keyDown[VR_KEY_Y] || vr.keyBlocked[VR_KEY_Y] || VR_YIsPlain() ) {
+			VR_SetKey( VR_KEY_Y, down );	// (an ordinary button)
+			return;
+		}
+		vr.wheelState = VR_WHEEL_PENDING;
+		vr.wheelPressTime = Sys_Milliseconds();
+		return;
+	}
+	if ( vr.pointerMode || cls.state != CA_ACTIVE ) {
+		VR_DropWheel( qfalse );	// (the menu came up over it)
+		if ( !down ) {
+			vr.keyBlocked[VR_KEY_Y] = qfalse;
+		}
+		return;
+	}
+	if ( down ) {
+		if ( vr.wheelState == VR_WHEEL_PENDING && Sys_Milliseconds() - vr.wheelPressTime >= VR_WHEEL_HOLD_MS ) {
+			vr.wheelState = VR_WHEEL_OPEN;
+			Cbuf_AddText( "+posewheel\n" );
+		}
+		return;
+	}
+	if ( vr.wheelState == VR_WHEEL_PENDING ) {
+		vr.wheelState = VR_WHEEL_IDLE;
+		VR_TapKey( VR_KEY_Y );	// a tap: what Y is bound to
+		return;
+	}
+	VR_DropWheel( qtrue );
+	vr.keyBlocked[VR_KEY_Y] = qfalse;	// (let go already)
+}
+
 // Lets go of every held controller button (focus lost, session ended).
 // Whatever is still held when input comes back is not a new press.
 static void VR_ReleaseAllKeys( void ) {
+	VR_DropWheel( qfalse );
 	for ( int k = 0; k < VR_NUM_BUTTONS; k++ ) {
 		if ( vr.keyDown[k] ) {
 			VR_SetKey( k, qfalse );
@@ -1470,6 +1545,30 @@ void VR_UIStarted( void ) {
 	vr.pointerForce = qtrue;	// and put it back where the controller points
 }
 
+// The pose wheel on a key, for playing without the headset (in it, Y holds
+// it): once, on the first of these that's free, unless it's bound already.
+static void VR_DefaultPoseWheelBind( void ) {
+	static const char *keys[] = { "p", "o", "i" };
+	cvar_t *applied = Cvar_Get( "vr_poseBindApplied", "0", CVAR_ARCHIVE );
+
+	if ( applied->integer >= 1 ) {
+		return;
+	}
+	Cvar_Set( "vr_poseBindApplied", "1" );
+	if ( Key_GetKey( "+posewheel" ) >= 0 ) {
+		return;
+	}
+	for ( size_t i = 0; i < ARRAY_LEN( keys ); i++ ) {
+		const int k = Key_StringToKeynum( (char *)keys[i] );
+		const char *b = Key_GetBinding( k );
+		if ( k >= 0 && ( !b || !b[0] ) ) {
+			Key_SetBinding( k, "+posewheel" );
+			Com_Printf( "Pose wheel: hold %s (bind <key> +posewheel to change it)\n", keys[i] );
+			return;
+		}
+	}
+}
+
 static void VR_SetDefaultBinds( void ) {
 	// Once per install, and only for keys the player hasn't bound, so their
 	// own binds (and deliberate unbinds) survive.
@@ -1633,7 +1732,7 @@ static void VR_PollInput( void ) {
 	VR_SetKey( VR_KEY_A, VR_GetBool( vr.actA, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_B, VR_GetBool( vr.actB, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_X, VR_GetBool( vr.actX, XR_NULL_PATH ) );
-	VR_SetKey( VR_KEY_Y, VR_GetBool( vr.actY, XR_NULL_PATH ) );
+	VR_WheelButton( VR_GetBool( vr.actY, XR_NULL_PATH ) );	// (tapped, or held: the pose wheel)
 	VR_SetKey( VR_KEY_STICK_L, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_LEFT] ) );
 	VR_SetKey( VR_KEY_STICK_R, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_RIGHT] ) );
 	VR_SetKey( VR_BUTTON_MENU, VR_GetBool( vr.actMenu, XR_NULL_PATH ) );	// Escape
@@ -1644,6 +1743,10 @@ static void VR_PollInput( void ) {
 		vr.pendingTurn = 0.0f;	// e.g. paused: don't pile up turns
 	}
 	const float ax = fabsf( vr.turnX ), ay = fabsf( vr.turnY );
+	if ( vr.wheelState == VR_WHEEL_OPEN ) {
+		vr.lastPollTime = Sys_Milliseconds();
+		return;	// (the right stick picks in the pose wheel: the cgame reads it)
+	}
 	if ( !vr.pointerMode ) {
 		if ( ay > ax && ay > 0.7f ) {
 			if ( !vr.weapLatched ) {
@@ -1659,8 +1762,11 @@ static void VR_PollInput( void ) {
 	const float dt = Com_Clamp( 0.0f, 0.1f, ( now - vr.lastPollTime ) * 0.001f );
 	vr.lastPollTime = now;
 	if ( vr_turnMode->integer == 1 ) {
-		// smooth turn
-		if ( ax > ay ) {
+		// smooth turn (once a stick held as the pose wheel shut has come back)
+		if ( vr.turnLatched && ax < 0.3f ) {
+			vr.turnLatched = qfalse;
+		}
+		if ( ax > ay && !vr.turnLatched ) {
 			vr.pendingTurn -= vr.turnX * vr_turnSpeed->value * dt;
 		}
 	} else {
@@ -2252,6 +2358,11 @@ static void VR_UpdateTracking( void ) {
 	vrClient.handAim = vr.aimFromHand;
 	vrClient.grabbing[VR_HAND_LEFT] = vr.grabbing[VR_HAND_LEFT];
 	vrClient.grabbing[VR_HAND_RIGHT] = vr.grabbing[VR_HAND_RIGHT];
+	vrClient.stick[VR_HAND_LEFT][0] = vr.moveX;
+	vrClient.stick[VR_HAND_LEFT][1] = vr.moveY;
+	vrClient.stick[VR_HAND_RIGHT][0] = vr.turnX;
+	vrClient.stick[VR_HAND_RIGHT][1] = vr.turnY;
+	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
 	const float hp[3] = { headOfs[0] * posScale, headOfs[1] * posScale, headOfs[2] * posScale };
@@ -2836,6 +2947,8 @@ void VR_Init( void ) {
 	// tells a VR-aware cgame that trap->ext.VR_GetClientState exists
 	Cvar_Get( "vr_engine", VR_ENGINE_TAG, CVAR_ROM, "OpenJK VR engine interface version" );
 	Cvar_Set( "vr_engine", VR_ENGINE_TAG );
+
+	VR_DefaultPoseWheelBind();
 
 	Cmd_AddCommand( "vr_recenter", VR_Recenter_f, "Re-centre the VR position and menu screen" );
 	Cmd_AddCommand( "vr_status", VR_Status_f, "Print VR runtime and headset status" );

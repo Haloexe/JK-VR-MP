@@ -749,6 +749,10 @@ void CG_OwnerDraw(float x, float y, float w, float h, float text_x, float text_y
 void CG_MouseEvent(int x, int y) {
 	int n;
 
+	if ( CG_PoseWheelMouse( x, y ) ) {
+		return;	// OpenJK VR: picking in the pose wheel (cg_vrpose.c)
+	}
+
 	/*
 	if ( (cg.predictedPlayerState.pm_type == PM_NORMAL || cg.predictedPlayerState.pm_type == PM_JETPACK || cg.predictedPlayerState.pm_type == PM_FLOAT || cg.predictedPlayerState.pm_type == PM_SPECTATOR) && cg.showScores == qfalse) {
 		trap->Key_SetCatcher(0);
@@ -831,6 +835,10 @@ void CG_EventHandling(int type) {
 
 
 void CG_KeyEvent(int key, qboolean down) {
+
+	if ( CG_PoseWheelKey( key, down ) ) {
+		return;	// OpenJK VR: the pose wheel has the keys (cg_vrpose.c)
+	}
 
 	if (!down) {
 		return;

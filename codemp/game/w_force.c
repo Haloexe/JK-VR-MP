@@ -682,6 +682,11 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 		return qfalse;
 	}
 
+	if ( forcePower != FP_HEAL && G_VRPosed( self ) )
+	{//OpenJK VR: not sat, knelt or lying, nor getting up - healing, you can (g_vrpose.c)
+		return qfalse;
+	}
+
 	if (!BG_CanUseFPNow(level.gametype, &self->client->ps, level.time, forcePower))
 	{
 		return qfalse;

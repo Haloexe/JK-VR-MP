@@ -177,6 +177,10 @@ static void G_StartPrivateDuel( gentity_t *ent, gentity_t *challenger ) {
 	G_AddEvent( ent, EV_PRIVATE_DUEL, 1 );
 	G_AddEvent( challenger, EV_PRIVATE_DUEL, 1 );
 
+	// up on their feet for it (g_vrpose.c)
+	G_VRPoseStandUp( ent );
+	G_VRPoseStandUp( challenger );
+
 	// sabers out, until the duel starts (then they come on to look cool)
 	G_DuelHolster( ent );
 	G_DuelHolster( challenger );

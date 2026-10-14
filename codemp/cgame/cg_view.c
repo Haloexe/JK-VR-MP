@@ -1018,6 +1018,9 @@ static void CG_OffsetFirstPersonView( void ) {
 	// add view height
 	origin[2] += cg.predictedPlayerState.viewheight;
 
+	// OpenJK VR: in a pose, at the body's own eyes (cg_vrbody.c)
+	origin[2] += CG_VR_PoseEyeAdjust();
+
 	// smooth out duck height changes
 	timeDelta = cg.time - cg.duckTime;
 	if ( timeDelta < DUCK_TIME) {
@@ -2728,6 +2731,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	// (and with the blades in your hands known, a salute to challenge someone)
 	CG_VR_BodyEndFrame();
 	CG_VR_DuelFrame();
+	CG_PoseWheelFrame();	// (the pose wheel, if it's up: cg_vrpose.c)
 
 	cg.refdef.time = cg.time;
 	memcpy( cg.refdef.areamask, cg.snap->areamask, sizeof( cg.refdef.areamask ) );

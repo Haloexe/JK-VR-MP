@@ -14,6 +14,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Multiplayer that shows it:** other players see you as you really move
   (head, arms, hands and saber), and lag compensation judges blades as each
   player saw them.
+- **Poses:** hold Y for a pose wheel to sit, sit cross-legged, kneel or lie
+  down. Your character does, your view drops to its eyes, and your head and
+  arms stay tracked. Players without VR get the wheel on a key.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.

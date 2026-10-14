@@ -1496,8 +1496,10 @@ Key_SetCatcher
 ====================
 */
 void Key_SetCatcher( int catcher ) {
-	// If the catcher state is changing, clear all key states
-	if ( catcher != keyCatchers )
+	// If the catcher state is changing, clear all key states (OpenJK VR: not
+	// for the cgame's alone - its pose wheel takes the mouse while its key is
+	// held, and letting go of that key is what picks)
+	if ( ( catcher & ~KEYCATCH_CGAME ) != ( keyCatchers & ~KEYCATCH_CGAME ) )
 		Key_ClearStates();
 
 	keyCatchers = catcher;

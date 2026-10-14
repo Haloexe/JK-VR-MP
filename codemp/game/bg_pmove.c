@@ -4537,6 +4537,26 @@ static void PM_CheckDuck (void)
 		pm->maxs[2] = pm->ps->standheight;//DEFAULT_MAXS_2;
 		pm->ps->viewheight = DEFAULT_VIEWHEIGHT;
 	}
+
+	// OpenJK VR: in a pose your eyes are lower - going down with the
+	// getting-down animation and back up with the getting up - and you're as
+	// big as crouching (up again where there's room, as from a crouch:
+	// bg_vrpose.c)
+	if ( pm->ps->clientNum < MAX_CLIENTS )
+	{
+		int poseEyes;
+		if ( BG_VRPoseHeights( pm->ps, pm->animations, &poseEyes ) )
+		{
+			pm->ps->viewheight = poseEyes;
+			pm->maxs[2] = pm->ps->crouchheight;
+			// crouched until up; on getting up's last move, standing if
+			// there's room now (then the game's own standing animation)
+			if ( BG_VRPose( pm->ps ) || pm->ps->legsTimer > pml.msec || ( pm->ps->pm_flags & PMF_DUCKED ) )
+			{
+				pm->ps->pm_flags |= PMF_DUCKED;
+			}
+		}
+	}
 }
 
 
@@ -10227,6 +10247,14 @@ void PmoveSingle (pmove_t *pmove) {
 		{
 			pm->cmd.upmove = 0;
 		}
+	}
+
+	// OpenJK VR: in a pose (or getting down into it or up out of it) you
+	// keep still; moving, jumping, crouching or attacking gets you up
+	// (bg_vrpose.c)
+	if ( BG_VRPoseMove( pm->ps, &pm->cmd, pm->animations ) )
+	{
+		stiffenedUp = qtrue;
 	}
 
 	if (pm->ps->pm_type == PM_FLOAT)

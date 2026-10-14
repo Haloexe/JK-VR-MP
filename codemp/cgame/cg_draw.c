@@ -8473,6 +8473,8 @@ static void CG_Draw2D_HUD( void ) {
 static void CG_Draw2D( void ) {
 	CG_Anchor2D( ANCHOR2D_MIDDLE );
 	CG_Draw2D_HUD();
+	CG_Anchor2D( ANCHOR2D_MIDDLE );
+	CG_DrawPoseWheel();	// (over it all, when it's up: cg_vrpose.c)
 	CG_Anchor2D( ANCHOR2D_STRETCH );
 }
 

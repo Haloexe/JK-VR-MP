@@ -460,6 +460,8 @@ typedef struct centity_s {
 	int				smoothTime;		// OpenJK VR: cg.time cg_smoothClients (beamEnd) or EF_CLIENTSMOOTH (turAngles) last smoothed this
 	int				lookTimeEye;	// OpenJK VR: cg.time the head last turned toward its look...
 	vec3_t			lookBefore;		// ...from these angles (the right eye takes the same step)
+	qboolean		poseYawSet;		// OpenJK VR: in a pose (bg_vrpose.c), the body faces as it did
+	float			poseYaw;		// ...going down: this way (looking about turns the head)
 } centity_t;
 
 
@@ -1909,11 +1911,19 @@ void CG_VR_NetStats( void );
 qboolean CG_VR_Engine( void );
 void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
 qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qboolean *twoHanded );
+float CG_VR_PoseEyeAdjust( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
 // cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
 void CG_VR_DuelFrame( void );
 void CG_VR_DuelCentrePrint( const char *text );
+// cg_vrpose.c (OpenJK VR: the pose wheel)
+void		CG_PoseWheelDown_f( void );
+void		CG_PoseWheelUp_f( void );
+qboolean	CG_PoseWheelMouse( int x, int y );
+qboolean	CG_PoseWheelKey( int key, qboolean down );
+void		CG_PoseWheelFrame( void );
+void		CG_DrawPoseWheel( void );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );

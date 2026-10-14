@@ -1707,6 +1707,39 @@ void BG_G2ATSTAngles(void *ghoul2, int time, vec3_t cent_lerpAngles );
 
 int BG_AnimLength( int index, animNumber_t anim );
 
+// OpenJK VR: poses - sit, sit cross-legged, kneel, lie down (bg_vrpose.c)
+typedef enum {
+	VRPOSE_NONE,
+	VRPOSE_SIT,
+	VRPOSE_CROSS,
+	VRPOSE_KNEEL,
+	VRPOSE_LIE,
+	VRPOSE_NUM
+} vrPose_t;
+typedef enum {
+	VRPHASE_NONE,
+	VRPHASE_DOWN,		// getting down into it
+	VRPHASE_HELD,		// in it
+	VRPHASE_UP			// getting up out of it
+} vrPosePhase_t;
+typedef struct bgVRPose_s {
+	const char	*name;		// as the pose command takes it
+	int			down;		// animation getting down into it
+	int			hold;		// ...in it
+	int			up;			// ...getting up
+	int			eye;		// viewheight in it
+} bgVRPose_t;
+extern const bgVRPose_t bgVRPoses[VRPOSE_NUM];
+int			BG_VRPose( const playerState_t *ps );
+void		BG_VRPoseSet( playerState_t *ps, int pose );
+int			BG_VRPoseNamed( const char *name );
+int			BG_VRPosePhase( const playerState_t *ps, const animation_t *animations, int *pose, float *progress );
+qboolean	BG_VRPoseStart( playerState_t *ps, animation_t *animations, int pose );
+void		BG_VRPoseStandUp( playerState_t *ps, animation_t *animations );
+qboolean	BG_VRPoseMove( playerState_t *ps, usercmd_t *cmd, animation_t *animations );
+qboolean	BG_VRPoseHeights( const playerState_t *ps, const animation_t *animations, int *viewheight );
+qboolean	BG_VRPoseAnim( int anim );
+
 qboolean BG_InSpecialJump( int anim );
 qboolean BG_InSaberStandAnim( int anim );
 qboolean BG_InReboundJump( int anim );

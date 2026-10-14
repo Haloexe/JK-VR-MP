@@ -2991,6 +2991,11 @@ void ClientThink_real( gentity_t *ent ) {
 			ent->client->lastGenCmdTime = level.time + 300; //default 100ms debounce between issuing the same command.
 		}
 
+		if ( pmove.cmd.generic_cmd >= GENCMD_FORCE_SPEED && pmove.cmd.generic_cmd <= GENCMD_FORCE_SEEING )
+		{//OpenJK VR: a Force power (bar healing) gets you up out of a pose - and waits till you are (g_vrpose.c)
+			G_VRPoseStandUp( ent );
+		}
+
 		switch(pmove.cmd.generic_cmd)
 		{
 		case 0:

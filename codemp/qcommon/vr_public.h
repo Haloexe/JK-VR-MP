@@ -19,13 +19,15 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-8"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-9"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
 												//     ext.VR_GetAvatar (cgame)
 												// -8: ext.R_Anchor2D, ext.R_Aspect2D (cgame, ui:
 												//     widescreen 2D)
+												// -9: vrClientState_t.stick, poseWheel (the pose
+												//     wheel, Y held)
 
 // ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
 // drawn is stretched across the window again, as always (any other x is a
@@ -174,6 +176,15 @@ typedef struct vrClientState_s {
 	// cgame said the hand could grab something, ext.VR_SetGrabZones), so it
 	// didn't press its bound key
 	qboolean	grabbing[2];
+
+	// the thumbsticks, [VR_HAND_LEFT] and [VR_HAND_RIGHT]: x to the right,
+	// y away from you (-1..1)
+	float		stick[2][2];
+
+	// Y is held for the pose wheel (the engine ran +posewheel; -posewheel
+	// when it's let go): meanwhile the right stick picks in it, and doesn't
+	// turn or switch weapons
+	qboolean	poseWheel;
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

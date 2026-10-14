@@ -41,6 +41,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #define VRB_TURN_OFF		0x00000100	// G2SURFACEFLAG_NODESCENDANTS: surface and its children off
 #define VRB_HEAD_BIT		( 1 << ( G2_MODELPART_HEAD - 10 ) )
+#define VRB_POSE_EYE_MAX	20.0f	// (units) the camera goes at most this far to a posed body's eyes
 
 enum {
 	VRB_UPPER,		// upper arm (shoulder joint)
@@ -162,6 +163,13 @@ typedef struct vrbState_s {
 	float		leanTarget;
 	int			leanTime;
 	int			leanSetTime;
+
+	// in a pose (bg_vrpose.c): how far the body's own eyes are above the
+	// eye point (the pose's viewheight is one for every body), eased - the
+	// camera goes there (CG_VR_PoseEyeAdjust)
+	float		poseEye;
+	float		poseEyeTarget;
+	int			poseEyeTime;
 
 	// which bones turn with the hand at the wrist (CG_VRB_ProbeHands)
 	qboolean	probed;
@@ -1671,9 +1679,12 @@ static qboolean CG_VRB_SaberHands( void ) {
 // The torso turns with your head, but lazily: it only has to follow once
 // you look more than cg_vrBodyTwist degrees away, and drifts after your
 // head otherwise (quickly while you move).
+static const animation_t *CG_VRB_Anims( void );
+
 static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 	vec3_t head[3];
 	float headYaw, diff, maxTwist, rate, dt;
+	qboolean posed;
 	const float speed = sqrtf( cg.predictedPlayerState.velocity[0] * cg.predictedPlayerState.velocity[0] +
 		cg.predictedPlayerState.velocity[1] * cg.predictedPlayerState.velocity[1] );
 
@@ -1691,7 +1702,10 @@ static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 	}
 	dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.yawTime ) * 0.001f );
 
-	maxTwist = Com_Clamp( 0.0f, 90.0f, cg_vrBodyTwist.value );
+	// (sat, knelt or lying, the body stays as it is while you look about,
+	// unless you turn right round: bg_vrpose.c)
+	posed = (qboolean)( BG_VRPosePhase( &cg.predictedPlayerState, CG_VRB_Anims(), NULL, NULL ) != VRPHASE_NONE );
+	maxTwist = posed ? 120.0f : Com_Clamp( 0.0f, 90.0f, cg_vrBodyTwist.value );
 	diff = AngleSubtract( headYaw, vrb.yawT );
 	if ( diff > maxTwist ) {
 		vrb.yawT = headYaw - maxTwist;
@@ -1699,7 +1713,9 @@ static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 		vrb.yawT = headYaw + maxTwist;
 	}
 	rate = ( speed > 20.0f ) ? 6.0f : 1.0f;
-	vrb.yawT = AngleNormalize360( vrb.yawT + AngleSubtract( headYaw, vrb.yawT ) * ( 1.0f - expf( -rate * dt ) ) );
+	if ( !posed ) {
+		vrb.yawT = AngleNormalize360( vrb.yawT + AngleSubtract( headYaw, vrb.yawT ) * ( 1.0f - expf( -rate * dt ) ) );
+	}
 
 	// tracking space -> world, exactly as the renderer turns the view
 	vrb.worldYaw = AngleNormalize360( vrb.yawT + VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw );
@@ -3698,6 +3714,37 @@ static qboolean CG_VRB_HeadSurface( void *g2, char *name, int size ) {
 	return qfalse;
 }
 
+// This body's animations.
+static const animation_t *CG_VRB_Anims( void ) {
+	const centity_t *cent = &cg_entities[cg.predictedPlayerState.clientNum];
+	return ( cent->localAnimIndex >= 0 && cent->localAnimIndex < MAX_ANIM_FILES ) ? bgAllAnims[cent->localAnimIndex].anims : NULL;
+}
+
+// In a pose held (not getting down or up), where the body's eyes are against
+// the eye point; out of it, back to nothing. Eased, so the camera glides.
+static void CG_VRB_PoseEyes( const centity_t *cent, const vec3_t eyes ) {
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.poseEyeTime ) * 0.001f );
+
+	if ( BG_VRPosePhase( &cg.predictedPlayerState, CG_VRB_Anims(), NULL, NULL ) == VRPHASE_HELD ) {
+		vrb.poseEyeTarget = Com_Clamp( -VRB_POSE_EYE_MAX, VRB_POSE_EYE_MAX,
+			eyes[2] - ( cent->lerpOrigin[2] + cg.predictedPlayerState.viewheight ) );
+	} else {
+		vrb.poseEyeTarget = 0.0f;
+	}
+	if ( cg.time - vrb.poseEyeTime < 0 || cg.time - vrb.poseEyeTime > 500 ) {
+		vrb.poseEye = 0.0f;	// (starting over)
+	}
+	vrb.poseEye += ( vrb.poseEyeTarget - vrb.poseEye ) * ( 1.0f - expf( -dt / 0.25f ) );
+	vrb.poseEyeTime = cg.time;
+}
+
+float CG_VR_PoseEyeAdjust( void ) {
+	if ( !CG_VR() || !cg_vrBody.integer || cg.predictedPlayerState.clientNum != cg.clientNum ) {
+		return 0.0f;
+	}
+	return vrbSelf.poseEye;
+}
+
 /*
 =================
 CG_VR_BodyPose
@@ -3788,7 +3835,10 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		if ( cg.time - cg.duckTime >= 0 && cg.time - cg.duckTime < DUCK_TIME ) {
 			duck = cg.duckChange * ( DUCK_TIME - ( cg.time - cg.duckTime ) ) / DUCK_TIME;
 		}
-		shift[2] = cg.refdef.vieworg[2] + duck - ( cent->lerpOrigin[2] + cg.predictedPlayerState.viewheight );
+		// in a pose the camera goes to the body's eyes (CG_VR_PoseEyeAdjust):
+		// the body stays put, on the floor
+		CG_VRB_PoseEyes( cent, eyes );
+		shift[2] = cg.refdef.vieworg[2] + duck - vrb.poseEye - ( cent->lerpOrigin[2] + cg.predictedPlayerState.viewheight );
 		shift[2] += Q_min( 0.0f, head[2] - cg.refdef.vieworg[2] );
 		shift[2] = Com_Clamp( -48.0f, 48.0f, shift[2] );
 

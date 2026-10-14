@@ -795,6 +795,8 @@ struct gclient_s {
 	} force;
 
 	int			vrDuelChallenge;	// OpenJK VR (g_vrduel.c): level.time this player challenged ps.duelIndex (0: hasn't)
+	float		vrPoseYaw;			// OpenJK VR (g_vrpose.c): which way they faced going into their pose...
+	int			vrPoseTime;			// ...then (level.time)
 };
 
 //Interest points
@@ -1033,6 +1035,12 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir );
 void Cmd_SaberAttackCycle_f(gentity_t *ent);
 int G_ItemUsable(playerState_t *ps, int forcedUse);
 void Cmd_ToggleSaber_f(gentity_t *ent);
+// g_vrpose.c (OpenJK VR: the pose command; the poses: bg_vrpose.c)
+void		G_VRPoseInit( void );
+void		G_VRPoseStandUp( gentity_t *ent );
+qboolean	G_VRPosed( gentity_t *ent );
+void		G_VRPoseBodyAngles( gentity_t *ent, vec3_t angles );
+void		Cmd_VRPose_f( gentity_t *ent );
 // g_vrduel.c (OpenJK VR: private duels, any number at a time)
 void		G_PrivateDuelInit( void );
 void		G_PrivateDuelPublish( void );
@@ -1374,6 +1382,7 @@ void		G_VRSaberClientReset( int clientNum );
 void		G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd );
 qboolean	G_VRSaberOn( void );
 void		G_VRSaberPublish( void );
+qboolean	G_VRSaberBodyYaw( int clientNum, float *yaw );
 qboolean	G_VRSaberClient( gentity_t *ent );
 qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
 qboolean	G_VRSaberActive( gentity_t *ent );

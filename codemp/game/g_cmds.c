@@ -3262,6 +3262,7 @@ command_t commands[] = {
 	{ "t_use",				Cmd_TargetUse_f,			CMD_CHEAT|CMD_ALIVE },
 	{ "voice_cmd",			Cmd_VoiceCommand_f,			CMD_NOINTERMISSION },
 	{ "vote",				Cmd_Vote_f,					CMD_NOINTERMISSION },
+	{ "pose",				Cmd_VRPose_f,				CMD_NOINTERMISSION|CMD_ALIVE },	// OpenJK VR (g_vrpose.c)
 	{ "vrduel",				Cmd_VRDuel_f,				CMD_NOINTERMISSION|CMD_ALIVE },	// OpenJK VR (g_vrduel.c)
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 };

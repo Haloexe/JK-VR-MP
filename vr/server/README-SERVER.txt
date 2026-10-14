@@ -109,6 +109,8 @@ GOOD TO KNOW
   A challenge stands for 10 seconds; bots accept the ones put to them
   (bot_acceptDuels 0: they don't). g_privateDuel 0 turns them off (VR
   players' salutes too).
+* Poses (sit, sit cross-legged, kneel, lie down) need nothing set up:
+  players take them with the pose wheel, or the pose command.
 * The log games.log keeps every VR swing, cut and clash (g_vrSaberLog). It
   only grows: delete it now and then, or set g_vrSaberLog 0.
 * A VR player's blade is judged as they saw the others (lag compensation,

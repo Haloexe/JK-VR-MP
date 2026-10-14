@@ -934,6 +934,7 @@ static QINLINE void G_G2PlayerAngles( gentity_t *ent, matrix3_t legs, vec3_t leg
 
 	VectorCopy(ent->client->ps.origin, lerpOrg);
 	VectorCopy(ent->client->ps.viewangles, lerpAng);
+	G_VRPoseBodyAngles( ent, lerpAng );	// OpenJK VR: a posed body faces as everyone sees it (g_vrpose.c)
 
 	if (ent->localAnimIndex <= 1)
 	{ //don't do these things on non-humanoids

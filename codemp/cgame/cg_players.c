@@ -4286,6 +4286,23 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 		vec3_t vrBodyAngles;
 		float *bodyAngles = CG_VR_BodyAngles(cent, vrBodyAngles) ? vrBodyAngles : cent->lerpAngles;
 
+		// OpenJK VR: sat, knelt or lying (bg_vrpose.c), a body without VR
+		// stays facing the way it went down; looking about turns its head
+		if ( bodyAngles == cent->lerpAngles && BG_VRPoseAnim( cent->currentState.legsAnim ) )
+		{
+			if ( !cent->poseYawSet )
+			{
+				cent->poseYaw = cent->lerpAngles[YAW];
+				cent->poseYawSet = qtrue;
+			}
+			VectorSet( vrBodyAngles, 0.0f, cent->poseYaw, 0.0f );
+			bodyAngles = vrBodyAngles;
+		}
+		else
+		{
+			cent->poseYawSet = qfalse;
+		}
+
 		if (cent->currentState.hasLookTarget)
 		{
 			VectorSubtract(cg_entities[cent->currentState.lookTarget].lerpOrigin, cent->lerpOrigin, lookAngles);
@@ -4294,7 +4311,7 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 		}
 		else
 		{
-			VectorCopy(bodyAngles, lookAngles);
+			VectorCopy(cent->poseYawSet ? cent->lerpAngles : bodyAngles, lookAngles);	// (OpenJK VR: posed, the head looks where they do)
 		}
 		lookAngles[PITCH] = 0;
 		// OpenJK VR: another VR player's head looks where theirs does (nods and tilts too)

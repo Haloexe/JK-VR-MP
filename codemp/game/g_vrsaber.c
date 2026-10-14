@@ -523,6 +523,17 @@ static qboolean VRS_AvatarShown( gentity_t *ent ) {
 	return qtrue;
 }
 
+static float		vrsBodyYaw[MAX_CLIENTS];	// the body's yaw in the avatar handed to the engine
+
+// Which way a VR player's body faces, as everyone draws it (their avatar).
+qboolean G_VRSaberBodyYaw( int clientNum, float *yaw ) {
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !vrsAvatarSet[clientNum] ) {
+		return qfalse;
+	}
+	*yaw = vrsBodyYaw[clientNum];
+	return qtrue;
+}
+
 static void VRS_ClearAvatar( int clientNum ) {
 	if ( vrsAvatarSet[clientNum] ) {
 		trap->ext.VR_SetAvatar( clientNum, NULL );
@@ -609,6 +620,7 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	}
 	trap->ext.VR_SetAvatar( clientNum, &a );
 	vrsAvatarSet[clientNum] = qtrue;
+	vrsBodyYaw[clientNum] = a.bodyYaw;
 }
 
 // The game's poses for standing still - most of them the saber stances, which

@@ -358,6 +358,20 @@ engage_duel (look at them, press it); you can put it on a button too, e.g.
 the left stick click:  bind AUX24 engage_duel  (that button walks
 otherwise). cg_vrDuelSalute 0 turns the salute off.
 
+Poses: hold Y for the pose wheel - sit (on a chair or a bench: stand with
+your back to it first), sit cross-legged, kneel, lie down. Push the right
+stick toward one and let go of Y (a quick press of Y still picks the next
+Force power). Your character goes down into it and your view with it, to
+its eyes; your head and arms stay yours, so you can still talk with your
+hands, and the body stays facing the way it went down while you look
+about. Moving, jumping, crouching, attacking or using the Force gets you
+up again (healing you can do sat) - so does lighting your saber, which a
+pose puts away - and in the wheel the pose you're in reads "Stand up".
+Everyone sees it, players without VR too. Without the headset, hold P (or
+O or I, whichever was free the first time: bind <key> +posewheel for
+another), move the mouse toward one and let go (Escape: none); or in the
+console: pose sit, pose cross, pose kneel, pose lie, pose stand.
+
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own
 settings (Documents\My Games\OpenJK-VR-Desktop), so it never changes your
