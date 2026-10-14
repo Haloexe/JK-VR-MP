@@ -95,10 +95,11 @@ working alongside. To type - click a text field (your name, a server
 address), open the chat line, or the console - a keyboard comes up on the
 menu screen: point at a key and pull the trigger. Shift once makes the next
 key a capital (or the symbol over a number); Backspace held repeats; Enter
-is Enter; Close (or B) is done. In Controls, the triggers, B and pushing a stick up or down
-are busy clicking, going back and scrolling, so to put a command on one of
-those use the console (see the AUX key names below); the other buttons
-(grips, A, X, Y, stick clicks) can be bound right there.
+is Enter; Close (or B) is done.
+In Controls, the triggers, B and pushing a stick up or down are busy
+clicking, going back and scrolling, so to put a command on one of those use
+the console (see the AUX key names below); the other buttons (grips, A, X,
+Y, stick clicks) can be bound right there.
 
 With a gun out you aim with your right hand: the gun is in your hand (the
 complete third-person model, so it looks right from every angle) and a
@@ -431,7 +432,8 @@ at), and  rp  for your characters: rp new <name>, rp play <name or
 number>, rp faction heroes|villains|neutral, rp desc <text>, rp bio
 <text>, rp delete <name>; rp look <player> shows anyone's card. A password
 typed in the console shows as *s and isn't kept in its history (one with a
-; in it goes in quotes; one with a " in it can only be typed in the menu).
+; or // in it goes in quotes; one with a " in it can only be typed in the
+menu), and a line that would cut a password short doesn't run.
 
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own
