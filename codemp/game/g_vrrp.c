@@ -1866,7 +1866,17 @@ qboolean G_RPConsoleCommand( void ) {
 		char temp[MAX_TOKEN_CHARS];
 		int who;
 		trap->Argv( 2, arg, sizeof( arg ) );
-		trap->Argv( 3, temp, sizeof( temp ) );
+		{	// the rest, without the spaces around it (as the player's game takes a password)
+			const char *t = ConcatArgs( 3 );
+			int n;
+			while ( *t == ' ' || *t == '\t' ) {
+				t++;
+			}
+			Q_strncpyz( temp, t, sizeof( temp ) );
+			for ( n = (int)strlen( temp ); n > 0 && ( temp[n - 1] == ' ' || temp[n - 1] == '\t' ); n-- ) {
+				temp[n - 1] = '\0';
+			}
+		}
 		acc = G_RP_AccountAnywhere( arg, &who );
 		if ( !acc || !temp[0] ) {
 			trap->Print( "usage: rp password <account> <temporary password>%s\n", acc ? "" : va( " (no account %s)", arg ) );
@@ -1881,7 +1891,7 @@ qboolean G_RPConsoleCommand( void ) {
 				rpLocks[l].until = 0;
 			}
 		}
-		trap->Print( "%s's password is now the temporary one: they log in with it and change it on the Login page\n", acc->name );
+		trap->Print( "%s's password is now the temporary one: they log in with it, then set their own (New password, in the Roleplay menu)\n", acc->name );
 		return qtrue;
 	}
 	return qfalse;	// (on a listen server the host's own rp commands go on to the game as a client's)

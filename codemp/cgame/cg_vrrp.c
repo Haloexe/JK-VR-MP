@@ -560,6 +560,16 @@ static qboolean CG_RP_Ready( void ) {
 	return qfalse;
 }
 
+// A password's copy wiped (so the compiler can't leave that out, as it may
+// a memset of what's not read again).
+static void CG_RP_Wipe( char *p, int size ) {
+	volatile char *v = p;
+
+	while ( size-- > 0 ) {
+		*v++ = '\0';
+	}
+}
+
 // A password as it's taken: the spaces before and after it out (one slips in
 // easily on the headset's keyboard, and the console drops them as it is).
 static void CG_RP_Password( const char *in, char *out, int size ) {
@@ -598,8 +608,8 @@ static void CG_RP_NewAccount( const char *name, const char *typed, const char *t
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
-	memset( password, 0, sizeof( password ) );
-	memset( again, 0, sizeof( again ) );
+	CG_RP_Wipe( password, sizeof( password ) );
+	CG_RP_Wipe( again, sizeof( again ) );
 }
 
 static void CG_RP_LogIn( const char *name, const char *typed ) {
@@ -621,7 +631,7 @@ static void CG_RP_LogIn( const char *name, const char *typed ) {
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
-	memset( password, 0, sizeof( password ) );
+	CG_RP_Wipe( password, sizeof( password ) );
 }
 
 static void CG_RP_NewPassword( const char *typedNow, const char *typed, const char *typedAgain ) {
@@ -647,9 +657,9 @@ static void CG_RP_NewPassword( const char *typedNow, const char *typed, const ch
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
-	memset( now, 0, sizeof( now ) );
-	memset( password, 0, sizeof( password ) );
-	memset( again, 0, sizeof( again ) );
+	CG_RP_Wipe( now, sizeof( now ) );
+	CG_RP_Wipe( password, sizeof( password ) );
+	CG_RP_Wipe( again, sizeof( again ) );
 }
 
 static void CG_RP_LogOut( void ) {
@@ -800,7 +810,7 @@ static void CG_RP_New_f( void ) {
 	trap->Cmd_Argv( 1, account, sizeof( account ) );
 	CG_RP_ArgsFrom( 2, password, sizeof( password ) );
 	CG_RP_NewAccount( account, password, password );
-	memset( password, 0, sizeof( password ) );
+	CG_RP_Wipe( password, sizeof( password ) );
 }
 
 static void CG_RP_Login_f( void ) {
@@ -813,7 +823,7 @@ static void CG_RP_Login_f( void ) {
 	trap->Cmd_Argv( 1, account, sizeof( account ) );
 	CG_RP_ArgsFrom( 2, password, sizeof( password ) );
 	CG_RP_LogIn( account, password );
-	memset( password, 0, sizeof( password ) );
+	CG_RP_Wipe( password, sizeof( password ) );
 }
 
 static void CG_RP_ChangePassword_f( void ) {
@@ -826,8 +836,8 @@ static void CG_RP_ChangePassword_f( void ) {
 	trap->Cmd_Argv( 1, now, sizeof( now ) );
 	trap->Cmd_Argv( 2, password, sizeof( password ) );
 	CG_RP_NewPassword( now, password, password );
-	memset( now, 0, sizeof( now ) );
-	memset( password, 0, sizeof( password ) );
+	CG_RP_Wipe( now, sizeof( now ) );
+	CG_RP_Wipe( password, sizeof( password ) );
 }
 
 static void CG_RP_Logout_f( void ) {
@@ -879,17 +889,17 @@ static void CG_RP_UI_f( void ) {
 		} else {
 			CG_RP_NewAccount( account, password, again );
 		}
-		memset( password, 0, sizeof( password ) );
-		memset( again, 0, sizeof( again ) );
+		CG_RP_Wipe( password, sizeof( password ) );
+		CG_RP_Wipe( again, sizeof( again ) );
 	} else if ( !Q_stricmp( what, "password" ) ) {
 		char now[MAX_CVAR_VALUE_STRING], password[MAX_CVAR_VALUE_STRING], again[MAX_CVAR_VALUE_STRING];
 		CG_RP_Take( "ui_rpPassword", now, sizeof( now ) );
 		CG_RP_Take( "ui_rpNewPassword", password, sizeof( password ) );
 		CG_RP_Take( "ui_rpNewAgain", again, sizeof( again ) );
 		CG_RP_NewPassword( now, password, again );
-		memset( now, 0, sizeof( now ) );
-		memset( password, 0, sizeof( password ) );
-		memset( again, 0, sizeof( again ) );
+		CG_RP_Wipe( now, sizeof( now ) );
+		CG_RP_Wipe( password, sizeof( password ) );
+		CG_RP_Wipe( again, sizeof( again ) );
 	} else if ( !Q_stricmp( what, "logout" ) ) {
 		CG_RP_LogOut();
 	} else if ( !Q_stricmp( what, "play" ) ) {

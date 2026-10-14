@@ -870,8 +870,8 @@ void CL_ForwardCommandToServer( const char *string ) {
 		return;
 	}
 
-	if ( !Con_SecretMayForward( cmd, (qboolean)( cls.state == CA_ACTIVE ) ) ) {
-		return;	// OpenJK VR: roleplay's login, as typed, not sent on (cl_keys.cpp)
+	if ( !Con_SecretMayForward( string, (qboolean)( cls.state == CA_ACTIVE ) ) ) {
+		return;	// OpenJK VR: a password, as typed, not sent on (cl_keys.cpp)
 	}
 
 	if ( Cmd_Argc() > 1 ) {

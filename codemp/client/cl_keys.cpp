@@ -657,15 +657,43 @@ void Field_CharEvent( field_t *edit, int ch ) {
 /*
 ================================================================================
 OpenJK VR: passwords typed in a command line - roleplay's /login, /new and
-/changepassword (the cgame's, cg_vrrp.c), the server's rp password, and
-the rconpassword and password cvars (set by name, or by set, seta...) - in
-any of the commands on it, are shown as '*'s where the line is drawn (the
-console's, the chat line's) and echoed, and such a line isn't kept in the
-console's history. As it runs, login's and new's password - the rest of the
-line - goes in quotes, so a ';' or '//' in it stays in it (and the others'
-can't have those but in quotes: the line doesn't run).
+/changepassword (the cgame's, cg_vrrp.c), the server's rp password, and the
+rconpassword and password cvars (by name, or by set, seta, sets or setu) - in
+any of the commands on the line, rcon's too. The line is read as the engine
+reads it (cmd.cpp: Cbuf_Execute parts it into commands, Cmd_TokenizeString
+each into words), so what's found is what would run.
+
+Where the line's drawn (the console's, the chat line) and echoed, the first
+password on it, and all that follows, shows as '*'s; such a line isn't kept
+in the console's history. As it runs: login's and new's password is the rest
+of the line (spaces in it kept as typed), put in quotes - with a ';', '//' or
+'/*' in it, it's to be typed in quotes (or the line doesn't run: it might have
+been meant as another command after it), and a '"' can't be typed in it here
+(the Roleplay menu takes one). The others' passwords must stand whole as
+typed: a ';', '//' or '/*' against one, or anything after one but in quotes,
+and the line doesn't run. The player's told why. So no password is ever cut
+short, or part of it run as another command (and sent on, as one the engine
+doesn't know, to the server).
 ================================================================================
 */
+
+#define CON_WORDS	256		// (more than a line has)
+
+typedef struct {
+	int			start, end;		// its text in the line (in quotes: inside them)
+	qboolean	quoted, closed;	// (in quotes; the closing one there)
+} conWord_t;
+
+typedef struct {
+	int			start, end;		// the command in the line
+	conWord_t	w[CON_WORDS];
+	int			n;
+	int			cmdWord;		// the word that takes a password (login...)
+	int			first;			// its password's first word (it may be past the last)
+	qboolean	roleplay;		// login, new, changepassword: the cgame's
+	qboolean	restOfLine;		// login, new: the rest of the line's the password
+	int			at;				// where its password starts in the line (-1: none's typed)
+} conCommand_t;
 
 static const char *Con_SkipSpace( const char *p ) {
 	while ( *p == ' ' || *p == '\t' ) {
@@ -674,100 +702,260 @@ static const char *Con_SkipSpace( const char *p ) {
 	return p;
 }
 
-// Past the next word (in quotes or not), as the command line splits them: a
-// quote, or a ';', ends a word.
-static const char *Con_SkipWord( const char *p ) {
-	p = Con_SkipSpace( p );
-	if ( *p == '"' ) {
-		for ( p++; *p && *p != '"'; p++ ) {
+// The command in the line from pos, as Cbuf_Execute parts it (the line as it
+// runs, a '\n' after it): out of quotes, at a ';' - not in a comment - or the
+// end of a /* */ (its '/' dropped), the line going on as another command; a //
+// comment runs to the line's end. *end: where it ends; returns where the next
+// starts (len + 1: there's none).
+static int Con_NextCommand( const char *line, int len, int pos, int *end ) {
+	qboolean star = qfalse, slash = qfalse;
+	int quotes = 0, i;
+
+	for ( i = pos; i < len + 1; i++ ) {
+		const char c = ( i < len ) ? line[i] : '\n';
+		const char next = ( i + 1 < len ) ? line[i + 1] : '\n';
+		if ( c == '"' ) {
+			quotes++;
 		}
-		return *p ? p + 1 : p;
-	}
-	while ( *p && *p != ' ' && *p != '\t' && *p != ';' && *p != '"' ) {
-		p++;
-	}
-	return p;
-}
-
-// Whether the next word is this one (a quote ends a word, as a space does).
-static qboolean Con_WordIs( const char *p, const char *word ) {
-	const size_t n = strlen( word );
-	p = Con_SkipSpace( p );
-	return (qboolean)( !Q_stricmpn( p, word, (int)n ) && ( !p[n] || p[n] == ' ' || p[n] == '\t' || p[n] == ';' || p[n] == '"' ) );
-}
-
-// Where the command starting at p ends, as the command buffer splits a line
-// (cmd.cpp): at a ';' out of quotes, the line's end - a // comment runs to it
-// - or a /* comment's end, after which the line goes on as another command.
-static const char *Con_CommandEnd( const char *p ) {
-	qboolean quoted = qfalse;
-
-	for ( ; *p; p++ ) {
-		if ( *p == '"' ) {
-			quoted = (qboolean)!quoted;
-		} else if ( !quoted && p[0] == '/' && p[1] == '/' ) {
-			return p + strlen( p );
-		} else if ( !quoted && p[0] == '/' && p[1] == '*' ) {
-			const char *close = strstr( p + 2, "*/" );
-			return close ? close + 2 : p + strlen( p );
-		} else if ( !quoted && *p == ';' ) {
-			break;
+		if ( !( quotes & 1 ) ) {
+			if ( i < len ) {
+				if ( !star && c == '/' && next == '/' ) {
+					slash = qtrue;
+				} else if ( !slash && c == '/' && next == '*' ) {
+					star = qtrue;
+				} else if ( star && c == '*' && next == '/' ) {
+					*end = i + 1;
+					return i + 2;
+				}
+			}
+			if ( !slash && !star && c == ';' ) {
+				*end = i;
+				return i + 1;
+			}
+		}
+		if ( !star && ( c == '\n' || c == '\r' ) ) {
+			*end = i;
+			return i + 1;
 		}
 	}
-	return p;
+	*end = len;	// (a /* that doesn't end: the rest of it)
+	return len + 1;
 }
 
-// Where the password in the command at p starts (NULL: there's none, or
-// nothing's typed for it); *toEnd: it's the rest of the line (login, new).
-static const char *Con_CommandSecret( const char *p, qboolean *toEnd ) {
-	*toEnd = qfalse;
-	p = Con_SkipSpace( p );
-	while ( *p == '/' || *p == '\\' ) {
-		p++;
+// The words of the command [start, end), as Cmd_TokenizeString takes them:
+// apart at spaces, a quote, // (the rest a comment) or /* (to its */).
+static int Con_Words( const char *line, int start, int end, conWord_t *w, int max ) {
+	int n = 0, t = start;
+
+	while ( n < max ) {
+		for ( ;; ) {
+			while ( t < end && (unsigned char)line[t] <= ' ' ) {
+				t++;
+			}
+			if ( t >= end || ( line[t] == '/' && t + 1 < end && line[t + 1] == '/' ) ) {
+				return n;
+			}
+			if ( line[t] != '/' || t + 1 >= end || line[t + 1] != '*' ) {
+				break;
+			}
+			while ( t < end && ( line[t] != '*' || t + 1 >= end || line[t + 1] != '/' ) ) {
+				t++;
+			}
+			if ( t >= end ) {
+				return n;
+			}
+			t += 2;
+		}
+		if ( line[t] == '"' ) {
+			w[n].quoted = qtrue;
+			w[n].start = ++t;
+			while ( t < end && line[t] != '"' ) {
+				t++;
+			}
+			w[n].end = t;
+			w[n].closed = (qboolean)( t < end );
+			n++;
+			if ( t >= end ) {
+				return n;
+			}
+			t++;
+			continue;
+		}
+		w[n].quoted = w[n].closed = qfalse;
+		w[n].start = t;
+		while ( t < end && (unsigned char)line[t] > ' ' && line[t] != '"' &&
+			!( line[t] == '/' && t + 1 < end && ( line[t + 1] == '/' || line[t + 1] == '*' ) ) ) {
+			t++;
+		}
+		w[n].end = t;
+		n++;
 	}
-	if ( Con_WordIs( p, "rcon" ) ) {
-		p = Con_SkipWord( p );	// (what follows, as the server's console takes it)
+	return n;
+}
+
+// Where a word ends in the line (its closing quote, if it has one, after it).
+static int Con_WordEnd( const conWord_t *w ) {
+	return w->end + ( ( w->quoted && w->closed ) ? 1 : 0 );
+}
+
+// Whether a word is this one (any '/' or '\\' before it, as typed by mistake, no matter).
+static qboolean Con_WordIs( const char *line, const conWord_t *w, const char *word ) {
+	const int n = (int)strlen( word );
+	int s = w->start;
+
+	while ( s < w->end && ( line[s] == '/' || line[s] == '\\' ) ) {
+		s++;
 	}
-	if ( Con_WordIs( p, "login" ) || Con_WordIs( p, "new" ) ) {
-		p = Con_SkipWord( Con_SkipWord( p ) );	// (the command, the account)
-		*toEnd = qtrue;
-	} else if ( Con_WordIs( p, "changepassword" ) || Con_WordIs( p, "rconpassword" ) || Con_WordIs( p, "password" ) ) {
-		p = Con_SkipWord( p );
-	} else if ( ( Con_WordIs( p, "set" ) || Con_WordIs( p, "seta" ) || Con_WordIs( p, "sets" ) || Con_WordIs( p, "setu" ) ) &&
-		( Con_WordIs( Con_SkipWord( p ), "rconpassword" ) || Con_WordIs( Con_SkipWord( p ), "password" ) ) ) {
-		p = Con_SkipWord( Con_SkipWord( p ) );	// (set, the cvar)
-	} else if ( Con_WordIs( p, "rp" ) && Con_WordIs( Con_SkipWord( p ), "password" ) ) {
-		p = Con_SkipWord( Con_SkipWord( Con_SkipWord( p ) ) );	// (rp, password, the account)
+	return (qboolean)( w->end - s == n && !Q_stricmpn( line + s, word, n ) );
+}
+
+static qboolean Con_Slashed( const char *line, const conWord_t *w ) {
+	return (qboolean)( w->start < w->end && ( line[w->start] == '/' || line[w->start] == '\\' ) );
+}
+
+// Whether a word's only slashes ("/ login ...", "\"/\" login ...": the word
+// after it's the command, as the player meant it).
+static qboolean Con_OnlySlashes( const char *line, const conWord_t *w ) {
+	int i;
+
+	if ( w->start >= w->end ) {
+		return qfalse;
+	}
+	for ( i = w->start; i < w->end; i++ ) {
+		if ( line[i] != '/' && line[i] != '\\' ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// Whether the command c (its words in) takes a password, and where it
+// starts: c->at (-1: none's typed). Not typed in the command, but there's
+// more on the line after its last word - a ';' or a comment cut it short -
+// that's taken for it.
+static qboolean Con_CommandSecret( const char *line, int len, conCommand_t *c ) {
+	const conWord_t *w = c->w;
+	int k = 0, i;
+
+	c->at = -1;
+	c->roleplay = c->restOfLine = qfalse;
+	while ( k < c->n && Con_OnlySlashes( line, &w[k] ) ) {
+		k++;
+	}
+	if ( k < c->n && Con_WordIs( line, &w[k], "rcon" ) ) {
+		k++;	// (what follows: the server's console runs it)
+	}
+	if ( k >= c->n ) {
+		return qfalse;
+	}
+	c->cmdWord = k;
+	if ( Con_WordIs( line, &w[k], "login" ) || Con_WordIs( line, &w[k], "new" ) ) {
+		c->first = k + 2;	// (the account, then the password)
+		c->roleplay = c->restOfLine = qtrue;
+	} else if ( Con_WordIs( line, &w[k], "changepassword" ) ) {
+		c->first = k + 1;
+		c->roleplay = qtrue;
+	} else if ( Con_WordIs( line, &w[k], "rconpassword" ) || Con_WordIs( line, &w[k], "password" ) ) {
+		c->first = k + 1;
+	} else if ( ( Con_WordIs( line, &w[k], "set" ) || Con_WordIs( line, &w[k], "seta" ) || Con_WordIs( line, &w[k], "sets" ) ||
+		Con_WordIs( line, &w[k], "setu" ) ) && k + 1 < c->n &&
+		( Con_WordIs( line, &w[k + 1], "rconpassword" ) || Con_WordIs( line, &w[k + 1], "password" ) ) ) {
+		c->first = k + 2;
+	} else if ( Con_WordIs( line, &w[k], "rp" ) && k + 1 < c->n && Con_WordIs( line, &w[k + 1], "password" ) ) {
+		c->first = k + 3;	// (rp, password, the account)
 	} else {
-		return NULL;
+		return qfalse;
 	}
-	p = Con_SkipSpace( p );
-	return *p ? p : NULL;
+	if ( c->first < c->n ) {
+		c->at = w[c->first].start - ( w[c->first].quoted ? 1 : 0 );
+	} else {
+		i = Con_WordEnd( &w[c->n - 1] );
+		while ( i < len && (unsigned char)line[i] <= ' ' ) {
+			i++;
+		}
+		if ( i < len ) {
+			c->at = i;
+		}
+	}
+	return qtrue;
+}
+
+// What a /* comment does to a line is past reading here with confidence
+// (a quote in one, a '/' the console takes off before it...): in a line with
+// one (or the end of one) in [0, len), a password command's word anywhere,
+// with more after it, is taken for one - from there (-1: none).
+static int Con_CommentedSecret( const char *line, int len ) {
+	static const char *words[] = { "login", "new", "changepassword", "rconpassword", "password" };
+	int i, j, s, e;
+
+	for ( i = 0; i + 1 < len && !( ( line[i] == '/' && line[i + 1] == '*' ) || ( line[i] == '*' && line[i + 1] == '/' ) ); i++ ) {
+	}
+	if ( i + 1 >= len ) {
+		return -1;
+	}
+	i = 0;
+	while ( i < len ) {
+		while ( i < len && ( (unsigned char)line[i] <= ' ' || line[i] == ';' || line[i] == '"' ) ) {
+			i++;
+		}
+		for ( s = i; i < len && (unsigned char)line[i] > ' ' && line[i] != ';' && line[i] != '"'; i++ ) {
+		}
+		for ( e = i; s < e && ( line[s] == '/' || line[s] == '\\' || line[s] == '*' ); s++ ) {
+		}
+		for ( j = 0; j < (int)ARRAY_LEN( words ); j++ ) {
+			if ( e - s == (int)strlen( words[j] ) && !Q_stricmpn( line + s, words[j], e - s ) ) {
+				int after = e;
+				while ( after < len && (unsigned char)line[after] <= ' ' ) {
+					after++;
+				}
+				if ( after < len ) {
+					return after;
+				}
+			}
+		}
+	}
+	return -1;
+}
+
+// The first command on the line from pos with a password typed (its words
+// read in c); returns where the next starts, or -1: there's none.
+static int Con_FindSecret( const char *line, int len, int pos, conCommand_t *c ) {
+	while ( pos <= len ) {
+		const int next = Con_NextCommand( line, len, pos, &c->end );
+		c->start = pos;
+		c->n = Con_Words( line, c->start, c->end, c->w, CON_WORDS );
+		if ( Con_CommandSecret( line, len, c ) && c->at >= 0 ) {
+			return next;
+		}
+		pos = next;
+	}
+	return -1;
 }
 
 // The line with its password hidden, into out (sameLength: as many '*'s,
-// else "********"): from where the first one starts, in any of its commands,
-// to the line's end - what follows a password's no more to be shown than it
-// (login's and new's run to the end; another with a ';' after it doesn't
-// run at all). qtrue: there's one.
+// else "********"): from where the first starts to the line's end. The '/'s
+// (or '\\'s) a line starts with don't count (the console's, the chat line's:
+// "//login" in the chat line is a login all the same). qtrue: there's one.
 qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLength ) {
-	const char *p = line, *secret = NULL;
-	int at, i;
+	static conCommand_t c;
+	const char *from = Con_SkipSpace( line );
+	int at, comment, i;
 
-	Q_strncpyz( out, line, size );
-	while ( *p && !secret ) {
-		const char *end = Con_CommandEnd( p );
-		qboolean toEnd;
-		secret = Con_CommandSecret( p, &toEnd );
-		if ( secret && !toEnd && secret >= end ) {
-			secret = NULL;	// (its password's not typed: what's after is another command)
-		}
-		p = ( *end == ';' ) ? end + 1 : end;
-	}
-	if ( !secret ) {
+	if ( size <= 0 ) {
 		return qfalse;
 	}
-	at = (int)( secret - line );
+	Q_strncpyz( out, line, size );
+	while ( *from == '/' || *from == '\\' ) {
+		from++;
+	}
+	at = ( Con_FindSecret( from, (int)strlen( from ), 0, &c ) >= 0 ) ? (int)( from - line ) + c.at : -1;
+	comment = Con_CommentedSecret( line, (int)strlen( line ) );
+	if ( comment >= 0 && ( at < 0 || comment < at ) ) {
+		at = comment;
+	}
+	if ( at < 0 ) {
+		return qfalse;
+	}
 	if ( at >= size ) {
 		return qtrue;	// (cut off before it)
 	}
@@ -782,94 +970,135 @@ qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLen
 	return qtrue;
 }
 
-// Whether the command at p is one of roleplay's with a password (cg_vrrp.c):
-// its server has a key, not the password, so no part of it's to go there.
-static qboolean Con_RoleplaySecret( const char *p ) {
-	p = Con_SkipSpace( p );
-	while ( *p == '/' || *p == '\\' ) {
-		p++;
+// Whether [from, to) of the line has what parts a line's commands in it: a
+// ';', or a comment's start.
+static qboolean Con_Parts( const char *line, int from, int to ) {
+	int i;
+
+	for ( i = from; i < to; i++ ) {
+		if ( line[i] == ';' || ( line[i] == '/' && i + 1 < to && ( line[i + 1] == '/' || line[i + 1] == '*' ) ) ) {
+			return qtrue;
+		}
 	}
-	return (qboolean)( Con_WordIs( p, "login" ) || Con_WordIs( p, "new" ) || Con_WordIs( p, "changepassword" ) );
+	return qfalse;
 }
 
-// The command line about to run (from the console or the chat line) made
-// safe for roleplay's passwords in it, into out: login's and new's - the rest
-// of their command - put in quotes, so spaces in it stay as typed. Such a
-// password can't have a ';' (or '//', '/*') in it but in quotes: right after
-// its text, one would cut it short and send on what follows to the server,
-// so a line with one there doesn't run (a ';' after a space parts commands,
-// as ever). (The cvars' - rconpassword, password - are as they were: their
-// server knows them.) qfalse: it's not to run (the player's told why).
+// The command line about to run (the console's, or a command from the chat
+// line) made safe for the passwords in it, into out: login's and new's - the
+// rest of the line - in quotes; the others' must stand whole as typed. qfalse:
+// it's not to run (the player's told why).
 qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
-	const char *p = line;
-	int n = 0;
+	static conCommand_t c;
+	const int len = (int)strlen( line );
+	int pos = 0, n, p, accountStart, accountEnd, pwStart, pwEnd, i;
+	qboolean accountQuoted, pwQuoted;
 
 	if ( size <= 0 ) {
 		return qfalse;
 	}
-	while ( *p ) {
-		const char *end = Con_CommandEnd( p ), *secret, *c, *last, *stop = end;
-		qboolean toEnd, quoted = qfalse;
-		secret = Con_CommandSecret( p, &toEnd );
-		if ( secret && ( secret >= end || !Con_RoleplaySecret( p ) ) ) {
-			secret = NULL;
+	while ( ( pos = Con_FindSecret( line, len, pos, &c ) ) >= 0 && !c.restOfLine ) {
+		// the others': whole as typed - words apart, and in quotes, or the line's end, after the last
+		if ( c.first >= c.n ) {
+			Com_Printf( "Not run: a ; or a comment before a password (put it in quotes)\n" );
+			return qfalse;
 		}
-		if ( secret ) {
-			// a ';' or a comment right after the password's text (not after a space, or its quotes): it's cut short
-			for ( c = secret; c < end; c++ ) {
-				if ( *c == '"' ) {
-					quoted = (qboolean)!quoted;
-				} else if ( !quoted && ( *c == ';' || ( c[0] == '/' && ( c[1] == '/' || c[1] == '*' ) ) ) ) {
-					if ( c > secret && c[-1] != ' ' && c[-1] != '\t' && c[-1] != '"' ) {
-						Com_Printf( "A ; or // in a password: put the password in quotes (a ; after a space parts commands)\n" );
-						return qfalse;
-					}
-					stop = c;	// (a comment: the password's over before it)
-					break;
+		for ( i = c.first; i < c.n; i++ ) {
+			const int after = Con_WordEnd( &c.w[i] );
+			if ( i + 1 < c.n ) {
+				p = after;
+				while ( p < c.w[i + 1].start - ( c.w[i + 1].quoted ? 1 : 0 ) && ( line[p] == ' ' || line[p] == '\t' ) ) {
+					p++;
 				}
-			}
-			if ( stop == end && *end == ';' && end > secret && end[-1] != ' ' && end[-1] != '\t' && end[-1] != '"' ) {
-				Com_Printf( "A ; or // in a password: put the password in quotes (a ; after a space parts commands)\n" );
-				return qfalse;
-			}
-		}
-		if ( secret && toEnd && *secret != '"' ) {
-			// login, new: what's left of the command, in quotes (no quote in it can be)
-			for ( last = stop; last > secret && ( last[-1] == ' ' || last[-1] == '\t' ); last-- ) {
-			}
-			for ( c = secret; c < last; c++ ) {
-				if ( *c == '"' ) {
-					Com_Printf( "A password with \" in it can't be typed here: use the Roleplay menu\n" );
+				if ( p == after || p != c.w[i + 1].start - ( c.w[i + 1].quoted ? 1 : 0 ) ) {
+					Com_Printf( "Not run: a password with \", or a comment, in it: put it in quotes\n" );
+					return qfalse;
+				}
+			} else if ( !c.w[i].closed ) {
+				for ( p = after; p < len && ( line[p] == ' ' || line[p] == '\t' ); p++ ) {
+				}
+				if ( p < len ) {
+					Com_Printf( "Not run: a ; or a comment against a password would cut it short (put it in quotes)\n" );
 					return qfalse;
 				}
 			}
-			if ( n + (int)( secret - p ) + (int)( last - secret ) + 2 + (int)( end - last ) >= size ) {
-				Com_Printf( "That line's too long\n" );
-				return qfalse;
-			}
-			memcpy( out + n, p, secret - p );
-			n += (int)( secret - p );
-			out[n++] = '"';
-			memcpy( out + n, secret, last - secret );
-			n += (int)( last - secret );
-			out[n++] = '"';
-			memcpy( out + n, last, end - last );
-			n += (int)( end - last );
-		} else {
-			if ( n + (int)( end - p ) >= size ) {
-				Com_Printf( "That line's too long\n" );
-				return qfalse;
-			}
-			memcpy( out + n, p, end - p );
-			n += (int)( end - p );
 		}
-		p = end;
-		if ( *p == ';' ) {
-			if ( n + 1 >= size ) {
-				Com_Printf( "That line's too long\n" );
-				return qfalse;
-			}
-			out[n++] = *p++;
+	}
+	// (login's or new's, the rest of the line, goes in quotes: what runs as it is is before it)
+	if ( Con_CommentedSecret( line, ( pos >= 0 ) ? c.start : len ) >= 0 ) {
+		Com_Printf( "Not run: a password on a line with a /* comment\n" );
+		return qfalse;
+	}
+	if ( pos < 0 ) {
+		if ( len >= size ) {
+			Com_Printf( "That line's too long\n" );
+			return qfalse;
+		}
+		Q_strncpyz( out, line, size );
+		return qtrue;
+	}
+
+	// login, new: what's before them as it is, then theirs - the account and
+	// the password, the rest of the line, each in quotes
+	p = Con_WordEnd( &c.w[c.cmdWord] );
+	n = p;	// (the line up to the command's word)
+	if ( p < len && line[p] != ' ' && line[p] != '\t' ) {
+		Com_Printf( "Type it as /%s <account> <password>\n", Con_WordIs( line, &c.w[c.cmdWord], "new" ) ? "new" : "login" );
+		return qfalse;
+	}
+	while ( p < len && ( line[p] == ' ' || line[p] == '\t' ) ) {
+		p++;
+	}
+	accountQuoted = (qboolean)( line[p] == '"' );
+	accountStart = accountQuoted ? p + 1 : p;
+	for ( p = accountStart; p < len && ( accountQuoted ? line[p] != '"' : ( line[p] != ' ' && line[p] != '\t' && line[p] != '"' ) ); p++ ) {
+	}
+	accountEnd = p;
+	if ( accountQuoted && p < len ) {
+		p++;	// (its closing quote)
+	}
+	if ( ( p < len && line[p] != ' ' && line[p] != '\t' ) || ( !accountQuoted && Con_Parts( line, accountStart, accountEnd ) ) ) {
+		Com_Printf( "Type it as /%s <account> <password>\n", Con_WordIs( line, &c.w[c.cmdWord], "new" ) ? "new" : "login" );
+		return qfalse;
+	}
+	while ( p < len && ( line[p] == ' ' || line[p] == '\t' ) ) {
+		p++;
+	}
+	pwStart = p;
+	for ( pwEnd = len; pwEnd > pwStart && ( line[pwEnd - 1] == ' ' || line[pwEnd - 1] == '\t' ); pwEnd-- ) {
+	}
+	pwQuoted = (qboolean)( pwEnd - pwStart >= 2 && line[pwStart] == '"' && line[pwEnd - 1] == '"' );
+	if ( pwQuoted ) {
+		pwStart++;
+		pwEnd--;
+	}
+	for ( i = pwStart; i < pwEnd; i++ ) {
+		if ( line[i] == '"' ) {
+			Com_Printf( "A password with \" in it can't be typed here: use the Roleplay menu\n" );
+			return qfalse;
+		}
+	}
+	if ( !pwQuoted && Con_Parts( line, pwStart, pwEnd ) ) {
+		// (it'd go in whole, in quotes - but what was it typed for: another command after it?)
+		Com_Printf( "A ; // or /* in a password: put the password in quotes\n" );
+		return qfalse;
+	}
+	if ( n + 3 + ( accountEnd - accountStart ) + 3 + ( pwEnd - pwStart ) + 1 > size ) {	// (the quotes, spaces, the end)
+		Com_Printf( "That line's too long\n" );
+		return qfalse;
+	}
+	memcpy( out, line, n );
+	if ( accountEnd > accountStart || accountQuoted ) {
+		out[n++] = ' ';
+		out[n++] = '"';
+		memcpy( out + n, line + accountStart, accountEnd - accountStart );
+		n += accountEnd - accountStart;
+		out[n++] = '"';
+		if ( pwEnd > pwStart ) {
+			out[n++] = ' ';
+			out[n++] = '"';
+			memcpy( out + n, line + pwStart, pwEnd - pwStart );
+			n += pwEnd - pwStart;
+			out[n++] = '"';
 		}
 	}
 	out[n] = '\0';
@@ -885,22 +1114,31 @@ const char *Con_ChatCommand( const char *line ) {
 }
 
 // A command the engine's to send on to the server as it was typed (the game
-// didn't take it): whether it may go. Roleplay's with a password (the
-// cgame's, cg_vrrp.c) don't - the password in the clear - when the game
-// isn't there to take them (connecting, loading), or they're mistyped
-// (//login: "/login"); the player's told why. Where the game declines one
-// (a server without roleplay may have its own /login), it goes.
+// didn't take it; cmd: the command, as it runs): whether it may go. One with
+// a password doesn't when it's mistyped (//login: "/login") - nor
+// roleplay's (the cgame's) when the game isn't there to take them
+// (connecting, loading), nor the server's rp password but by rcon; the
+// player's told why. Where the game declines a /login (a server without
+// roleplay may have its own), it goes.
 qboolean Con_SecretMayForward( const char *cmd, qboolean inGame ) {
-	const char *word = cmd;
+	static conCommand_t c;
+	const int len = (int)strlen( cmd );
+	int i;
 
-	while ( *word == '/' || *word == '\\' ) {
-		word++;
-	}
-	if ( Q_stricmp( word, "login" ) && Q_stricmp( word, "new" ) && Q_stricmp( word, "changepassword" ) ) {
+	c.start = 0;
+	c.end = len;
+	c.n = Con_Words( cmd, 0, len, c.w, CON_WORDS );
+	if ( !Con_CommandSecret( cmd, len, &c ) || c.at < 0 ) {
 		return qtrue;
 	}
-	if ( word != cmd ) {
-		Com_Printf( "Not sent: type it with one slash (/%s ...)\n", word );
+	for ( i = 0; i <= c.cmdWord; i++ ) {
+		if ( Con_Slashed( cmd, &c.w[i] ) ) {
+			Com_Printf( "Not sent: type it with one slash (/%.*s ...)\n", c.w[c.cmdWord].end - c.w[c.cmdWord].start, cmd + c.w[c.cmdWord].start );
+			return qfalse;
+		}
+	}
+	if ( !c.roleplay || c.cmdWord > 0 ) {
+		Com_Printf( "Not sent: that's for rcon (rcon %.*s ...)\n", c.w[c.cmdWord].end - c.w[c.cmdWord].start, cmd + c.w[c.cmdWord].start );
 		return qfalse;
 	}
 	if ( !inGame ) {

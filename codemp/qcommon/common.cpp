@@ -1865,6 +1865,10 @@ static void PrintCvarMatches( const char *s ) {
 	}
 }
 
+#ifndef DEDICATED
+qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLength );	// OpenJK VR (cl_keys.cpp)
+#endif
+
 /*
 ===============
 Field_FindFirstSeparator
@@ -1902,7 +1906,15 @@ static qboolean Field_Complete( void ) {
 		return qtrue;
 	}
 
+#ifndef DEDICATED
+	{	// OpenJK VR: a password on the line not shown (cl_keys.cpp)
+		char shown[MAX_EDIT_LINE];
+		Con_HideSecret( completionField->buffer, shown, sizeof( shown ), qfalse );
+		Com_Printf( "%c%s\n", CONSOLE_PROMPT_CHAR, shown );
+	}
+#else
 	Com_Printf( "%c%s\n", CONSOLE_PROMPT_CHAR, completionField->buffer );
+#endif
 
 	return qfalse;
 }
