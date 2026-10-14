@@ -689,23 +689,27 @@ static const char *Con_SkipWord( const char *p ) {
 	return p;
 }
 
-// Whether the next word is this one.
+// Whether the next word is this one (a quote ends a word, as a space does).
 static qboolean Con_WordIs( const char *p, const char *word ) {
 	const size_t n = strlen( word );
 	p = Con_SkipSpace( p );
-	return (qboolean)( !Q_stricmpn( p, word, (int)n ) && ( !p[n] || p[n] == ' ' || p[n] == '\t' || p[n] == ';' ) );
+	return (qboolean)( !Q_stricmpn( p, word, (int)n ) && ( !p[n] || p[n] == ' ' || p[n] == '\t' || p[n] == ';' || p[n] == '"' ) );
 }
 
-// Where the command starting at p ends, as the command buffer splits a line:
-// at a ';' out of quotes (or the line's end; a comment, // or /*, runs to it).
+// Where the command starting at p ends, as the command buffer splits a line
+// (cmd.cpp): at a ';' out of quotes, the line's end - a // comment runs to it
+// - or a /* comment's end, after which the line goes on as another command.
 static const char *Con_CommandEnd( const char *p ) {
 	qboolean quoted = qfalse;
 
 	for ( ; *p; p++ ) {
 		if ( *p == '"' ) {
 			quoted = (qboolean)!quoted;
-		} else if ( !quoted && *p == '/' && ( p[1] == '/' || p[1] == '*' ) ) {
+		} else if ( !quoted && p[0] == '/' && p[1] == '/' ) {
 			return p + strlen( p );
+		} else if ( !quoted && p[0] == '/' && p[1] == '*' ) {
+			const char *close = strstr( p + 2, "*/" );
+			return close ? close + 2 : p + strlen( p );
 		} else if ( !quoted && *p == ';' ) {
 			break;
 		}
@@ -778,49 +782,97 @@ qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLen
 	return qtrue;
 }
 
+// Whether the command at p is one of roleplay's with a password (cg_vrrp.c):
+// its server has a key, not the password, so no part of it's to go there.
+static qboolean Con_RoleplaySecret( const char *p ) {
+	p = Con_SkipSpace( p );
+	while ( *p == '/' || *p == '\\' ) {
+		p++;
+	}
+	return (qboolean)( Con_WordIs( p, "login" ) || Con_WordIs( p, "new" ) || Con_WordIs( p, "changepassword" ) );
+}
+
 // The command line about to run (from the console or the chat line) made
-// safe for a password in it, into out: login's and new's, the rest of the
-// line, put in quotes; the others', a ';', '//' or '/*' out of quotes
-// would cut short (and send on what follows). qfalse: it's not to run (the
-// player's told why).
+// safe for roleplay's passwords in it, into out: login's and new's - the rest
+// of their command - put in quotes, so spaces in it stay as typed. Such a
+// password can't have a ';' (or '//', '/*') in it but in quotes: right after
+// its text, one would cut it short and send on what follows to the server,
+// so a line with one there doesn't run (a ';' after a space parts commands,
+// as ever). (The cvars' - rconpassword, password - are as they were: their
+// server knows them.) qfalse: it's not to run (the player's told why).
 qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
 	const char *p = line;
+	int n = 0;
 
-	Q_strncpyz( out, line, size );
+	if ( size <= 0 ) {
+		return qfalse;
+	}
 	while ( *p ) {
-		const char *end = Con_CommandEnd( p ), *secret;
-		qboolean toEnd;
+		const char *end = Con_CommandEnd( p ), *secret, *c, *last, *stop = end;
+		qboolean toEnd, quoted = qfalse;
 		secret = Con_CommandSecret( p, &toEnd );
-		if ( secret && toEnd ) {
-			const int at = (int)( secret - line );
-			if ( *secret == '"' ) {
-				return qtrue;	// (in quotes already)
-			}
-			if ( strchr( secret, '"' ) ) {
-				Com_Printf( "A password with \" in it can't be typed here: use the Roleplay menu\n" );
-				return qfalse;
-			}
-			if ( at + (int)strlen( secret ) + 3 > size ) {
-				Com_Printf( "That line's too long\n" );
-				return qfalse;
-			}
-			Com_sprintf( out + at, size - at, "\"%s\"", secret );
-			return qtrue;	// (the rest of the line was the password)
+		if ( secret && ( secret >= end || !Con_RoleplaySecret( p ) ) ) {
+			secret = NULL;
 		}
 		if ( secret ) {
-			qboolean quoted = qfalse;
-			const char *c;
-			for ( c = secret; *c; c++ ) {
+			// a ';' or a comment right after the password's text (not after a space, or its quotes): it's cut short
+			for ( c = secret; c < end; c++ ) {
 				if ( *c == '"' ) {
 					quoted = (qboolean)!quoted;
-				} else if ( !quoted && ( *c == ';' || ( *c == '/' && ( c[1] == '/' || c[1] == '*' ) ) ) ) {
-					Com_Printf( "Put the password in quotes: a ; // or /* in it would cut it short\n" );
+				} else if ( !quoted && ( *c == ';' || ( c[0] == '/' && ( c[1] == '/' || c[1] == '*' ) ) ) ) {
+					if ( c > secret && c[-1] != ' ' && c[-1] != '\t' && c[-1] != '"' ) {
+						Com_Printf( "A ; or // in a password: put the password in quotes (a ; after a space parts commands)\n" );
+						return qfalse;
+					}
+					stop = c;	// (a comment: the password's over before it)
+					break;
+				}
+			}
+			if ( stop == end && *end == ';' && end > secret && end[-1] != ' ' && end[-1] != '\t' && end[-1] != '"' ) {
+				Com_Printf( "A ; or // in a password: put the password in quotes (a ; after a space parts commands)\n" );
+				return qfalse;
+			}
+		}
+		if ( secret && toEnd && *secret != '"' ) {
+			// login, new: what's left of the command, in quotes (no quote in it can be)
+			for ( last = stop; last > secret && ( last[-1] == ' ' || last[-1] == '\t' ); last-- ) {
+			}
+			for ( c = secret; c < last; c++ ) {
+				if ( *c == '"' ) {
+					Com_Printf( "A password with \" in it can't be typed here: use the Roleplay menu\n" );
 					return qfalse;
 				}
 			}
+			if ( n + (int)( secret - p ) + (int)( last - secret ) + 2 + (int)( end - last ) >= size ) {
+				Com_Printf( "That line's too long\n" );
+				return qfalse;
+			}
+			memcpy( out + n, p, secret - p );
+			n += (int)( secret - p );
+			out[n++] = '"';
+			memcpy( out + n, secret, last - secret );
+			n += (int)( last - secret );
+			out[n++] = '"';
+			memcpy( out + n, last, end - last );
+			n += (int)( end - last );
+		} else {
+			if ( n + (int)( end - p ) >= size ) {
+				Com_Printf( "That line's too long\n" );
+				return qfalse;
+			}
+			memcpy( out + n, p, end - p );
+			n += (int)( end - p );
 		}
-		p = ( *end == ';' ) ? end + 1 : end;
+		p = end;
+		if ( *p == ';' ) {
+			if ( n + 1 >= size ) {
+				Com_Printf( "That line's too long\n" );
+				return qfalse;
+			}
+			out[n++] = *p++;
+		}
 	}
+	out[n] = '\0';
 	return qtrue;
 }
 

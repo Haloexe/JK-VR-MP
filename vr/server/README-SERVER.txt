@@ -5,7 +5,7 @@ A game server that runs on its own - no game window, no headset - for VR
 players and players without VR to join. Everything works on it as in a
 game hosted from the menu: the VR saber combat (real blades cut, block and
 clash, lag compensated), everyone seeing VR players as they really move,
-and proximity voice chat. Players join with OpenJK VR (in a headset or its
+proximity voice chat, and roleplay. Players join with OpenJK VR (in a headset or its
 desktop copy, "Launch OpenJK Desktop.bat") or with the normal game, which
 fights the normal way. Give your players the same OpenJK VR version as
 the server, and update both together.
@@ -99,6 +99,33 @@ Type these in the server's window (on Linux, its terminal):
 From your game instead (with rconpassword set in server.cfg):
   rconpassword <password>
   rcon status               any of the commands above after "rcon"
+
+
+ROLEPLAY
+--------
+  g_rp 1                    roleplay on (0: off) - at any time, no map
+                            change; nothing is lost while it's off
+With it on, players log in to an account of theirs on this server (in the
+Roleplay menu, or /new and /login) and play characters of their own: a
+name no one else here has, a faction (Heroes, Villains, Neutral), a
+description and a bio. Everyone sees the character's name, and what a
+player wears while playing it stays with it. Talk reaches only the players
+near (g_rpTalkRange), /me too; the team chat key and /ooc go to everyone,
+out of character. g_rpCharacters: characters per account (5; up to 10).
+Players on the normal game can't log in, but see the characters' names
+and the chat.
+  rp list                   who plays which character, on which account
+  rp rename <player> <name> give someone's character another name
+  rp delete <account> <character>   delete a character (online or not)
+  rp password <account> <temporary> for a player who forgot theirs (they
+                            change it in the Roleplay menu after)
+Passwords never reach the server: it keeps a key made from each, over
+this server's salt. The accounts are in rp/accounts and the salt in
+rp/server.txt, in the server's own files (Linux: home/base/rp; Windows:
+Documents\My Games\OpenJK-VR-Server\base\rp). Back up rp/server.txt:
+without it every password stops working. If it can't be read, roleplay
+stays off and the console says so (mend it or put the backup back;
+deleting it starts over without the old passwords).
 
 
 GOOD TO KNOW

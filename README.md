@@ -14,9 +14,16 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Multiplayer that shows it:** other players see you as you really move
   (head, arms, hands and saber), and lag compensation judges blades as each
   player saw them.
-- **Poses:** hold Y for a pose wheel to sit, sit cross-legged, kneel or lie
-  down. Your character does, your view drops to its eyes, and your head and
-  arms stay tracked. Players without VR get the wheel on a key.
+- **Roleplay:** servers can switch on a roleplay mode at any time. Players log
+  in to an account and play characters of their own (a name, a faction, a
+  description and a bio) that everyone sees, with talk that reaches only those
+  nearby, speech bubbles, `/me` and out-of-character chat, and character cards
+  you see by looking at someone. Passwords never leave the player's PC.
+- **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
+  a pose (sit, sit cross-legged, kneel or lie down, with your view at your
+  character's eyes and your head and arms still tracked) or reach roleplay;
+  a keyboard comes up whenever something takes typing. Players without VR get
+  the wheel on a key.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.
@@ -71,7 +78,7 @@ settings and commands. Players need the same OpenJK VR version as the server.
 The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
 `cl_voice.cpp`), the renderer (`codemp/rd-vanilla`), the client game
 (`codemp/cgame/cg_vrbody.c`: body, arms, solid blades and haptics) and the server game
-(`codemp/game/g_vrsaber.c`: saber combat). The "HOW IT WORKS" section of
+(`codemp/game/g_vrsaber.c`: saber combat; `g_vrrp.c`: roleplay). The "HOW IT WORKS" section of
 `vr/README-VR.txt` has the details.
 
 ## Credits

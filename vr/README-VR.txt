@@ -29,6 +29,11 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     see PLAYING WITH OTHERS)
   * Proximity voice chat: talk to the players near you and hear them from
     where they are; pick your microphone in Setup > Sound (see VOICE CHAT)
+  * Roleplay on servers that switch it on: an account, characters of your
+    own (a name, a faction, a description and a bio), talk that reaches
+    only those near you with speech bubbles over their heads, /me and
+    out-of-character chat, and character cards (see ROLEPLAY)
+  * A keyboard in the headset for typing in menus, chat and the console
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
 
@@ -86,8 +91,11 @@ where it points.
   B                    back (like Escape)
   Left menu button     close the menu / back
 Each click gives a small buzz in your hand. The keyboard and mouse keep
-working alongside. Typing (your name, a server address, chat) still needs
-the keyboard. In Controls, the triggers, B and pushing a stick up or down
+working alongside. To type - click a text field (your name, a server
+address), open the chat line, or the console - a keyboard comes up on the
+menu screen: point at a key and pull the trigger. Shift once makes the next
+key a capital (or the symbol over a number); Backspace held repeats; Enter
+is Enter; Close (or B) is done. In Controls, the triggers, B and pushing a stick up or down
 are busy clicking, going back and scrolling, so to put a command on one of
 those use the console (see the AUX key names below); the other buttons
 (grips, A, X, Y, stick clicks) can be bound right there.
@@ -358,19 +366,72 @@ engage_duel (look at them, press it); you can put it on a button too, e.g.
 the left stick click:  bind AUX24 engage_duel  (that button walks
 otherwise). cg_vrDuelSalute 0 turns the salute off.
 
-Poses: hold Y for the pose wheel - sit (on a chair or a bench: stand with
-your back to it first), sit cross-legged, kneel, lie down. Push the right
-stick toward one and let go of Y (a quick press of Y still picks the next
-Force power). Your character goes down into it and your view with it, to
-its eyes; your head and arms stay yours, so you can still talk with your
+The wheel: hold Y, push the right stick toward a slot and let go of Y (a
+quick press of Y still picks the next Force power):
+  up     Say...       the chat line, with the headset's keyboard
+  right  Poses        sit (on a chair or a bench: stand with your back to
+                      it first), kneel, lie down, sit cross-legged
+  down   Companions   (still to come)
+  left   Roleplay     read the bio of whom you look at, challenge them to a
+                      duel, the Roleplay menu (see ROLEPLAY)
+Rest on Poses or Roleplay a moment and its ring opens: push toward what you
+want there and let go of Y (Back, up and to the left, goes back; let go
+with the stick in the middle and nothing happens). What can't be done now
+is greyed out, and the line under the wheel says why. Without the
+headset, hold P (or O or I, whichever was free the first time: bind <key>
++posewheel for another), move the mouse toward a slot and let go (Escape:
+none).
+
+Poses: your character goes down into it and your view with it, to its
+eyes; your head and arms stay yours, so you can still talk with your
 hands, and the body stays facing the way it went down while you look
 about. Moving, jumping, crouching, attacking or using the Force gets you
 up again (healing you can do sat) - so does lighting your saber, which a
 pose puts away - and in the wheel the pose you're in reads "Stand up".
-Everyone sees it, players without VR too. Without the headset, hold P (or
-O or I, whichever was free the first time: bind <key> +posewheel for
-another), move the mouse toward one and let go (Escape: none); or in the
-console: pose sit, pose cross, pose kneel, pose lie, pose stand.
+Everyone sees it, players without VR too. In the console: pose sit, pose
+cross, pose kneel, pose lie, pose stand.
+
+ROLEPLAY: on a server with roleplay switched on (its owner switches it on
+and off at any time, no map change: g_rp 1 - or set Roleplay on Create
+game when you host), you play characters of your own. Open the Roleplay
+menu - the ROLEPLAY tab under the in-game menu's bar, or Roleplay menu on
+the wheel's Roleplay ring - and make an account (a name for it and a
+password, twice). Then make a character there: a name no one else on the
+server has, and in the Editor its faction (Heroes, Villains or Neutral), a
+one-line description and a bio. While roleplay is on, everyone sees your
+character's name instead of yours, and what you wear while you play it
+(model, saber and skin colours, chosen in the game's own player menu)
+stays with that character. An account keeps up to 5 characters (the
+server's g_rpCharacters). Switching characters respawns you, so it waits
+until you're out of a duel and haven't been hurt for 10 s. With roleplay
+off the game plays as before, and nothing is lost.
+  Your password never leaves your PC: the game makes a key of it and logs
+in with that. Remember me keeps the key (never the password) and logs you
+in on that server by itself next time; Log out forgets it. A forgotten
+password: the server's owner can give you a temporary one.
+  Talk (the chat key, or Say... on the wheel) reaches only the players
+within about 15 m (the server's g_rpTalkRange), and shows over your head
+in a speech bubble for 6 s;  /me draws his saber  shows as "* Kael draws
+his saber". The team chat key, or /ooc <text>, goes to everyone, out of
+character, under your own name. Commands work typed into the chat line
+too.
+  Look at someone playing a character - within 4 m, with your own saber
+off or fists out - for half a second, and their card shows: name, faction
+and description. Their bio: Read their bio on the wheel's Roleplay ring,
+or the menu's People page (everyone here, with their faction and
+description).
+  The menu's other pages: Chat & cards (speech bubbles, cards and Remember
+me on or off: cg_rpBubbles, cg_rpCards, cg_rpRemember), Help, and Server,
+for the owner: roleplay on or off, characters per account and how far
+talk reaches - straight into a game you host; on your own server, after
+typing its rcon password into the page.
+  In the console (Shift+~):  new <account> <password>,  login <account>
+<password>,  logout,  changepassword <old> <new>,  bio (of whom you look
+at), and  rp  for your characters: rp new <name>, rp play <name or
+number>, rp faction heroes|villains|neutral, rp desc <text>, rp bio
+<text>, rp delete <name>; rp look <player> shows anyone's card. A password
+typed in the console shows as *s and isn't kept in its history (one with a
+; in it goes in quotes; one with a " in it can only be typed in the menu).
 
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own
@@ -538,8 +599,6 @@ KNOWN LIMITATIONS
   * Guns are held in the right hand only (for now); only sabers can be
     held with both hands.
   * Mirrors show your character without a head (it is hidden for your view).
-  * Typing in menus (names, server addresses) and chat need the keyboard
-    (no on-screen keyboard yet).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
   * Things near the edge of your view can pop in (the game culls with its
@@ -590,6 +649,14 @@ no client. Source files:
   codemp/client/snd_voice.cpp  voices played from where the players are
   codemp/server/sv_client.cpp  the server passing voices on to those near
   codemp/ui/ui_vrvoice.c       the voice chat settings (base\ui\vr_voice.menu)
+  codemp/client/cl_vrkeyboard.cpp  the headset's keyboard
+  codemp/cgame/cg_vrpose.c     the wheel (poses: game/bg_vrpose.c)
+  codemp/game/g_vrrp.c         roleplay, the server's side: the switch,
+                               accounts, logins, characters, chat
+  codemp/cgame/cg_vrrp.c       roleplay, the player's side: logging in,
+                               speech bubbles, cards
+  codemp/game/bg_vrcrypt.c     SHA-256, HMAC and PBKDF2 for the logins
+  codemp/ui/ui_vrrp.c          the Roleplay menu (base\ui\vr_rp.menu)
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
   vr/build-linux-server.sh     the Linux dedicated server (vr/server/)

@@ -37,7 +37,7 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			1
+#define RP_PROTOCOL			2		// (as the server's, g_vrrp.c)
 #define RP_CHARS_MAX		10		// (as many as a server keeps at most)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
@@ -560,12 +560,28 @@ static qboolean CG_RP_Ready( void ) {
 	return qfalse;
 }
 
-static void CG_RP_NewAccount( const char *name, const char *password, const char *again ) {
-	char account[RP_ACCOUNT_MAX + 1];
+// A password as it's taken: the spaces before and after it out (one slips in
+// easily on the headset's keyboard, and the console drops them as it is).
+static void CG_RP_Password( const char *in, char *out, int size ) {
+	int n;
+
+	while ( *in == ' ' || *in == '\t' ) {
+		in++;
+	}
+	Q_strncpyz( out, in, size );
+	for ( n = (int)strlen( out ); n > 0 && ( out[n - 1] == ' ' || out[n - 1] == '\t' ); n-- ) {
+		out[n - 1] = '\0';
+	}
+}
+
+static void CG_RP_NewAccount( const char *name, const char *typed, const char *typedAgain ) {
+	char account[RP_ACCOUNT_MAX + 1], password[MAX_STRING_CHARS], again[MAX_STRING_CHARS];
 
 	if ( !CG_RP_Ready() ) {
 		return;
 	}
+	CG_RP_Password( typed, password, sizeof( password ) );
+	CG_RP_Password( typedAgain, again, sizeof( again ) );
 	if ( !CG_RP_AccountName( name, account, sizeof( account ) ) ) {
 		CG_RP_Show( "An account name takes 3 to 20 letters, numbers, _ or -", qtrue );
 	} else if ( (int)strlen( password ) < RP_PASSWORD_MIN ) {
@@ -582,14 +598,17 @@ static void CG_RP_NewAccount( const char *name, const char *password, const char
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
+	memset( password, 0, sizeof( password ) );
+	memset( again, 0, sizeof( again ) );
 }
 
-static void CG_RP_LogIn( const char *name, const char *password ) {
-	char account[RP_ACCOUNT_MAX + 1];
+static void CG_RP_LogIn( const char *name, const char *typed ) {
+	char account[RP_ACCOUNT_MAX + 1], password[MAX_STRING_CHARS];
 
 	if ( !CG_RP_Ready() ) {
 		return;
 	}
+	CG_RP_Password( typed, password, sizeof( password ) );
 	if ( !CG_RP_AccountName( name, account, sizeof( account ) ) ) {
 		CG_RP_Show( "An account name takes 3 to 20 letters, numbers, _ or -", qtrue );
 	} else if ( !password[0] ) {
@@ -602,12 +621,18 @@ static void CG_RP_LogIn( const char *name, const char *password ) {
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
+	memset( password, 0, sizeof( password ) );
 }
 
-static void CG_RP_NewPassword( const char *now, const char *password, const char *again ) {
+static void CG_RP_NewPassword( const char *typedNow, const char *typed, const char *typedAgain ) {
+	char now[MAX_STRING_CHARS], password[MAX_STRING_CHARS], again[MAX_STRING_CHARS];
+
 	if ( !CG_RP_Ready() ) {
 		return;
 	}
+	CG_RP_Password( typedNow, now, sizeof( now ) );
+	CG_RP_Password( typed, password, sizeof( password ) );
+	CG_RP_Password( typedAgain, again, sizeof( again ) );
 	if ( !cgrp.account[0] ) {
 		CG_RP_Show( "Log in first", qtrue );
 	} else if ( (int)strlen( password ) < RP_PASSWORD_MIN ) {
@@ -622,6 +647,9 @@ static void CG_RP_NewPassword( const char *now, const char *password, const char
 		cgrp.ask.time = cg.time;
 		CG_RP_AskSend();
 	}
+	memset( now, 0, sizeof( now ) );
+	memset( password, 0, sizeof( password ) );
+	memset( again, 0, sizeof( again ) );
 }
 
 static void CG_RP_LogOut( void ) {

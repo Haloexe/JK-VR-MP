@@ -65,7 +65,7 @@ extern void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chat
 
 static int G_RP_ClientArg( const char *arg );
 
-#define RP_PROTOCOL			1
+#define RP_PROTOCOL			2		// (2: rpacct says when it answers a login; a new password's proof is over its key)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
 #define RP_NAME_MAX			32		// a character's name: visible characters...
@@ -363,14 +363,41 @@ static int G_RP_ReadFile( const char *path, char *buf, int size ) {
 	return len;
 }
 
+// Whether name is listed in dir (a file there, whether it opens or not).
+static qboolean G_RP_Listed( const char *dir, const char *name ) {
+	static char list[65536];
+	const char *p;
+	int count, i;
+
+	count = trap->FS_GetFileList( dir, ".txt", list, sizeof( list ) );
+	for ( i = 0, p = list; i < count && *p; i++, p += strlen( p ) + 1 ) {
+		if ( !Q_stricmp( p, name ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Whether a file's there (one that won't open, say locked, too: it's never
+// taken for none, and written over).
 static qboolean G_RP_FileThere( const char *path ) {
 	fileHandle_t f;
 	const int len = trap->FS_Open( path, &f, FS_READ );
+	char dir[MAX_QPATH];
+	const char *slash;
 
 	if ( f ) {
 		trap->FS_Close( f );
 	}
-	return (qboolean)( len >= 0 && f );
+	if ( len >= 0 && f ) {
+		return qtrue;
+	}
+	slash = strrchr( path, '/' );
+	if ( !slash ) {
+		return qfalse;
+	}
+	Q_strncpyz( dir, path, Com_Clampi( 1, sizeof( dir ), (int)( slash - path ) + 1 ) );
+	return G_RP_Listed( dir, slash + 1 );
 }
 
 static qboolean G_RP_WriteFile( const char *path, const char *text ) {
@@ -603,7 +630,7 @@ static qboolean G_RP_LoadServer( void ) {
 		Q_strlwr( rp.salt );
 		return qtrue;
 	}
-	if ( len != -1 ) {
+	if ( len != -1 || G_RP_FileThere( RP_SERVER_FILE ) ) {
 		Com_Printf( S_COLOR_RED "Roleplay is off: %s couldn't be read. Mend it, or delete it to start over (every account's "
 			"password then stops working)\n", RP_SERVER_FILE );
 		G_LogPrintf( "Roleplay: %s couldn't be read; roleplay is off\n", RP_SERVER_FILE );
@@ -765,6 +792,9 @@ static const char *G_RP_BusyReason( int clientNum, qboolean switching ) {
 		if ( cl->ps.m_iVehicleNum ) {
 			return "Not in a vehicle";
 		}
+		if ( cl->ps.isJediMaster ) {
+			return "Not while you're the Jedi Master";
+		}
 		if ( level.gametype == GT_SIEGE || level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL ) {
 			return "In this game type, switch characters while you're out of the round";
 		}
@@ -876,8 +906,8 @@ static void G_RP_Hello( gentity_t *ent ) {
 	char arg[16];
 
 	trap->Argv( 1, arg, sizeof( arg ) );
-	if ( atoi( arg ) < 1 ) {
-		return;
+	if ( atoi( arg ) < RP_PROTOCOL ) {
+		return;	// (an older build's: it'd take the answers wrong)
 	}
 	c->capable = qtrue;
 	if ( c->challenge[0] ) {
@@ -1458,7 +1488,18 @@ void Cmd_VRRP_f( gentity_t *ent ) {
 	char cmd[32];
 
 	trap->Argv( 0, cmd, sizeof( cmd ) );
+	if ( !Q_stricmp( cmd, "me" ) ) {
+		G_RP_Me( ent );	// (roleplay off, or not ready: as plain chat)
+		return;
+	}
+	if ( !Q_stricmp( cmd, "ooc" ) ) {
+		G_RP_Ooc( ent );
+		return;
+	}
 	if ( !rp.ready ) {
+		if ( !Q_stricmp( cmd, "rp" ) ) {
+			G_RP_Print( ent - g_entities, "Roleplay isn't working on this server: its owner's to look at rp/server.txt" );
+		}
 		return;
 	}
 	if ( !Q_stricmp( cmd, "rpver" ) ) {
@@ -1477,10 +1518,6 @@ void Cmd_VRRP_f( gentity_t *ent ) {
 		G_RP_Card( ent, qfalse );
 	} else if ( !Q_stricmp( cmd, "rpbio" ) ) {
 		G_RP_Card( ent, qtrue );
-	} else if ( !Q_stricmp( cmd, "me" ) ) {
-		G_RP_Me( ent );
-	} else if ( !Q_stricmp( cmd, "ooc" ) ) {
-		G_RP_Ooc( ent );
 	}
 }
 
@@ -1739,6 +1776,10 @@ qboolean G_RPConsoleCommand( void ) {
 	int i, n;
 
 	trap->Argv( 1, sub, sizeof( sub ) );
+	if ( !rp.ready && ( !Q_stricmp( sub, "list" ) || !Q_stricmp( sub, "rename" ) || !Q_stricmp( sub, "delete" ) || !Q_stricmp( sub, "password" ) ) ) {
+		trap->Print( "Roleplay isn't working: %s couldn't be read (mend it, or delete it to start over)\n", RP_SERVER_FILE );
+		return qtrue;	// (a key made now would be over no salt)
+	}
 	if ( !Q_stricmp( sub, "list" ) ) {
 		trap->Print( "num  player                account               character\n" );
 		for ( i = 0; i < level.maxclients; i++ ) {

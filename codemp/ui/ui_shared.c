@@ -5614,13 +5614,19 @@ void Item_TextScroll_Paint(itemDef_t *item)
 		// when it changes - into its own buffers, not the string pool
 		qboolean changed = qfalse;
 		DC->getCVarString(item->cvar, cvartext, sizeof(cvartext));
+		if ( scrollPtr->cvarNoRoom ) {
+			return;
+		}
 		if ( !scrollPtr->cvarText ) {
-			scrollPtr->cvarText = (char *)UI_Alloc( TEXTSCROLL_CVAR_TEXT );
-			scrollPtr->cvarLines = (char *)UI_Alloc( TEXTSCROLL_CVAR_LINES );
-			if ( !scrollPtr->cvarText || !scrollPtr->cvarLines ) {
-				scrollPtr->cvarText = scrollPtr->cvarLines = NULL;
+			// (the two in one, so a failure leaves nothing half taken - and
+			// only once, not a failure printed every frame)
+			char *buffers = (char *)UI_Alloc( TEXTSCROLL_CVAR_TEXT + TEXTSCROLL_CVAR_LINES );
+			if ( !buffers ) {
+				scrollPtr->cvarNoRoom = qtrue;
 				return;
 			}
+			scrollPtr->cvarText = buffers;
+			scrollPtr->cvarLines = buffers + TEXTSCROLL_CVAR_TEXT;
 			changed = qtrue;
 		}
 		if ( changed || strcmp( cvartext, scrollPtr->cvarText ) ) {

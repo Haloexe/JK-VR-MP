@@ -255,6 +255,7 @@ typedef struct textScrollDef_s
 	char			*cvarText;
 	char			*cvarLines;
 	int				cvarLinesUsed;
+	qboolean		cvarNoRoom;		// (no room for them: tried once, then left blank)
 } textScrollDef_t;
 
 #define ITEM_ALIGN_LEFT		0		// left alignment

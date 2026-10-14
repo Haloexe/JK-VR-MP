@@ -1301,6 +1301,19 @@ bool FS_FileCacheable(const char* const filename)
 
 /*
 ===========
+FS_IsRoleplayData
+
+OpenJK VR: a file of roleplay's own - text under rp/ (the server's accounts and
+salt, the logins a player's PC keeps: g_vrrp.c, cg_vrrp.c) - read from the
+directory even on a pure server, as it's no game content.
+===========
+*/
+static qboolean FS_IsRoleplayData( const char *filename, int namelen ) {
+	return (qboolean)( !Q_stricmpn( filename, "rp/", 3 ) && FS_IsExt( filename, ".txt", namelen ) );
+}
+
+/*
+===========
 FS_FOpenFileRead
 
 Finds the file in the search path.
@@ -1520,7 +1533,7 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 					    !FS_IsExt( filename, ".game", l ) &&		// menu files
 					    !FS_IsExt( filename, ".dat", l ) &&		// for journal files
 					    !FS_IsDemoExt( filename, l ) &&			// demos
-					    Q_stricmpn( filename, "rp/", 3 ) ) {		// OpenJK VR: roleplay's own files (logins kept, accounts: not game content)
+					    !FS_IsRoleplayData( filename, l ) ) {		// OpenJK VR: roleplay's own (logins kept, accounts: not game content)
 						continue;
 					}
 				}
@@ -1538,7 +1551,8 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 					!FS_IsExt( filename, ".menu", l ) &&		// menu files
 					!FS_IsExt( filename, ".game", l ) &&		// menu files
 					!FS_IsExt( filename, ".dat", l ) &&		// for journal files
-					!FS_IsDemoExt( filename, l ) ) {			// demos
+					!FS_IsDemoExt( filename, l ) &&			// demos
+					!FS_IsRoleplayData( filename, l ) ) {		// OpenJK VR
 					fs_fakeChkSum = Q_flrand(0.0f, 1.0f);
 				}
 #ifdef _WIN32
@@ -2418,7 +2432,7 @@ char **FS_ListFilteredFiles( const char *path, const char *extension, char *filt
 			// don't scan directories for files if we are pure or restricted
 			if ( fs_numServerPaks &&
 				 (!extension || Q_stricmp(extension, "fcf")) &&
-				 Q_stricmpn( path, "rp/", 3 ) )	// OpenJK VR: roleplay's own files (its accounts: not game content)
+				 !( ( !Q_stricmp( path, "rp" ) || !Q_stricmpn( path, "rp/", 3 ) ) && extension && !Q_stricmp( extension, ".txt" ) ) )	// OpenJK VR: roleplay's own
 			{
 				//rww - allow scanning for fcf files outside of pak even if pure
 			    continue;
