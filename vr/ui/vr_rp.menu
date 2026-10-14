@@ -614,7 +614,23 @@
 			name            rp_new_l1
 			group           rp_new
 			rect            40 282 520 18
-			text            "Passwords take 4 characters or more. Keep it: the server can't tell you it."
+			text            "Pick a password you use nowhere else: 4 characters or more."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_new_l2
+			group           rp_new
+			rect            40 300 520 18
+			text            "Keep it: the server can't tell you it (its owner can set you a new one)."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
