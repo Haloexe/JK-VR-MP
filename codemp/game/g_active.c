@@ -2405,6 +2405,10 @@ void ClientThink_real( gentity_t *ent ) {
 	// OpenJK VR: a private duel - one of any number at a time (g_vrduel.c)
 	G_PrivateDuelThink( ent, ucmd );
 
+	// OpenJK VR: roleplay - down: giving up, or nothing; up: giving someone
+	// down a hand (g_vrdown.c)
+	G_RPDownThink( ent, ucmd );
+
 	if (ent->client->doingThrow > level.time)
 	{
 		gentity_t *throwee = &g_entities[ent->client->throwingIndex];

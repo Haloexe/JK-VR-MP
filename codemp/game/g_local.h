@@ -798,6 +798,19 @@ struct gclient_s {
 	float		vrPoseYaw;			// OpenJK VR (g_vrpose.c): which way they faced going into their pose...
 	int			vrPoseTime;			// ...then (level.time)
 	int			rpHurtTime;			// OpenJK VR (g_vrrp.c): level.time they last took damage
+
+	// OpenJK VR (g_vrdown.c): roleplay - down, not dead (ps: VRPOSE_DOWNED); NPCs' sides
+	qboolean	rpDowned;			// down, until helped up or they give up
+	int			rpDownTime;			// level.time they went down...
+	int			rpDownBy;			// ...put down by (an entity number; ENTITYNUM_WORLD: nobody)...
+	int			rpDownByTime;		// ...a player in the game since (their pers.enterTime)...
+	int			rpDownMod;			// ...this way (MOD_*)...
+	int			rpDownDamage;		// ...with this blow (giving up, they die of it)
+	int			rpGiveUpFrom;		// level.time they've held attack since, giving up (0: not)
+	qboolean	rpAttackFree;		// attack let go of since they went down (held then, it doesn't give up)
+	int			rpHelping;			// whom they're getting up (client number + 1; 0: nobody)...
+	int			rpHelpFrom;			// ...since then
+	int			rpProvoked;			// NPCs' sides they attacked this life (1 << npcteam_t): those fight back
 };
 
 //Interest points
@@ -1064,6 +1077,21 @@ void		G_RPLookRGB( int clientNum, int *rgba );
 qboolean	G_RPChat( gentity_t *ent, gentity_t *target, int mode, const char *text );
 qboolean	G_RPConsoleCommand( void );
 void		Cmd_VRRP_f( gentity_t *ent );
+int			G_RPFaction( int clientNum );
+qboolean	G_RPCapable( int clientNum );
+// g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
+qboolean	G_RPDownOn( void );
+qboolean	G_RPDowned( const gentity_t *ent );
+qboolean	G_RPDownGuard( gentity_t *targ, int mod );
+qboolean	G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, int damage, int mod );
+void		G_RPDownDied( gentity_t *self );
+void		G_RPGiveUp( gentity_t *ent );
+void		G_RPGiveUpCommand( gentity_t *ent );
+void		G_RPDownThink( gentity_t *ent, usercmd_t *ucmd );
+void		G_RPDownFrame( void );
+void		G_RPDownHello( int clientNum );
+int			G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent );
+void		G_RPProvoke( gentity_t *attacker, gentity_t *targ );
 
 //
 // g_items.c

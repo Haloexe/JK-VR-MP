@@ -394,6 +394,11 @@ void G_SetEnemy( gentity_t *self, gentity_t *enemy )
 		return;
 	}
 
+	if ( G_RPNPCEnemy( self, enemy ) == 0 )
+	{//OpenJK VR: roleplay - not one this NPC's side goes after (by their faction), nor anyone down (g_vrdown.c)
+		return;
+	}
+
 	if ( self->NPC->confusionTime > level.time )
 	{//can't pick up enemies if confused
 		return;
@@ -441,7 +446,9 @@ void G_SetEnemy( gentity_t *self, gentity_t *enemy )
 		self->enemy = enemy;
 
 		//Special case- if player is being hunted by his own people, set their enemy team correctly
-		if ( self->client->playerTeam == NPCTEAM_PLAYER && enemy->s.number >= 0 && enemy->s.number < MAX_CLIENTS )
+		//(OpenJK VR: not a roleplay character - their faction says who goes after them, g_vrdown.c)
+		if ( self->client->playerTeam == NPCTEAM_PLAYER && enemy->s.number >= 0 && enemy->s.number < MAX_CLIENTS &&
+			G_RPNPCEnemy( self, enemy ) < 0 )
 		{
 			self->client->enemyTeam = NPCTEAM_PLAYER;
 		}
@@ -1385,6 +1392,10 @@ qboolean ValidEnemy(gentity_t *ent)
 			else if ( ent->client->tempSpectate >= level.time )
 			{//don't go after spectators
 				return qfalse;
+			}
+			else if ( G_RPNPCEnemy( NPCS.NPC, ent ) >= 0 )
+			{//OpenJK VR: roleplay - a player playing a character, by their faction; nobody down (g_vrdown.c)
+				return (qboolean)G_RPNPCEnemy( NPCS.NPC, ent );
 			}
 			else
 			{

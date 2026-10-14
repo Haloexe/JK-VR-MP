@@ -512,14 +512,21 @@ static void UI_VRRP_Page( int page ) {
 		break;
 	case RPP_SERVER:
 		if ( UI_VRRP_Local() ) {
+			char downed[16];
 			trap->Cvar_Set( "ui_rpSrvChars", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, UI_VRRP_Int( "g_rpCharacters" ) ) ) );
 			trap->Cvar_Set( "ui_rpSrvRange", va( "%i", UI_VRRP_Int( "g_rpTalkRange" ) ) );
+			UI_VRRP_Str( "g_rpDowned", downed, sizeof( downed ) );	// ("": the game's not made it yet - its default)
+			trap->Cvar_Set( "ui_rpSrvDowned", ( !downed[0] || atoi( downed ) ) ? "1" : "0" );
 		} else {
 			char now[16];
 			UI_VRRP_Str( "ui_rpSrvChars", now, sizeof( now ) );
 			if ( !now[0] ) {
 				trap->Cvar_Set( "ui_rpSrvChars", "5" );
 				trap->Cvar_Set( "ui_rpSrvRange", "510" );
+			}
+			UI_VRRP_Str( "ui_rpSrvDowned", now, sizeof( now ) );
+			if ( !now[0] ) {
+				trap->Cvar_Set( "ui_rpSrvDowned", "1" );
 			}
 		}
 		break;
@@ -661,6 +668,7 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 		} else if ( !Q_stricmp( how, "apply" ) ) {
 			UI_VRRP_ServerSet( "g_rpCharacters", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, UI_VRRP_Int( "ui_rpSrvChars" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpTalkRange", va( "%i", Com_Clampi( 0, 100000, UI_VRRP_Int( "ui_rpSrvRange" ) ) ) );
+			UI_VRRP_ServerSet( "g_rpDowned", UI_VRRP_Int( "ui_rpSrvDowned" ) ? "1" : "0" );
 		}
 	}
 	return qtrue;

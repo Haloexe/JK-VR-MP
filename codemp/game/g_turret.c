@@ -456,6 +456,10 @@ static qboolean turret_find_enemies( gentity_t *self )
 		{
 			continue;
 		}
+		if ( G_RPDowned( target ) )
+		{//OpenJK VR: down in roleplay - nothing harms them (g_vrdown.c)
+			continue;
+		}
 		if ( target->client->sess.sessionTeam == TEAM_SPECTATOR )
 		{
 			continue;
@@ -566,6 +570,10 @@ void turret_base_think( gentity_t *self )
 	}
 	else if ( self->enemy->client && self->enemy->client->tempSpectate >= level.time )
 	{//don't keep going after spectators
+		self->enemy = NULL;
+	}
+	else if ( G_RPDowned( self->enemy ) )
+	{//OpenJK VR: down in roleplay - nothing harms them (g_vrdown.c)
 		self->enemy = NULL;
 	}
 	else

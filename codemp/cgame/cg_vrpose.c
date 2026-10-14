@@ -11,8 +11,8 @@ one. Out of the middle:
                          you're in reads "Stand up"
   down    Companions >   (to come)
   left    Roleplay >     read the bio of whom you look at, challenge them
-                         to a duel, give up (downed: to come), the Roleplay
-                         menu
+                         to a duel, give up (when you're down: cg_vrdown.c),
+                         the Roleplay menu
 
 Resting on a ring (>) for a moment opens it; Back, up and to the left,
 goes back. A ring that opens waits for the stick to move before it picks
@@ -50,7 +50,7 @@ enum {
 	PWA_POSE,		// a pose (arg: VRPOSE_*)
 	PWA_BIO,		// read their bio
 	PWA_DUEL,		// challenge them to a duel
-	PWA_GIVEUP,		// give up, downed (to come)
+	PWA_GIVEUP,		// give up, down (cg_vrdown.c)
 	PWA_MENU,		// the Roleplay menu
 	PWA_COMPANION	// an order to your companions (to come)
 };
@@ -159,11 +159,17 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 		if ( slot->arg == PW_POSES && !CG_PW_Served() ) {
 			return "This server doesn't have poses";
 		}
+		if ( slot->arg == PW_POSES && CG_RP_IsDown() ) {
+			return "Not while you're down";
+		}
 		if ( slot->arg == PW_COMPANIONS ) {
 			return "Companions are still to come";
 		}
 		return NULL;
 	case PWA_POSE:
+		if ( CG_RP_IsDown() ) {
+			return "Not while you're down";
+		}
 		return CG_PW_Served() ? NULL : "This server doesn't have poses";
 	case PWA_BIO:
 		if ( !CG_RP_On() ) {
@@ -171,9 +177,12 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 		}
 		return CG_RP_CanReadBio() ? NULL : "Look at someone playing a character, your weapon away";
 	case PWA_DUEL:
+		if ( CG_RP_IsDown() ) {
+			return "Not while you're down";
+		}
 		return ( CG_VR_DuelWheelTarget() >= 0 ) ? NULL : "Look at someone near, your saber in hand";
 	case PWA_GIVEUP:
-		return "Only when you're down";
+		return CG_RP_IsDown() ? NULL : "Only when you're down";
 	case PWA_MENU:
 		return CG_RP_On() ? NULL : "Roleplay is off";
 	case PWA_COMPANION:
@@ -240,6 +249,9 @@ static void CG_PW_Do( const pwSlot_t *slot ) {
 		break;
 	case PWA_DUEL:
 		CG_VR_DuelWheel( CG_VR_DuelWheelTarget() );
+		break;
+	case PWA_GIVEUP:
+		CG_RP_GiveUp();	// (cg_vrdown.c)
 		break;
 	case PWA_MENU:
 		trap->SendConsoleCommand( "ui_openmenu vr_rp\n" );	// (ui/vr_rp.menu)

@@ -1766,7 +1766,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 84 545 270
-			text            "With roleplay on you play a character: everyone sees its name, it sides with the Heroes, the Villains or the Neutral, and it has a description and a bio. Off, the game plays as ever.\nACCOUNT: make one on the Characters page (or /new name password), then log in (/login name password). Your password becomes a key on this PC and is never sent.\nCHARACTERS: make them on the Characters page and pick one to play. What you wear while playing it stays with it. Switching waits until you are out of a fight.\nEDITOR: its faction, description and bio.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions, to come. Left: Roleplay - read a bio, a duel, this menu. Rest on a ring to open it.\nCHAT: talk reaches those near you (15 m, unless the server is set otherwise); /me for actions; out of character: the team chat key or /ooc.\nSERVER: its owner turns roleplay on and off there."
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nWHEEL: hold Y. Up: Say... Right: Poses. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc.\nDOWN: out of health, you go down instead of dying (pits, lava and the like still kill). Your faction gets you up: looking at you, holding use (the right grip) for 3 s. To respawn, hold attack (the trigger) for 1.5 s, or Give up on the wheel. A duel's loser goes down.\nNPCS: the light side's are with the Heroes, the dark side's with the Villains; Neutral are left alone until they attack one. Nobody harms someone down.\nSERVER: its owner turns roleplay on and off there."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -2022,11 +2022,49 @@
 
 		itemDef
 		{
+			name            rp_srv_downed
+			group           rp_server
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 288 520 22
+			text            "When health runs out:"
+			cvar            "ui_rpSrvDowned"
+			cvarFloatList
+			{
+				"Down until helped up" 1 "Dying, as ever" 0
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Down: someone of their faction gets them up, or they give up (Free For All, Team FFA)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_downed bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_downed bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
 			name            rp_srv_apply
 			group           rp_server
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            40 294 110 24
+			rect            40 322 110 24
 			text            "Apply"
 			font            2
 			textscale       0.8

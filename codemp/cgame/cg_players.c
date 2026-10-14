@@ -4286,9 +4286,10 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 		vec3_t vrBodyAngles;
 		float *bodyAngles = CG_VR_BodyAngles(cent, vrBodyAngles) ? vrBodyAngles : cent->lerpAngles;
 
-		// OpenJK VR: sat, knelt or lying (bg_vrpose.c), a body without VR
-		// stays facing the way it went down; looking about turns its head
-		if ( bodyAngles == cent->lerpAngles && BG_VRPoseAnim( cent->currentState.legsAnim ) )
+		// OpenJK VR: sat, knelt or lying (bg_vrpose.c) - or down in
+		// roleplay (cg_vrdown.c) - a body without VR stays facing the way it
+		// went down; looking about turns its head
+		if ( bodyAngles == cent->lerpAngles && ( BG_VRPoseAnim( cent->currentState.legsAnim ) || CG_RP_DownBody( cent ) ) )
 		{
 			if ( !cent->poseYawSet )
 			{

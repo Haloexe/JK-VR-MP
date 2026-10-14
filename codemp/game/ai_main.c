@@ -1791,6 +1791,11 @@ int PassStandardEnemyChecks(bot_state_t *bs, gentity_t *en)
 		return 0;
 	}
 
+	if ( G_RPDowned( en ) )
+	{ //OpenJK VR: down in roleplay - nothing harms them (g_vrdown.c)
+		return 0;
+	}
+
 	if (!en->takedamage)
 	{ //a client that can't take damage?
 		return 0;

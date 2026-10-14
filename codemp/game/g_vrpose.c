@@ -34,6 +34,9 @@ static const char *G_VRPoseRefusal( gentity_t *ent ) {
 	if ( ps->pm_type != PM_NORMAL || ent->health < 1 || ps->stats[STAT_HEALTH] < 1 ) {
 		return "Not now";
 	}
+	if ( BG_VRPose( ps ) >= VRPOSE_CHOSEN ) {
+		return "Not while you're down";	// (or getting up from it: g_vrdown.c)
+	}
 	if ( ps->m_iVehicleNum || ps->emplacedIndex ) {
 		return "Not while riding or at a gun";
 	}
@@ -93,8 +96,9 @@ void G_VRPoseBodyAngles( gentity_t *ent, vec3_t angles ) {
 	angles[YAW] = yaw;
 }
 
+// Up out of a pose taken (not out of being down: only a hand gets them up from that, g_vrdown.c).
 void G_VRPoseStandUp( gentity_t *ent ) {
-	if ( ent && ent->client && BG_VRPose( &ent->client->ps ) ) {
+	if ( ent && ent->client && BG_VRPose( &ent->client->ps ) && BG_VRPose( &ent->client->ps ) < VRPOSE_CHOSEN ) {
 		BG_VRPoseStandUp( &ent->client->ps, bgAllAnims[ent->localAnimIndex].anims );
 	}
 }

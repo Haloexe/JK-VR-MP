@@ -76,8 +76,8 @@ static qboolean G_DuelFree( const gentity_t *ent ) {
 	if ( cl->sess.sessionTeam == TEAM_SPECTATOR || ( cl->ps.pm_flags & PMF_FOLLOW ) ) {
 		return qfalse;
 	}
-	if ( ent->health < 1 || cl->ps.stats[STAT_HEALTH] < 1 ) {
-		return qfalse;
+	if ( ent->health < 1 || cl->ps.stats[STAT_HEALTH] < 1 || cl->rpDowned ) {
+		return qfalse;	// (dead, or down: g_vrdown.c)
 	}
 	return (qboolean)( cl->ps.weapon == WP_SABER && !cl->ps.saberInFlight && !cl->ps.duelInProgress );
 }
@@ -291,8 +291,8 @@ static void G_DuelUnholster( gentity_t *ent ) {
 
 // Every frame (ClientThink) for a player in a private duel: until it starts
 // they stand still with their sabers out; then the sabers come on; it ends
-// when one of them is down (the winner gets their health back) or they're
-// too far apart.
+// when one of them is dead - or down, in roleplay (g_vrdown.c) - (the
+// winner gets their health back) or they're too far apart.
 void G_PrivateDuelThink( gentity_t *ent, usercmd_t *ucmd ) {
 	gclient_t *client = ent->client;
 	gentity_t *duelAgainst;
@@ -318,11 +318,12 @@ void G_PrivateDuelThink( gentity_t *ent, usercmd_t *ucmd ) {
 
 	if ( !duelAgainst || !duelAgainst->client || !duelAgainst->inuse || duelAgainst->client->ps.duelIndex != ent->s.number ) {
 		G_DuelOver( ent );	// (they've gone)
-	} else if ( duelAgainst->health < 1 || duelAgainst->client->ps.stats[STAT_HEALTH] < 1 ) {
+	} else if ( duelAgainst->health < 1 || duelAgainst->client->ps.stats[STAT_HEALTH] < 1 || duelAgainst->client->rpDowned ) {
+		// (lost: dead - or down instead, in roleplay: g_vrdown.c)
 		G_EndPrivateDuel( ent, duelAgainst );
 
-		// the winner gets full health, providing he's still alive
-		if ( ent->health > 0 && client->ps.stats[STAT_HEALTH] > 0 ) {
+		// the winner gets full health, providing he's still alive (and up)
+		if ( ent->health > 0 && client->ps.stats[STAT_HEALTH] > 0 && !client->rpDowned ) {
 			if ( ent->health < client->ps.stats[STAT_MAX_HEALTH] ) {
 				client->ps.stats[STAT_HEALTH] = ent->health = client->ps.stats[STAT_MAX_HEALTH];
 			}

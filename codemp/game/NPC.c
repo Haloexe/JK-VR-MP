@@ -1859,6 +1859,11 @@ void NPC_Think ( gentity_t *self)//, int msec )
 		G_DroidSounds( self );
 	}
 
+	if ( NPCS.NPC->enemy && G_RPNPCEnemy( NPCS.NPC, NPCS.NPC->enemy ) == 0 )
+	{//OpenJK VR: roleplay - an enemy this NPC no longer goes after (down, on its side now...): dropped (g_vrdown.c)
+		G_ClearEnemy( NPCS.NPC );
+	}
+
 	if ( NPCS.NPCInfo->nextBStateThink <= level.time
 		&& !NPCS.NPC->s.m_iVehicleNum )//NPCs sitting in Vehicles do NOTHING
 	{

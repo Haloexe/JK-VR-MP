@@ -18,6 +18,8 @@ wrong.
 THE MENUS read where things stand in ui_rp* cvars, and ask for things
 with "rpui <what>" (below).
 
+DOWN, NOT DEAD: being down, getting someone up, giving up - cg_vrdown.c.
+
 SPEECH BUBBLES. With roleplay on, what someone near you says, and their
 /me, shows over their head for 6 seconds (cg_rpBubbles).
 
@@ -79,8 +81,7 @@ qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y 
 #define RP_LINE_MAX			128
 #define RP_FONT				FONT_MEDIUM
 
-enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
-static const char *rpFactions[RPF_NUM] = { "Heroes", "Villains", "Neutral" };
+static const char *rpFactions[RPF_NUM] = { "Heroes", "Villains", "Neutral" };	// (RPF_*: bg_public.h)
 
 enum { RPCHAT_NONE, RPCHAT_TALK, RPCHAT_ACTION, RPCHAT_OOC };
 
@@ -1152,6 +1153,10 @@ qboolean CG_RP_ServerCommand( const char *cmd ) {
 		CG_RP_PasswordCmd();
 	} else if ( !Q_stricmp( cmd, "rpfail" ) ) {
 		CG_RP_FailCmd();
+	} else if ( !Q_stricmp( cmd, "rpdn" ) ) {
+		CG_RP_DownCmd();	// (who's down: cg_vrdown.c)
+	} else if ( !Q_stricmp( cmd, "rpup" ) ) {
+		CG_RP_UpCmd();
 	} else {
 		return qfalse;
 	}
@@ -1269,6 +1274,7 @@ void CG_RP_Frame( void ) {
 	CG_RP_AutoLogin();
 	CG_RP_Look();
 	CG_RP_People();
+	CG_RP_DownFrame();	// (down, getting someone up: cg_vrdown.c)
 }
 
 /*
@@ -1488,6 +1494,7 @@ void CG_RP_Draw( void ) {
 			CG_RP_DrawBubbles();
 		}
 		CG_RP_DrawCard();
+		CG_RP_DrawDown();	// (down, getting someone up: cg_vrdown.c)
 	}
 	CG_RP_DrawNotice();
 	CG_Anchor2D( was );
@@ -1499,6 +1506,19 @@ static void CG_RP_Show( const char *text, qboolean print ) {
 	}
 	CG_RP_Layout( text, RP_NOTICE_WIDTH, 3, &cgrp.notice );
 	cgrp.noticeTime = cg.time ? cg.time : 1;
+}
+
+// A line for the player a moment, and in the console (cg_vrdown.c's).
+void CG_RP_Notice( const char *text ) {
+	CG_RP_Show( text, qtrue );
+}
+
+// The faction of the character you play (-1: none, or roleplay's off).
+int CG_RP_MyFaction( void ) {
+	if ( !cgrp.on || !cgrp.account[0] || cgrp.active < 0 || cgrp.active >= cgrp.numChars ) {
+		return -1;
+	}
+	return Com_Clampi( RPF_HEROES, RPF_NEUTRAL, cgrp.chars[cgrp.active].faction );
 }
 
 /*
@@ -1536,6 +1556,7 @@ void CG_RP_Restart( void ) {
 	CG_RP_AskOver();
 	memset( rpBubbles, 0, sizeof( rpBubbles ) );
 	memset( rpCards, 0, sizeof( rpCards ) );
+	CG_RP_DownInit();	// (everyone up again; the server says who's down when we hello)
 }
 
 // The menus' cvars of a server's (its people, the editor's fields, the
@@ -1564,6 +1585,7 @@ void CG_RP_Init( void ) {
 	cgrp.target = -1;
 	cgrp.bioWho = -1;
 	cgrp.menuBio = -1;
+	CG_RP_DownInit();
 	CG_RP_UIClear();	// (another server's)
 	trap->Cvar_VariableStringBuffer( "cl_currentServerIP", cgrp.address, sizeof( cgrp.address ) );
 	if ( !cgrp.address[0] ) {

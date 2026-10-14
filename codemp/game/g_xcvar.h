@@ -129,6 +129,7 @@ XCVAR_DEF( g_powerDuelEndHealth,		"90",			NULL,						CVAR_ARCHIVE,									qtrue
 XCVAR_DEF( g_powerDuelStartHealth,		"150",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_rp,						"0",			CVU_RP,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: roleplay mode (g_vrrp.c)
 XCVAR_DEF( g_rpCharacters,				"5",			NULL,						CVAR_ARCHIVE,									qtrue )
+XCVAR_DEF( g_rpDowned,					"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: roleplay - down, not dead (g_vrdown.c)
 XCVAR_DEF( g_rpTalkRange,				"510",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_privateDuel,				"1",			CVU_PrivateDuel,			CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_randFix,					"1",			NULL,						CVAR_ARCHIVE,									qtrue )

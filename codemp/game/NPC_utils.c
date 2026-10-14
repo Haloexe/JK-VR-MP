@@ -1162,6 +1162,13 @@ qboolean NPC_ValidEnemy( gentity_t *ent )
 	{//don't go after spectators
 		return qfalse;
 	}
+	{//OpenJK VR: roleplay - a player playing a character, by their faction; nobody down (g_vrdown.c)
+		const int rp = G_RPNPCEnemy( NPCS.NPC, ent );
+		if ( rp >= 0 )
+		{
+			return (qboolean)rp;
+		}
+	}
 	if ( ent->NPC && ent->client )
 	{
 		entTeam = ent->client->playerTeam;

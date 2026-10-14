@@ -5097,7 +5097,7 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 					}
 					else
 					{
-						plTeam = NPCTEAM_PLAYER;
+						plTeam = CG_RP_NPCSide();	// OpenJK VR: roleplay - your faction's side (cg_vrdown.c); NPCTEAM_PLAYER if none
 					}
 
 					if ( crossEnt->currentState.powerups & (1 <<PW_CLOAKED) )

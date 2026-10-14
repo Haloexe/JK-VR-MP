@@ -739,6 +739,10 @@ static qboolean turretG2_find_enemies( gentity_t *self )
 		{
 			continue;
 		}
+		if ( G_RPDowned( target ) )
+		{//OpenJK VR: down in roleplay - nothing harms them (g_vrdown.c)
+			continue;
+		}
 		if ( target->client && target->client->sess.sessionTeam == TEAM_SPECTATOR )
 		{
 			continue;
@@ -877,7 +881,8 @@ void turretG2_base_think( gentity_t *self )
 	if ( self->enemy )
 	{
 		if ( self->enemy->health < 0
-			|| !self->enemy->inuse )
+			|| !self->enemy->inuse
+			|| G_RPDowned( self->enemy ) )//OpenJK VR: down in roleplay (g_vrdown.c)
 		{
 			self->enemy = NULL;
 		}

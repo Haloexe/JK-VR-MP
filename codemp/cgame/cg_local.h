@@ -1940,6 +1940,18 @@ void		CG_RP_Draw( void );
 qboolean	CG_RP_On( void );
 qboolean	CG_RP_CanReadBio( void );
 void		CG_RP_ReadBio( void );
+void		CG_RP_Notice( const char *text );
+int			CG_RP_MyFaction( void );
+// cg_vrdown.c (OpenJK VR: roleplay - down, not dead)
+void		CG_RP_DownInit( void );
+void		CG_RP_DownCmd( void );
+void		CG_RP_UpCmd( void );
+void		CG_RP_DownFrame( void );
+void		CG_RP_DrawDown( void );
+qboolean	CG_RP_IsDown( void );
+qboolean	CG_RP_DownBody( const centity_t *cent );
+void		CG_RP_GiveUp( void );
+int			CG_RP_NPCSide( void );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );

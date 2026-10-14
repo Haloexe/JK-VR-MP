@@ -2110,6 +2110,8 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	if ( !attacker )
 		return;
 
+	G_RPDownDied( self );	// OpenJK VR: roleplay - down no more (g_vrdown.c)
+
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
 
@@ -4463,6 +4465,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		return;
 	}
 
+	if ( G_RPDownGuard( targ, mod ) )
+	{//OpenJK VR: roleplay - no more harm to someone down (no finishing blow), bar a map's hazards (g_vrdown.c)
+		return;
+	}
+
 	if ( (targ->flags&FL_SHIELDED) && mod != MOD_SABER  && !targ->client)
 	{//magnetically protected, this thing can only be damaged by lightsabers
 		return;
@@ -4579,6 +4586,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	if ( !attacker ) {
 		attacker = &g_entities[ENTITYNUM_WORLD];
 	}
+
+	G_RPProvoke( attacker, targ );	// OpenJK VR: roleplay - an NPC's side that left them be fights back (g_vrdown.c)
 
 	// shootable doors / buttons don't actually have any health
 
@@ -5465,6 +5474,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 
 		if ( targ->health <= 0 ) {
+			if ( G_RPDown( targ, inflictor, attacker, take, mod ) )
+			{//OpenJK VR: roleplay - a player playing a character goes down instead (g_vrdown.c)
+				return;
+			}
 			if ( client )
 			{
 				targ->flags |= FL_NO_KNOCKBACK;

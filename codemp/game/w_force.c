@@ -547,6 +547,11 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 		return 0;
 	}
 
+	if ( G_RPDowned( other ) )
+	{//OpenJK VR: nobody's Force reaches someone down in roleplay - a grip on them lets go (g_vrdown.c)
+		return 0;
+	}
+
 	if (attacker && attacker->client && !BG_CanUseFPNow(level.gametype, &attacker->client->ps, level.time, forcePower))
 	{
 		return 0;
@@ -684,6 +689,11 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 
 	if ( forcePower != FP_HEAL && G_VRPosed( self ) )
 	{//OpenJK VR: not sat, knelt or lying, nor getting up - healing, you can (g_vrpose.c)
+		return qfalse;
+	}
+
+	if ( G_RPDowned( self ) )
+	{//OpenJK VR: down in roleplay, not even that (g_vrdown.c)
 		return qfalse;
 	}
 

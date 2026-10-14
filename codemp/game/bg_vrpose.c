@@ -18,6 +18,15 @@ there's room, as from crouching: PM_CheckDuck). They can't fight in one:
 attacking gets them up, and the Force (bar healing) waits till they're up
 (w_force.c).
 
+DOWN (roleplay, g_vrdown.c): a player whose health runs out is put down by
+the server - knocked flat on their back, as the game's own knockdown does -
+and stays there whatever they press, until the server gets them up (a hand
+from their side, or roleplay going off; giving up ends it in dying). The
+same rules keep their own game's prediction still. Getting up out of it is
+its own pose (RISING) for as long as the game's getting-up animation runs,
+as a knockdown's getting up is the game's own and has no business being a
+pose's.
+
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
 ===========================================================================
@@ -39,11 +48,15 @@ const bgVRPose_t bgVRPoses[VRPOSE_NUM] = {
 	{ "cross",	BOTH_STAND5TOSIT2,		BOTH_SIT2,				BOTH_SIT2TOSTAND5,		6 },	// cross-legged, on the floor
 	{ "kneel",	BOTH_STAND_TO_KNEEL,	BOTH_STAND_TO_KNEEL,	BOTH_KNEEL_TO_STAND,	20 },	// (its last frame held)
 	{ "lie",	BOTH_STAND_TO_KNEEL,	BOTH_SLEEP1,			BOTH_SLEEP1GETUP,		-16 },	// on your back (down by way of kneeling)
+	{ "down",	BOTH_KNOCKDOWN1,		BOTH_KNOCKDOWN1,		BOTH_GETUP1,			-16 },	// down in a fight (roleplay): flat on your back (its last frame held)
+	{ "",		0,						0,						0,						DEFAULT_VIEWHEIGHT },	// (getting up out of being down: down's getting up)
 };
 
 // what gets a player up
 #define VRPOSE_UP_BUTTONS	( BUTTON_ATTACK | BUTTON_ALT_ATTACK | BUTTON_FORCEPOWER | BUTTON_FORCEGRIP | \
 							  BUTTON_FORCE_LIGHTNING | BUTTON_FORCE_DRAIN )
+// what a player who's down can't do (talking, they can)
+#define VRPOSE_DOWN_BUTTONS	( VRPOSE_UP_BUTTONS | BUTTON_USE | BUTTON_USE_HOLDABLE | BUTTON_GESTURE )
 
 int BG_VRPose( const playerState_t *ps ) {
 	return ( ps->userInt1 & 1 ) | ( ( ps->userInt2 & 1 ) << 1 ) | ( ( ps->userInt3 & 1 ) << 2 );
@@ -58,7 +71,7 @@ void BG_VRPoseSet( playerState_t *ps, int pose ) {
 int BG_VRPoseNamed( const char *name ) {
 	int i;
 
-	for ( i = VRPOSE_NONE + 1; name && i < VRPOSE_NUM; i++ ) {
+	for ( i = VRPOSE_NONE + 1; name && i < VRPOSE_CHOSEN; i++ ) {
 		if ( !Q_stricmp( name, bgVRPoses[i].name ) ) {
 			return i;
 		}
@@ -88,7 +101,7 @@ int BG_VRPosePhase( const playerState_t *ps, const animation_t *animations, int 
 	int phase = VRPHASE_NONE, which = VRPOSE_NONE, i;
 	float progress = 1.0f;
 
-	if ( pose > VRPOSE_NONE && pose < VRPOSE_NUM ) {
+	if ( pose > VRPOSE_NONE && pose < VRPOSE_NUM && pose != VRPOSE_RISING ) {
 		const bgVRPose_t *vp = &bgVRPoses[pose];
 		const int downTime = BG_VRP_AnimTime( animations, vp->down );
 
@@ -109,9 +122,13 @@ int BG_VRPosePhase( const playerState_t *ps, const animation_t *animations, int 
 		if ( phase ) {
 			which = pose;
 		}
-	} else if ( pose == VRPOSE_NONE && ps->legsTimer > 0 ) {
+	} else if ( ( pose == VRPOSE_NONE || pose == VRPOSE_RISING ) && ps->legsTimer > 0 ) {
 		for ( i = VRPOSE_NONE + 1; i < VRPOSE_NUM; i++ ) {
-			const int upTime = BG_VRP_AnimTime( animations, bgVRPoses[i].up );
+			int upTime;
+			if ( i == VRPOSE_RISING || ( i == VRPOSE_DOWNED ) != ( pose == VRPOSE_RISING ) ) {
+				continue;	// (out of a pose taken, its own getting up; out of being down, down's)
+			}
+			upTime = BG_VRP_AnimTime( animations, bgVRPoses[i].up );
 			if ( ps->legsAnim == bgVRPoses[i].up && upTime ) {
 				phase = VRPHASE_UP;
 				which = i;
@@ -132,8 +149,8 @@ int BG_VRPosePhase( const playerState_t *ps, const animation_t *animations, int 
 qboolean BG_VRPoseStart( playerState_t *ps, animation_t *animations, int pose ) {
 	const bgVRPose_t *vp;
 
-	if ( pose <= VRPOSE_NONE || pose >= VRPOSE_NUM || !BG_VRP_AnimTime( animations, bgVRPoses[pose].hold ) ) {
-		return qfalse;	// (this model can't)
+	if ( pose <= VRPOSE_NONE || pose >= VRPOSE_CHOSEN || !BG_VRP_AnimTime( animations, bgVRPoses[pose].hold ) ) {
+		return qfalse;	// (this model can't; or no one takes that one themselves)
 	}
 	vp = &bgVRPoses[pose];
 	BG_VRPoseSet( ps, pose );
@@ -151,13 +168,65 @@ qboolean BG_VRPoseStart( playerState_t *ps, animation_t *animations, int pose ) 
 void BG_VRPoseStandUp( playerState_t *ps, animation_t *animations ) {
 	const int pose = BG_VRPose( ps );
 
+	if ( pose == VRPOSE_RISING ) {
+		return;	// (getting up already)
+	}
 	BG_VRPoseSet( ps, VRPOSE_NONE );
 	ps->pm_flags |= PMF_DUCKED;	// (up only where there's room to stand: PM_CheckDuck)
 	if ( pose > VRPOSE_NONE && pose < VRPOSE_NUM && BG_VRP_AnimTime( animations, bgVRPoses[pose].up ) ) {
+		if ( pose == VRPOSE_DOWNED ) {
+			BG_VRPoseSet( ps, VRPOSE_RISING );	// (the game's getting up off the floor: this one's)
+		}
 		BG_SetAnim( ps, animations, SETANIM_BOTH, bgVRPoses[pose].up, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART );
 	} else {
 		ps->legsTimer = ps->torsoTimer = 0;	// (the game's own animation, at once)
 	}
+}
+
+void BG_VRPoseDown( playerState_t *ps, animation_t *animations ) {
+	const bgVRPose_t *vp = &bgVRPoses[VRPOSE_DOWNED];
+
+	BG_VRPoseSet( ps, VRPOSE_DOWNED );
+	ps->pm_flags |= PMF_DUCKED;
+	ps->forceHandExtend = HANDEXTEND_NONE;	// (a knockdown, a choke: the floor now)
+	ps->forceHandExtendTime = 0;
+	if ( BG_VRP_AnimTime( animations, vp->hold ) && ps->legsAnim != vp->hold ) {
+		BG_SetAnim( ps, animations, SETANIM_BOTH, vp->hold, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART );
+	}	// (knocked flat already: as they are; a model without it: down all the same, standing)
+}
+
+qboolean BG_VRDowned( const playerState_t *ps ) {
+	return (qboolean)( ps->clientNum >= 0 && ps->clientNum < MAX_CLIENTS && BG_VRPose( ps ) == VRPOSE_DOWNED );
+}
+
+// Down: there whatever happens, until the server gets them up. Kept still
+// - no moving, jumping or crouching, no fighting, using things or the
+// Force (the server takes the attack button for giving up first) - and
+// kept down: what else would take the body over (a knockdown, a choke)
+// doesn't, and the body's back down if something did.
+static qboolean BG_VRP_Downed( playerState_t *ps, usercmd_t *cmd, animation_t *animations ) {
+	const bgVRPose_t *vp = &bgVRPoses[VRPOSE_DOWNED];
+
+	if ( ps->pm_type == PM_NORMAL || ps->pm_type == PM_JETPACK || ps->pm_type == PM_FLOAT ) {
+		const int phase = BG_VRPosePhase( ps, animations, NULL, NULL );
+		ps->forceHandExtend = HANDEXTEND_NONE;
+		ps->forceHandExtendTime = 0;
+		if ( phase == VRPHASE_HELD ) {
+			ps->legsTimer = VRPOSE_PIN;
+			if ( ps->torsoAnim != vp->hold && ps->torsoTimer <= 0 ) {
+				BG_SetAnim( ps, animations, SETANIM_TORSO, vp->hold, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD );
+			}
+			if ( ps->torsoAnim == vp->hold ) {
+				ps->torsoTimer = VRPOSE_PIN;
+			}
+		} else if ( phase == VRPHASE_NONE && BG_VRP_AnimTime( animations, vp->hold ) ) {
+			BG_SetAnim( ps, animations, SETANIM_BOTH, vp->hold, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART );
+		}	// (going down: it plays)
+	}
+	cmd->forwardmove = cmd->rightmove = cmd->upmove = 0;
+	cmd->buttons &= ~VRPOSE_DOWN_BUTTONS;
+	cmd->generic_cmd = 0;	// (Force powers, the saber on: the server's, after the move)
+	return qtrue;
 }
 
 qboolean BG_VRPoseMove( playerState_t *ps, usercmd_t *cmd, animation_t *animations ) {
@@ -165,6 +234,9 @@ qboolean BG_VRPoseMove( playerState_t *ps, usercmd_t *cmd, animation_t *animatio
 
 	if ( ps->clientNum < 0 || ps->clientNum >= MAX_CLIENTS ) {
 		return qfalse;	// (players only)
+	}
+	if ( BG_VRPose( ps ) == VRPOSE_DOWNED ) {
+		return BG_VRP_Downed( ps, cmd, animations );
 	}
 	phase = BG_VRPosePhase( ps, animations, &pose, NULL );
 	if ( !phase ) {
@@ -241,10 +313,11 @@ qboolean BG_VRPoseHeights( const playerState_t *ps, const animation_t *animation
 	return qtrue;
 }
 
+// (a pose taken: down's are the game's own knockdown's)
 qboolean BG_VRPoseAnim( int anim ) {
 	int i;
 
-	for ( i = VRPOSE_NONE + 1; i < VRPOSE_NUM; i++ ) {
+	for ( i = VRPOSE_NONE + 1; i < VRPOSE_CHOSEN; i++ ) {
 		if ( anim == bgVRPoses[i].down || anim == bgVRPoses[i].hold || anim == bgVRPoses[i].up ) {
 			return qtrue;
 		}

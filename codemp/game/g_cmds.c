@@ -2680,6 +2680,11 @@ void saberKnockDown(gentity_t *saberent, gentity_t *saberOwner, gentity_t *other
 
 void Cmd_ToggleSaber_f(gentity_t *ent)
 {
+	if ( G_RPDowned( ent ) )
+	{//OpenJK VR: down in roleplay, the sabers stay off (g_vrdown.c)
+		return;
+	}
+
 	if (ent->client->ps.fd.forceGripCripple)
 	{ //if they are being gripped, don't let them unholster their saber
 		if (ent->client->ps.saberHolstered)

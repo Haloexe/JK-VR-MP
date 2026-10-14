@@ -1707,14 +1707,21 @@ void BG_G2ATSTAngles(void *ghoul2, int time, vec3_t cent_lerpAngles );
 
 int BG_AnimLength( int index, animNumber_t anim );
 
-// OpenJK VR: poses - sit, sit cross-legged, kneel, lie down (bg_vrpose.c)
+// OpenJK VR: roleplay's factions (g_vrrp.c, cg_vrrp.c; NPCs' sides by them: g_vrdown.c)
+enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
+
+// OpenJK VR: poses - sit, sit cross-legged, kneel, lie down (bg_vrpose.c) -
+// and, in roleplay, down (g_vrdown.c): on the floor until helped up
 typedef enum {
 	VRPOSE_NONE,
 	VRPOSE_SIT,
 	VRPOSE_CROSS,
 	VRPOSE_KNEEL,
 	VRPOSE_LIE,
-	VRPOSE_NUM
+	VRPOSE_DOWNED,		// (only the server puts a player in it, and gets them up)
+	VRPOSE_RISING,		// getting up out of it (with the game's own getting up off the floor)
+	VRPOSE_NUM,
+	VRPOSE_CHOSEN = VRPOSE_DOWNED	// the poses a player takes themselves: the ones before it
 } vrPose_t;
 typedef enum {
 	VRPHASE_NONE,
@@ -1739,6 +1746,8 @@ void		BG_VRPoseStandUp( playerState_t *ps, animation_t *animations );
 qboolean	BG_VRPoseMove( playerState_t *ps, usercmd_t *cmd, animation_t *animations );
 qboolean	BG_VRPoseHeights( const playerState_t *ps, const animation_t *animations, int *viewheight );
 qboolean	BG_VRPoseAnim( int anim );
+void		BG_VRPoseDown( playerState_t *ps, animation_t *animations );
+qboolean	BG_VRDowned( const playerState_t *ps );
 
 qboolean BG_InSpecialJump( int anim );
 qboolean BG_InSaberStandAnim( int anim );

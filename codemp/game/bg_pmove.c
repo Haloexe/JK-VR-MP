@@ -254,6 +254,11 @@ qboolean BG_KnockDownable(playerState_t *ps)
 		return qfalse;
 	}
 
+	if ( BG_VRDowned( ps ) )
+	{ //OpenJK VR: down in roleplay - on the floor already (bg_vrpose.c)
+		return qfalse;
+	}
+
 	//ok, I guess?
 	return qtrue;
 }

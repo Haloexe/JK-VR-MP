@@ -26,6 +26,10 @@ respawns them, and waits until they're out of a duel and unhurt for 10 s
 (and not carrying a flag, in a vehicle or, in Siege and the duel game
 types, in the round), at most every 10 s.
 
+DOWN, NOT DEAD (g_rpDowned): running out of health downs a player playing a
+character until someone of their faction gets them up or they give up; and
+NPCs take sides by faction - g_vrdown.c.
+
 CHAT, with roleplay on: talk (the chat key) reaches those within
 g_rpTalkRange (510 units, 15 m), /me actions too; the team chat key or
 /ooc goes to everyone, out of character, under the player's own name;
@@ -38,7 +42,7 @@ Client commands (most sent by the cgame or the menus, not typed):
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
   rplogout
-  rp new|play|faction|desc|bio|delete|list|look ...
+  rp new|play|faction|desc|bio|delete|list|look|giveup ...
   rpcard <client>, rpbio <client>    what a character's card shows
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
@@ -88,8 +92,7 @@ static int G_RP_ClientArg( const char *arg );
 #define RP_SERVER_FILE_MAX	4096
 #define RP_ACCOUNT_DIR		"rp/accounts"
 
-enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
-static const char *rpFactions[RPF_NUM] = { "Heroes", "Villains", "Neutral" };
+static const char *rpFactions[RPF_NUM] = { "Heroes", "Villains", "Neutral" };	// (RPF_*: bg_public.h)
 
 // What a character wears, kept from what the player wears while playing it.
 static const char *rpLookKeys[] = { "model", "color1", "color2", "char_color_red", "char_color_green", "char_color_blue" };
@@ -716,6 +719,22 @@ static rpChar_t *G_RP_Active( int clientNum ) {
 	return &c->acc.chars[c->active];
 }
 
+// The faction of the character a client plays (-1: none, or roleplay's off).
+int G_RPFaction( int clientNum ) {
+	const rpChar_t *ch;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return -1;
+	}
+	ch = G_RP_Active( clientNum );
+	return ch ? ch->faction : -1;
+}
+
+// Whether a client's game runs this build (it said rpver).
+qboolean G_RPCapable( int clientNum ) {
+	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].capable );
+}
+
 static void G_RP_RememberLook( int clientNum ) {
 	char userinfo[MAX_INFO_STRING];
 	int k;
@@ -769,6 +788,9 @@ static const char *G_RP_BusyReason( int clientNum, qboolean switching ) {
 
 	if ( !cl ) {
 		return "Not now";
+	}
+	if ( cl->rpDowned ) {
+		return "Not while you're down";
 	}
 	if ( cl->ps.duelInProgress ) {
 		return "Not during a duel";
@@ -918,6 +940,7 @@ static void G_RP_Hello( gentity_t *ent ) {
 		G_RP_NewChallenge( clientNum );
 	}
 	G_RP_SendAccount( clientNum );
+	G_RPDownHello( clientNum );	// (who's down: g_vrdown.c)
 }
 
 // A client's address, without the port (accounts made from it are counted).
@@ -1215,6 +1238,10 @@ static void G_RP_Rp( gentity_t *ent ) {
 		G_RP_Msg( clientNum, "Roleplay is off on this server right now" );
 		return;
 	}
+	if ( !Q_stricmp( sub, "giveup" ) ) {
+		G_RPGiveUpCommand( ent );	// (down: g_vrdown.c)
+		return;
+	}
 	if ( !c->loggedIn ) {
 		G_RP_Msg( clientNum, "Log in first: /login <account> <password>, or /new <account> <password> for a new one" );
 		return;
@@ -1225,7 +1252,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 			G_RP_Print( clientNum, va( " %i  %s" S_COLOR_WHITE " (%s)%s", i + 1, c->acc.chars[i].name, rpFactions[c->acc.chars[i].faction],
 				( i == c->active ) ? " - playing" : "" ) );
 		}
-		G_RP_Print( clientNum, "rp new <name> | play <name or number> | faction heroes|villains|neutral | desc <text> | bio <text> | delete <name>" );
+		G_RP_Print( clientNum, "rp new <name> | play <name or number> | faction heroes|villains|neutral | desc <text> | bio <text> | delete <name> | giveup" );
 		return;
 	}
 	if ( !Q_stricmp( sub, "new" ) ) {
@@ -1264,6 +1291,10 @@ static void G_RP_Rp( gentity_t *ent ) {
 			G_RP_Msg( clientNum, "You have no character by that name" );
 			return;
 		}
+		if ( i == c->active && G_RPDowned( ent ) ) {
+			G_RP_Msg( clientNum, "Not while you're down" );	// (no way up but a hand, or giving up)
+			return;
+		}
 		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " deleted", c->acc.chars[i].name ) );
 		if ( i == c->active ) {
 			c->active = -1;
@@ -1297,6 +1328,9 @@ static void G_RP_Rp( gentity_t *ent ) {
 				return;
 			}
 			c->acc.chars[c->active].faction = i;
+			if ( ent->client ) {
+				ent->client->rpProvoked = 0;	// (the NPCs' grudges were against the other side: g_vrdown.c)
+			}
 		}
 		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " is with the %s", c->acc.chars[c->active].name, rpFactions[i] ) );
 	} else if ( !Q_stricmp( sub, "desc" ) ) {
@@ -1306,7 +1340,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 		G_RP_CleanText( ConcatArgs( 2 ), c->acc.chars[c->active].bio, sizeof( c->acc.chars[0].bio ) );
 		G_RP_Msg( clientNum, "Bio set" );
 	} else {
-		G_RP_Print( clientNum, "rp list | new | play | faction | desc | bio | delete | look" );
+		G_RP_Print( clientNum, "rp list | new | play | faction | desc | bio | delete | look | giveup" );
 		return;
 	}
 	G_RP_SaveAccount( &c->acc );
@@ -1514,6 +1548,10 @@ void Cmd_VRRP_f( gentity_t *ent ) {
 	} else if ( !Q_stricmp( cmd, "rppass" ) ) {
 		G_RP_ChangePassword( ent );
 	} else if ( !Q_stricmp( cmd, "rplogout" ) ) {
+		if ( G_RPDowned( ent ) ) {
+			G_RP_Msg( ent - g_entities, "Not while you're down" );	// (no way up but a hand, or giving up)
+			return;
+		}
 		G_RP_LogOut( ent - g_entities, rpc[ent - g_entities].loggedIn ? "Logged out" : NULL );
 	} else if ( !Q_stricmp( cmd, "rp" ) ) {
 		G_RP_Rp( ent );

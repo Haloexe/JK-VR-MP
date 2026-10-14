@@ -604,6 +604,10 @@ static qboolean pas_find_enemies( gentity_t *self )
 		{
 			continue;
 		}
+		if ( G_RPDowned( target ) )
+		{//OpenJK VR: down in roleplay - nothing harms them (g_vrdown.c)
+			continue;
+		}
 		if ( self->alliedTeam && target->client->sess.sessionTeam == self->alliedTeam )
 		{
 			continue;
@@ -668,7 +672,7 @@ void pas_adjust_enemy( gentity_t *ent )
 	trace_t	tr;
 	qboolean keep = qtrue;
 
-	if ( ent->enemy->health <= 0 )
+	if ( ent->enemy->health <= 0 || G_RPDowned( ent->enemy ) )//OpenJK VR: down in roleplay (g_vrdown.c)
 	{
 		keep = qfalse;
 	}
@@ -834,7 +838,7 @@ void pas_think( gentity_t *ent )
 		{
 			ent->enemy = NULL;
 		}
-		else if (ent->enemy->health < 1)
+		else if (ent->enemy->health < 1 || G_RPDowned( ent->enemy ))//OpenJK VR: down in roleplay (g_vrdown.c)
 		{
 			ent->enemy = NULL;
 		}
