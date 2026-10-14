@@ -61,6 +61,7 @@ static struct {
 	int			peopleTime;		// the cards last asked for (uiDC.realTime; 0: not)
 	char		message[MAX_CVAR_VALUE_STRING];	// the message shown, and since when
 	int			messageTime;
+	char		editFor[MAX_CVAR_VALUE_STRING];	// the character the Editor's fields were asked for
 	int			numPeople;		// who's here, as the list has them
 	int			people[MAX_CLIENTS];
 	char		names[MAX_CLIENTS][MAX_QPATH];
@@ -464,6 +465,14 @@ void UI_VRRP_Frame( void ) {
 		}
 	}
 
+	// the Editor up, and another character played: its fields, not the last one's
+	if ( vrrp.page == RPP_EDIT && strcmp( playing, vrrp.editFor ) ) {
+		Q_strncpyz( vrrp.editFor, playing, sizeof( vrrp.editFor ) );
+		if ( playing[0] ) {
+			UI_VRRP_Exec( "rpui edit\n" );
+		}
+	}
+
 	// a message, gone after a while
 	UI_VRRP_Str( "ui_rpMessage", message, sizeof( message ) );
 	if ( strcmp( message, vrrp.message ) ) {
@@ -495,14 +504,12 @@ static void UI_VRRP_Page( int page ) {
 	vrrp.peopleTime = 0;
 	trap->Cvar_Set( "ui_rpMessage", "" );
 	switch ( vrrp.page ) {
-	case RPP_EDIT: {
-		char playing[MAX_CVAR_VALUE_STRING];
-		UI_VRRP_Str( "ui_rpPlaying", playing, sizeof( playing ) );
-		if ( playing[0] ) {
+	case RPP_EDIT:
+		UI_VRRP_Str( "ui_rpPlaying", vrrp.editFor, sizeof( vrrp.editFor ) );
+		if ( vrrp.editFor[0] ) {
 			UI_VRRP_Exec( "rpui edit\n" );	// (the character's as it is now)
 		}
 		break;
-	}
 	case RPP_SERVER:
 		if ( UI_VRRP_Local() ) {
 			trap->Cvar_Set( "ui_rpSrvChars", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, UI_VRRP_Int( "g_rpCharacters" ) ) ) );
@@ -594,6 +601,7 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 		trap->Cvar_Set( "ui_rpLoginAgain", "" );
 	} else if ( !Q_stricmp( what, "back" ) ) {
 		vrrp.newAccount = qfalse;
+		trap->Cvar_Set( "ui_rpLoginAgain", "" );
 	} else if ( !Q_stricmp( what, "new" ) ) {
 		UI_VRRP_Exec( "rpui new\n" );
 	} else if ( !Q_stricmp( what, "logout" ) ) {

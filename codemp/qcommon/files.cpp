@@ -1519,7 +1519,8 @@ long FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean unique
 					    !FS_IsExt( filename, ".menu", l ) &&		// menu files
 					    !FS_IsExt( filename, ".game", l ) &&		// menu files
 					    !FS_IsExt( filename, ".dat", l ) &&		// for journal files
-					    !FS_IsDemoExt( filename, l ) ) {			// demos
+					    !FS_IsDemoExt( filename, l ) &&			// demos
+					    Q_stricmpn( filename, "rp/", 3 ) ) {		// OpenJK VR: roleplay's own files (logins kept, accounts: not game content)
 						continue;
 					}
 				}
@@ -2416,7 +2417,8 @@ char **FS_ListFilteredFiles( const char *path, const char *extension, char *filt
 
 			// don't scan directories for files if we are pure or restricted
 			if ( fs_numServerPaks &&
-				 (!extension || Q_stricmp(extension, "fcf")) )
+				 (!extension || Q_stricmp(extension, "fcf")) &&
+				 Q_stricmpn( path, "rp/", 3 ) )	// OpenJK VR: roleplay's own files (its accounts: not game content)
 			{
 				//rww - allow scanning for fcf files outside of pak even if pure
 			    continue;

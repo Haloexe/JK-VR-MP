@@ -10119,6 +10119,11 @@ void UI_Refresh( int realtime )
 		static char said[32];
 		const itemDef_t *field = ( trap->Key_GetCatcher() & KEYCATCH_UI ) ? Item_TextField_Typing() : NULL;
 		char now[32];
+		if ( field && ( !( field->window.flags & WINDOW_VISIBLE ) || !field->parent ||
+			!( ( (const menuDef_t *)field->parent )->window.flags & WINDOW_VISIBLE ) ) ) {
+			Item_TextField_Stop();	// (its menu's shut, or it's hidden: no typing into it)
+			field = NULL;
+		}
 		if ( field ) {
 			Com_sprintf( now, sizeof( now ), "1 %i", (int)( field->window.rect.y + field->window.rect.h * 0.5f ) );
 		} else {

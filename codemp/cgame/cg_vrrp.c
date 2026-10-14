@@ -48,7 +48,7 @@ qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y 
 
 #define RP_SAVED_FILE		"rp/remember.txt"
 #define RP_SAVED_MAX		32		// servers remembered
-#define RP_SAVED_TEXT		8192
+#define RP_SAVED_TEXT		16384
 
 #define RP_HELLO_FIRST		500		// after the first snapshot, hello...
 #define RP_HELLO_AGAIN		3000	// ...again after this long without an answer...
@@ -138,7 +138,6 @@ static struct {
 	struct {
 		int			kind;		// RPASK_*
 		qboolean	sent;		// (no: it waits for a challenge)
-		qboolean	challenged;	// a new challenge came since it went: the server's taken it up
 		int			time;
 		char		account[RP_ACCOUNT_MAX + 1];
 		byte		key[VRRP_KEY_LEN];		// logs in with this / the new password's
@@ -377,6 +376,8 @@ typedef struct {
 
 static rpSaved_t rpSaved[RP_SAVED_MAX];
 
+// The logins kept, into rpSaved[]: how many (-1: the file's there but too
+// big to read - and so it's never written over).
 static int CG_RP_ReadSaved( void ) {
 	static char text[RP_SAVED_TEXT];
 	fileHandle_t f;
@@ -390,7 +391,7 @@ static int CG_RP_ReadSaved( void ) {
 	}
 	if ( len <= 0 || len >= (int)sizeof( text ) ) {
 		trap->FS_Close( f );
-		return 0;
+		return ( len <= 0 ) ? 0 : -1;
 	}
 	trap->FS_Read( text, len, f );
 	trap->FS_Close( f );
@@ -453,6 +454,10 @@ static int CG_RP_FindSaved( int count ) {
 static void CG_RP_Remember( const char *account, const byte *key ) {
 	int n = CG_RP_ReadSaved(), i = CG_RP_FindSaved( n );
 
+	if ( n < 0 ) {
+		CG_RP_Show( "Your login can't be kept: " RP_SAVED_FILE " is too big to read", qtrue );
+		return;
+	}
 	if ( !cgrp.address[0] || !cgrp.salt[0] ) {
 		memset( rpSaved, 0, sizeof( rpSaved ) );
 		return;
@@ -471,15 +476,23 @@ static void CG_RP_Remember( const char *account, const byte *key ) {
 	CG_RP_WriteSaved( n );
 }
 
+// This server's kept login forgotten (the salt not known yet: any kept for
+// its address).
 static void CG_RP_Forget( void ) {
-	int n = CG_RP_ReadSaved(), i = CG_RP_FindSaved( n );
+	const int n = CG_RP_ReadSaved();
+	int i, kept = 0;
 
-	if ( i < 0 ) {
-		memset( rpSaved, 0, sizeof( rpSaved ) );
+	for ( i = 0; i < n; i++ ) {
+		if ( !Q_stricmp( rpSaved[i].address, cgrp.address ) && ( !cgrp.salt[0] || !Q_stricmp( rpSaved[i].salt, cgrp.salt ) ) ) {
+			continue;
+		}
+		rpSaved[kept++] = rpSaved[i];
+	}
+	if ( n <= 0 || kept == n || !cgrp.address[0] ) {
+		memset( rpSaved, 0, sizeof( rpSaved ) );	// (nothing to forget; or too big to read, and so kept as it is)
 		return;
 	}
-	memmove( &rpSaved[i], &rpSaved[i + 1], sizeof( rpSaved[0] ) * ( n - i - 1 ) );
-	CG_RP_WriteSaved( n - 1 );
+	CG_RP_WriteSaved( kept );
 }
 
 /*
@@ -517,9 +530,9 @@ static void CG_RP_AskSend( void ) {
 		cgrp.challengeUsed = qtrue;
 		break;
 	case RPASK_PASSWORD:
-		VRRP_LoginProof( cgrp.ask.oldKey, "password", cgrp.challenge, cgrp.ask.account, proof );
-		VRC_ToHex( proof, sizeof( proof ), hex );
 		VRC_ToHex( cgrp.ask.key, VRRP_KEY_LEN, hex2 );
+		VRRP_LoginProof( cgrp.ask.oldKey, va( "password %s", hex2 ), cgrp.challenge, cgrp.ask.account, proof );	// (the new key's part of it)
+		VRC_ToHex( proof, sizeof( proof ), hex );
 		trap->SendClientCommand( va( "rppass %s %s", hex, hex2 ) );
 		cgrp.challengeUsed = qtrue;
 		break;
@@ -528,7 +541,6 @@ static void CG_RP_AskSend( void ) {
 	memset( hex, 0, sizeof( hex ) );
 	memset( hex2, 0, sizeof( hex2 ) );
 	cgrp.ask.sent = qtrue;
-	cgrp.ask.challenged = qfalse;
 	cgrp.ask.time = cg.time;
 }
 
@@ -613,18 +625,21 @@ static void CG_RP_NewPassword( const char *now, const char *password, const char
 }
 
 static void CG_RP_LogOut( void ) {
-	CG_RP_Forget();
+	qboolean asking;
+
 	if ( !cgrp.server ) {
 		CG_RP_Show( "This server doesn't have roleplay", qtrue );
 		return;
 	}
-	if ( cgrp.ask.kind != RPASK_NONE ) {
-		CG_RP_AskOver();	// (whatever it was doesn't matter now)
-	}
-	if ( !cgrp.account[0] ) {
+	CG_RP_Forget();
+	asking = (qboolean)( cgrp.ask.kind != RPASK_NONE && cgrp.ask.kind != RPASK_PASSWORD );
+	CG_RP_AskOver();	// (whatever it was doesn't matter now)
+	if ( cgrp.known && !cgrp.account[0] && !asking ) {
 		CG_RP_Show( "You're not logged in", qtrue );
 		return;
 	}
+	// (the server's told even when it isn't known yet whether it has us logged
+	// in, or a login's on its way: it takes them in turn, and ends logged out)
 	trap->SendClientCommand( "rplogout" );
 }
 
@@ -795,6 +810,14 @@ static void CG_RP_Bio_f( void ) {
 	CG_RP_ReadBio();
 }
 
+// The Roleplay menu's Editor: the character played, into its fields.
+static void CG_RP_UIEdit( const rpChar_t *ch ) {
+	trap->Cvar_Set( "ui_rpEditName", ch->name );
+	trap->Cvar_Set( "ui_rpEditFaction", va( "%i", ch->faction ) );
+	trap->Cvar_Set( "ui_rpEditDesc", ch->desc );
+	trap->Cvar_Set( "ui_rpEditBio", ch->bio );
+}
+
 // A cvar a menu typed into, read and emptied.
 static void CG_RP_Take( const char *cvar, char *out, int size ) {
 	trap->Cvar_VariableStringBuffer( cvar, out, size );
@@ -868,13 +891,17 @@ static void CG_RP_UI_f( void ) {
 		if ( !ch ) {
 			CG_RP_Show( "Play a character first", qfalse );
 		} else if ( !Q_stricmp( what, "edit" ) ) {
-			trap->Cvar_Set( "ui_rpEditName", ch->name );
-			trap->Cvar_Set( "ui_rpEditFaction", va( "%i", ch->faction ) );
-			trap->Cvar_Set( "ui_rpEditDesc", ch->desc );
-			trap->Cvar_Set( "ui_rpEditBio", ch->bio );
+			CG_RP_UIEdit( ch );
 		} else {
 			char text[MAX_CVAR_VALUE_STRING];
 			int faction;
+			trap->Cvar_VariableStringBuffer( "ui_rpEditName", text, sizeof( text ) );
+			if ( strcmp( text, ch->name ) ) {
+				// the fields were another character's: never saved to this one
+				CG_RP_UIEdit( ch );
+				trap->Cvar_Set( "ui_rpMessage", va( "You play %s" S_COLOR_WHITE " now: check what's here, then save", ch->name ) );
+				return;
+			}
 			trap->Cvar_VariableStringBuffer( "ui_rpEditFaction", text, sizeof( text ) );
 			faction = atoi( text );
 			if ( text[0] && faction >= 0 && faction < RPF_NUM && faction != ch->faction ) {
@@ -924,15 +951,13 @@ static void CG_RP_ChallengeCmd( void ) {
 	Q_strncpyz( cgrp.challenge, challenge, sizeof( cgrp.challenge ) );
 	cgrp.hello = qtrue;
 	cgrp.challengeUsed = qfalse;
-	if ( cgrp.ask.kind != RPASK_NONE && cgrp.ask.sent ) {
-		cgrp.ask.challenged = qtrue;	// (the server's taken it up: its answer comes next)
-	}
 	CG_RP_AskSend();	// (one waiting for a challenge goes)
 }
 
-// rpacct <account|-> <active> <count> <most>
+// rpacct <account|-> <active> <count> <most> <1: this answers a login or new account | 0>
 static void CG_RP_AccountCmd( void ) {
 	char account[64];
+	const qboolean answer = (qboolean)( atoi( CG_Argv( 5 ) ) == 1 );
 	int i;
 
 	trap->Cmd_Argv( 1, account, sizeof( account ) );
@@ -951,9 +976,10 @@ static void CG_RP_AccountCmd( void ) {
 		memset( &cgrp.chars[i], 0, sizeof( cgrp.chars[i] ) );
 	}
 
-	// a login or a new account went through
-	if ( account[0] && ( cgrp.ask.kind == RPASK_NEW || cgrp.ask.kind == RPASK_LOGIN || cgrp.ask.kind == RPASK_AUTO ) &&
-		cgrp.ask.sent && cgrp.ask.challenged && !Q_stricmp( cgrp.ask.account, account ) ) {
+	// a login or a new account went through (not just where things stand: a
+	// late answer to a hello names the account too)
+	if ( account[0] && answer && ( cgrp.ask.kind == RPASK_NEW || cgrp.ask.kind == RPASK_LOGIN || cgrp.ask.kind == RPASK_AUTO ) &&
+		cgrp.ask.sent && !Q_stricmp( cgrp.ask.account, account ) ) {
 		if ( cgrp.ask.kind != RPASK_AUTO ) {
 			if ( cgrp.ask.remember ) {
 				CG_RP_Remember( account, cgrp.ask.key );
@@ -1046,8 +1072,8 @@ static void CG_RP_MessageCmd( void ) {
 // rppassok: the new password's the one now
 static void CG_RP_PasswordCmd( void ) {
 	if ( cgrp.ask.kind == RPASK_PASSWORD && cgrp.ask.sent ) {
-		int n = CG_RP_ReadSaved(), i = CG_RP_FindSaved( n );
-		if ( i >= 0 && !Q_stricmp( rpSaved[i].account, cgrp.ask.account ) ) {
+		const int n = CG_RP_ReadSaved(), i = CG_RP_FindSaved( n );
+		if ( n > 0 && i >= 0 && !Q_stricmp( rpSaved[i].account, cgrp.ask.account ) ) {
 			VRC_ToHex( cgrp.ask.key, VRRP_KEY_LEN, rpSaved[i].key );	// (what's kept logs in with the new one)
 			CG_RP_WriteSaved( n );
 		} else {
@@ -1474,9 +1500,24 @@ void CG_RP_Restart( void ) {
 	memset( rpCards, 0, sizeof( rpCards ) );
 }
 
+// The menus' cvars of a server's (its people, the editor's fields, the
+// last word, what was typed for a password), emptied.
+static void CG_RP_UIClear( void ) {
+	static const char *cvars[] = { "ui_rpEditName", "ui_rpEditFaction", "ui_rpEditDesc", "ui_rpEditBio", "ui_rpBioRead", "ui_rpBioName",
+		"ui_rpMessage", "ui_rpLoginPassword", "ui_rpLoginAgain", "ui_rpPassword", "ui_rpNewPassword", "ui_rpNewAgain" };
+	int i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		trap->Cvar_Set( va( "ui_rpWhoF%i", i ), "" );
+		trap->Cvar_Set( va( "ui_rpWhoD%i", i ), "" );
+	}
+	for ( i = 0; i < (int)ARRAY_LEN( cvars ); i++ ) {
+		trap->Cvar_Set( cvars[i], "" );
+	}
+}
+
 void CG_RP_Init( void ) {
 	char *p;
-	int i;
 
 	memset( &cgrp, 0, sizeof( cgrp ) );
 	memset( rpBubbles, 0, sizeof( rpBubbles ) );
@@ -1485,10 +1526,7 @@ void CG_RP_Init( void ) {
 	cgrp.target = -1;
 	cgrp.bioWho = -1;
 	cgrp.menuBio = -1;
-	for ( i = 0; i < MAX_CLIENTS; i++ ) {
-		trap->Cvar_Set( va( "ui_rpWhoF%i", i ), "" );	// (another server's people)
-		trap->Cvar_Set( va( "ui_rpWhoD%i", i ), "" );
-	}
+	CG_RP_UIClear();	// (another server's)
 	trap->Cvar_VariableStringBuffer( "cl_currentServerIP", cgrp.address, sizeof( cgrp.address ) );
 	if ( !cgrp.address[0] ) {
 		trap->Cvar_VariableStringBuffer( "cl_currentServerAddress", cgrp.address, sizeof( cgrp.address ) );
@@ -1501,7 +1539,6 @@ void CG_RP_Init( void ) {
 	Q_strlwr( cgrp.address );
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
-	trap->Cvar_Set( "ui_rpMessage", "" );
 }
 
 void CG_RP_Shutdown( void ) {
@@ -1510,10 +1547,11 @@ void CG_RP_Shutdown( void ) {
 	memset( cgrp.challenge, 0, sizeof( cgrp.challenge ) );
 	cgrp.server = cgrp.on = qfalse;
 	cgrp.account[0] = '\0';
-	cgrp.numChars = 0;
+	cgrp.numChars = cgrp.most = 0;
 	cgrp.active = -1;
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
+	CG_RP_UIClear();
 }
 
 // For the wheel: roleplay's on here.
@@ -1539,6 +1577,9 @@ qboolean CG_RP_ConsoleCommand( const char *cmd ) {
 
 	for ( i = 0; i < (int)ARRAY_LEN( rpCommands ); i++ ) {
 		if ( !Q_stricmp( cmd, rpCommands[i].name ) ) {
+			if ( !cgrp.server && Q_stricmp( cmd, "rpui" ) ) {
+				return qfalse;	// (a server without roleplay may have its own: /login on it is its own)
+			}
 			rpCommands[i].func();
 			return qtrue;
 		}

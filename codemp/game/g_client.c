@@ -2143,6 +2143,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	Q_strncpyz( oldname, client->pers.netname, sizeof( oldname ) );
 	s = Info_ValueForKey( userinfo, "name" );
 	ClientCleanName( s, client->pers.netname, sizeof( client->pers.netname ) );
+	G_RPOwnRename( clientNum, userinfo, client->pers.netname, sizeof( client->pers.netname ) );	// OpenJK VR: their own name, while a character's is shown (g_vrrp.c)
 	rpNamed = G_RPName( clientNum, client->pers.netname, sizeof( client->pers.netname ) );	// OpenJK VR: the roleplay character they play (g_vrrp.c)
 	Q_strncpyz( client->pers.netname_nocolor, client->pers.netname, sizeof( client->pers.netname_nocolor ) );
 	Q_StripColor( client->pers.netname_nocolor );

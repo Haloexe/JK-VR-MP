@@ -658,9 +658,12 @@ void Field_CharEvent( field_t *edit, int ch ) {
 ================================================================================
 OpenJK VR: passwords typed in a command line - roleplay's /login, /new and
 /changepassword (the cgame's, cg_vrrp.c), the server's rp password, and
-the rconpassword and password cvars - are shown as '*'s where the line is
-drawn (the console's, the chat line's) and echoed, and such a line isn't
-kept in the console's history.
+the rconpassword and password cvars (set by name, or by set, seta...) - in
+any of the commands on it, are shown as '*'s where the line is drawn (the
+console's, the chat line's) and echoed, and such a line isn't kept in the
+console's history. As it runs, login's and new's password - the rest of the
+line - goes in quotes, so a ';' or '//' in it stays in it (and the others'
+can't have those but in quotes: the line doesn't run).
 ================================================================================
 */
 
@@ -671,7 +674,8 @@ static const char *Con_SkipSpace( const char *p ) {
 	return p;
 }
 
-// Past the next word (in quotes or not).
+// Past the next word (in quotes or not), as the command line splits them: a
+// quote, or a ';', ends a word.
 static const char *Con_SkipWord( const char *p ) {
 	p = Con_SkipSpace( p );
 	if ( *p == '"' ) {
@@ -679,7 +683,7 @@ static const char *Con_SkipWord( const char *p ) {
 		}
 		return *p ? p + 1 : p;
 	}
-	while ( *p && *p != ' ' && *p != '\t' && *p != ';' ) {
+	while ( *p && *p != ' ' && *p != '\t' && *p != ';' && *p != '"' ) {
 		p++;
 	}
 	return p;
@@ -692,10 +696,28 @@ static qboolean Con_WordIs( const char *p, const char *word ) {
 	return (qboolean)( !Q_stricmpn( p, word, (int)n ) && ( !p[n] || p[n] == ' ' || p[n] == '\t' || p[n] == ';' ) );
 }
 
-// Where the password in a command line starts (NULL: there's none).
-static const char *Con_SecretStart( const char *line ) {
-	const char *p = Con_SkipSpace( line );
+// Where the command starting at p ends, as the command buffer splits a line:
+// at a ';' out of quotes (or the line's end; a comment, // or /*, runs to it).
+static const char *Con_CommandEnd( const char *p ) {
+	qboolean quoted = qfalse;
 
+	for ( ; *p; p++ ) {
+		if ( *p == '"' ) {
+			quoted = (qboolean)!quoted;
+		} else if ( !quoted && *p == '/' && ( p[1] == '/' || p[1] == '*' ) ) {
+			return p + strlen( p );
+		} else if ( !quoted && *p == ';' ) {
+			break;
+		}
+	}
+	return p;
+}
+
+// Where the password in the command at p starts (NULL: there's none, or
+// nothing's typed for it); *toEnd: it's the rest of the line (login, new).
+static const char *Con_CommandSecret( const char *p, qboolean *toEnd ) {
+	*toEnd = qfalse;
+	p = Con_SkipSpace( p );
 	while ( *p == '/' || *p == '\\' ) {
 		p++;
 	}
@@ -704,8 +726,12 @@ static const char *Con_SecretStart( const char *line ) {
 	}
 	if ( Con_WordIs( p, "login" ) || Con_WordIs( p, "new" ) ) {
 		p = Con_SkipWord( Con_SkipWord( p ) );	// (the command, the account)
+		*toEnd = qtrue;
 	} else if ( Con_WordIs( p, "changepassword" ) || Con_WordIs( p, "rconpassword" ) || Con_WordIs( p, "password" ) ) {
 		p = Con_SkipWord( p );
+	} else if ( ( Con_WordIs( p, "set" ) || Con_WordIs( p, "seta" ) || Con_WordIs( p, "sets" ) || Con_WordIs( p, "setu" ) ) &&
+		( Con_WordIs( Con_SkipWord( p ), "rconpassword" ) || Con_WordIs( Con_SkipWord( p ), "password" ) ) ) {
+		p = Con_SkipWord( Con_SkipWord( p ) );	// (set, the cvar)
 	} else if ( Con_WordIs( p, "rp" ) && Con_WordIs( Con_SkipWord( p ), "password" ) ) {
 		p = Con_SkipWord( Con_SkipWord( Con_SkipWord( p ) ) );	// (rp, password, the account)
 	} else {
@@ -715,11 +741,25 @@ static const char *Con_SecretStart( const char *line ) {
 	return *p ? p : NULL;
 }
 
+// The line with its password hidden, into out (sameLength: as many '*'s,
+// else "********"): from where the first one starts, in any of its commands,
+// to the line's end - what follows a password's no more to be shown than it
+// (login's and new's run to the end; another with a ';' after it doesn't
+// run at all). qtrue: there's one.
 qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLength ) {
-	const char *secret = Con_SecretStart( line );
+	const char *p = line, *secret = NULL;
 	int at, i;
 
 	Q_strncpyz( out, line, size );
+	while ( *p && !secret ) {
+		const char *end = Con_CommandEnd( p );
+		qboolean toEnd;
+		secret = Con_CommandSecret( p, &toEnd );
+		if ( secret && !toEnd && secret >= end ) {
+			secret = NULL;	// (its password's not typed: what's after is another command)
+		}
+		p = ( *end == ';' ) ? end + 1 : end;
+	}
 	if ( !secret ) {
 		return qfalse;
 	}
@@ -736,6 +776,92 @@ qboolean Con_HideSecret( const char *line, char *out, int size, qboolean sameLen
 		Q_strcat( out, size, "********" );
 	}
 	return qtrue;
+}
+
+// The command line about to run (from the console or the chat line) made
+// safe for a password in it, into out: login's and new's, the rest of the
+// line, put in quotes; the others', a ';', '//' or '/*' out of quotes
+// would cut short (and send on what follows). qfalse: it's not to run (the
+// player's told why).
+qboolean Con_SecretCommandLine( const char *line, char *out, int size ) {
+	const char *p = line;
+
+	Q_strncpyz( out, line, size );
+	while ( *p ) {
+		const char *end = Con_CommandEnd( p ), *secret;
+		qboolean toEnd;
+		secret = Con_CommandSecret( p, &toEnd );
+		if ( secret && toEnd ) {
+			const int at = (int)( secret - line );
+			if ( *secret == '"' ) {
+				return qtrue;	// (in quotes already)
+			}
+			if ( strchr( secret, '"' ) ) {
+				Com_Printf( "A password with \" in it can't be typed here: use the Roleplay menu\n" );
+				return qfalse;
+			}
+			if ( at + (int)strlen( secret ) + 3 > size ) {
+				Com_Printf( "That line's too long\n" );
+				return qfalse;
+			}
+			Com_sprintf( out + at, size - at, "\"%s\"", secret );
+			return qtrue;	// (the rest of the line was the password)
+		}
+		if ( secret ) {
+			qboolean quoted = qfalse;
+			const char *c;
+			for ( c = secret; *c; c++ ) {
+				if ( *c == '"' ) {
+					quoted = (qboolean)!quoted;
+				} else if ( !quoted && ( *c == ';' || ( *c == '/' && ( c[1] == '/' || c[1] == '*' ) ) ) ) {
+					Com_Printf( "Put the password in quotes: a ; // or /* in it would cut it short\n" );
+					return qfalse;
+				}
+			}
+		}
+		p = ( *end == ';' ) ? end + 1 : end;
+	}
+	return qtrue;
+}
+
+// The chat line's text a command - '/' and a letter, spaces before it no
+// matter (/me waves, /login..., typed on the headset's keyboard): the
+// command, without the '/' (NULL: it's chat).
+const char *Con_ChatCommand( const char *line ) {
+	line = Con_SkipSpace( line );
+	return ( line[0] == '/' && ( ( line[1] >= 'a' && line[1] <= 'z' ) || ( line[1] >= 'A' && line[1] <= 'Z' ) ) ) ? line + 1 : NULL;
+}
+
+// A command the engine's to send on to the server as it was typed (the game
+// didn't take it): whether it may go. Roleplay's with a password (the
+// cgame's, cg_vrrp.c) don't - the password in the clear - when the game
+// isn't there to take them (connecting, loading), or they're mistyped
+// (//login: "/login"); the player's told why. Where the game declines one
+// (a server without roleplay may have its own /login), it goes.
+qboolean Con_SecretMayForward( const char *cmd, qboolean inGame ) {
+	const char *word = cmd;
+
+	while ( *word == '/' || *word == '\\' ) {
+		word++;
+	}
+	if ( Q_stricmp( word, "login" ) && Q_stricmp( word, "new" ) && Q_stricmp( word, "changepassword" ) ) {
+		return qtrue;
+	}
+	if ( word != cmd ) {
+		Com_Printf( "Not sent: type it with one slash (/%s ...)\n", word );
+		return qfalse;
+	}
+	if ( !inGame ) {
+		Com_Printf( "Not sent: wait until you're in the game\n" );
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// Whether the chat line's text looks like a command (a '/' or '\\' first).
+qboolean Con_ChatLooksCommand( const char *line ) {
+	line = Con_SkipSpace( line );
+	return (qboolean)( line[0] == '/' || line[0] == '\\' );
 }
 
 /*
@@ -767,19 +893,20 @@ void Console_Key( int key ) {
 	//		Field_AutoComplete( &g_consoleField );
 
 		// print executed command (OpenJK VR: a password in it hidden)
-		char shown[MAX_EDIT_LINE];
+		char shown[MAX_EDIT_LINE], run[MAX_EDIT_LINE + 4];
 		const qboolean secret = Con_HideSecret( g_consoleField.buffer, shown, sizeof( shown ), qfalse );
 		Com_Printf( "%c%s\n", CONSOLE_PROMPT_CHAR, shown );
 
-		// check if cgame wants to eat the command...?
-		if ( cls.cgameStarted && cl.mSharedMemory ) {
+		if ( !Con_SecretCommandLine( g_consoleField.buffer, run, sizeof( run ) ) ) {
+			// (OpenJK VR: a password it would cut short: not run)
+		} else if ( cls.cgameStarted && cl.mSharedMemory ) {	// check if cgame wants to eat the command...?
 			TCGIncomingConsoleCommand *icc = (TCGIncomingConsoleCommand *)cl.mSharedMemory;
 
-			Q_strncpyz( icc->conCommand, g_consoleField.buffer, sizeof( icc->conCommand ) );
+			Q_strncpyz( icc->conCommand, run, sizeof( icc->conCommand ) );
 
 			if ( CGVM_IncomingConsoleCommand() ) {
 				// valid command
-				Cbuf_AddText( g_consoleField.buffer );
+				Cbuf_AddText( run );
 				Cbuf_AddText( "\n" );
 			}
 			else if ( icc->conCommand[0] ) {
@@ -790,7 +917,7 @@ void Console_Key( int key ) {
 		}
 		else {
 			// cgame didn't eat it, execute it
-			Cbuf_AddText( g_consoleField.buffer );
+			Cbuf_AddText( run );
 			Cbuf_AddText( "\n" );
 		}
 
@@ -902,11 +1029,19 @@ void Message_Key( int key ) {
 	}
 
 	if ( key == A_ENTER || key == A_KP_ENTER ) {
-		if ( ( chatField.buffer[0] == '/' || chatField.buffer[0] == '\\' ) && chatField.buffer[1] ) {
+		const char *command = ( chat_playerNum == -1 ) ? Con_ChatCommand( chatField.buffer ) : NULL;
+		char run[MAX_EDIT_LINE + 4], shown[MAX_EDIT_LINE];
+		if ( command ) {
 			// OpenJK VR: a command, as the console takes it (/me waves,
 			// /login..., typed on the headset's keyboard)
-			Cbuf_AddText( chatField.buffer + 1 );
-			Cbuf_AddText( "\n" );
+			if ( Con_SecretCommandLine( command, run, sizeof( run ) ) ) {
+				Cbuf_AddText( run );
+				Cbuf_AddText( "\n" );
+			}
+		} else if ( Con_ChatLooksCommand( chatField.buffer ) && Con_HideSecret( chatField.buffer, shown, sizeof( shown ), qfalse ) ) {
+			// OpenJK VR: a command with a password in it that wouldn't run as
+			// one (a tell's line, a slash too many): not said to anyone
+			Com_Printf( "Not sent: it has a password in it. To log in, type /login <account> <password>\n" );
 		} else if ( chatField.buffer[0] && cls.state == CA_ACTIVE ) {
 				 if ( chat_playerNum != -1 )	Com_sprintf( buffer, sizeof( buffer ), "tell %i \"%s\"\n", chat_playerNum, chatField.buffer );
 			else if ( chat_team )				Com_sprintf( buffer, sizeof( buffer ), "say_team \"%s\"\n", chatField.buffer );

@@ -1451,6 +1451,8 @@ void Menus_CloseAll()
 	int i;
 
 	g_waitingForKey = qfalse;
+	g_editingField = qfalse;	// OpenJK VR: nor typing in a field (it's shut)
+	g_editItem = NULL;
 
 	for (i = 0; i < menuCount; i++)
 	{
@@ -3475,25 +3477,31 @@ const itemDef_t *Item_TextField_Typing( void ) {
 	return g_editingField ? g_editItem : NULL;
 }
 
-// OpenJK VR: a field taken to type in: the cursor at the end of what's there
-// (as End puts it: the headset's keyboard has no keys to move it, and what's
-// typed goes on after what was).
+// OpenJK VR: a field taken to type in: the cursor at its start, as ever (what's
+// typed takes the place of what was) - or, in a field kept to its box (ours),
+// at the end of what's there, as End puts it: what's typed goes on after
+// what was, and the headset's keyboard has no keys to move it.
 static void Item_TextField_Begin( itemDef_t *item ) {
 	editFieldDef_t *editPtr = item->typeData.edit;
 	char buff[1024];
 	int len = 0;
 
+	if ( !editPtr || !editPtr->clipToBox ) {
+		item->cursorPos = 0;
+		if ( editPtr ) {
+			editPtr->paintOffset = 0;
+		}
+		return;
+	}
 	if ( item->cvar ) {
 		DC->getCVarString( item->cvar, buff, sizeof( buff ) );
 		len = (int)strlen( buff );
-		if ( editPtr && editPtr->maxChars && len > editPtr->maxChars ) {
+		if ( editPtr->maxChars && len > editPtr->maxChars ) {
 			len = editPtr->maxChars;
 		}
 	}
 	item->cursorPos = len;
-	if ( editPtr ) {
-		editPtr->paintOffset = ( editPtr->maxPaintChars > 0 && len > editPtr->maxPaintChars ) ? len - editPtr->maxPaintChars : 0;
-	}
+	editPtr->paintOffset = 0;	// (a field kept to its box keeps the cursor in view itself)
 }
 
 // OpenJK VR: typing in a field stopped (the field's gone from the screen).
@@ -3518,6 +3526,16 @@ qboolean Item_TextField_HandleKey(itemDef_t *item, int key) {
 		len = strlen(buff);
 		if (editPtr->maxChars && len > editPtr->maxChars) {
 			len = editPtr->maxChars;
+		}
+		// OpenJK VR: the cursor where there's text - what a field holds can change
+		// behind it (a menu empties a password's cvar), and it's come back to by Tab
+		if ( item->cursorPos > len ) {
+			item->cursorPos = len;
+		} else if ( item->cursorPos < 0 ) {
+			item->cursorPos = 0;
+		}
+		if ( editPtr->paintOffset > item->cursorPos ) {
+			editPtr->paintOffset = item->cursorPos;
 		}
 		if ( key & K_CHAR_FLAG ) {
 			key &= ~K_CHAR_FLAG;
@@ -3648,6 +3666,9 @@ qboolean Item_TextField_HandleKey(itemDef_t *item, int key) {
 			newItem = Menu_SetNextCursorItem((menuDef_t *) item->parent);
 			if (newItem && (newItem->type == ITEM_TYPE_EDITFIELD || newItem->type == ITEM_TYPE_NUMERICFIELD))
 			{
+				if ( newItem->typeData.edit && ( (editFieldDef_t *)newItem->typeData.edit )->clipToBox ) {
+					Item_TextField_Begin( newItem );	// OpenJK VR: as a click takes it
+				}
 				g_editItem = newItem;
 				g_editingField = qtrue;
 			}
@@ -3662,6 +3683,9 @@ qboolean Item_TextField_HandleKey(itemDef_t *item, int key) {
 			newItem = Menu_SetPrevCursorItem((menuDef_t *) item->parent);
 			if (newItem && (newItem->type == ITEM_TYPE_EDITFIELD || newItem->type == ITEM_TYPE_NUMERICFIELD))
 			{
+				if ( newItem->typeData.edit && ( (editFieldDef_t *)newItem->typeData.edit )->clipToBox ) {
+					Item_TextField_Begin( newItem );	// OpenJK VR: as a click takes it
+				}
 				g_editItem = newItem;
 				g_editingField = qtrue;
 			}
@@ -4373,7 +4397,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 					if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory))
 					{
 						Item_Action(item);
-						Item_TextField_Begin( item );	// OpenJK VR: the cursor at the end (was at the start)
+						Item_TextField_Begin( item );	// OpenJK VR: (in a field kept to its box: at the end)
 						g_editingField = qtrue;
 						g_editItem = item;
 						//DC->setOverstrikeMode(qtrue);
@@ -4442,7 +4466,7 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 		case A_ENTER:
 			if (item) {
 				if (item->type == ITEM_TYPE_EDITFIELD || item->type == ITEM_TYPE_NUMERICFIELD) {
-					Item_TextField_Begin( item );	// OpenJK VR: the cursor at the end (was at the start)
+					Item_TextField_Begin( item );	// OpenJK VR: (in a field kept to its box: at the end)
 					g_editingField = qtrue;
 					g_editItem = item;
 					//DC->setOverstrikeMode(qtrue);
@@ -4799,7 +4823,12 @@ void Item_TextField_Paint(itemDef_t *item) {
 	menuDef_t *parent = (menuDef_t*)item->parent;
 	editFieldDef_t *editPtr = item->typeData.edit;
 
-	Item_Text_Paint(item);
+	if ( editPtr->password && !( item->text && item->text[0] ) ) {
+		int w, h;
+		Item_SetTextExtents( item, &w, &h, "" );	// OpenJK VR: no label - it'd show the cvar: the password
+	} else {
+		Item_Text_Paint(item);
+	}
 
 	buff[0] = '\0';
 
@@ -4809,6 +4838,13 @@ void Item_TextField_Paint(itemDef_t *item) {
 		{
 			trap->SE_GetStringTextString( &buff[1], buff, sizeof(buff));
 		}
+	}
+	{	// OpenJK VR: the cursor, and where it's shown from, where there's text (what a
+		// field holds can change behind it; drawn with the cursor before them, the
+		// text would be measured to a place before its start)
+		const int len = (int)strlen( buff );
+		item->cursorPos = Com_Clampi( 0, len, item->cursorPos );
+		editPtr->paintOffset = Com_Clampi( 0, item->cursorPos, editPtr->paintOffset );
 	}
 	if ( editPtr->password ) {	// OpenJK VR: a password, as *s (as long, so the cursor's where it was)
 		int i;
@@ -5562,12 +5598,38 @@ void Item_Image_Paint(itemDef_t *item) {
 }
 
 
+#define TEXTSCROLL_CVAR_TEXT	1024
+#define TEXTSCROLL_CVAR_LINES	( TEXTSCROLL_CVAR_TEXT + MAX_TEXTSCROLL_LINES )	// (the text, and an end to each line)
+
 void Item_TextScroll_Paint(itemDef_t *item)
 {
-	char cvartext[1024];
+	char cvartext[TEXTSCROLL_CVAR_TEXT];
 	float x, y, size, count, thumb;
 	int	  i;
 	textScrollDef_t *scrollPtr = item->typeData.textscroll;
+
+	if (item->cvar)
+	{
+		// OpenJK VR: its text kept, and laid out again (back at the top) only
+		// when it changes - into its own buffers, not the string pool
+		qboolean changed = qfalse;
+		DC->getCVarString(item->cvar, cvartext, sizeof(cvartext));
+		if ( !scrollPtr->cvarText ) {
+			scrollPtr->cvarText = (char *)UI_Alloc( TEXTSCROLL_CVAR_TEXT );
+			scrollPtr->cvarLines = (char *)UI_Alloc( TEXTSCROLL_CVAR_LINES );
+			if ( !scrollPtr->cvarText || !scrollPtr->cvarLines ) {
+				scrollPtr->cvarText = scrollPtr->cvarLines = NULL;
+				return;
+			}
+			changed = qtrue;
+		}
+		if ( changed || strcmp( cvartext, scrollPtr->cvarText ) ) {
+			Q_strncpyz( scrollPtr->cvarText, cvartext, TEXTSCROLL_CVAR_TEXT );
+			item->text = scrollPtr->cvarText;
+			scrollPtr->startPos = 0;
+			Item_TextScroll_BuildLines ( item );
+		}
+	}
 
 	count = scrollPtr->iLineCount;
 
@@ -5590,14 +5652,6 @@ void Item_TextScroll_Paint(itemDef_t *item)
 		thumb = y - SCROLLBAR_SIZE - 1;
 	}
 	DC->drawHandlePic(x, thumb, SCROLLBAR_SIZE, SCROLLBAR_SIZE, DC->Assets.scrollBarThumb);
-
-	if (item->cvar)
-	{
-		DC->getCVarString(item->cvar, cvartext, sizeof(cvartext));
-		item->text = cvartext;
-		Item_TextScroll_BuildLines ( item );
-		item->text = NULL;	// (cvartext goes when this returns: its lines are kept)
-	}
 
 	// adjust size for item painting
 	size = item->window.rect.h - 2;
@@ -8715,6 +8769,23 @@ qboolean Item_Parse(int handle, itemDef_t *item) {
 	return qfalse;
 }
 
+// OpenJK VR: a text scroll's line kept - a cvar's in its own buffer (laid
+// out again as the cvar changes), the rest in the string pool as ever.
+static const char *Item_TextScroll_KeepLine( textScrollDef_t *scrollPtr, const char *line ) {
+	if ( scrollPtr->cvarLines ) {
+		const int len = (int)strlen( line ) + 1;
+		char *p;
+		if ( scrollPtr->cvarLinesUsed + len > TEXTSCROLL_CVAR_LINES ) {
+			return NULL;
+		}
+		p = scrollPtr->cvarLines + scrollPtr->cvarLinesUsed;
+		memcpy( p, line, len );
+		scrollPtr->cvarLinesUsed += len;
+		return p;
+	}
+	return String_Alloc( line );
+}
+
 static void Item_TextScroll_BuildLines ( itemDef_t* item )
 {
 	char text[2048];
@@ -8748,6 +8819,7 @@ static void Item_TextScroll_BuildLines ( itemDef_t* item )
 	psBestLineBreakSrcPos = psCurrentTextReadPos;
 
 	scrollPtr->iLineCount = 0;
+	scrollPtr->cvarLinesUsed = 0;
 	memset((char*)scrollPtr->pLines,0,sizeof(scrollPtr->pLines));
 
 	while (*psCurrentTextReadPos && (scrollPtr->iLineCount < MAX_TEXTSCROLL_LINES) )
@@ -8795,7 +8867,7 @@ static void Item_TextScroll_BuildLines ( itemDef_t* item )
 
 				// hack it to fit in with this code...
 				//
-				scrollPtr->pLines[ scrollPtr->iLineCount ] = String_Alloc ( sLineForDisplay );
+				scrollPtr->pLines[ scrollPtr->iLineCount ] = Item_TextScroll_KeepLine( scrollPtr, sLineForDisplay );
 				break;	// print this line
 			}
 			else
@@ -8828,7 +8900,7 @@ static void Item_TextScroll_BuildLines ( itemDef_t* item )
 
 					// hack it to fit in with this code...
 					//
-					scrollPtr->pLines[ scrollPtr->iLineCount ] = String_Alloc( sLineForDisplay );
+					scrollPtr->pLines[ scrollPtr->iLineCount ] = Item_TextScroll_KeepLine( scrollPtr, sLineForDisplay );
 					break;	// print this line
 				}
 			}
@@ -8847,7 +8919,7 @@ static void Item_TextScroll_BuildLines ( itemDef_t* item )
 		{
 			// then this is the last line and we've just run out of text, no CR, no overflow etc...
 			//
-			scrollPtr->pLines[ scrollPtr->iLineCount ] = String_Alloc( sLineForDisplay );
+			scrollPtr->pLines[ scrollPtr->iLineCount ] = Item_TextScroll_KeepLine( scrollPtr, sLineForDisplay );
 		}
 
 		scrollPtr->iLineCount++;

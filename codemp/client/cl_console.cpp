@@ -850,7 +850,7 @@ void Con_DrawNotify (void)
 		{	// OpenJK VR: a command typed there, a password in it shown as '*'s
 			static field_t shown;
 			shown = chatField;
-			if ( chatField.buffer[0] == '/' || chatField.buffer[0] == '\\' ) {
+			if ( Con_ChatLooksCommand( chatField.buffer ) ) {
 				Con_HideSecret( chatField.buffer, shown.buffer, sizeof( shown.buffer ), qtrue );
 			}
 			Field_BigDraw( &shown, skip * BIGCHAR_WIDTH, v, qtrue, qtrue );

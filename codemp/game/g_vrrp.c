@@ -22,7 +22,9 @@ server), a faction (Heroes, Villains, Neutral), and, optional, a one-line
 description and a bio. While roleplay is on, the player is shown as the
 character they play, looking as it does: what they wear while playing it
 (model, saber and skin colours) is kept with it. Switching characters
-respawns them, and waits until they're out of a duel and unhurt for 10 s.
+respawns them, and waits until they're out of a duel and unhurt for 10 s
+(and not carrying a flag, in a vehicle or, in Siege and the duel game
+types, in the round), at most every 10 s.
 
 CHAT, with roleplay on: talk (the chat key) reaches those within
 g_rpTalkRange (510 units, 15 m), /me actions too; the team chat key or
@@ -40,9 +42,10 @@ Client commands (most sent by the cgame or the menus, not typed):
   rpcard <client>, rpbio <client>    what a character's card shows
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
-<most> then rpchar <i> <faction> "name" "desc" "bio" each, rpcard, rpbio,
-rpmsg; rppassok, or rpfail <1: the name or password was wrong | 0>, to
-end a request made with a key.
+<most> <1: this answers a login or a new account | 0> then rpchar <i>
+<faction> "name" "desc" "bio" each, rpcard, rpbio, rpmsg; rppassok, or
+rpfail <1: the name or password was wrong | 0>, to end a request made
+with a key. A new password's proof is over "password <its key>".
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
 rp password <account> <temporary>.
@@ -74,11 +77,15 @@ static int G_RP_ClientArg( const char *arg );
 #define RP_TRIES			5		// wrong passwords...
 #define RP_LOCKOUT			60000	// ...then this long before another try
 #define RP_NEW_WAIT			10000	// between accounts made from one connection
+#define RP_NEW_PER_ADDRESS	3		// accounts made from one address...
+#define RP_NEW_ADDRESS_TIME	3600000	// ...in this long (ms; and the map's time)
+#define RP_SWITCH_WAIT		10000	// between switching characters
 #define RP_HURT_WAIT		10000	// switching characters or faction waits this long after being hurt
 #define RP_CARDS_PER_SEC	10
 #define RP_FILE_MAX			16384
 
 #define RP_SERVER_FILE		"rp/server.txt"
+#define RP_SERVER_FILE_MAX	4096
 #define RP_ACCOUNT_DIR		"rp/accounts"
 
 enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
@@ -115,6 +122,8 @@ typedef struct {
 	char		lookBase[RP_LOOK_KEYS][MAX_QPATH];	// what they wore when the character was taken up
 	int			fails, lockUntil;	// wrong passwords on this connection
 	int			newTime;			// the last account made from here
+	int			switchTime;			// the last switch of characters (respawning them)
+	qboolean	answering;			// the next rpacct answers their login or new account
 	int			cardTime, cards;	// card requests this second
 } rpClient_t;
 
@@ -128,6 +137,13 @@ static struct {
 } rp;
 
 static rpClient_t rpc[MAX_CLIENTS];
+
+// addresses that made accounts lately
+#define RP_ADDRESSES	64
+static struct {
+	char	address[48];
+	int		count, since;
+} rpMade[RP_ADDRESSES];
 
 // accounts that took wrong passwords lately
 #define RP_LOCKS	32
@@ -213,8 +229,11 @@ static const char *G_RP_NameProblem( const char *name ) {
 	qboolean letter = qfalse;
 	const int len = Q_PrintStrlen( name );
 
-	if ( len < 2 || len > RP_NAME_MAX || (int)strlen( name ) >= RP_NAME_BUF ) {
+	if ( len < 2 || len > RP_NAME_MAX ) {
 		return "A name takes 2 to 32 characters";
+	}
+	if ( (int)strlen( name ) >= MAX_NETNAME ) {	// (shown whole as the player's name, or cut to look like another's)
+		return "That name is too long with its colour codes";
 	}
 	for ( p = name; *p; p++ ) {
 		if ( Q_IsColorString( p ) ) {
@@ -231,8 +250,10 @@ static const char *G_RP_NameProblem( const char *name ) {
 }
 
 static qboolean G_RP_AccountNameOk( const char *name ) {
+	static const char *devices[] = { "con", "prn", "aux", "nul" };	// (Windows' devices: not files, whatever follows)
 	const int len = (int)strlen( name );
 	const char *p;
+	int i;
 
 	if ( len < RP_ACCOUNT_MIN || len > RP_ACCOUNT_MAX ) {
 		return qfalse;
@@ -241,6 +262,14 @@ static qboolean G_RP_AccountNameOk( const char *name ) {
 		if ( !( ( *p >= 'a' && *p <= 'z' ) || ( *p >= '0' && *p <= '9' ) || *p == '_' || *p == '-' ) ) {
 			return qfalse;
 		}
+	}
+	for ( i = 0; i < (int)ARRAY_LEN( devices ); i++ ) {
+		if ( !Q_stricmp( name, devices[i] ) ) {
+			return qfalse;
+		}
+	}
+	if ( len == 4 && ( !Q_stricmpn( name, "com", 3 ) || !Q_stricmpn( name, "lpt", 3 ) ) && name[3] >= '0' && name[3] <= '9' ) {
+		return qfalse;
 	}
 	return qtrue;
 }
@@ -314,6 +343,8 @@ Files
 ================================================================================
 */
 
+// Reads path into buf: its length; -1: there's no such file; -2: it's
+// there, but too big to read whole.
 static int G_RP_ReadFile( const char *path, char *buf, int size ) {
 	fileHandle_t f;
 	int len = trap->FS_Open( path, &f, FS_READ );
@@ -324,12 +355,22 @@ static int G_RP_ReadFile( const char *path, char *buf, int size ) {
 	if ( len >= size ) {
 		trap->FS_Close( f );
 		G_LogPrintf( "Roleplay: %s is too big to read\n", path );
-		return -1;
+		return -2;
 	}
 	trap->FS_Read( buf, len, f );
 	trap->FS_Close( f );
 	buf[len] = '\0';
 	return len;
+}
+
+static qboolean G_RP_FileThere( const char *path ) {
+	fileHandle_t f;
+	const int len = trap->FS_Open( path, &f, FS_READ );
+
+	if ( f ) {
+		trap->FS_Close( f );
+	}
+	return (qboolean)( len >= 0 && f );
 }
 
 static qboolean G_RP_WriteFile( const char *path, const char *text ) {
@@ -487,11 +528,16 @@ static qboolean G_RP_IndexAdd( const char *name, const char *account ) {
 	return qtrue;
 }
 
-static void G_RP_IndexRemove( const char *name ) {
-	const int i = G_RP_IndexFind( name );
+static void G_RP_IndexRemove( const char *name, const char *account ) {
+	char key[RP_NAME_BUF];
+	int i;
 
-	if ( i >= 0 ) {
-		rpIndex[i] = rpIndex[--rpIndexCount];
+	G_RP_NameKey( name, key, sizeof( key ) );
+	for ( i = 0; i < rpIndexCount; i++ ) {
+		if ( !strcmp( rpIndex[i].key, key ) && !Q_stricmp( rpIndex[i].account, account ) ) {
+			rpIndex[i] = rpIndex[--rpIndexCount];
+			return;
+		}
 	}
 }
 
@@ -523,12 +569,17 @@ The server's salt and secret
 ================================================================================
 */
 
-static void G_RP_LoadServer( void ) {
-	char text[512], salt[VRRP_SALT_HEX + 1] = { 0 };
+// The salt and secret, read (or, the first time, made): qfalse if the file's
+// there but can't be read - never made anew over it, as a new salt is every
+// account's password lost.
+static qboolean G_RP_LoadServer( void ) {
+	static char text[RP_SERVER_FILE_MAX];
+	char salt[VRRP_SALT_HEX + 1] = { 0 };
 	const char *p, *tok;
 	qboolean haveSalt = qfalse, haveSecret = qfalse;
+	const int len = G_RP_ReadFile( RP_SERVER_FILE, text, sizeof( text ) );
 
-	if ( G_RP_ReadFile( RP_SERVER_FILE, text, sizeof( text ) ) >= 0 ) {
+	if ( len >= 0 ) {
 		p = text;
 		COM_BeginParseSession( "rp server" );
 		while ( 1 ) {
@@ -550,7 +601,13 @@ static void G_RP_LoadServer( void ) {
 	if ( haveSalt && haveSecret ) {
 		Q_strncpyz( rp.salt, salt, sizeof( rp.salt ) );
 		Q_strlwr( rp.salt );
-		return;
+		return qtrue;
+	}
+	if ( len != -1 ) {
+		Com_Printf( S_COLOR_RED "Roleplay is off: %s couldn't be read. Mend it, or delete it to start over (every account's "
+			"password then stops working)\n", RP_SERVER_FILE );
+		G_LogPrintf( "Roleplay: %s couldn't be read; roleplay is off\n", RP_SERVER_FILE );
+		return qfalse;
 	}
 	// the first time: make them
 	{
@@ -563,6 +620,7 @@ static void G_RP_LoadServer( void ) {
 		G_RP_WriteFile( RP_SERVER_FILE, va( "// OpenJK VR roleplay: this server's login salt and secret. Keep it:\n"
 			"// a new salt makes every account's password stop working.\nsalt %s\nsecret %s\n", rp.salt, secretHex ) );
 	}
+	return qtrue;
 }
 
 static void G_RP_NewChallenge( int clientNum ) {
@@ -594,13 +652,15 @@ static void G_RP_SendAccount( int clientNum ) {
 	int i;
 
 	if ( !c->capable ) {
+		rpc[clientNum].answering = qfalse;
 		return;
 	}
 	if ( !c->loggedIn ) {
-		trap->SendServerCommand( clientNum, va( "rpacct - -1 0 %i", G_RP_MostChars() ) );
+		trap->SendServerCommand( clientNum, va( "rpacct - -1 0 %i 0", G_RP_MostChars() ) );
 		return;
 	}
-	trap->SendServerCommand( clientNum, va( "rpacct %s %i %i %i", c->acc.name, c->active, c->acc.numChars, G_RP_MostChars() ) );
+	trap->SendServerCommand( clientNum, va( "rpacct %s %i %i %i %i", c->acc.name, c->active, c->acc.numChars, G_RP_MostChars(), c->answering ? 1 : 0 ) );
+	rpc[clientNum].answering = qfalse;
 	for ( i = 0; i < c->acc.numChars; i++ ) {
 		const rpChar_t *ch = &c->acc.chars[i];
 		trap->SendServerCommand( clientNum, va( "rpchar %i %i \"%s\" \"%s\" \"%s\"", i, ch->faction, ch->name, ch->desc, ch->bio ) );
@@ -647,12 +707,21 @@ static void G_RP_Refresh( int clientNum ) {
 	}
 }
 
+// Whether a client's in the round, alive: switching characters respawns them.
+static qboolean G_RP_InPlay( const gentity_t *ent ) {
+	return (qboolean)( ent->client && ent->health > 0 && ent->client->sess.sessionTeam != TEAM_SPECTATOR &&
+		ent->client->pers.connected == CON_CONNECTED );
+}
+
 // Takes up character index (-1: none) for a logged in client; respawn: the
 // way switching does (and the first one taken up doesn't).
 static void G_RP_Play( int clientNum, int index, qboolean respawn ) {
 	rpClient_t *c = &rpc[clientNum];
 	gentity_t *ent = &g_entities[clientNum];
 
+	if ( respawn ) {
+		c->switchTime = level.time ? level.time : 1;
+	}
 	c->active = index;
 	c->acc.last = index;
 	G_RP_RememberLook( clientNum );
@@ -660,24 +729,45 @@ static void G_RP_Play( int clientNum, int index, qboolean respawn ) {
 	G_RP_WriteSession( clientNum );
 	G_RP_Refresh( clientNum );
 	G_RP_SendAccount( clientNum );
-	if ( respawn && G_RPOn() && ent->client && ent->health > 0 && ent->client->sess.sessionTeam != TEAM_SPECTATOR &&
-		ent->client->pers.connected == CON_CONNECTED ) {
+	if ( respawn && G_RPOn() && G_RP_InPlay( ent ) ) {
 		ClientSpawn( ent );
 	}
 }
 
-// Why a client can't switch characters (or faction) now (NULL: they can).
-static const char *G_RP_BusyReason( int clientNum ) {
+// Why a client can't switch characters (switch: what respawns them) or
+// faction now (NULL: they can).
+static const char *G_RP_BusyReason( int clientNum, qboolean switching ) {
 	const gentity_t *ent = &g_entities[clientNum];
+	const gclient_t *cl = ent->client;
 
-	if ( !ent->client ) {
+	if ( !cl ) {
 		return "Not now";
 	}
-	if ( ent->client->ps.duelInProgress ) {
+	if ( cl->ps.duelInProgress ) {
 		return "Not during a duel";
 	}
-	if ( ent->client->rpHurtTime && level.time - ent->client->rpHurtTime < RP_HURT_WAIT && ent->health > 0 ) {
+	if ( cl->rpHurtTime && level.time - cl->rpHurtTime < RP_HURT_WAIT && ent->health > 0 ) {
 		return "Not while fighting: wait until you've been unhurt for 10 seconds";
+	}
+	if ( !switching ) {
+		return NULL;
+	}
+	if ( level.intermissiontime ) {
+		return "Not now: the round's over";
+	}
+	if ( rpc[clientNum].switchTime && level.time - rpc[clientNum].switchTime < RP_SWITCH_WAIT ) {
+		return "Wait a moment before switching characters again";
+	}
+	if ( G_RP_InPlay( ent ) ) {	// (respawned by it: what dying would sort out, it doesn't)
+		if ( cl->ps.powerups[PW_REDFLAG] || cl->ps.powerups[PW_BLUEFLAG] || cl->ps.powerups[PW_NEUTRALFLAG] ) {
+			return "Not while you carry a flag";
+		}
+		if ( cl->ps.m_iVehicleNum ) {
+			return "Not in a vehicle";
+		}
+		if ( level.gametype == GT_SIEGE || level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL ) {
+			return "In this game type, switch characters while you're out of the round";
+		}
 	}
 	return NULL;
 }
@@ -688,23 +778,34 @@ Logging in and out
 ================================================================================
 */
 
+// An account's place among those with wrong passwords lately (-1: none; add:
+// given one - an empty place, or the one wrong longest ago that isn't
+// waiting out its lock, as wrong passwords for other names mustn't end one;
+// -1 if all are).
 static int G_RP_LockFor( const char *name, qboolean add ) {
-	int i, oldest = 0;
+	int i, take = -1;
 
 	for ( i = 0; i < RP_LOCKS; i++ ) {
-		if ( !Q_stricmp( rpLocks[i].name, name ) ) {
+		if ( rpLocks[i].name[0] && !Q_stricmp( rpLocks[i].name, name ) ) {
 			return i;
-		}
-		if ( rpLocks[i].time < rpLocks[oldest].time ) {
-			oldest = i;
 		}
 	}
 	if ( !add ) {
 		return -1;
 	}
-	memset( &rpLocks[oldest], 0, sizeof( rpLocks[0] ) );
-	Q_strncpyz( rpLocks[oldest].name, name, sizeof( rpLocks[0].name ) );
-	return oldest;
+	for ( i = 0; i < RP_LOCKS; i++ ) {
+		if ( rpLocks[i].name[0] && rpLocks[i].until && level.time - rpLocks[i].until < 0 ) {
+			continue;	// (waiting)
+		}
+		if ( take < 0 || !rpLocks[i].name[0] || ( rpLocks[take].name[0] && rpLocks[i].time < rpLocks[take].time ) ) {
+			take = i;
+		}
+	}
+	if ( take >= 0 ) {
+		memset( &rpLocks[take], 0, sizeof( rpLocks[0] ) );
+		Q_strncpyz( rpLocks[take].name, name, sizeof( rpLocks[0].name ) );
+	}
+	return take;
 }
 
 static qboolean G_RP_Locked( int clientNum, const char *account ) {
@@ -723,6 +824,9 @@ static void G_RP_Failed( int clientNum, const char *account ) {
 	if ( ++c->fails >= RP_TRIES ) {
 		c->fails = 0;
 		c->lockUntil = level.time + RP_LOCKOUT;
+	}
+	if ( i < 0 ) {
+		return;	// (every place waiting: the connection's count still holds)
 	}
 	rpLocks[i].time = level.time;
 	if ( ++rpLocks[i].fails >= RP_TRIES ) {
@@ -762,6 +866,7 @@ static void G_RP_LogIn( int clientNum, const rpAccount_t *acc ) {
 	c->loggedIn = qtrue;
 	c->acc = *acc;
 	c->fails = 0;
+	c->answering = qtrue;	// (the account sent next answers the login, or the new account)
 	G_RP_Play( clientNum, ( acc->last >= 0 && acc->last < acc->numChars ) ? acc->last : -1, qfalse );
 }
 
@@ -775,15 +880,66 @@ static void G_RP_Hello( gentity_t *ent ) {
 		return;
 	}
 	c->capable = qtrue;
-	G_RP_NewChallenge( clientNum );
+	if ( c->challenge[0] ) {
+		// a hello again (one lost, or its answer late): the same challenge, so
+		// the answer to either does, until it's used
+		trap->SendServerCommand( clientNum, va( "rpch %s %s", rp.salt, c->challenge ) );
+	} else {
+		G_RP_NewChallenge( clientNum );
+	}
 	G_RP_SendAccount( clientNum );
+}
+
+// A client's address, without the port (accounts made from it are counted).
+static void G_RP_Address( int clientNum, char *out, int size ) {
+	const gclient_t *cl = g_entities[clientNum].client;
+	char *colon;
+
+	Q_strncpyz( out, cl ? cl->sess.IP : "", size );
+	if ( out[0] == '[' ) {
+		char *end = strchr( out, ']' );
+		if ( end ) {
+			end[1] = '\0';
+		}
+	} else if ( ( colon = strchr( out, ':' ) ) != NULL && !strchr( colon + 1, ':' ) ) {
+		*colon = '\0';
+	}
+}
+
+// Whether another account may be made from address now; made: one was.
+static qboolean G_RP_AddressMay( const char *address, qboolean made ) {
+	int i, take = 0;
+
+	for ( i = 0; i < RP_ADDRESSES; i++ ) {
+		if ( rpMade[i].address[0] && !Q_stricmp( rpMade[i].address, address ) ) {
+			break;
+		}
+		if ( !rpMade[i].address[0] || ( rpMade[take].address[0] && rpMade[i].since < rpMade[take].since ) ) {
+			take = i;
+		}
+	}
+	if ( i < RP_ADDRESSES && level.time - rpMade[i].since >= RP_NEW_ADDRESS_TIME ) {
+		rpMade[i].count = 0;	// (a new hour)
+		rpMade[i].since = level.time;
+	}
+	if ( !made ) {
+		return (qboolean)( i == RP_ADDRESSES || rpMade[i].count < RP_NEW_PER_ADDRESS );
+	}
+	if ( i == RP_ADDRESSES ) {
+		i = take;
+		Q_strncpyz( rpMade[i].address, address, sizeof( rpMade[i].address ) );
+		rpMade[i].count = 0;
+		rpMade[i].since = level.time;
+	}
+	rpMade[i].count++;
+	return qtrue;
 }
 
 static void G_RP_NewAccount( gentity_t *ent ) {
 	const int clientNum = ent - g_entities;
 	rpClient_t *c = &rpc[clientNum];
 	static rpAccount_t acc;
-	char name[64], hex[128];
+	char name[64], hex[128], address[48];
 
 	if ( !G_RPOn() ) {
 		G_RP_Refused( clientNum, "Roleplay is off on this server right now", qfalse );
@@ -793,11 +949,13 @@ static void G_RP_NewAccount( gentity_t *ent ) {
 	trap->Argv( 2, hex, sizeof( hex ) );
 	Q_strlwr( name );
 	if ( !G_RP_AccountNameOk( name ) ) {
-		G_RP_Refused( clientNum, "An account name takes 3 to 20 letters, numbers, _ or -", qfalse );
+		G_RP_Refused( clientNum, "An account name takes 3 to 20 letters, numbers, _ or - (and isn't con, nul, aux, prn, com1 or lpt1...)", qfalse );
 		return;
 	}
-	if ( c->newTime && level.time - c->newTime < RP_NEW_WAIT ) {
-		G_RP_Refused( clientNum, "Wait a moment before making another account", qfalse );
+	G_RP_Address( clientNum, address, sizeof( address ) );
+	if ( ( c->newTime && level.time - c->newTime < RP_NEW_WAIT ) || !G_RP_AddressMay( address, qfalse ) ) {
+		G_RP_Refused( clientNum, ( c->newTime && level.time - c->newTime < RP_NEW_WAIT ) ? "Wait a moment before making another account" :
+			"Enough accounts have been made from here for now: try later", qfalse );
 		return;
 	}
 	memset( &acc, 0, sizeof( acc ) );
@@ -805,17 +963,14 @@ static void G_RP_NewAccount( gentity_t *ent ) {
 		G_RP_Refused( clientNum, "Your game didn't send a proper key: update OpenJK VR", qfalse );
 		return;
 	}
-	{
-		static rpAccount_t existing;
-		char text[8];
-		if ( G_RP_LoadAccount( name, &existing ) || G_RP_ReadFile( G_RP_AccountPath( name ), text, sizeof( text ) ) >= 0 ) {
-			G_RP_Refused( clientNum, "That account name is taken", qfalse );
-			return;
-		}
+	if ( G_RP_FileThere( G_RP_AccountPath( name ) ) ) {	// (taken, even if its file won't read: never written over)
+		G_RP_Refused( clientNum, "That account name is taken", qfalse );
+		return;
 	}
 	Q_strncpyz( acc.name, name, sizeof( acc.name ) );
 	acc.last = -1;
 	c->newTime = level.time;
+	G_RP_AddressMay( address, qtrue );
 	G_RP_SaveAccount( &acc );
 	G_LogPrintf( "Roleplay: account %s made by client %i\n", acc.name, clientNum );
 	G_RP_NewChallenge( clientNum );	// (before the account, as a login has it: the game knows the answer's to it)
@@ -893,7 +1048,8 @@ static void G_RP_ChangePassword( gentity_t *ent ) {
 		G_RP_Refused( clientNum, "Your game didn't send a proper key: update OpenJK VR", qfalse );
 		return;
 	}
-	VRRP_LoginProof( c->acc.key, "password", challenge, c->acc.name, want );
+	Q_strlwr( keyHex );
+	VRRP_LoginProof( c->acc.key, va( "password %s", keyHex ), challenge, c->acc.name, want );	// (the new key's part of it)
 	if ( !VRC_Equal( proof, want, sizeof( want ) ) ) {
 		G_RP_Failed( clientNum, c->acc.name );
 		G_RP_Refused( clientNum, "That isn't your current password", qtrue );
@@ -989,7 +1145,7 @@ static void G_RP_NewChar( int clientNum, const char *rawName ) {
 static void G_RP_DeleteChar( rpAccount_t *acc, int index ) {
 	int i;
 
-	G_RP_IndexRemove( acc->chars[index].name );
+	G_RP_IndexRemove( acc->chars[index].name, acc->name );
 	for ( i = index; i < acc->numChars - 1; i++ ) {
 		acc->chars[i] = acc->chars[i + 1];
 	}
@@ -1043,7 +1199,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 		return;
 	}
 	if ( !Q_stricmp( sub, "new" ) ) {
-		busy = ( c->active >= 0 ) ? G_RP_BusyReason( clientNum ) : NULL;
+		busy = ( c->active >= 0 ) ? G_RP_BusyReason( clientNum, qtrue ) : NULL;
 		if ( busy ) {
 			G_RP_Msg( clientNum, busy );
 			return;
@@ -1061,7 +1217,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 		if ( i == c->active ) {
 			return;
 		}
-		busy = G_RP_BusyReason( clientNum );
+		busy = G_RP_BusyReason( clientNum, qtrue );
 		if ( busy ) {
 			G_RP_Msg( clientNum, busy );
 			return;
@@ -1105,7 +1261,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 			return;
 		}
 		if ( i != c->acc.chars[c->active].faction ) {
-			busy = G_RP_BusyReason( clientNum );
+			busy = G_RP_BusyReason( clientNum, qfalse );
 			if ( busy ) {
 				G_RP_Msg( clientNum, busy );
 				return;
@@ -1328,6 +1484,35 @@ void Cmd_VRRP_f( gentity_t *ent ) {
 	}
 }
 
+// ClientUserinfoChanged, before G_RPName: netname, the player's own name
+// (cleaned), changed while the name shown is a character's - announced and
+// held back as any rename is (the name shown doesn't change, so the game's
+// own rename check doesn't see it).
+void G_RPOwnRename( int clientNum, char *userinfo, char *netname, int size ) {
+	rpClient_t *c;
+	gclient_t *cl;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !( cl = g_entities[clientNum].client ) ) {
+		return;
+	}
+	c = &rpc[clientNum];
+	if ( !c->named || !G_RP_Active( clientNum ) || !c->playerName[0] || !strcmp( c->playerName, netname ) ||
+		cl->pers.connected != CON_CONNECTED ) {
+		return;
+	}
+	if ( cl->pers.netnameTime > level.time ) {
+		trap->SendServerCommand( clientNum, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "NONAMECHANGE" ) ) );
+		Info_SetValueForKey( userinfo, "name", c->playerName );
+		trap->SetUserinfo( clientNum, userinfo );
+		Q_strncpyz( netname, c->playerName, size );
+		return;
+	}
+	trap->SendServerCommand( -1, va( "print \"%s" S_COLOR_WHITE " %s %s" S_COLOR_WHITE " (out of character)\n\"", c->playerName,
+		G_GetStringEdString( "MP_SVGAME", "PLRENAME" ), netname ) );
+	G_LogPrintf( "ClientRename: %i [%s] (%s) \"%s^7\" -> \"%s^7\" (out of character)\n", clientNum, cl->sess.IP, cl->pers.guid, c->playerName, netname );
+	cl->pers.netnameTime = level.time + 5000;
+}
+
 // ClientUserinfoChanged: the name shown. netname holds the player's own
 // (cleaned); while they play a character, it becomes the character's.
 // qtrue: the name shown is or was a character's, so the change isn't a
@@ -1364,7 +1549,8 @@ void G_RPLookSeen( int clientNum, const char *userinfo ) {
 	}
 	c = &rpc[clientNum];
 	for ( k = 0; k < RP_LOOK_KEYS; k++ ) {
-		const char *now = Info_ValueForKey( userinfo, rpLookKeys[k] );
+		char now[MAX_QPATH];
+		Q_strncpyz( now, Info_ValueForKey( userinfo, rpLookKeys[k] ), sizeof( now ) );	// (as kept: a longer one's cut alike)
 		if ( strcmp( now, c->lookBase[k] ) ) {
 			Q_strncpyz( c->lookBase[k], now, sizeof( c->lookBase[k] ) );
 			G_RP_CleanText( now, ch->look[k], sizeof( ch->look[k] ) );
@@ -1445,7 +1631,7 @@ void G_RPPublish( void ) {
 	const qboolean on = (qboolean)( g_rp.integer != 0 );
 	int i;
 
-	trap->Cvar_Set( "vrRP", on ? "1" : "0" );
+	trap->Cvar_Set( "vrRP", ( on && rp.ready ) ? "1" : "0" );
 	if ( !rp.ready || on == rp.on ) {
 		return;
 	}
@@ -1470,9 +1656,13 @@ void G_RPInit( void ) {
 	trap->Cvar_Register( NULL, "vrRP", "0", CVAR_SERVERINFO | CVAR_ROM );
 	memset( &rp, 0, sizeof( rp ) );
 	rp.bootTime = (int)time( NULL );
-	G_RP_LoadServer();
-	G_RP_IndexBuild();
 	memset( rpLocks, 0, sizeof( rpLocks ) );
+	memset( rpMade, 0, sizeof( rpMade ) );
+	if ( !G_RP_LoadServer() ) {
+		trap->Cvar_Set( "vrRP", "0" );
+		return;	// (not ready: off, whatever g_rp says)
+	}
+	G_RP_IndexBuild();
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
 		rpc[i].active = -1;
 	}
@@ -1578,13 +1768,18 @@ qboolean G_RPConsoleCommand( void ) {
 			trap->Print( "%s\n", problem );
 			return qtrue;
 		}
-		n = G_RP_IndexFind( name );
-		if ( n >= 0 && Q_stricmp( rpIndex[n].account, rpc[i].acc.name ) ) {
-			trap->Print( "Someone already has a character by that name\n" );
-			return qtrue;
+		{	// (a name another character has - theirs too - won't do; the same one in other colours will)
+			char now[RP_NAME_BUF], want[RP_NAME_BUF];
+			G_RP_NameKey( rpc[i].acc.chars[rpc[i].active].name, now, sizeof( now ) );
+			G_RP_NameKey( name, want, sizeof( want ) );
+			n = G_RP_IndexFind( name );
+			if ( n >= 0 && strcmp( want, now ) ) {
+				trap->Print( "Someone already has a character by that name\n" );
+				return qtrue;
+			}
 		}
-		G_RP_IndexRemove( rpc[i].acc.chars[rpc[i].active].name );
-		G_RP_IndexAdd( name, rpc[i].acc.name );
+		G_RP_IndexRemove( rpc[i].acc.chars[rpc[i].active].name, rpc[i].acc.name );
+		G_RP_IndexAdd( name, rpc[i].acc.name );	// (room: one just went)
 		G_RP_Msg( i, va( "The server renamed %s" S_COLOR_WHITE " to %s", rpc[i].acc.chars[rpc[i].active].name, name ) );
 		Q_strncpyz( rpc[i].acc.chars[rpc[i].active].name, name, sizeof( rpc[i].acc.chars[0].name ) );
 		G_RP_SaveAccount( &rpc[i].acc );

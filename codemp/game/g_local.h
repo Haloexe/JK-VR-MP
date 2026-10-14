@@ -1056,6 +1056,7 @@ void		G_RPPublish( void );
 qboolean	G_RPOn( void );
 void		G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot );
 void		G_RPClientDisconnect( int clientNum );
+void		G_RPOwnRename( int clientNum, char *userinfo, char *netname, int size );
 qboolean	G_RPName( int clientNum, char *netname, int size );
 void		G_RPLookSeen( int clientNum, const char *userinfo );
 qboolean	G_RPLookValue( int clientNum, const char *key, char *value, int size );

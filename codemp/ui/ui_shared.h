@@ -249,6 +249,12 @@ typedef struct textScrollDef_s
 	int				iLineCount;
 	const char*		pLines[MAX_TEXTSCROLL_LINES];	// can contain NULL ptrs that you should skip over during paint.
 
+	// OpenJK VR: a text scroll of a cvar's keeps the text it laid out, and its
+	// lines, itself - laid out again only when it changes, and not in the
+	// string pool (which would fill, lines at every change)
+	char			*cvarText;
+	char			*cvarLines;
+	int				cvarLinesUsed;
 } textScrollDef_t;
 
 #define ITEM_ALIGN_LEFT		0		// left alignment

@@ -65,6 +65,10 @@ extern int			chat_playerNum;
 // password as '*'s, one a character (sameLength: as it's typed) or eight
 // (echoed). qfalse: there's none in it (out is the line).
 qboolean Con_HideSecret		( const char *line, char *out, int size, qboolean sameLength );
+qboolean Con_SecretCommandLine	( const char *line, char *out, int size );
+const char *Con_ChatCommand		( const char *line );
+qboolean Con_ChatLooksCommand	( const char *line );
+qboolean Con_SecretMayForward	( const char *cmd, qboolean inGame );
 
 void	Field_KeyDownEvent	( field_t *edit, int key );
 void	Field_CharEvent		( field_t *edit, int ch );
