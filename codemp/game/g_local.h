@@ -1082,8 +1082,8 @@ qboolean	G_RPCapable( int clientNum );
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
 qboolean	G_RPDowned( const gentity_t *ent );
-qboolean	G_RPDownGuard( gentity_t *targ, int mod );
-qboolean	G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, int damage, int mod );
+qboolean	G_RPDownGuard( gentity_t *targ, gentity_t *attacker, int mod );
+qboolean	G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, const vec3_t point, int damage, int mod );
 void		G_RPDownDied( gentity_t *self );
 void		G_RPGiveUp( gentity_t *ent );
 void		G_RPGiveUpCommand( gentity_t *ent );
@@ -1428,6 +1428,7 @@ qboolean	G_VRSaberOn( void );
 void		G_VRSaberPublish( void );
 qboolean	G_VRSaberBodyYaw( int clientNum, float *yaw );
 qboolean	G_VRSaberClient( gentity_t *ent );
+qboolean	G_VRHeadGaze( const gentity_t *ent, vec3_t start, vec3_t dir );
 qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
 qboolean	G_VRSaberActive( gentity_t *ent );
 qboolean	G_VRSaberBlade( gentity_t *ent, int saberNum, int bladeNum, vec3_t base, vec3_t dir );

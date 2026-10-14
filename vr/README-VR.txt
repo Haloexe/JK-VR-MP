@@ -32,7 +32,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Roleplay on servers that switch it on: an account, characters of your
     own (a name, a faction, a description and a bio), talk that reaches
     only those near you with speech bubbles over their heads, /me and
-    out-of-character chat, and character cards (see ROLEPLAY)
+    out-of-character chat, and character cards; down instead of dead,
+    until someone of your faction gets you up; NPCs that take sides by
+    faction (see ROLEPLAY)
   * A keyboard in the headset for typing in menus, chat and the console
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
@@ -374,7 +376,8 @@ quick press of Y still picks the next Force power):
                       it first), kneel, lie down, sit cross-legged
   down   Companions   (still to come)
   left   Roleplay     read the bio of whom you look at, challenge them to a
-                      duel, the Roleplay menu (see ROLEPLAY)
+                      duel, give up (when you're down), the Roleplay menu
+                      (see ROLEPLAY)
 Rest on Poses or Roleplay a moment and its ring opens: push toward what you
 want there and let go of Y (Back, up and to the left, goes back; let go
 with the stick in the middle and nothing happens). What can't be done now
@@ -421,16 +424,44 @@ off or fists out - for half a second, and their card shows: name, faction
 and description. Their bio: Read their bio on the wheel's Roleplay ring,
 or the menu's People page (everyone here, with their faction and
 description).
+  Down, not dead (Free For All and Team FFA, unless the server's owner
+turns it off: g_rpDowned): playing a character, when your health runs out
+you go down where you stand instead of dying - flat on your back, sabers
+off, able to talk but not to move, fight, switch weapons or use the Force
+- and nothing harms you there. Someone of your faction gets you up: from
+close by (a few steps) they look at you - or aim at you - and hold use (in
+the headset, the right grip) for 3 seconds, and you're up with 25 health;
+a bar fills for both of you as they do. Or you give up: hold attack (the
+trigger) for 1.5 s - a press made after going down - or Give up on the
+wheel's Roleplay ring, or /kill; you die as you would have (the kill is
+whoever put you down's) and respawn. A map's own hazards still kill, down
+or not: a pit, water (lying in it, a hand's depth drowns you in 12 s
+unless someone gets you up), lava and slime, doors, lifts and crushers,
+kill zones, lasers, lightning. A duel's loser goes down. Bots, players not
+playing a character, and anyone riding a vehicle, at a gun or in a
+monster's jaws die as ever. While you're down your character stays as it
+is: no logging in or out, switching, deleting or changing faction.
+  NPCs take sides: the light side's (Jedi, rebels) are with the Heroes and
+go after Villains, the dark side's (Sith, stormtroopers, mercenaries) are
+with the Villains and go after Heroes; Neutral characters are left alone -
+until they attack an NPC, whose side then fights back for the rest of that
+life. Nobody's NPCs, turrets or sentries harm someone who's down, and the
+crosshair shows your side's NPCs as friends. Monsters are monsters.
+  Roleplay needs this build on the server and on your PC: an older OpenJK
+VR on a server with this one is told to update, and can't play a
+character there.
   The menu's other pages: Chat & cards (speech bubbles, cards and Remember
 me on or off: cg_rpBubbles, cg_rpCards, cg_rpRemember), Help, and Server,
-for the owner: roleplay on or off, characters per account and how far
-talk reaches - straight into a game you host; on your own server, after
-typing its rcon password into the page.
+for the owner: roleplay on or off, characters per account, how far talk
+reaches and whether running out of health downs players - straight into a
+game you host; on your own server, after typing its rcon password into the
+page (it shows the server's settings as they are).
   In the console (Shift+~):  new <account> <password>,  login <account>
 <password>,  logout,  changepassword <old> <new>,  bio (of whom you look
 at), and  rp  for your characters: rp new <name>, rp play <name or
 number>, rp faction heroes|villains|neutral, rp desc <text>, rp bio
-<text>, rp delete <name>; rp look <player> shows anyone's card. A password
+<text>, rp delete <name>, rp giveup (down); rp look <player> shows anyone's
+card. A password
 typed in the console shows as *s and isn't kept in its history (one with a
 ; or // in it goes in quotes; one with a " in it can only be typed in the
 menu), and a line that would cut a password short doesn't run.
@@ -664,6 +695,9 @@ no client. Source files:
                                accounts, logins, characters, chat
   codemp/cgame/cg_vrrp.c       roleplay, the player's side: logging in,
                                speech bubbles, cards
+  codemp/game/g_vrdown.c       roleplay: down, not dead; NPCs taking sides
+  codemp/cgame/cg_vrdown.c     being down, getting someone up: the panel,
+                               the prompts, Give up
   codemp/game/bg_vrcrypt.c     SHA-256, HMAC and PBKDF2 for the logins
   codemp/ui/ui_vrrp.c          the Roleplay menu (base\ui\vr_rp.menu)
   shared/sdl/sdl_window.cpp    session creation after the GL context

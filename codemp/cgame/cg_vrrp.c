@@ -39,7 +39,7 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			2		// (as the server's, g_vrrp.c)
+#define RP_PROTOCOL			3		// (as the server's, g_vrrp.c)
 #define RP_CHARS_MAX		10		// (as many as a server keeps at most)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20

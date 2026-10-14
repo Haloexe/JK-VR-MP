@@ -183,9 +183,29 @@ void BG_VRPoseStandUp( playerState_t *ps, animation_t *animations ) {
 	}
 }
 
+// Down, nothing in hand goes off: a charge held (a thermal cooking, a
+// bowcaster drawn, a lock taken) is let go of unfired - charged weapons
+// fire as the button comes up, and down, it's never down - and a scope's
+// put away.
+static void BG_VRP_DownHands( playerState_t *ps ) {
+	if ( ps->weaponstate == WEAPON_CHARGING || ps->weaponstate == WEAPON_CHARGING_ALT ) {
+		ps->weaponstate = WEAPON_READY;
+		ps->eFlags &= ~( EF_FIRING | EF_ALT_FIRING );
+	}
+	if ( ps->rocketLockIndex != ENTITYNUM_NONE || ps->rocketLockTime > 0 || ps->rocketTargetTime ) {
+		BG_ClearRocketLock( ps );
+	}
+	if ( ps->zoomMode ) {
+		ps->zoomMode = 0;
+		ps->zoomLocked = qfalse;
+		ps->zoomTime = ps->commandTime;
+	}
+}
+
 void BG_VRPoseDown( playerState_t *ps, animation_t *animations ) {
 	const bgVRPose_t *vp = &bgVRPoses[VRPOSE_DOWNED];
 
+	BG_VRP_DownHands( ps );
 	BG_VRPoseSet( ps, VRPOSE_DOWNED );
 	ps->pm_flags |= PMF_DUCKED;
 	ps->forceHandExtend = HANDEXTEND_NONE;	// (a knockdown, a choke: the floor now)
@@ -200,10 +220,11 @@ qboolean BG_VRDowned( const playerState_t *ps ) {
 }
 
 // Down: there whatever happens, until the server gets them up. Kept still
-// - no moving, jumping or crouching, no fighting, using things or the
-// Force (the server takes the attack button for giving up first) - and
-// kept down: what else would take the body over (a knockdown, a choke)
-// doesn't, and the body's back down if something did.
+// - no moving, jumping or crouching, no fighting, switching weapons, using
+// things or the Force (the server takes the attack button for giving up
+// first), nothing in hand going off - and kept down: what else would take
+// the body over (a knockdown, a choke) doesn't, and the body's back down
+// if something did.
 static qboolean BG_VRP_Downed( playerState_t *ps, usercmd_t *cmd, animation_t *animations ) {
 	const bgVRPose_t *vp = &bgVRPoses[VRPOSE_DOWNED];
 
@@ -223,9 +244,11 @@ static qboolean BG_VRP_Downed( playerState_t *ps, usercmd_t *cmd, animation_t *a
 			BG_SetAnim( ps, animations, SETANIM_BOTH, vp->hold, SETANIM_FLAG_OVERRIDE | SETANIM_FLAG_HOLD | SETANIM_FLAG_RESTART );
 		}	// (going down: it plays)
 	}
+	BG_VRP_DownHands( ps );
 	cmd->forwardmove = cmd->rightmove = cmd->upmove = 0;
 	cmd->buttons &= ~VRPOSE_DOWN_BUTTONS;
 	cmd->generic_cmd = 0;	// (Force powers, the saber on: the server's, after the move)
+	cmd->weapon = ps->weapon;	// (a switch would light a saber: the weapon's put back as it was)
 	return qtrue;
 }
 

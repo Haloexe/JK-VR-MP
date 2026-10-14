@@ -339,6 +339,11 @@ void G_Throw( gentity_t *targ, vec3_t newDir, float push )
 	vec3_t	kvel;
 	float	mass;
 
+	if ( G_RPDowned( targ ) )
+	{//OpenJK VR: down in roleplay - nothing shoves them (into a pit...) (g_vrdown.c)
+		return;
+	}
+
 	if ( targ->physicsBounce > 0 )	//overide the mass
 	{
 		mass = targ->physicsBounce;

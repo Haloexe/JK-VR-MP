@@ -11,10 +11,12 @@ server counts it: from a press made after you went down). In the headset
 your hands feel it as you go down, and as you're got up.
 
 SOMEONE DOWN - the server says who, and their faction (rpdn): look at them
-near enough and a line says so - and, of your faction, how to get them up;
-holding use on them, a bar fills (rpup: from when the server started
-counting). Someone of your faction going down near you: a line says so (and
-a light buzz). Bodies down stay facing the way they went down
+near enough - aim at them, or (in the headset, when the server sees where
+it looks: CG_VRB_GazeShared) look at them - and a line says so, and, of
+your faction, how to get them up; holding use on them, a bar fills (rpup:
+from when the server started counting). As the server sees it
+(g_vrdown.c). Someone of your faction going down near you: a line says so
+(and a light buzz). Bodies down stay facing the way they went down
 (cg_players.c), as for a pose.
 
 This file is part of the OpenJK source code and is licensed under the GNU
@@ -150,58 +152,66 @@ Every frame
 ================================================================================
 */
 
-// Where you look from, and which way (the headset: where it faces).
-static void CG_RP_DownGaze( vec3_t start, vec3_t dir ) {
-	matrix3_t axis;
+// Whether a look from start along dir reaches the middle of n (down) near
+// enough to get them up, and how far off it (squared): as the server sees
+// it (g_vrdown.c's G_RP_Sees).
+static qboolean CG_RP_DownSees( int n, const vec3_t start, const vec3_t dir, float *off ) {
+	vec3_t mid, d;
+	float dist2, along;
+	trace_t tr;
 
-	if ( CG_VR_HeadPose( start, axis ) ) {
-		VectorCopy( axis[0], dir );
-		return;
+	VectorCopy( cg_entities[n].lerpOrigin, mid );
+	mid[2] -= RPD_SEE_DOWN;
+	VectorSubtract( mid, start, d );
+	dist2 = VectorLengthSquared( d );
+	along = DotProduct( d, dir );
+	if ( along <= 0.0f || dist2 > RPD_REACH * RPD_REACH ) {
+		return qfalse;
 	}
-	VectorCopy( cg.predictedPlayerState.origin, start );
-	start[2] += cg.predictedPlayerState.viewheight;
-	VectorCopy( cg.refdef.viewaxis[0], dir );
+	*off = dist2 - along * along;
+	if ( *off > RPD_WIDE * RPD_WIDE ) {
+		return qfalse;
+	}
+	CG_Trace( &tr, start, NULL, NULL, mid, cg.clientNum, MASK_SOLID );
+	return (qboolean)( tr.fraction >= 1.0f );	// (no wall between: bodies aren't solid to it)
 }
 
-// Someone down you look at, near enough to get them up (as the server
-// sees it: g_vrdown.c); -1: nobody.
+// Someone down you look at, near enough to get them up - by your aim (your
+// eye point and view, as the server has them: a VR player's right hand,
+// holding a gun) or where your headset looks (from the camera, as your
+// avatar tells the server) - the nearest your look; -1: nobody.
 static int CG_RP_DownLook( void ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
-	vec3_t start, dir;
-	float bestOff = 0.0f;
+	vec3_t aimFrom, aim, headFrom, head;
+	matrix3_t axis;
+	qboolean gaze;
+	float bestOff = 0.0f, off;
 	int i, best = -1;
 
 	if ( CG_RP_IsDown() || ps->clientNum != cg.clientNum || ps->pm_type == PM_DEAD || ps->stats[STAT_HEALTH] <= 0 ||
 		( cg.snap->ps.pm_flags & PMF_FOLLOW ) || cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		return -1;
 	}
-	CG_RP_DownGaze( start, dir );
+	VectorCopy( ps->origin, aimFrom );
+	aimFrom[2] += ps->viewheight;
+	AngleVectors( ps->viewangles, aim, NULL, NULL );
+	gaze = (qboolean)( CG_VRB_GazeShared() && CG_VR_HeadPose( headFrom, axis ) );
+	if ( gaze ) {
+		VectorCopy( cg.refdef.vieworg, headFrom );
+		VectorCopy( axis[0], head );
+	}
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
-		const centity_t *cent = &cg_entities[i];
-		vec3_t mid, d;
-		float dist2, along, off;
-		trace_t tr;
-		if ( rpd.down[i] < 0 || i == cg.clientNum || !cent->currentValid ) {
+		if ( rpd.down[i] < 0 || i == cg.clientNum || !cg_entities[i].currentValid ) {
 			continue;
 		}
-		VectorCopy( cent->lerpOrigin, mid );
-		mid[2] -= RPD_SEE_DOWN;
-		VectorSubtract( mid, start, d );
-		dist2 = VectorLengthSquared( d );
-		along = DotProduct( d, dir );
-		if ( along <= 0.0f || dist2 > RPD_REACH * RPD_REACH ) {
-			continue;
+		if ( CG_RP_DownSees( i, aimFrom, aim, &off ) && ( best < 0 || off < bestOff ) ) {
+			best = i;
+			bestOff = off;
 		}
-		off = dist2 - along * along;
-		if ( off > RPD_WIDE * RPD_WIDE || ( best >= 0 && off >= bestOff ) ) {
-			continue;
+		if ( gaze && CG_RP_DownSees( i, headFrom, head, &off ) && ( best < 0 || off < bestOff ) ) {
+			best = i;
+			bestOff = off;
 		}
-		CG_Trace( &tr, start, NULL, NULL, mid, cg.clientNum, CONTENTS_SOLID );
-		if ( tr.fraction < 1.0f ) {
-			continue;	// (a wall between)
-		}
-		best = i;
-		bestOff = off;
 	}
 	return best;
 }

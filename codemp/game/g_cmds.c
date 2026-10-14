@@ -513,6 +513,12 @@ void Cmd_TeamTask_f( gentity_t *ent ) {
 #endif
 
 void G_Kill( gentity_t *ent ) {
+	if ( G_RPDowned( ent ) )
+	{//OpenJK VR: down in roleplay, /kill is giving up - the death whoever put them down's (g_vrdown.c)
+		G_RPGiveUp( ent );
+		return;
+	}
+
 	if ((level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL) &&
 		level.numPlayingClients > 1 && !level.warmupTime)
 	{

@@ -1914,6 +1914,7 @@ qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qb
 float CG_VR_PoseEyeAdjust( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
+qboolean CG_VRB_GazeShared( void );
 // cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
 void CG_VR_DuelFrame( void );
 void CG_VR_DuelCentrePrint( const char *text );

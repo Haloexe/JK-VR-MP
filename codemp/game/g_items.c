@@ -672,7 +672,7 @@ void pas_adjust_enemy( gentity_t *ent )
 	trace_t	tr;
 	qboolean keep = qtrue;
 
-	if ( ent->enemy->health <= 0 || G_RPDowned( ent->enemy ) )//OpenJK VR: down in roleplay (g_vrdown.c)
+	if ( ent->enemy->health <= 0 )
 	{
 		keep = qfalse;
 	}

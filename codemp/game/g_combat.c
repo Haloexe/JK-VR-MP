@@ -4438,6 +4438,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		return;
 	}
 
+	if ( G_RPDownGuard( targ, attacker, mod ) )
+	{//OpenJK VR: roleplay - no more harm to someone down (no finishing blow), bar a map's hazards (g_vrdown.c)
+		return;
+	}
+
 	if (mod == MOD_DEMP2 && targ && targ->inuse && targ->client)
 	{
 		if ( targ->client->ps.electrifyTime < level.time )
@@ -4462,11 +4467,6 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	}
 
 	if (!targ->takedamage) {
-		return;
-	}
-
-	if ( G_RPDownGuard( targ, mod ) )
-	{//OpenJK VR: roleplay - no more harm to someone down (no finishing blow), bar a map's hazards (g_vrdown.c)
 		return;
 	}
 
@@ -5474,7 +5474,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 
 		if ( targ->health <= 0 ) {
-			if ( G_RPDown( targ, inflictor, attacker, take, mod ) )
+			if ( G_RPDown( targ, inflictor, attacker, point, take, mod ) )
 			{//OpenJK VR: roleplay - a player playing a character goes down instead (g_vrdown.c)
 				return;
 			}

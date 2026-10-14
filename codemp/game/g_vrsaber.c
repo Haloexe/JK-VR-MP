@@ -68,6 +68,7 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_REACH		64.0f	// a hilt or hand can't be further than this from the camera
 #define VR_SABER_VIEW_XY	16.0f	// the camera's smoothing can't take it further than this sideways...
 #define VR_SABER_VIEW_Z		48.0f	// ...or up and down from the eye
+#define VR_GAZE_FRESH		500		// ms: where a VR player's headset was last seen to look stands for this long (G_VRHeadGaze)
 #define VR_SABER_FAST		1.5f	// units/ms: faster than a player or a hand really moves
 #define VR_SABER_TELEPORT	48.0f	// the camera jumping this much more than VR_SABER_FAST: a teleport
 #define VR_SABER_JUMP		8.0f	// a blade jumping this much more than VR_SABER_FAST: a glitch
@@ -131,6 +132,9 @@ typedef struct vrSaberState_s {
 	int				hitVrTime[MAX_CLIENTS];	// (level.time), and the player's command time of it
 	qboolean		activitySet;
 	vec3_t			activity;			// where in the room a hand last moved to (g_inactivity)
+	int				gazeTime;			// level.time their headset was last seen (its avatar's head; 0: never)...
+	vec3_t			gazeAngles;			// ...looking this way (world)...
+	vec3_t			gazeView;			// ...from this far off their eye point (the camera's, as for the hands)
 	struct {							// the swing under way (VRS_TrackSwing)
 		qboolean	on;
 		qboolean	cutting;			// fast enough to cut (the whoosh went out)
@@ -553,6 +557,51 @@ static void VRS_SafeDir( vec3_t v, const vec3_t fallback ) {
 // sends it with their snapshots). The hands go as offsets from the player's
 // origin before this command moves it - where the body was when they saw
 // them - so they move with the body wherever it is drawn.
+// The camera a pose was seen from, off the player's eye point: as the
+// client sent it, kept near (it only smooths the camera).
+static void VRS_ViewOffset( const vrUserPose_t *pose, vec3_t view ) {
+	float len;
+
+	VectorCopy( pose->viewOffset, view );
+	len = sqrtf( view[0] * view[0] + view[1] * view[1] );
+	if ( len > VR_SABER_VIEW_XY ) {
+		view[0] *= VR_SABER_VIEW_XY / len;
+		view[1] *= VR_SABER_VIEW_XY / len;
+	}
+	view[2] = Com_Clamp( -VR_SABER_VIEW_Z, VR_SABER_VIEW_Z, view[2] );
+}
+
+// Where a VR player's headset looks, from their avatar (G_VRHeadGaze).
+static void VRS_KeepGaze( vrSaberState_t *vs, const vrUserPose_t *pose ) {
+	if ( !pose->avatar.valid ) {
+		return;	// (not seen: it goes stale)
+	}
+	vs->gazeTime = level.time ? level.time : 1;
+	VectorCopy( pose->avatar.headAngles, vs->gazeAngles );
+	VRS_ViewOffset( pose, vs->gazeView );
+}
+
+// Where a VR player looks from and which way, as their headset has it
+// lately (qfalse: no headset of theirs seen in VR_GAZE_FRESH) - roleplay's
+// getting someone up looks this way as well as the way they aim.
+qboolean G_VRHeadGaze( const gentity_t *ent, vec3_t start, vec3_t dir ) {
+	const int n = ent ? ent->s.number : -1;
+	const vrSaberState_t *vs;
+
+	if ( n < 0 || n >= MAX_CLIENTS || !ent->client ) {
+		return qfalse;
+	}
+	vs = &vrSabers[n];
+	if ( !vs->gazeTime || level.time - vs->gazeTime > VR_GAZE_FRESH || level.time - vs->gazeTime < 0 ) {
+		return qfalse;
+	}
+	VectorCopy( ent->client->ps.origin, start );
+	start[2] += ent->client->ps.viewheight;
+	VectorAdd( start, vs->gazeView, start );
+	AngleVectors( vs->gazeAngles, dir, NULL, NULL );
+	return qtrue;
+}
+
 static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	static const vec3_t fwd = { 1.0f, 0.0f, 0.0f };
 	const int clientNum = ent - g_entities;
@@ -576,13 +625,7 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	// camera's own smoothing (as for the blades)
 	VectorCopy( cl->ps.origin, eye );
 	eye[2] += cl->ps.viewheight;
-	VectorCopy( pose->viewOffset, view );
-	len = sqrtf( view[0] * view[0] + view[1] * view[1] );
-	if ( len > VR_SABER_VIEW_XY ) {
-		view[0] *= VR_SABER_VIEW_XY / len;
-		view[1] *= VR_SABER_VIEW_XY / len;
-	}
-	view[2] = Com_Clamp( -VR_SABER_VIEW_Z, VR_SABER_VIEW_Z, view[2] );
+	VRS_ViewOffset( pose, view );
 	VectorAdd( eye, view, cam );
 
 	a.bodyYaw = AngleNormalize360( a.bodyYaw );
@@ -737,6 +780,7 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 	if ( !vrPosesAvailable || !trap->ext.VR_GetUserPose( clientNum, &pose ) ) {
 		memset( &pose, 0, sizeof( pose ) );
 	}
+	VRS_KeepGaze( vs, &pose );		// (where their headset looks: G_VRHeadGaze)
 	VRS_TakeAvatar( ent, &pose );	// (what everyone else sees, saber or not)
 	if ( !G_VRSaberOn() || !pose.valid ) {
 		vs->count = 0;		// the stream broke: never sweep across the gap

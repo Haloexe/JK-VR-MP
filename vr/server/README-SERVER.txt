@@ -113,7 +113,21 @@ player wears while playing it stays with it. Talk reaches only the players
 near (g_rpTalkRange), /me too; the team chat key and /ooc go to everyone,
 out of character. g_rpCharacters: characters per account (5; up to 10).
 Players on the normal game can't log in, but see the characters' names
-and the chat.
+and the chat. Players need this build: an older OpenJK VR is told to
+update.
+  g_rpDowned 1              down, not dead (0: dying as ever) - in Free
+                            For All and Team FFA, a player playing a
+                            character whose health runs out goes down,
+                            until someone of their faction gets them up
+                            (3 s holding use on them) or they give up
+                            (attack held 1.5 s, the wheel, /kill: the kill
+                            is whoever put them down's); a map's hazards
+                            still kill; bots die as ever
+NPCs take sides by the players' factions: the light side's are with the
+Heroes, the dark side's with the Villains; Neutral are left alone until
+they attack one. Nobody's NPCs, turrets or sentries harm someone down.
+The log says who went down, by whom, who got whom up and who gave up
+(lines starting "Roleplay:").
   rp list                   who plays which character, on which account
   rp rename <player> <name> give someone's character another name
   rp delete <account> <character>   delete a character (online or not)

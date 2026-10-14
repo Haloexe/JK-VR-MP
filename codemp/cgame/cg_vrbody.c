@@ -4055,6 +4055,19 @@ static void CG_VRB_LogHands( centity_t *cent ) {
 	}
 }
 
+static int vrbGazeSent;	// cg.time your avatar - where your headset looks - last went with your pose (0: never)
+
+// Whether the server sees where your headset looks: your avatar went with
+// your pose lately, to a server that reads them (sv_vrx) - roleplay's
+// getting someone up looks that way as well as the way you aim
+// (cg_vrdown.c; the server's G_VRHeadGaze).
+qboolean CG_VRB_GazeShared( void ) {
+	if ( !vrbGazeSent || cg.time - vrbGazeSent > 500 || cg.time - vrbGazeSent < 0 ) {
+		return qfalse;
+	}
+	return (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SYSTEMINFO ), "sv_vrx" ) ) == VR_POSE_PROTOCOL );
+}
+
 // Your body as everyone else is to see it (offsets from the camera, like the
 // saber pose): which way it faces, where you look, and your hands as the arm
 // solver held them this frame (a hand it didn't: the animation has it).
@@ -4143,6 +4156,7 @@ void CG_VR_BodyEndFrame( void ) {
 			// and what everyone else sees of you
 			if ( body ) {
 				CG_VRB_FillAvatar( vr, shift, &p->avatar );
+				vrbGazeSent = cg.time ? cg.time : 1;	// (where your headset looks went with it: CG_VRB_GazeShared)
 			} else {
 				memset( &p->avatar, 0, sizeof( p->avatar ) );
 			}

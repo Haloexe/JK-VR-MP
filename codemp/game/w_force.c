@@ -4598,7 +4598,7 @@ void SeekerDroneUpdate(gentity_t *self)
 		return;
 	}
 
-	if (self->health < 1)
+	if (self->health < 1 || G_RPDowned( self )) //OpenJK VR: or down in roleplay (g_vrdown.c)
 	{
 		VectorCopy(self->client->ps.origin, elevated);
 		elevated[2] += 40;

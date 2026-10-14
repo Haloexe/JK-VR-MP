@@ -69,7 +69,8 @@ extern void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chat
 
 static int G_RP_ClientArg( const char *arg );
 
-#define RP_PROTOCOL			2		// (2: rpacct says when it answers a login; a new password's proof is over its key)
+#define RP_PROTOCOL			3		// (2: rpacct says when it answers a login; a new password's proof is over its key;
+									// 3: down, not dead - rpdn, rpup, rp giveup, the pose: g_vrdown.c)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
 #define RP_NAME_MAX			32		// a character's name: visible characters...
@@ -128,6 +129,7 @@ typedef struct {
 	int			switchTime;			// the last switch of characters (respawning them)
 	qboolean	answering;			// the next rpacct answers their login or new account
 	int			cardTime, cards;	// card requests this second
+	qboolean	toldOld;			// told their build is older than this server's roleplay
 } rpClient_t;
 
 static struct {
@@ -768,6 +770,9 @@ static void G_RP_Play( int clientNum, int index, qboolean respawn ) {
 	if ( respawn ) {
 		c->switchTime = level.time ? level.time : 1;
 	}
+	if ( ent->client ) {
+		ent->client->rpProvoked = 0;	// (the NPCs' grudges were the last character's: g_vrdown.c)
+	}
 	c->active = index;
 	c->acc.last = index;
 	G_RP_RememberLook( clientNum );
@@ -895,6 +900,9 @@ static void G_RP_LogOut( int clientNum, const char *why ) {
 	}
 	c->loggedIn = qfalse;
 	c->active = -1;
+	if ( g_entities[clientNum].client ) {
+		g_entities[clientNum].client->rpProvoked = 0;	// (the character's grudges go with it: g_vrdown.c)
+	}
 	memset( &c->acc, 0, sizeof( c->acc ) );
 	G_RP_WriteSession( clientNum );
 	G_RP_Refresh( clientNum );
@@ -929,7 +937,13 @@ static void G_RP_Hello( gentity_t *ent ) {
 
 	trap->Argv( 1, arg, sizeof( arg ) );
 	if ( atoi( arg ) < RP_PROTOCOL ) {
-		return;	// (an older build's: it'd take the answers wrong)
+		// (an older build's: it'd take the answers wrong - and down, it'd
+		// see itself standing: it's told, once, and left out of roleplay)
+		if ( !c->toldOld ) {
+			c->toldOld = qtrue;
+			G_RP_Print( clientNum, "This server's roleplay is newer than your OpenJK VR: update it to play a character here" );
+		}
+		return;
 	}
 	c->capable = qtrue;
 	if ( c->challenge[0] ) {
@@ -998,6 +1012,10 @@ static void G_RP_NewAccount( gentity_t *ent ) {
 		G_RP_Refused( clientNum, "Roleplay is off on this server right now", qfalse );
 		return;
 	}
+	if ( G_RPDowned( ent ) ) {
+		G_RP_Refused( clientNum, "Not while you're down", qfalse );	// (logging in to it: no way up but a hand, or giving up)
+		return;
+	}
 	trap->Argv( 1, name, sizeof( name ) );
 	trap->Argv( 2, hex, sizeof( hex ) );
 	Q_strlwr( name );
@@ -1041,6 +1059,10 @@ static void G_RP_Login( gentity_t *ent ) {
 
 	if ( !G_RPOn() ) {
 		G_RP_Refused( clientNum, "Roleplay is off on this server right now", qfalse );
+		return;
+	}
+	if ( G_RPDowned( ent ) ) {
+		G_RP_Refused( clientNum, "Not while you're down", qfalse );	// (another character: no way up but a hand, or giving up)
 		return;
 	}
 	trap->Argv( 1, name, sizeof( name ) );
