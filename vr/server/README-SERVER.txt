@@ -115,7 +115,8 @@ out of character. g_rpCharacters: characters per account (5; up to 10).
 Players on the normal game can't log in, but see the characters' names
 and the chat. Players need this build: an older OpenJK VR is told to
 update. Logging in works with roleplay off too (it changes nothing else
-then: admins keep their cheats, below).
+then: admins keep their cheats, below) - the Roleplay menu opens then
+too, from the in-game menu or the wheel.
   g_rpDowned 1              down, not dead (0: dying as ever) - in Free
                             For All and Team FFA, a player playing a
                             character whose health runs out goes down,
@@ -150,6 +151,14 @@ off, ends their god mode, no-clip and no target. In the Roleplay menu an
 admin has an Admin page (spawn any NPC or vehicle in front of them, kill
 the ones they spawned or every NPC, switch the cheats); the Server page's
 Admins makes or unmakes them (by rcon on a server you don't host).
+Only the server's own console makes admins (its window, where it has
+one), or rcon with the rconpassword. A player typing rp admin is turned
+away, and the log says who tried ("typed rp admin - refused"); a vote
+can't carry it. So keep the rcon password long and random (20 letters
+and digits, say) and to yourself: anyone who has it can make admins, and
+do anything else rcon can. Wrong guesses show in the server's console as
+"Bad rcon from <address>" - its window, or a service's journal - and
+with  seta logfile 1  in server.cfg in qconsole.log too, by games.log.
 Passwords never reach the server: it keeps a key made from each, over
 this server's salt. The accounts are in rp/accounts and the salt in
 rp/server.txt, in the server's own files (Linux: home/base/rp; Windows:

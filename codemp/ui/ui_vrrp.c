@@ -6,7 +6,8 @@ what each shows as things stand, its lists, and what its buttons do.
 Opened from the wheel's Roleplay ring, the ROLEPLAY tab under the in-game
 bar (where the server has roleplay), or "ui_openmenu vr_rp". The game
 (cg_vrrp.c) keeps where things stand in ui_rp... cvars - the server
-(ui_rpServer: 0 none, 1 off, 2 on), the account, its characters, the
+(ui_rpServer: 0 none, 1 off, 2 on, 3 not working - its rp/server.txt
+can't be read: no logging in, it says so), the account, its characters, the
 one played, the server's last word - and does what needs the server when
 asked: "rpui <what>", run from here.
 
@@ -22,7 +23,9 @@ asked: "rpui <what>", run from here.
   Server       the owner's: roleplay on or off, characters per account, how
                far talk reaches, whether running out of health downs players
                - straight to the game you host, by rcon to another server;
-               and Admins: an account made an admin, or not (rp admin)
+               and Admins: an account made an admin, or not (rp admin: only
+               the server's console takes it - yours, hosting; another
+               server's by rcon, its password typed - and it says so)
   Admin        an admin's only (its button at the top: ui_rpAdmin, from the
                server's rpadmin): every NPC and vehicle the game's files have
                (feeder 67, a box to find one) to spawn in front of you; kill
@@ -494,8 +497,10 @@ Every frame, while it's up: what's shown, as things stand
 // Whether an item of this group is shown now (-1: the group isn't one of
 // the pages', so whatever it is stays). Logging in, roleplay on or off (off:
 // it says so, above): it changes nothing else then, but an admin's cheats.
+// Where roleplay isn't working (3), no logging in: it says why.
 static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean playing, qboolean admin ) {
 	const qboolean chars = (qboolean)( vrrp.page == RPP_CHARS );
+	const qboolean logs = (qboolean)( server == 1 || server == 2 );	// (logging in works here)
 
 	if ( !group || Q_stricmpn( group, "rp_", 3 ) ) {
 		return -1;
@@ -504,16 +509,16 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 		return chars && !in && server == 2;
 	}
 	if ( !Q_stricmp( group, "rp_out" ) ) {
-		return chars && !in && server != 0;
+		return chars && !in && logs;
 	}
 	if ( !Q_stricmp( group, "rp_off" ) ) {
 		return chars && !in && server != 2;
 	}
 	if ( !Q_stricmp( group, "rp_login" ) ) {
-		return chars && !in && server != 0 && !vrrp.newAccount;
+		return chars && !in && logs && !vrrp.newAccount;
 	}
 	if ( !Q_stricmp( group, "rp_new" ) ) {
-		return chars && !in && server != 0 && vrrp.newAccount;
+		return chars && !in && logs && vrrp.newAccount;
 	}
 	if ( !Q_stricmp( group, "rp_admintab" ) ) {
 		return admin;
@@ -571,6 +576,8 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	UI_VRRP_Str( "ui_rpPlayingFaction", faction, sizeof( faction ) );
 	if ( server == 0 ) {
 		trap->Cvar_Set( "ui_rpStatus", "This server doesn't have roleplay" );
+	} else if ( server == 3 ) {
+		trap->Cvar_Set( "ui_rpStatus", "Roleplay isn't working on this server right now" );
 	} else if ( server == 1 ) {
 		trap->Cvar_Set( "ui_rpStatus", account[0] ? va( "Roleplay is off on this server right now (you're logged in as %s)", account ) :
 			"Roleplay is off on this server right now" );
@@ -584,11 +591,25 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	if ( server == 0 ) {
 		trap->Cvar_Set( "ui_rpOffLine1", "This server doesn't run OpenJK VR's roleplay: you play as yourself." );
 		trap->Cvar_Set( "ui_rpOffLine2", "" );
+	} else if ( server == 3 ) {
+		trap->Cvar_Set( "ui_rpOffLine1", "Roleplay isn't working here: the server can't read its rp/server.txt." );
+		trap->Cvar_Set( "ui_rpOffLine2", "No logging in until its owner mends it (its console says how)." );
 	} else {
 		trap->Cvar_Set( "ui_rpOffLine1", "Roleplay is off here for now: everyone plays as themselves." );
 		trap->Cvar_Set( "ui_rpOffLine2", "You can still log in. The owner can turn it on, on the Server page." );
 	}
 	trap->Cvar_Set( "ui_rpAccountLine", va( "Account: %s%s", account, admin ? " (admin)" : "" ) );
+	// who makes admins: the server's console alone - yours, hosting (and rcon there too, if the game
+	// has an rcon password: one cvar, rconPassword, the game's and the server's - typed for another
+	// server on this page, say); another server's by rcon (a player's own rp admin: turned away, g_vrrp.c)
+	if ( UI_VRRP_Local() ) {
+		char rcon[MAX_CVAR_VALUE_STRING];
+		UI_VRRP_Str( "rconPassword", rcon, sizeof( rcon ) );
+		trap->Cvar_Set( "ui_rpAdminWhoLine", rcon[0] ? "You host this game: only you, or someone with its rcon password, can make admins." :
+			"You host this game, so only you can make admins here." );
+	} else {
+		trap->Cvar_Set( "ui_rpAdminWhoLine", "Only someone with this server's rcon password (above) can make admins." );
+	}
 	if ( vrrp.page == RPP_ADMIN && admin ) {
 		const int shown = UI_VRRP_NPCs();
 		trap->Cvar_Set( "ui_rpAdminCountLine", vrrpNPCs.find[0] ? va( "%i of %i found", shown, vrrpNPCs.count ) :
@@ -600,7 +621,7 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	trap->Cvar_Set( "ui_rpCountLine", most > 0 ? va( "%i of %i characters", count, most ) : va( "%i characters", count ) );
 	trap->Cvar_Set( "ui_rpEditLine", va( "Playing %s", playing ) );
 	trap->Cvar_Set( "ui_rpServerLine", server == 2 ? "Roleplay is on here" : server == 1 ? "Roleplay is off here" :
-		"This server doesn't have roleplay" );
+		server == 3 ? "Roleplay isn't working here: rp/server.txt can't be read (see the console)" : "This server doesn't have roleplay" );
 	if ( vrrp.deleting >= 0 ) {
 		UI_VRRP_Str( va( "ui_rpName%i", vrrp.deleting ), name, sizeof( name ) );
 		trap->Cvar_Set( "ui_rpDeleteLine", va( "Delete %s" S_COLOR_WHITE "? It can't be undone.", name ) );
@@ -616,7 +637,7 @@ void UI_VRRP_Frame( void ) {
 	if ( !menu || !( menu->window.flags & WINDOW_VISIBLE ) ) {
 		return;
 	}
-	server = Com_Clampi( 0, 2, UI_VRRP_Int( "ui_rpServer" ) );
+	server = Com_Clampi( 0, 3, UI_VRRP_Int( "ui_rpServer" ) );
 	UI_VRRP_Str( "ui_rpAccount", account, sizeof( account ) );
 	UI_VRRP_Str( "ui_rpPlaying", playing, sizeof( playing ) );
 	in = (qboolean)( account[0] != '\0' );

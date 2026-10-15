@@ -377,7 +377,8 @@ quick press of Y still picks the next Force power):
   down   Companions   (still to come)
   left   Roleplay     read the bio of whom you look at, challenge them to a
                       duel, give up (when you're down), the Roleplay menu
-                      (see ROLEPLAY)
+                      (roleplay on or off: you log in there either way -
+                      see ROLEPLAY)
 Rest on Poses or Roleplay a moment and its ring opens: push toward what you
 want there and let go of Y (Back, up and to the left, goes back; let go
 with the stick in the middle and nothing happens). What can't be done now
@@ -414,7 +415,8 @@ in with that. Remember me keeps the key (never the password) and logs you
 in on that server by itself next time; Log out forgets it. A forgotten
 password: the server's owner can give you a temporary one. Logging in
 works with roleplay off too (it changes nothing else then, but an
-admin's cheats).
+admin's cheats): the ROLEPLAY tab and the wheel's Roleplay menu open the
+menu then as well.
   Talk (the chat key, or Say... on the wheel) reaches only the players
 within about 15 m (the server's g_rpTalkRange), and shows over your head
 in a speech bubble for 6 s;  /me draws his saber  shows as "* Kael draws
@@ -462,6 +464,12 @@ you; Kill my NPCs (the ones you spawned there), Kill all NPCs; God mode,
 No-clip and No target, each saying whether it's on; Give all. The console
 cheats work too (npc spawn <name>, god, noclip...). Nobody else is shown
 who's an admin; logging out ends your god mode, no-clip and no target.
+Only the server's owner makes admins - at its console, or by rcon with
+its rcon password (on a game you host from your PC, you're the server:
+your Server page does it straight away - and rcon reaches it too while
+your game has an rcon password, such as one you typed on that page for
+another server; its Admins says so). A player typing rp admin is turned
+away, and the server's log says who tried.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
 character there.

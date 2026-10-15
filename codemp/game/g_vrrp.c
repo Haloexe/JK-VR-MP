@@ -23,7 +23,9 @@ account) works with roleplay off too, where it changes nothing else: an
 admin has their cheats either way.
 
 ADMINS. The owner makes an account an admin by rcon - rp admin <account>
-on|off, kept in its file; rp admins lists them. Logged in to it, a player
+on|off, kept in its file; rp admins lists them. Only the server's console
+does (rcon: its password; a listen server's host: their own console): a
+player's own rp admin is turned away and logged. Logged in to it, a player
 can use every cheat command with cheats off (G_RPCheatAllowed, asked by
 ClientCommand), each one logged; nobody, admin or not, uses one while down.
 Their game is told what its Admin page shows (rpadmin); nobody else is
@@ -1380,6 +1382,16 @@ static void G_RP_Rp( gentity_t *ent ) {
 					ch->desc[0] ? ": " : "", ch->desc, ch->bio[0] ? "\n" : "", ch->bio ) );
 			}
 		}
+		return;
+	}
+	if ( !Q_stricmp( sub, "admin" ) || !Q_stricmp( sub, "admins" ) ) {
+		// the server's console's alone (G_RPConsoleCommand: by rcon, its password typed): a player's
+		// own is turned away, roleplay on or off, and goes in the log (a listen server's host's never
+		// comes here - the console's takes it first)
+		G_RP_Msg( clientNum, "Only the server's owner makes admins: rcon rp admin <account> on, with its rcon password" );
+		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " (client %i%s%s) typed rp %s - refused: only the console or rcon makes admins\n",
+			c->playerName[0] ? c->playerName : ent->client->pers.netname, clientNum,	// (their own name, not a character's)
+			c->loggedIn ? ", account " : "", c->loggedIn ? c->acc.name : "", sub );
 		return;
 	}
 	if ( !G_RPOn() ) {

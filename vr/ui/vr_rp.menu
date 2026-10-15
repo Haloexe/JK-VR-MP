@@ -2200,12 +2200,13 @@
 			decoration
 		}
 
+		// (who can: you, hosting; on another server, whoever has its rcon password - ui_vrrp.c says which)
 		itemDef
 		{
-			name            rp_sadm_l2
+			name            rp_sadm_who
 			group           rp_srv_adm
 			rect            40 194 520 18
-			text            "Type the name of their account, then make it an admin or not."
+			cvar            "ui_rpAdminWhoLine"
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -2237,7 +2238,7 @@
 			border          1
 			bordercolor     .35 .45 .8 .7
 			visible         1
-			descText        "The account's name, as they log in with it"
+			descText        "Their account's name, as they log in with it; then Make admin or Remove admin"
 			mouseEnter
 			{
 				setitemcolor	rp_sadm_account bordercolor 1 .682 0 1
@@ -2839,7 +2840,7 @@
 			cvarTest        "ui_rpServer"
 			showCvar
 			{
-				"1" ; "2"
+				"1" ; "2" ; "3"
 			}
 			action
 			{

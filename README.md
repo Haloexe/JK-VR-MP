@@ -23,7 +23,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   until someone of their faction helps them up or they give up, and NPCs take
   sides by the players' factions. Server owners can make trusted accounts
   admins, who get every cheat (and a menu page to spawn any NPC or vehicle)
-  without cheats being turned on for everyone.
+  without cheats being turned on for everyone. Only the server's console or
+  rcon can make an admin, and logging in works with roleplay switched off.
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
   a pose (sit, sit cross-legged, kneel or lie down, with your view at your
   character's eyes and your head and arms still tracked) or reach roleplay;

@@ -12,7 +12,8 @@ one. Out of the middle:
   down    Companions >   (to come)
   left    Roleplay >     read the bio of whom you look at, challenge them
                          to a duel, give up (when you're down: cg_vrdown.c),
-                         the Roleplay menu
+                         the Roleplay menu (roleplay on or off: logging in
+                         works either way)
 
 Resting on a ring (>) for a moment opens it; Back, up and to the left,
 goes back. A ring that opens waits for the stick to move before it picks
@@ -184,7 +185,7 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 	case PWA_GIVEUP:
 		return CG_RP_IsDown() ? NULL : "Only when you're down";
 	case PWA_MENU:
-		return CG_RP_On() ? NULL : "Roleplay is off";
+		return CG_RP_MenuWhy();	// (roleplay off: logging in there all the same)
 	case PWA_COMPANION:
 		return "Companions are still to come";
 	default:

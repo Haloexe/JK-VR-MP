@@ -1939,6 +1939,7 @@ void		CG_RP_Chat( void );
 void		CG_RP_Frame( void );
 void		CG_RP_Draw( void );
 qboolean	CG_RP_On( void );
+const char	*CG_RP_MenuWhy( void );
 qboolean	CG_RP_CanReadBio( void );
 void		CG_RP_ReadBio( void );
 void		CG_RP_Notice( const char *text );

@@ -134,6 +134,7 @@ typedef struct {
 static struct {
 	// the server
 	qboolean	server;			// it has roleplay (serverinfo vrRP)...
+	qboolean	working;		// ...that works (a lone "0": its rp/server.txt can't be read)...
 	qboolean	on;				// ...and it's on
 	char		address[MAX_QPATH];
 	int			firstSnap;
@@ -352,8 +353,9 @@ The menus' cvars
 ================================================================================
 */
 
+// ui_rpServer: 0 no roleplay here, 1 off, 2 on, 3 not working (a lone "0": no logging in there)
 static void CG_RP_UIServer( void ) {
-	trap->Cvar_Set( "ui_rpServer", !cgrp.server ? "0" : cgrp.on ? "2" : "1" );
+	trap->Cvar_Set( "ui_rpServer", !cgrp.server ? "0" : !cgrp.working ? "3" : cgrp.on ? "2" : "1" );
 }
 
 static void CG_RP_UIChar( int i ) {
@@ -1638,6 +1640,9 @@ void CG_RP_ServerInfo( const char *info ) {
 		memset( rpBubbles, 0, sizeof( rpBubbles ) );
 	}
 	cgrp.server = server;
+	// working: on, or its settings said ("<on> <characters> <talk range> <downed>"); a lone "0" is a
+	// server whose roleplay isn't (it answers nothing - or a first build's, off: no logging in then)
+	cgrp.working = (qboolean)( on || strchr( value, ' ' ) != NULL );
 	cgrp.on = on;
 	CG_RP_UIServer();
 }
@@ -1706,7 +1711,7 @@ void CG_RP_Shutdown( void ) {
 	CG_RP_AskOver();
 	memset( cgrp.salt, 0, sizeof( cgrp.salt ) );
 	memset( cgrp.challenge, 0, sizeof( cgrp.challenge ) );
-	cgrp.server = cgrp.on = qfalse;
+	cgrp.server = cgrp.working = cgrp.on = qfalse;
 	cgrp.account[0] = '\0';
 	cgrp.numChars = cgrp.most = 0;
 	cgrp.active = -1;
@@ -1720,6 +1725,19 @@ void CG_RP_Shutdown( void ) {
 // For the wheel: roleplay's on here.
 qboolean CG_RP_On( void ) {
 	return cgrp.on;
+}
+
+// For the wheel: why the Roleplay menu's of no use here (NULL: it is - roleplay
+// on or off: off, it still logs you in - an admin's cheats work then too - and
+// its owner turns it on there).
+const char *CG_RP_MenuWhy( void ) {
+	if ( !cgrp.server ) {
+		return "This server doesn't have roleplay";
+	}
+	if ( !cgrp.working ) {
+		return "Roleplay isn't working on this server";
+	}
+	return NULL;
 }
 
 // The console commands this has.
