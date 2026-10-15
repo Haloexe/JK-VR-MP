@@ -76,7 +76,7 @@ extern char *modNames[MOD_MAX];	// (g_combat.c)
 #define RP_HELP_WIDE	40.0f	// ...looking this close to it
 #define RP_SEE_DOWN		12.0f	// the middle of someone down: this far under where they are (on the floor)
 #define RP_HELP_TELL_GAP	250	// ms: what a player's hand is doing is told them at most this often (use pressed again and again)
-#define RP_DOWN_HAZARD	25		// what a map's hazards take of someone down before they kill (a door's bump, a breath of water: borne)
+#define RP_DOWN_HAZARD	25		// what of a map's hazards someone down bears before one kills (a door's bump, a breath of water)
 
 static int rpDownTold[MAX_CLIENTS];	// what everyone was last told of each client: down (their faction) or up (-1)
 static int rpHelpTold[MAX_CLIENTS];	// whom each player, and they, were last told the player's getting up (-1: nobody)...
@@ -268,7 +268,7 @@ qboolean G_RPDownGuard( gentity_t *targ, gentity_t *inflictor, gentity_t *attack
 	if ( !G_RP_Hazard( targ, inflictor, attacker, dflags, mod ) ) {
 		return qtrue;
 	}
-	if ( damage < cl->rpDownHazard ) {
+	if ( damage <= cl->rpDownHazard ) {
 		cl->rpDownHazard -= damage;	// (borne)
 		return qtrue;
 	}

@@ -3617,6 +3617,11 @@ qboolean LogAccuracyHit( gentity_t *target, gentity_t *attacker ) {
 		return qfalse;
 	}
 
+	if ( G_RPDowned( target ) )
+	{//OpenJK VR: down in roleplay - nothing harms them: no hit (g_vrdown.c)
+		return qfalse;
+	}
+
 	if ( OnSameTeam( target, attacker ) ) {
 		return qfalse;
 	}

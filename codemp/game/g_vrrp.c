@@ -702,11 +702,13 @@ static void G_RP_SendAccount( int clientNum ) {
 	}
 }
 
-// The login a client keeps across a map change (the game restarts, they don't).
+// The login a client keeps across a map change (the game restarts, they
+// don't), and that their game runs this build: it says so again, a moment
+// in, but it's known from the start - they go down, not die, from the first.
 static void G_RP_WriteSession( int clientNum ) {
 	const rpClient_t *c = &rpc[clientNum];
 
-	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i", c->acc.name, c->active ) : "" );
+	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i %i", c->acc.name, c->active, c->capable ? 1 : 0 ) : "" );
 }
 
 /*
@@ -1710,6 +1712,7 @@ void G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 		int active;
 		Q_strncpyz( name, COM_Parse( &p ), sizeof( name ) );
 		active = atoi( COM_Parse( &p ) );
+		c->capable = (qboolean)( atoi( COM_Parse( &p ) ) == 1 );	// (an older server's session doesn't say: its hello will)
 		if ( G_RP_LoadAccount( name, &acc ) ) {
 			c->loggedIn = qtrue;
 			c->acc = acc;
