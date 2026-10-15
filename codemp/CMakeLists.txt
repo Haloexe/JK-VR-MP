@@ -359,8 +359,9 @@ if(BuildMPEngine)
 	if(BuildMPVR AND WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 		set(MPEngineDefines ${MPEngineDefines} "OPENJK_VR")
 		set(MPEngineIncludeDirectories ${MPEngineIncludeDirectories} ${OpenJKLibDir}/openxr/include)
-		# The OpenXR loader DLL is loaded at runtime (no import library needed)
-		set(MPEngineLibraries ${MPEngineLibraries} "opengl32")
+		# The OpenXR loader DLL is loaded at runtime (no import library needed);
+		# ole32: the taskbar told a borderless window is fullscreen (sdl_window.cpp)
+		set(MPEngineLibraries ${MPEngineLibraries} "opengl32" "ole32")
 		install(FILES "${OpenJKLibDir}/openxr/bin/x64/libopenxr_loader.dll" DESTINATION "${JKAInstallDir}")
 
 		# Proximity voice chat: the Opus codec (lib/opus, BSD licence), built

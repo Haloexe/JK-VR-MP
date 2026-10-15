@@ -83,10 +83,19 @@ OpenJK VR: the window on a desktop with more than one display.
 - One the size of its display ("Desktop", r_mode -2: windowed or borderless)
   takes the size of the display it's moved to: a vid_restart once it's settled
   there (after a map's loaded; not while a demo or video is being recorded).
+- A borderless one is an ordinary window, not a popup as SDL makes it: Windows
+  and the graphics drivers take an OpenGL popup covering its monitor for a
+  game in true fullscreen, taking the screen from the desktop's compositor -
+  switching away and back (Alt+Tab) then flashes the screen black while the
+  compositor takes it back. Covering its monitor, the taskbar's told it's
+  fullscreen so it stays behind it, and Windows 11 doesn't round its corners
+  (WIN_Borderless). r_noborderPopup 1: as SDL makes it.
 */
 
 #ifdef _WIN32
 #define WIN_FRAMES	// the window's frame and place through Windows itself
+#include <objbase.h>
+#include <shobjidl.h>	// ITaskbarList2 (WIN_MarkFullscreen)
 #endif
 
 #define WIN_SETTLE_MSEC		250		// a window that's moved is looked at once it's been still this long
@@ -98,6 +107,7 @@ OpenJK VR: the window on a desktop with more than one display.
 
 cvar_t	*vid_xpos;
 cvar_t	*vid_ypos;
+cvar_t	*r_noborderPopup;
 
 static struct {
 	int			wantW, wantH;	// its picture's size, the renderer's (0: none kept - a headset's mirror)
@@ -110,8 +120,13 @@ static struct {
 	int			fitX, fitY;		// ...where it was (its top left corner: a fix-up keeps that)
 #ifdef WIN_FRAMES
 	HWND		hwnd;
+	qboolean	markedFull;		// the taskbar's been told it's fullscreen
 #endif
 } win;
+
+#ifdef WIN_FRAMES
+static void WIN_Borderless( void );
+#endif
 
 static int winRestarted = -WIN_RESTARTS_MSEC;	// when it last had a vid_restart of its own
 static int winRestartsClose;					// ...and how many it's had in a row
@@ -247,6 +262,10 @@ void WIN_Present( window_t *window )
 			// SDL_WM_ToggleFullScreen didn't work, so do it the slow way
 			if ( !sdlToggled )
 				Cbuf_AddText( "vid_restart\n" );
+#ifdef WIN_FRAMES
+			else
+				WIN_Borderless();	// OpenJK VR: (back from fullscreen, SDL's made it a popup again)
+#endif
 
 			IN_Restart();
 		}
@@ -608,6 +627,89 @@ static void WIN_KeepOnDisplay( int display )
 }
 #endif
 
+#ifdef WIN_FRAMES
+// Whether the window covers its monitor
+static qboolean WIN_CoversMonitor( void )
+{
+	HMONITOR monitor;
+	MONITORINFO mi;
+	RECT r;
+
+	if ( !win.hwnd || !GetWindowRect( win.hwnd, &r ) || !( monitor = MonitorFromWindow( win.hwnd, MONITOR_DEFAULTTONEAREST ) ) )
+		return qfalse;
+	mi.cbSize = sizeof( mi );
+	if ( !GetMonitorInfo( monitor, &mi ) )
+		return qfalse;
+	return (qboolean)( r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top && r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom );
+}
+
+// Tells the taskbar the window is fullscreen - it stays behind it - or not
+static void WIN_MarkFullscreen( qboolean full )
+{
+	static const CLSID clsidTaskbarList = { 0x56FDF344, 0xFD6D, 0x11D0, { 0x95, 0x8A, 0x00, 0x60, 0x97, 0xC9, 0xA0, 0x90 } };
+	static const IID iidTaskbarList2 = { 0x602D4995, 0xB13A, 0x429B, { 0xA6, 0x6E, 0x19, 0x35, 0xE4, 0x4F, 0x43, 0x17 } };
+	static qboolean comReady;
+	ITaskbarList2 *taskbar = NULL;
+
+	if ( !win.hwnd || full == win.markedFull )
+		return;
+	if ( !comReady )
+	{
+		const HRESULT hr = CoInitialize( NULL );
+		comReady = (qboolean)( SUCCEEDED( hr ) || hr == RPC_E_CHANGED_MODE );	// (multithreaded already: as good)
+	}
+	if ( comReady && SUCCEEDED( CoCreateInstance( clsidTaskbarList, NULL, CLSCTX_INPROC_SERVER, iidTaskbarList2, (void **)&taskbar ) ) && taskbar )
+	{
+		if ( SUCCEEDED( taskbar->HrInit() ) && SUCCEEDED( taskbar->MarkFullscreenWindow( win.hwnd, full ? TRUE : FALSE ) ) )
+			win.markedFull = full;
+		taskbar->Release();
+	}
+}
+
+// Windows 11: the window's corners square (an ordinary window's are rounded)
+static void WIN_SquareCorners( void )
+{
+	typedef HRESULT ( WINAPI *setAttribute_t )( HWND, DWORD, LPCVOID, DWORD );
+	static setAttribute_t setAttribute;
+	static qboolean looked;
+	const DWORD cornerPreference = 33, doNotRound = 1;	// (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND)
+
+	if ( !looked )
+	{
+		HMODULE dwm = LoadLibraryA( "dwmapi.dll" );
+		looked = qtrue;
+		if ( dwm )
+			setAttribute = (setAttribute_t)GetProcAddress( dwm, "DwmSetWindowAttribute" );
+	}
+	if ( setAttribute && win.hwnd )
+		setAttribute( win.hwnd, cornerPreference, &doNotRound, sizeof( doNotRound ) );	// (Windows 10: refused, nothing to do)
+}
+
+// A borderless window: an ordinary window, not a popup, and - covering its
+// monitor - fullscreen to the taskbar (the design note above). Again whenever
+// SDL's made it a popup again (Alt+Enter back from fullscreen) or it's moved.
+static void WIN_Borderless( void )
+{
+	const Uint32 flags = screen ? SDL_GetWindowFlags( screen ) : 0;
+	const qboolean ours = (qboolean)( win.hwnd && ( flags & SDL_WINDOW_BORDERLESS ) && !( flags & SDL_WINDOW_FULLSCREEN ) && !r_noborderPopup->integer );
+
+	if ( ours )
+	{
+		const LONG_PTR style = GetWindowLongPtr( win.hwnd, GWL_STYLE );
+		if ( style & WS_POPUP )
+		{
+			// (no caption, no frame: the picture's the window, as before; minimize
+			// as other windows do, from the taskbar)
+			SetWindowLongPtr( win.hwnd, GWL_STYLE, ( style & ~WS_POPUP ) | WS_MINIMIZEBOX );
+			SetWindowPos( win.hwnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER );
+			WIN_SquareCorners();
+		}
+	}
+	if ( flags & SDL_WINDOW_SHOWN )
+		WIN_MarkFullscreen( (qboolean)( ours && WIN_CoversMonitor() ) );
+}
+#endif
+
 // A new window (still hidden unless fullscreen): its picture the renderer's
 // size, one with a title bar where it was asked to be (its picture at x, y)
 // and kept on its display, then shown - and what's kept of it, noted
@@ -643,8 +745,12 @@ static void WIN_Place( const glconfig_t *glConfig, int mode, qboolean fullscreen
 			if ( titled )
 				WIN_KeepOnDisplay( display );
 		}
+		WIN_Borderless();
 #endif
 		SDL_ShowWindow( screen );
+#ifdef WIN_FRAMES
+		WIN_Borderless();	// (shown: the taskbar knows it now)
+#endif
 	}
 	win.display = SDL_GetWindowDisplayIndex( screen );
 }
@@ -716,6 +822,9 @@ void WIN_WindowFrame( qboolean loading, qboolean recording )
 	if ( !win.changed || now - win.changed < WIN_SETTLE_MSEC )
 		return;
 
+#ifdef WIN_FRAMES
+	WIN_Borderless();	// (still covering its monitor, or not, for the taskbar)
+#endif
 	SDL_Rect b = { 0, 0, 0, 0 };
 	const int on = WIN_DisplayOfWindow( &b );
 
@@ -1332,6 +1441,7 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 #ifdef OPENJK_VR
 	vid_xpos			= Cvar_Get( "vid_xpos",				"",			CVAR_ARCHIVE_ND, "Where the window was: its picture's left edge on the desktop (it opens there, on that display)" );
 	vid_ypos			= Cvar_Get( "vid_ypos",				"",			CVAR_ARCHIVE_ND, "Where the window was: its picture's top edge on the desktop" );
+	r_noborderPopup		= Cvar_Get( "r_noborderPopup",		"0",		CVAR_ARCHIVE_ND, "1: a borderless window is a popup, as SDL makes it (Windows may take one covering the screen for true fullscreen: a black flash switching away)" );
 #endif
 
 #ifdef OPENJK_VR

@@ -506,7 +506,10 @@ Brightness (Setup > Video, r_gamma) is drawn into the game's own picture
 (r_gammaShaders 1), so it never changes the rest of your screen and
 switching away from the game (Alt+Tab) leaves your desktop as it is;
 r_gammaShaders 0 (then vid_restart) sets it on the monitor itself, as the
-original game did.
+original game did. A borderless window is an ordinary window to Windows,
+not one in true fullscreen, so switching away and back doesn't flash the
+screen black; the taskbar still stays behind it (r_noborderPopup 1, then
+vid_restart: as before).
 
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
