@@ -1365,6 +1365,17 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 	r_ext_multisample->integer = savedMultisample;
 #endif
 
+#ifdef OPENJK_VR
+	// On a monitor the brightness (r_gamma) is drawn into the picture at the
+	// end of each frame - the renderer's r_gammaShaders, on by default - not
+	// set on the display's gamma ramp: that brightens the whole display, every
+	// window on it, and SDL swaps it back and forth as the game loses and gets
+	// focus (Alt+Tab: the desktop's brightness jumping, a black flash with some
+	// drivers). The ramp's never touched then, not even to see if it can be.
+	if ( Cvar_VariableIntegerValue( "r_gammaShaders" ) )
+		glConfig->deviceSupportsGamma = (qboolean)!r_ignorehwgamma->integer;
+	else
+#endif
 	glConfig->deviceSupportsGamma =
 		(qboolean)(!r_ignorehwgamma->integer && SDL_SetWindowBrightness( screen, 1.0f ) >= 0);
 

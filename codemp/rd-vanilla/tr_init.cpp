@@ -705,7 +705,10 @@ static void GLimp_InitExtensions( void )
 		qglGetIntegerv( GL_MAX_GENERAL_COMBINERS_NV, &iNumGeneralCombiners );
 
 	glConfigExt.doGammaCorrectionWithShaders = qfalse;
-	if ( r_gammaShaders->integer && qglActiveTextureARB && bTexRectSupported && bARBVertexProgram && bARBFragmentProgram )
+	// OpenJK VR: a monitor's picture only (in a headset the brightness is baked
+	// into the textures: deviceSupportsGamma off), so the display's own gamma
+	// ramp is left alone (sdl_window.cpp)
+	if ( r_gammaShaders->integer && glConfig.deviceSupportsGamma && qglActiveTextureARB && bTexRectSupported && bARBVertexProgram && bARBFragmentProgram )
 	{
 #if !defined(__APPLE__)
 		qglTexImage3D = (PFNGLTEXIMAGE3DPROC)ri.GL_GetProcAddress("glTexImage3D");
@@ -1574,7 +1577,7 @@ void R_Register( void )
 	r_ext_compiled_vertex_array			= ri.Cvar_Get( "r_ext_compiled_vertex_array",		"1",						CVAR_ARCHIVE_ND|CVAR_LATCH, "" );
 	r_ext_texture_env_add				= ri.Cvar_Get( "r_ext_texture_env_add",			"1",						CVAR_ARCHIVE_ND|CVAR_LATCH, "" );
 	r_ext_texture_filter_anisotropic	= ri.Cvar_Get( "r_ext_texture_filter_anisotropic",	"16",						CVAR_ARCHIVE_ND, "" );
-	r_gammaShaders						= ri.Cvar_Get( "r_gammaShaders",					"0",						CVAR_ARCHIVE_ND|CVAR_LATCH, "" );
+	r_gammaShaders						= ri.Cvar_Get( "r_gammaShaders",					"1",						CVAR_ARCHIVE_ND|CVAR_LATCH, "Brightness (r_gamma) drawn into the picture, so it never changes the rest of the screen (0: set on the monitor itself, as the original game did)" );	// OpenJK VR: on by default (sdl_window.cpp)
 	r_environmentMapping				= ri.Cvar_Get( "r_environmentMapping",				"1",						CVAR_ARCHIVE_ND, "" );
 	r_DynamicGlow						= ri.Cvar_Get( "r_DynamicGlow",					"0",						CVAR_ARCHIVE_ND, "" );
 	r_DynamicGlowPasses					= ri.Cvar_Get( "r_DynamicGlowPasses",				"5",						CVAR_ARCHIVE_ND, "" );

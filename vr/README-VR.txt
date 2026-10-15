@@ -502,6 +502,11 @@ other Windows scaling (125%, 150%) too - the window keeps its resolution -
 and a window at the Desktop resolution takes the resolution of the monitor
 it's moved to (the game restarts its display for that, once you've let go of
 it). vid_xpos and vid_ypos are where it was.
+Brightness (Setup > Video, r_gamma) is drawn into the game's own picture
+(r_gammaShaders 1), so it never changes the rest of your screen and
+switching away from the game (Alt+Tab) leaves your desktop as it is;
+r_gammaShaders 0 (then vid_restart) sets it on the monitor itself, as the
+original game did.
 
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
