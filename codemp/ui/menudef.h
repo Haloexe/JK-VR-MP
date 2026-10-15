@@ -134,6 +134,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define FEEDER_VR_MICS						0x40			// OpenJK VR: microphones (voice chat; 64 in ui/vr_voice.menu)
 #define FEEDER_VR_RPCHARS					0x41			// OpenJK VR: your roleplay characters (65 in ui/vr_rp.menu)
 #define FEEDER_VR_RPPEOPLE					0x42			// OpenJK VR: the people here (66 in ui/vr_rp.menu)
+#define FEEDER_VR_RPNPCS					0x43			// OpenJK VR: NPCs and vehicles to spawn, for admins (67 in ui/vr_rp.menu)
 
 
 // Xbox specific, hope no one minds

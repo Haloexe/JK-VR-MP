@@ -291,7 +291,9 @@ void G_Give( gentity_t *ent, const char *name, const char *args, int argc )
 
 	if ( !give_all && !Q_stricmp( name, "weaponnum" ) )
 	{
-		ent->client->ps.stats[STAT_WEAPONS] |= (1 << atoi( args ));
+		const int weapon = atoi( args );
+		if ( weapon > WP_NONE && weapon <= LAST_USEABLE_WEAPON )	// OpenJK VR: a weapon there is (a roleplay admin gives with cheats off too)
+			ent->client->ps.stats[STAT_WEAPONS] |= (1 << weapon);
 		return;
 	}
 
@@ -3329,10 +3331,11 @@ void ClientCommand( int clientNum ) {
 		return;
 	}
 
+	// OpenJK VR: cheats on, or an admin's with them off - never while down;
+	// the player's told why not (g_vrrp.c)
 	else if ( (command->flags & CMD_CHEAT)
-		&& !sv_cheats.integer )
+		&& !G_RPCheatAllowed( ent ) )
 	{
-		trap->SendServerCommand( clientNum, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "NOCHEATS" ) ) );
 		return;
 	}
 
@@ -3346,5 +3349,9 @@ void ClientCommand( int clientNum ) {
 	}
 
 	else
+	{
+		if ( ( command->flags & CMD_CHEAT ) && !sv_cheats.integer )
+			G_RPAdminCheat( ent );	// OpenJK VR: an admin's cheat, logged (g_vrrp.c)
 		command->func( ent );
+	}
 }

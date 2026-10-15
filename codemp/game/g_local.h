@@ -1081,6 +1081,10 @@ qboolean	G_RPConsoleCommand( void );
 void		Cmd_VRRP_f( gentity_t *ent );
 int			G_RPFaction( int clientNum );
 qboolean	G_RPCapable( int clientNum );
+qboolean	G_RPAdmin( int clientNum );
+qboolean	G_RPCheatAllowed( gentity_t *ent );
+void		G_RPAdminCheat( gentity_t *ent );
+void		G_RPFrame( void );
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
 qboolean	G_RPDowned( const gentity_t *ent );

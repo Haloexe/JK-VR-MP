@@ -114,7 +114,8 @@ near (g_rpTalkRange), /me too; the team chat key and /ooc go to everyone,
 out of character. g_rpCharacters: characters per account (5; up to 10).
 Players on the normal game can't log in, but see the characters' names
 and the chat. Players need this build: an older OpenJK VR is told to
-update.
+update. Logging in works with roleplay off too (it changes nothing else
+then: admins keep their cheats, below).
   g_rpDowned 1              down, not dead (0: dying as ever) - in Free
                             For All and Team FFA, a player playing a
                             character whose health runs out goes down,
@@ -137,6 +138,18 @@ roleplay's on, and these settings: "<on> <g_rpCharacters> <g_rpTalkRange>
   rp delete <account> <character>   delete a character (online or not)
   rp password <account> <temporary> for a player who forgot theirs (they
                             change it in the Roleplay menu after)
+  rp admin <account> on|off make an account an admin, or not (without on
+                            or off: whether it is one)
+  rp admins                 the admin accounts, and which are here
+Admins: a player logged in to an admin account - roleplay on or off - can
+use every cheat command with sv_cheats 0 (npc spawn and npc kill, god,
+noclip, notarget, give and the rest), for themselves, and the log has
+each one (lines starting "Admin:", with the account). Nobody uses a cheat
+while down. Nobody else is shown who's an admin. Logging out, or rp admin
+off, ends their god mode, no-clip and no target. In the Roleplay menu an
+admin has an Admin page (spawn any NPC or vehicle in front of them, kill
+the ones they spawned or every NPC, switch the cheats); the Server page's
+Admins makes or unmakes them (by rcon on a server you don't host).
 Passwords never reach the server: it keeps a key made from each, over
 this server's salt. The accounts are in rp/accounts and the salt in
 rp/server.txt, in the server's own files (Linux: home/base/rp; Windows:

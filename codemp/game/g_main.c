@@ -3380,8 +3380,10 @@ void G_RunFrame( int levelTime ) {
 #ifdef _G_FRAME_PERFANAL
 	trap->PrecisionTimer_Start(&timer_ClientEndframe);
 #endif
-	// OpenJK VR: roleplay - players' sides for the NPCs, who's down (g_vrdown.c)
+	// OpenJK VR: roleplay - players' sides for the NPCs, who's down (g_vrdown.c);
+	// admins' games told what their Admin page shows (g_vrrp.c)
 	G_RPDownFrame();
+	G_RPFrame();
 
 	// perform final fixups on the players
 	ent = &g_entities[0];

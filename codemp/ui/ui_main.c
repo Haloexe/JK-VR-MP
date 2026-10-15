@@ -7914,6 +7914,7 @@ static int UI_FeederCount(float feederID)
 
 		case FEEDER_VR_RPCHARS:	// OpenJK VR: roleplay
 		case FEEDER_VR_RPPEOPLE:
+		case FEEDER_VR_RPNPCS:
 			return UI_VRRP_FeederCount( (int)feederID );
 
 		case FEEDER_SABER_SINGLE_INFO:
@@ -8205,7 +8206,7 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	{
 		return UI_VRVoice_FeederText(index);
 	}
-	else if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE)	// OpenJK VR: roleplay
+	else if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE || feederID == FEEDER_VR_RPNPCS)	// OpenJK VR: roleplay
 	{
 		return UI_VRRP_FeederText((int)feederID, index, column);
 	}
@@ -8800,7 +8801,7 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 	{
 		return UI_VRVoice_FeederSelection(index);
 	}
-	if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE)	// OpenJK VR: roleplay
+	if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE || feederID == FEEDER_VR_RPNPCS)	// OpenJK VR: roleplay
 	{
 		return UI_VRRP_FeederSelection(feederID, index);
 	}

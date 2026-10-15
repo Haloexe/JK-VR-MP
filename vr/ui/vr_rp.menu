@@ -4,7 +4,7 @@
 //
 //	The Roleplay menu (vr_rp), opened from the wheel's Roleplay ring, the ROLEPLAY tab under the
 //	in-game bar, or "ui_openmenu vr_rp". Its pages - Characters, Editor, People, Chat & cards,
-//	Help, Server - are the items' groups (rp_...): the game's menu code (ui_vrrp.c) shows the
+//	Help, Server, and Admin for admins - are the items' groups (rp_...): the game's menu code (ui_vrrp.c) shows the
 //	page picked and, on it, what fits (logged in or not, playing a character or not...), fills
 //	the lists and the ui_rp... cvars the text shows, and runs what the buttons ask (uiScript
 //	vrRP ...) - what needs the server goes through the game ("rpui ...", cg_vrrp.c).
@@ -12,7 +12,7 @@
 //	vr_rp_tab and vr_rp_create are never shown themselves: their items go on the in-game bar
 //	(under it) and on Create game's settings (a free row), where the menus have room for them.
 //
-//	feeder 65:	your characters		feeder 66:	the people here
+//	feeder 65:	your characters		feeder 66:	the people here		feeder 67:	NPCs and vehicles (Admin)
 //	"password" (an edit field): what's typed shows as *s
 //
 //----------------------------------------------------------------------------------------------
@@ -307,13 +307,49 @@
 			}
 		}
 
+		// Admin: an admin's page (its button, top right, shown to admins only: ui_rpAdmin)
+		itemDef
+		{
+			name            rp_tab6
+			group           rp_admintab
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            496 6 94 20
+			text            "Admin"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      47
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Cheats that work here for you: NPCs, god mode, no-clip"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP page 6 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_tab6 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_tab6 backcolor 0 0 .3 .7
+			}
+		}
+
 		//------------------------------------------------------------------------------------------
 		// Characters, not logged in: log in, or make an account
 		//------------------------------------------------------------------------------------------
 		itemDef
 		{
 			name            rp_out_l1
-			group           rp_out
+			group           rp_out_on
 			rect            40 86 520 18
 			text            "Log in to your roleplay account on this server, or make one."
 			font            4
@@ -329,7 +365,7 @@
 		itemDef
 		{
 			name            rp_out_l2
-			group           rp_out
+			group           rp_out_on
 			rect            40 104 520 18
 			text            "Your password becomes a key on this PC: the password itself is never sent."
 			font            4
@@ -1765,8 +1801,28 @@
 			group           rp_help
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
-			rect            30 84 545 270
-			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nWHEEL: hold Y. Up: Say... Right: Poses. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc.\nDOWN: out of health, you go down instead of dying (pits, lava and the like still kill). Your faction gets you up: looking at you, holding use (the right grip) for 3 s. To respawn, hold attack (the trigger) for 1.5 s, or Give up on the wheel. A duel's loser goes down.\nNPCS: the light side's are with the Heroes, the dark side's with the Villains; Neutral are left alone until they attack one. Nobody harms someone down.\nSERVER: its owner turns roleplay on and off there."
+			rect            30 84 545 136
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nWHEEL: hold Y. Up: Say... Right: Poses. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		itemDef
+		{
+			name            rp_help_text2
+			group           rp_help
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            30 222 545 136
+			text            "DOWN: out of health, you go down instead of dying (pits, lava and the like still kill). Your faction gets you up: looking at you, holding use (the right grip) for 3 s. To respawn, hold attack (the trigger) for 1.5 s, or Give up on the wheel. A duel's loser goes down.\nNPCS: the light side's are with the Heroes, the dark side's with the Villains; Neutral are left alone until they attack one. Nobody harms someone down.\nSERVER: its owner turns roleplay on and off there.\nADMINS: an admin's cheats work here even with cheats off; their Admin page (top right) spawns NPCs."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -1865,7 +1921,7 @@
 		itemDef
 		{
 			name            rp_srv_state
-			group           rp_server
+			group           rp_srv_set
 			rect            40 176 520 18
 			cvar            "ui_rpServerLine"
 			font            2
@@ -1881,7 +1937,7 @@
 		itemDef
 		{
 			name            rp_srv_on
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
 			rect            40 200 170 24
@@ -1915,7 +1971,7 @@
 		itemDef
 		{
 			name            rp_srv_off
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
 			rect            220 200 150 24
@@ -1949,7 +2005,7 @@
 		itemDef
 		{
 			name            rp_srv_chars
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
 			rect            40 236 520 22
@@ -1986,7 +2042,7 @@
 		itemDef
 		{
 			name            rp_srv_range
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
 			rect            40 262 520 22
@@ -2023,7 +2079,7 @@
 		itemDef
 		{
 			name            rp_srv_downed
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
 			rect            40 288 520 22
@@ -2061,7 +2117,7 @@
 		itemDef
 		{
 			name            rp_srv_apply
-			group           rp_server
+			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
 			rect            40 322 110 24
@@ -2089,6 +2145,611 @@
 			mouseExit
 			{
 				setitemcolor	rp_srv_apply backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_admins
+			group           rp_srv_set
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            170 322 130 24
+			text            "Admins"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Make an account an admin, or not"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server admins ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_admins backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_admins backcolor 0 0 .3 .7
+			}
+		}
+
+		// Server: Admins (an account made an admin, or not: rp admin)
+		itemDef
+		{
+			name            rp_sadm_l1
+			group           rp_srv_adm
+			rect            40 176 520 18
+			text            "An admin can use every cheat here, even with cheats off (NPCs, god mode...)."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_sadm_l2
+			group           rp_srv_adm
+			rect            40 194 520 18
+			text            "Type the name of their account, then make it an admin or not."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_sadm_account
+			group           rp_srv_adm
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            40 220 520 22
+			text            "Account:"
+			cvar            "ui_rpAdminAccount"
+			maxChars        20
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      170
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "The account's name, as they log in with it"
+			mouseEnter
+			{
+				setitemcolor	rp_sadm_account bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_sadm_account bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_sadm_on
+			group           rp_srv_adm
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 256 150 24
+			text            "Make admin"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      75
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server adminOn ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_sadm_on backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_sadm_on backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_sadm_off
+			group           rp_srv_adm
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            200 256 160 24
+			text            "Remove admin"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      80
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server adminOff ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_sadm_off backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_sadm_off backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_sadm_l3
+			group           rp_srv_adm
+			rect            40 292 520 18
+			text            "In the console, rp admins lists them (on another server: rcon rp admins)."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_sadm_back
+			group           rp_srv_adm
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 322 110 24
+			text            "Back"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server settings ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_sadm_back backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_sadm_back backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Admin: an admin's cheats (they work here with cheats off) - NPCs and vehicles (feeder 67)
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_adm_l1
+			group           rp_admin
+			rect            30 84 540 18
+			text            "Your cheats work here, even with cheats off on the server. Each one is logged."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_adm_find
+			group           rp_admin
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            30 106 300 22
+			text            "Find:"
+			cvar            "ui_rpAdminFind"
+			maxChars        32
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      50
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "Part of a name: trooper, rebel, swoop..."
+			mouseEnter
+			{
+				setitemcolor	rp_adm_find bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_find bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_list
+			group           rp_admin
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            30 134 300 176
+			elementwidth    280
+			elementheight   16
+			elementtype     LISTBOX_TEXT
+			feeder          67
+			columns         2 4 196 192  205 70 66
+			font            2
+			textscale       0.75
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 .2 .45
+			border          1
+			bordercolor     .35 .45 .8 .8
+			outlinecolor    .2 .45 .85 .6
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_count
+			group           rp_admin
+			rect            30 314 300 18
+			cvar            "ui_rpAdminCountLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_adm_spawn
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 134 220 24
+			text            "Spawn"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      110
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "The one picked in the list, in front of you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP adminSpawn ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_spawn backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_spawn backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_killmine
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 164 220 24
+			text            "Kill my NPCs"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      110
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "The NPCs and vehicles you spawned here"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin killmine ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_killmine backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_killmine backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_killall
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 194 220 24
+			text            "Kill all NPCs"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      110
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Every NPC and vehicle on the map"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin killall ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_killall backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_killall backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_god
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 236 130 24
+			text            "God mode"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Nothing hurts you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin god ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_god backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_god backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_godstate
+			group           rp_admin
+			rect            490 239 80 18
+			cvar            "ui_rpAdminGodLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_adm_noclip
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 264 130 24
+			text            "No-clip"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Fly, through walls"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin noclip ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_noclip backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_noclip backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_noclipstate
+			group           rp_admin
+			rect            490 267 80 18
+			cvar            "ui_rpAdminNoclipLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_adm_notarget
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 292 130 24
+			text            "No target"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "NPCs don't see you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin notarget ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_notarget backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_notarget backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_notargetstate
+			group           rp_admin
+			rect            490 295 80 18
+			cvar            "ui_rpAdminNotargetLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_adm_give
+			group           rp_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 324 220 24
+			text            "Give all"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      110
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Every weapon and item, full ammo, health and armor"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin give ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_give backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_give backcolor 0 0 .3 .7
 			}
 		}
 

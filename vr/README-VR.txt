@@ -412,7 +412,9 @@ off the game plays as before, and nothing is lost.
   Your password never leaves your PC: the game makes a key of it and logs
 in with that. Remember me keeps the key (never the password) and logs you
 in on that server by itself next time; Log out forgets it. A forgotten
-password: the server's owner can give you a temporary one.
+password: the server's owner can give you a temporary one. Logging in
+works with roleplay off too (it changes nothing else then, but an
+admin's cheats).
   Talk (the chat key, or Say... on the wheel) reaches only the players
 within about 15 m (the server's g_rpTalkRange), and shows over your head
 in a speech bubble for 6 s;  /me draws his saber  shows as "* Kael draws
@@ -450,6 +452,16 @@ with the Villains and go after Heroes; Neutral characters are left alone -
 until they attack an NPC, whose side then fights back for the rest of that
 life. Nobody's NPCs, turrets or sentries harm someone who's down, and the
 crosshair shows your side's NPCs as friends. Monsters are monsters.
+  Admins: the server's owner can make an account an admin (rcon: rp admin
+<account> on). Logged in to it - roleplay on or off - your cheats work on
+that server even with its cheats off, for you alone, and each one goes in
+its log; not while you're down. An Admin button shows at the top of the
+Roleplay menu (only to you): its page lists every NPC and vehicle the
+game has - Find narrows it - and Spawn puts the one picked in front of
+you; Kill my NPCs (the ones you spawned there), Kill all NPCs; God mode,
+No-clip and No target, each saying whether it's on; Give all. The console
+cheats work too (npc spawn <name>, god, noclip...). Nobody else is shown
+who's an admin; logging out ends your god mode, no-clip and no target.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
 character there.
@@ -458,7 +470,8 @@ me on or off: cg_rpBubbles, cg_rpCards, cg_rpRemember), Help, and Server,
 for the owner: roleplay on or off, characters per account, how far talk
 reaches and whether running out of health downs players - straight into a
 game you host; on your own server, after typing its rcon password into the
-page (it shows the server's settings as they are).
+page (it shows the server's settings as they are). Its Admins makes an
+account an admin, or not (the console shows the server's answer).
   In the console (Shift+~):  new <account> <password>,  login <account>
 <password>,  logout,  changepassword <old> <new>,  bio (of whom you look
 at), and  rp  for your characters: rp new <name>, rp play <name or
@@ -703,9 +716,10 @@ no client. Source files:
   codemp/client/cl_vrkeyboard.cpp  the headset's keyboard
   codemp/cgame/cg_vrpose.c     the wheel (poses: game/bg_vrpose.c)
   codemp/game/g_vrrp.c         roleplay, the server's side: the switch,
-                               accounts, logins, characters, chat
+                               accounts, logins, characters, chat, admins
+                               (g_cmds.c asks it whether a cheat runs)
   codemp/cgame/cg_vrrp.c       roleplay, the player's side: logging in,
-                               speech bubbles, cards
+                               speech bubbles, cards, the Admin page's cheats
   codemp/game/g_vrdown.c       roleplay: down, not dead; NPCs taking sides
   codemp/cgame/cg_vrdown.c     being down, getting someone up: the panel,
                                the prompts, Give up

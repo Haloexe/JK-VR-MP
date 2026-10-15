@@ -11,9 +11,16 @@ over the server's salt and the account name) and never leaves this PC: a
 new account sends the server its key, and a login only proves the key
 against the one-time challenge the server sent. Remember me
 (cg_rpRemember) keeps the key, never the password, in rp/remember.txt
-with the server's address and salt, and logs in with it there whenever
-roleplay is on; /logout forgets it, and so does the server saying it's
-wrong.
+with the server's address and salt, and logs in with it there once a
+visit, roleplay on or off (an admin's cheats don't wait for it); /logout
+forgets it, and so does the server saying it's wrong.
+
+ADMINS. An account the server's owner made an admin (rcon rp admin) can
+use every cheat there, cheats on or off: the server says so (rpadmin),
+and the Roleplay menu shows its Admin page - spawn an NPC or a vehicle
+(tagged as the admin's: vra_<account>), kill those or every NPC, god
+mode, no-clip, no target, give all. They're the game's own cheat
+commands, which the server lets an admin use.
 
 THE MENUS read where things stand in ui_rp* cvars, and ask for things
 with "rpui <what>" (below).
@@ -39,7 +46,15 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			3		// (as the server's, g_vrrp.c)
+#define RP_PROTOCOL			4		// (as the server's, g_vrrp.c: 4 takes rpadmin)
+
+// what the server says of an admin (rpadmin; as g_vrrp.c's)
+#define RPA_ADMIN			1
+#define RPA_GOD				2
+#define RPA_NOCLIP			4
+#define RPA_NOTARGET		8
+#define RP_ADMIN_TAG		"vra_"	// an admin's NPCs, spawned from the Admin page: vra_<account>
+#define RP_NPC_NAME_MAX		63
 #define RP_CHARS_MAX		10		// (as many as a server keeps at most)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
@@ -134,7 +149,8 @@ static struct {
 	int			active;			// the character played (-1: none)
 	int			numChars, most;
 	rpChar_t	chars[RP_CHARS_MAX];
-	qboolean	autoTried;		// logged in with what this PC kept (since roleplay came on)
+	qboolean	autoTried;		// logged in with what this PC kept (once a visit)
+	int			admin;			// what the server says of us (rpadmin: RPA_*; 0: not an admin)
 
 	struct {
 		int			kind;		// RPASK_*
@@ -371,6 +387,14 @@ static void CG_RP_UIAccount( void ) {
 	CG_RP_UIPlaying();
 }
 
+// What the Admin page shows: whether we're an admin here, and our cheats.
+static void CG_RP_UIAdmin( void ) {
+	trap->Cvar_Set( "ui_rpAdmin", ( cgrp.admin & RPA_ADMIN ) ? "1" : "0" );
+	trap->Cvar_Set( "ui_rpAdminGod", ( cgrp.admin & RPA_GOD ) ? "1" : "0" );
+	trap->Cvar_Set( "ui_rpAdminNoclip", ( cgrp.admin & RPA_NOCLIP ) ? "1" : "0" );
+	trap->Cvar_Set( "ui_rpAdminNotarget", ( cgrp.admin & RPA_NOTARGET ) ? "1" : "0" );
+}
+
 /*
 ================================================================================
 Logins this PC keeps: rp/remember.txt, a line a server -
@@ -555,12 +579,12 @@ static void CG_RP_AskSend( void ) {
 	cgrp.ask.time = cg.time;
 }
 
-// Whether something can be asked now (if not, the player's told why).
+// Whether something can be asked now (if not, the player's told why). With
+// roleplay off too: logging in then changes nothing but an admin's cheats
+// (a server older than that says no itself).
 static qboolean CG_RP_Ready( void ) {
 	if ( !cgrp.server ) {
 		CG_RP_Show( "This server doesn't have roleplay", qtrue );
-	} else if ( !cgrp.on ) {
-		CG_RP_Show( "Roleplay is off on this server right now", qtrue );
 	} else if ( !cgrp.hello ) {
 		CG_RP_Show( "Still getting in touch with the server: try again in a moment", qtrue );
 	} else if ( cgrp.ask.kind != RPASK_NONE ) {
@@ -874,8 +898,66 @@ rpui <what>: the Roleplay menu's buttons.
   edit              the character played into ui_rpEditFaction, ui_rpEditDesc, ui_rpEditBio...
   save              ...and what's changed there back
   bio               read the bio of who you look at
+  admin <what>      the Admin page (CG_RP_Admin)
 The passwords' cvars are emptied as they're read.
 */
+
+// An NPC's or vehicle's name as its files have it: letters, digits, _ - .
+static qboolean CG_RP_NPCName( const char *name ) {
+	const char *p;
+
+	if ( !name[0] || (int)strlen( name ) > RP_NPC_NAME_MAX ) {
+		return qfalse;
+	}
+	for ( p = name; *p; p++ ) {
+		if ( !( ( *p >= 'a' && *p <= 'z' ) || ( *p >= 'A' && *p <= 'Z' ) || ( *p >= '0' && *p <= '9' ) || *p == '_' || *p == '-' || *p == '.' ) ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+/*
+rpui admin <what>: the Admin page's buttons, the game's own cheat commands
+(the server lets an admin use them with cheats off):
+  spawn <name> <npc|vehicle>   in front of you, tagged vra_<account>
+  killmine, killall            the NPCs spawned here with your tag / every one
+  god, noclip, notarget        on or off
+  give                         give all
+*/
+static void CG_RP_Admin( void ) {
+	char what[32];
+
+	trap->Cmd_Argv( 2, what, sizeof( what ) );
+	if ( !( cgrp.admin & RPA_ADMIN ) || !cgrp.account[0] ) {
+		trap->Cvar_Set( "ui_rpMessage", "You're not an admin on this server" );
+		return;
+	}
+	if ( !Q_stricmp( what, "spawn" ) ) {
+		char name[MAX_QPATH * 2], kind[16];	// (room for one too long: seen whole, and refused)
+		trap->Cmd_Argv( 3, name, sizeof( name ) );
+		trap->Cmd_Argv( 4, kind, sizeof( kind ) );
+		if ( !CG_RP_NPCName( name ) ) {
+			trap->Cvar_Set( "ui_rpMessage", "Pick one in the list first" );
+			return;
+		}
+		trap->SendClientCommand( va( "npc spawn %s%s " RP_ADMIN_TAG "%s", !Q_stricmp( kind, "vehicle" ) ? "vehicle " : "", name, cgrp.account ) );
+		trap->Cvar_Set( "ui_rpMessage", va( "%s, in front of you", name ) );
+	} else if ( !Q_stricmp( what, "killmine" ) ) {
+		trap->SendClientCommand( va( "npc kill " RP_ADMIN_TAG "%s", cgrp.account ) );
+		trap->Cvar_Set( "ui_rpMessage", "The NPCs you spawned here: killed" );
+	} else if ( !Q_stricmp( what, "killall" ) ) {
+		trap->SendClientCommand( "npc kill all" );
+		trap->Cvar_Set( "ui_rpMessage", "Every NPC here: killed" );
+	} else if ( !Q_stricmp( what, "god" ) || !Q_stricmp( what, "noclip" ) || !Q_stricmp( what, "notarget" ) ) {
+		trap->SendClientCommand( what );	// (on or off: the page shows it as the server says - rpadmin)
+		trap->Cvar_Set( "ui_rpMessage", "" );
+	} else if ( !Q_stricmp( what, "give" ) ) {
+		trap->SendClientCommand( "give all" );
+		trap->Cvar_Set( "ui_rpMessage", "Every weapon and item, full ammo, health and armor" );
+	}
+}
+
 static void CG_RP_UI_f( void ) {
 	char what[32];
 
@@ -966,6 +1048,8 @@ static void CG_RP_UI_f( void ) {
 		}
 	} else if ( !Q_stricmp( what, "people" ) ) {
 		cgrp.peopleUntil = cg.time + RP_PEOPLE_TIME;	// (everyone's card, one at a time: CG_RP_People)
+	} else if ( !Q_stricmp( what, "admin" ) ) {
+		CG_RP_Admin();
 	}
 }
 
@@ -1005,7 +1089,11 @@ static void CG_RP_AccountCmd( void ) {
 	}
 	cgrp.known = qtrue;
 	if ( Q_stricmp( account, cgrp.account ) ) {
-		memset( cgrp.chars, 0, sizeof( cgrp.chars ) );	// (another account's come)
+		memset( cgrp.chars, 0, sizeof( cgrp.chars ) );	// (another account's come...)
+		if ( cgrp.admin ) {
+			cgrp.admin = 0;	// (...not an admin until the server says so: rpadmin, a frame on)
+			CG_RP_UIAdmin();
+		}
 	}
 	Q_strncpyz( cgrp.account, account, sizeof( cgrp.account ) );
 	cgrp.numChars = account[0] ? Com_Clampi( 0, RP_CHARS_MAX, atoi( CG_Argv( 3 ) ) ) : 0;
@@ -1108,6 +1196,15 @@ static void CG_RP_MessageCmd( void ) {
 	CG_RP_Show( text, qfalse );
 }
 
+// rpadmin <RPA_* bits>: whether we're an admin here, and our cheats on or off
+static void CG_RP_AdminCmd( void ) {
+	cgrp.admin = atoi( CG_Argv( 1 ) ) & ( RPA_ADMIN | RPA_GOD | RPA_NOCLIP | RPA_NOTARGET );
+	if ( !( cgrp.admin & RPA_ADMIN ) ) {
+		cgrp.admin = 0;
+	}
+	CG_RP_UIAdmin();
+}
+
 // rppassok: the new password's the one now
 static void CG_RP_PasswordCmd( void ) {
 	if ( cgrp.ask.kind == RPASK_PASSWORD && cgrp.ask.sent ) {
@@ -1153,6 +1250,8 @@ qboolean CG_RP_ServerCommand( const char *cmd ) {
 		CG_RP_PasswordCmd();
 	} else if ( !Q_stricmp( cmd, "rpfail" ) ) {
 		CG_RP_FailCmd();
+	} else if ( !Q_stricmp( cmd, "rpadmin" ) ) {
+		CG_RP_AdminCmd();
 	} else if ( !Q_stricmp( cmd, "rpdn" ) ) {
 		CG_RP_DownCmd();	// (who's down: cg_vrdown.c)
 	} else if ( !Q_stricmp( cmd, "rpup" ) ) {
@@ -1235,11 +1334,13 @@ static void CG_RP_People( void ) {
 	}
 }
 
-// With roleplay on and not logged in: what this PC kept for this server.
+// Not logged in, roleplay on or off: what this PC kept for this server, once a
+// visit (logged out by the server - the account logged in somewhere else -
+// it isn't tried again: no taking turns with that other place).
 static void CG_RP_AutoLogin( void ) {
 	int n, i;
 
-	if ( !cgrp.server || !cgrp.on || !cgrp.hello || !cgrp.known || cgrp.account[0] || cgrp.autoTried || cgrp.ask.kind != RPASK_NONE ) {
+	if ( !cgrp.server || !cgrp.hello || !cgrp.known || cgrp.account[0] || cgrp.autoTried || cgrp.ask.kind != RPASK_NONE ) {
 		return;
 	}
 	cgrp.autoTried = qtrue;
@@ -1533,11 +1634,8 @@ void CG_RP_ServerInfo( const char *info ) {
 	const qboolean server = (qboolean)( value[0] != '\0' );
 	const qboolean on = (qboolean)( server && atoi( value ) == 1 );
 
-	if ( !on ) {
-		cgrp.autoTried = qfalse;	// (when it's on again, log in again)
-		if ( cgrp.on ) {
-			memset( rpBubbles, 0, sizeof( rpBubbles ) );
-		}
+	if ( !on && cgrp.on ) {
+		memset( rpBubbles, 0, sizeof( rpBubbles ) );
 	}
 	cgrp.server = server;
 	cgrp.on = on;
@@ -1557,6 +1655,8 @@ void CG_RP_Restart( void ) {
 	memset( rpBubbles, 0, sizeof( rpBubbles ) );
 	memset( rpCards, 0, sizeof( rpCards ) );
 	CG_RP_DownInit();	// (everyone up again; the server says who's down when we hello)
+	cgrp.admin = 0;		// (and whether we're an admin)
+	CG_RP_UIAdmin();
 }
 
 // The menus' cvars of a server's (its people, the editor's fields, the
@@ -1599,6 +1699,7 @@ void CG_RP_Init( void ) {
 	Q_strlwr( cgrp.address );
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
+	CG_RP_UIAdmin();
 }
 
 void CG_RP_Shutdown( void ) {
@@ -1609,8 +1710,10 @@ void CG_RP_Shutdown( void ) {
 	cgrp.account[0] = '\0';
 	cgrp.numChars = cgrp.most = 0;
 	cgrp.active = -1;
+	cgrp.admin = 0;
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
+	CG_RP_UIAdmin();
 	CG_RP_UIClear();
 }
 

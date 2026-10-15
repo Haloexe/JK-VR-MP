@@ -18,7 +18,18 @@ never leaves their PC and what crosses the network can't be replayed. The
 server keeps only the key, in rp/accounts/<name>.txt with the account's
 characters. Five wrong passwords, and the account (and the connection)
 wait a minute. A forgotten password: the owner sets a temporary one by
-rcon (rp password <account> <temporary>).
+rcon (rp password <account> <temporary>). Logging in (and making an
+account) works with roleplay off too, where it changes nothing else: an
+admin has their cheats either way.
+
+ADMINS. The owner makes an account an admin by rcon - rp admin <account>
+on|off, kept in its file; rp admins lists them. Logged in to it, a player
+can use every cheat command with cheats off (G_RPCheatAllowed, asked by
+ClientCommand), each one logged; nobody, admin or not, uses one while down.
+Their game is told what its Admin page shows (rpadmin); nobody else is
+told who's an admin. No longer one (logged out, the account logged in
+somewhere else, rp admin off), their god mode, no-clip and no target end,
+unless cheats are on for everyone.
 
 CHARACTERS. Up to g_rpCharacters per account: a name (unique on the
 server), a faction (Heroes, Villains, Neutral), and, optional, a one-line
@@ -40,7 +51,8 @@ tell is as it was. Our clients get the speaker and the kind of line with
 each, for speech bubbles; other clients see plain chat.
 
 Client commands (most sent by the cgame or the menus, not typed):
-  rpver <protocol>          this client runs this build (cg_vrrp.c)
+  rpver <protocol>          this client runs this build (cg_vrrp.c); 4 and
+                            later: it takes rpadmin
   rpnew <account> <key>     make an account (key: 64 hex digits)
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
@@ -52,10 +64,12 @@ To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
 <most> <1: this answers a login or a new account | 0> then rpchar <i>
 <faction> "name" "desc" "bio" each, rpcard, rpbio, rpmsg; rppassok, or
 rpfail <1: the name or password was wrong | 0>, to end a request made
-with a key. A new password's proof is over "password <its key>".
+with a key. A new password's proof is over "password <its key>". An
+admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
+4 no-clip, 8 no target; 0: not an admin>.
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
-rp password <account> <temporary>.
+rp password <account> <temporary>, rp admin <account> [on|off], rp admins.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -74,6 +88,13 @@ static int G_RP_ClientArg( const char *arg );
 
 #define RP_PROTOCOL			3		// (2: rpacct says when it answers a login; a new password's proof is over its key;
 									// 3: down, not dead - rpdn, rpup, rp giveup, the pose: g_vrdown.c)
+#define RP_PROTOCOL_ADMIN	4		// a game this new takes rpadmin (one between, as ever, plays roleplay)
+
+// what an admin's game is told (rpadmin)
+#define RPA_ADMIN			1
+#define RPA_GOD				2
+#define RPA_NOCLIP			4
+#define RPA_NOTARGET		8
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
 #define RP_NAME_MAX			32		// a character's name: visible characters...
@@ -114,12 +135,15 @@ typedef struct {
 	char		name[RP_ACCOUNT_MAX + 1];	// lower case
 	byte		key[VRRP_KEY_LEN];
 	int			last;						// the character last played (-1: none)
+	qboolean	admin;						// the owner made it an admin (rp admin): every cheat, cheats on or off
 	int			numChars;
 	rpChar_t	chars[RP_CHARS_MAX];
 } rpAccount_t;
 
 typedef struct {
 	qboolean	capable;			// runs this build (sent rpver)
+	int			protocol;			// the one it said (0: not yet)
+	int			adminTold;			// what rpadmin last told it (RPA_*; 0: nothing, or not an admin)
 	char		challenge[VRRP_CHALLENGE_HEX + 1];
 	qboolean	loggedIn;
 	rpAccount_t	acc;
@@ -431,7 +455,7 @@ static void G_RP_SaveAccount( const rpAccount_t *acc ) {
 	int i, k;
 
 	VRC_ToHex( acc->key, VRRP_KEY_LEN, hex );
-	Com_sprintf( text, sizeof( text ), "// OpenJK VR roleplay account\nkey %s\nlast %i\n", hex, acc->last );
+	Com_sprintf( text, sizeof( text ), "// OpenJK VR roleplay account\nkey %s\nlast %i\n%s", hex, acc->last, acc->admin ? "admin 1\n" : "" );
 	for ( i = 0; i < acc->numChars; i++ ) {
 		const rpChar_t *ch = &acc->chars[i];
 		Q_strcat( text, sizeof( text ), va( "character\nname \"%s\"\nfaction %i\ndesc \"%s\"\nbio \"%s\"\n",
@@ -462,7 +486,7 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 	static char text[RP_FILE_MAX];
 	const char *p, *tok;
 	rpChar_t *ch = NULL;
-	qboolean haveKey = qfalse;
+	qboolean haveKey = qfalse, inChar = qfalse;
 
 	if ( !G_RP_AccountNameOk( name ) || G_RP_ReadFile( G_RP_AccountPath( name ), text, sizeof( text ) ) < 0 ) {
 		return qfalse;
@@ -481,7 +505,10 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 			haveKey = VRC_FromHex( COM_ParseExt( &p, qfalse ), acc->key, VRRP_KEY_LEN );
 		} else if ( !Q_stricmp( tok, "last" ) ) {
 			acc->last = atoi( COM_ParseExt( &p, qfalse ) );
+		} else if ( !inChar && !Q_stricmp( tok, "admin" ) ) {	// (the account's, never a character's)
+			acc->admin = (qboolean)( atoi( COM_ParseExt( &p, qfalse ) ) == 1 );
 		} else if ( !Q_stricmp( tok, "character" ) ) {
+			inChar = qtrue;
 			ch = ( acc->numChars < RP_CHARS_MAX ) ? &acc->chars[acc->numChars++] : NULL;
 			if ( ch ) {
 				memset( ch, 0, sizeof( *ch ) );
@@ -489,6 +516,7 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 			}
 		} else if ( !Q_stricmp( tok, "end" ) ) {
 			ch = NULL;
+			inChar = qfalse;
 		} else if ( ch && !Q_stricmp( tok, "name" ) ) {
 			G_RP_CleanText( COM_ParseExt( &p, qfalse ), ch->name, sizeof( ch->name ) );
 		} else if ( ch && !Q_stricmp( tok, "faction" ) ) {
@@ -836,6 +864,96 @@ static const char *G_RP_BusyReason( int clientNum, qboolean switching ) {
 
 /*
 ================================================================================
+Admins: accounts the owner made admins (rcon rp admin), with every cheat
+================================================================================
+*/
+
+// Whether a client is an admin now: logged in to an account the owner made one.
+qboolean G_RPAdmin( int clientNum ) {
+	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rp.ready && rpc[clientNum].loggedIn && rpc[clientNum].acc.admin );
+}
+
+// Someone who's no longer an admin: what their cheats left on ends - unless
+// cheats are on for everyone, when anyone may have it.
+static void G_RP_AdminOff( int clientNum ) {
+	gentity_t *ent = &g_entities[clientNum];
+
+	if ( sv_cheats.integer || !ent->inuse || !ent->client ) {
+		return;
+	}
+	ent->flags &= ~( FL_GODMODE | FL_NOTARGET );
+	ent->client->noclip = qfalse;
+}
+
+// What an admin's game is told (RPA_*; 0: not an admin).
+static int G_RP_AdminBits( int clientNum ) {
+	const gentity_t *ent = &g_entities[clientNum];
+	int bits;
+
+	if ( !G_RPAdmin( clientNum ) || !ent->client ) {
+		return 0;
+	}
+	bits = RPA_ADMIN;
+	if ( ent->flags & FL_GODMODE ) {
+		bits |= RPA_GOD;
+	}
+	if ( ent->client->noclip ) {
+		bits |= RPA_NOCLIP;
+	}
+	if ( ent->flags & FL_NOTARGET ) {
+		bits |= RPA_NOTARGET;
+	}
+	return bits;
+}
+
+// ClientCommand, a cheat command: whether it runs - cheats on, as ever; off,
+// for an admin; never while down (no cheat out of it: a hand up, or giving
+// up). qfalse: the player's told why.
+qboolean G_RPCheatAllowed( gentity_t *ent ) {
+	const int clientNum = ent - g_entities;
+
+	if ( !sv_cheats.integer && !G_RPAdmin( clientNum ) ) {
+		trap->SendServerCommand( clientNum, va( "print \"%s\n\"", G_GetStringEdString( "MP_SVGAME", "NOCHEATS" ) ) );
+		return qfalse;
+	}
+	if ( G_RPDowned( ent ) ) {
+		G_RP_Msg( clientNum, "Not while you're down" );
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// ClientCommand, a cheat about to run with cheats off: an admin's, logged.
+void G_RPAdminCheat( gentity_t *ent ) {
+	const int clientNum = ent - g_entities;
+
+	G_LogPrintf( "Admin: %s" S_COLOR_WHITE " (account %s, client %i): %s\n", ent->client ? ent->client->pers.netname : "",
+		rpc[clientNum].acc.name, clientNum, ConcatArgs( 0 ) );
+}
+
+// Each frame: an admin's game told what its Admin page shows as it changes
+// (rpadmin), and one no longer an admin told so once (a game too old for
+// it, never).
+void G_RPFrame( void ) {
+	int i;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		rpClient_t *c = &rpc[i];
+		const gentity_t *ent = &g_entities[i];
+		int bits;
+		if ( !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED || c->protocol < RP_PROTOCOL_ADMIN ) {
+			continue;
+		}
+		bits = G_RP_AdminBits( i );
+		if ( bits != c->adminTold ) {
+			c->adminTold = bits;
+			trap->SendServerCommand( i, va( "rpadmin %i", bits ) );
+		}
+	}
+}
+
+/*
+================================================================================
 Logging in and out
 ================================================================================
 */
@@ -903,6 +1021,9 @@ static void G_RP_LogOut( int clientNum, const char *why ) {
 	if ( !c->loggedIn ) {
 		return;
 	}
+	if ( c->acc.admin ) {
+		G_RP_AdminOff( clientNum );	// (an admin's cheats go with the login)
+	}
 	c->loggedIn = qfalse;
 	c->active = -1;
 	if ( g_entities[clientNum].client ) {
@@ -928,8 +1049,12 @@ static void G_RP_LogIn( int clientNum, const rpAccount_t *acc ) {
 			G_RP_LogOut( i, "Logged out: your account logged in somewhere else" );
 		}
 	}
+	if ( c->loggedIn && c->acc.admin && !acc->admin ) {
+		G_RP_AdminOff( clientNum );	// (logged in to another account, one that isn't an admin)
+	}
 	c->loggedIn = qtrue;
 	c->acc = *acc;
+	c->adminTold = -1;	// (another account: its game told where it stands, admin or not)
 	c->fails = 0;
 	c->answering = qtrue;	// (the account sent next answers the login, or the new account)
 	G_RP_Play( clientNum, ( acc->last >= 0 && acc->last < acc->numChars ) ? acc->last : -1, qfalse );
@@ -951,6 +1076,8 @@ static void G_RP_Hello( gentity_t *ent ) {
 		return;
 	}
 	c->capable = qtrue;
+	c->protocol = atoi( arg );
+	c->adminTold = 0;	// (a game started over - a vid_restart - knows nothing yet: told again)
 	if ( c->challenge[0] ) {
 		// a hello again (one lost, or its answer late): the same challenge, so
 		// the answer to either does, until it's used
@@ -1013,10 +1140,7 @@ static void G_RP_NewAccount( gentity_t *ent ) {
 	static rpAccount_t acc;
 	char name[64], hex[128], address[48];
 
-	if ( !G_RPOn() ) {
-		G_RP_Refused( clientNum, "Roleplay is off on this server right now", qfalse );
-		return;
-	}
+	// (roleplay off too: logged in, nothing else changes then - but an admin's cheats)
 	if ( G_RPDowned( ent ) ) {
 		G_RP_Refused( clientNum, "Not while you're down", qfalse );	// (logging in to it: no way up but a hand, or giving up)
 		return;
@@ -1062,10 +1186,7 @@ static void G_RP_Login( gentity_t *ent ) {
 	byte proof[VRC_SHA256_LEN], want[VRC_SHA256_LEN];
 	char challenge[VRRP_CHALLENGE_HEX + 1];
 
-	if ( !G_RPOn() ) {
-		G_RP_Refused( clientNum, "Roleplay is off on this server right now", qfalse );
-		return;
-	}
+	// (roleplay off too, as a new account)
 	if ( G_RPDowned( ent ) ) {
 		G_RP_Refused( clientNum, "Not while you're down", qfalse );	// (another character: no way up but a hand, or giving up)
 		return;
@@ -1216,7 +1337,7 @@ static void G_RP_NewChar( int clientNum, const char *rawName ) {
 	ch->faction = RPF_NEUTRAL;
 	G_RP_RememberLook( clientNum );	// it starts out looking as they do
 	for ( k = 0; k < RP_LOOK_KEYS; k++ ) {
-		Q_strncpyz( ch->look[k], c->lookBase[k], sizeof( ch->look[k] ) );
+		G_RP_CleanText( c->lookBase[k], ch->look[k], sizeof( ch->look[k] ) );	// (as stored: what it's read back as, and nothing more)
 	}
 	G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " made", ch->name ) );
 	G_RP_Play( clientNum, c->acc.numChars - 1, (qboolean)( c->active >= 0 ) );
@@ -1806,7 +1927,7 @@ void G_RPShutdown( void ) {
 
 /*
 ================================================================================
-Rcon: rp list | rename | delete | password
+Rcon: rp list | rename | delete | password | admin | admins
 ================================================================================
 */
 
@@ -1861,7 +1982,8 @@ qboolean G_RPConsoleCommand( void ) {
 	int i, n;
 
 	trap->Argv( 1, sub, sizeof( sub ) );
-	if ( !rp.ready && ( !Q_stricmp( sub, "list" ) || !Q_stricmp( sub, "rename" ) || !Q_stricmp( sub, "delete" ) || !Q_stricmp( sub, "password" ) ) ) {
+	if ( !rp.ready && ( !Q_stricmp( sub, "list" ) || !Q_stricmp( sub, "rename" ) || !Q_stricmp( sub, "delete" ) || !Q_stricmp( sub, "password" ) ||
+		!Q_stricmp( sub, "admin" ) || !Q_stricmp( sub, "admins" ) ) ) {
 		trap->Print( "Roleplay isn't working: %s couldn't be read (mend it, or delete it to start over)\n", RP_SERVER_FILE );
 		return qtrue;	// (a key made now would be over no salt)
 	}
@@ -1873,8 +1995,8 @@ qboolean G_RPConsoleCommand( void ) {
 				continue;
 			}
 			ch = ( rpc[i].loggedIn && rpc[i].active >= 0 && rpc[i].active < rpc[i].acc.numChars ) ? &rpc[i].acc.chars[rpc[i].active] : NULL;
-			trap->Print( "%3i  %-20s  %-20s  %s (%s)\n", i, rpc[i].playerName[0] ? rpc[i].playerName : g_entities[i].client->pers.netname,
-				rpc[i].loggedIn ? rpc[i].acc.name : "-", ch ? ch->name : "-", ch ? rpFactions[ch->faction] : "" );
+			trap->Print( "%3i  %-20s  %-20s  %s (%s)%s\n", i, rpc[i].playerName[0] ? rpc[i].playerName : g_entities[i].client->pers.netname,
+				rpc[i].loggedIn ? rpc[i].acc.name : "-", ch ? ch->name : "-", ch ? rpFactions[ch->faction] : "", G_RPAdmin( i ) ? "  - an admin" : "" );
 		}
 		trap->Print( "Roleplay is %s; %i characters on this server\n", G_RPOn() ? "on" : "off", rpIndexCount );
 		return qtrue;
@@ -1977,6 +2099,59 @@ qboolean G_RPConsoleCommand( void ) {
 			}
 		}
 		trap->Print( "%s's password is now the temporary one: they log in with it, then set their own (New password, in the Roleplay menu)\n", acc->name );
+		return qtrue;
+	}
+	if ( !Q_stricmp( sub, "admin" ) ) {
+		rpAccount_t *acc;
+		char how[16];
+		qboolean on;
+		int who = -1;
+		trap->Argv( 2, arg, sizeof( arg ) );
+		trap->Argv( 3, how, sizeof( how ) );
+		acc = arg[0] ? G_RP_AccountAnywhere( arg, &who ) : NULL;
+		if ( !acc || ( how[0] && Q_stricmp( how, "on" ) && Q_stricmp( how, "off" ) && Q_stricmp( how, "1" ) && Q_stricmp( how, "0" ) ) ) {
+			trap->Print( "usage: rp admin <account> [on|off]%s\n", ( arg[0] && !acc ) ? va( " (no account %s)", arg ) : "" );
+			return qtrue;
+		}
+		if ( !how[0] ) {
+			trap->Print( "%s %s an admin\n", acc->name, acc->admin ? "is" : "isn't" );
+			return qtrue;
+		}
+		on = (qboolean)( !Q_stricmp( how, "on" ) || !Q_stricmp( how, "1" ) );
+		if ( on == acc->admin ) {
+			trap->Print( "%s %s an admin already\n", acc->name, on ? "is" : "isn't" );
+			return qtrue;
+		}
+		acc->admin = on;
+		G_RP_SaveAccount( acc );
+		G_LogPrintf( "Roleplay: %s %s an admin (rcon)\n", acc->name, on ? "made" : "is no longer" );
+		trap->Print( on ? "%s is an admin now: logged in, they can use every cheat\n" : "%s isn't an admin any more\n", acc->name );
+		if ( who >= 0 ) {
+			if ( !on ) {
+				G_RP_AdminOff( who );
+			}
+			G_RP_Msg( who, on ? "You're an admin on this server now: your cheats work here, and the Admin page is at the top of the Roleplay menu" :
+				"You're no longer an admin on this server" );
+		}
+		return qtrue;
+	}
+	if ( !Q_stricmp( sub, "admins" ) ) {
+		static char list[65536];
+		const char *p;
+		const int count = trap->FS_GetFileList( RP_ACCOUNT_DIR, ".txt", list, sizeof( list ) );
+		n = 0;
+		for ( i = 0, p = list; i < count && *p; i++, p += strlen( p ) + 1 ) {
+			char name[RP_ACCOUNT_MAX + 1];
+			const rpAccount_t *acc;
+			int who;
+			COM_StripExtension( p, name, sizeof( name ) );
+			acc = G_RP_AccountAnywhere( name, &who );	// (a player's copy, if they're on)
+			if ( acc && acc->admin ) {
+				trap->Print( "%s%s\n", acc->name, ( who >= 0 && g_entities[who].client ) ? va( "  - here: %s", g_entities[who].client->pers.netname ) : "" );
+				n++;
+			}
+		}
+		trap->Print( "%i admin%s (rp admin <account> on|off)\n", n, n == 1 ? "" : "s" );
 		return qtrue;
 	}
 	return qfalse;	// (on a listen server the host's own rp commands go on to the game as a client's)

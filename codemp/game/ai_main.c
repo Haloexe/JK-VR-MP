@@ -5923,6 +5923,11 @@ void Bot_SetForcedMovement(int bot, int forward, int right, int up)
 {
 	bot_state_t *bs;
 
+	if ( bot < 0 || bot >= MAX_CLIENTS )
+	{ //OpenJK VR: a client number that isn't one (debugBMove_*: a roleplay admin's with cheats off too)
+		return;
+	}
+
 	bs = botstates[bot];
 
 	if (!bs)
