@@ -18,7 +18,10 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   in to an account and play characters of their own (a name, a faction, a
   description and a bio) that everyone sees, with talk that reaches only those
   nearby, speech bubbles, `/me` and out-of-character chat, and character cards
-  you see by looking at someone. Passwords never leave the player's PC.
+  you see by looking at someone. Passwords never leave the player's PC. In a
+  fight, running out of health puts a character down instead of killing them,
+  until someone of their faction helps them up or they give up, and NPCs take
+  sides by the players' factions.
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
   a pose (sit, sit cross-legged, kneel or lie down, with your view at your
   character's eyes and your head and arms still tracked) or reach roleplay;
@@ -80,7 +83,7 @@ settings and commands. Players need the same OpenJK VR version as the server.
 The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
 `cl_voice.cpp`), the renderer (`codemp/rd-vanilla`), the client game
 (`codemp/cgame/cg_vrbody.c`: body, arms, solid blades and haptics) and the server game
-(`codemp/game/g_vrsaber.c`: saber combat; `g_vrrp.c`: roleplay). The "HOW IT WORKS" section of
+(`codemp/game/g_vrsaber.c`: saber combat; `g_vrrp.c`: roleplay; `g_vrdown.c`: down, not dead). The "HOW IT WORKS" section of
 `vr/README-VR.txt` has the details.
 
 ## Credits
