@@ -1515,10 +1515,10 @@ void CG_RP_Notice( const char *text ) {
 
 // The faction of the character you play (-1: none, or roleplay's off).
 int CG_RP_MyFaction( void ) {
-	if ( !cgrp.on || !cgrp.account[0] || cgrp.active < 0 || cgrp.active >= cgrp.numChars ) {
+	if ( !cgrp.on || cgrp.active < 0 || cgrp.active >= cgrp.numChars ) {	// (no account: none played - rpacct)
 		return -1;
 	}
-	return Com_Clampi( RPF_HEROES, RPF_NEUTRAL, cgrp.chars[cgrp.active].faction );
+	return cgrp.chars[cgrp.active].faction;	// (in range: rpchar)
 }
 
 /*

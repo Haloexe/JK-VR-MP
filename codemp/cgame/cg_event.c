@@ -1964,6 +1964,10 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 	case EV_NOAMMO:
 		DEBUGNAME("EV_NOAMMO");
 //		trap->S_StartSound (NULL, es->number, CHAN_AUTO, cgs.media.noAmmoSound );
+		if ( CG_RP_IsDown() )
+		{//OpenJK VR: down in roleplay, the weapon in hand stays (no switching for want of ammo: up, it's seen to) (cg_vrdown.c)
+			break;
+		}
 		if ( es->number == cg.snap->ps.clientNum )
 		{
 			if ( CG_InFighter() || CG_InATST() || cg.snap->ps.weapon == WP_NONE )

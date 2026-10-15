@@ -5,7 +5,10 @@ accounts and logins, characters and factions, and roleplay chat.
 
 THE SWITCH. g_rp 1 turns roleplay on and 0 off, at any time, with no map
 change; the serverinfo "vrRP" says which (and, there at all, that this
-server knows roleplay). Off, the game plays as before; nothing is lost.
+server knows roleplay): "<on> <g_rpCharacters> <g_rpTalkRange>
+<g_rpDowned>" ("0": not ready), games reading the first (atoi, older
+builds too), the Roleplay menu's Server page the rest (ui_vrrp.c). Off,
+the game plays as before; nothing is lost.
 
 ACCOUNTS. A player makes one with /new <name> <password> and logs in with
 /login <name> <password>. Their game (cg_vrrp.c) turns the password into a
@@ -1725,13 +1728,29 @@ void G_RPClientDisconnect( int clientNum ) {
 	trap->Cvar_Set( va( "vrrp%i", clientNum ), "" );
 }
 
+// The serverinfo "vrRP": "0" - roleplay not ready here - or whether it's
+// on, and the settings the Roleplay menu's Server page shows.
+static void G_RP_ServerInfo( void ) {
+	if ( !rp.ready ) {
+		trap->Cvar_Set( "vrRP", "0" );	// (not ready: off, whatever g_rp says)
+		return;
+	}
+	trap->Cvar_Set( "vrRP", va( "%i %i %i %i", g_rp.integer ? 1 : 0, G_RP_MostChars(), g_rpTalkRange.integer,
+		g_rpDowned.integer ? 1 : 0 ) );
+}
+
+// g_rpCharacters, g_rpTalkRange or g_rpDowned changed: the serverinfo follows.
+void G_RPPublishSettings( void ) {
+	G_RP_ServerInfo();
+}
+
 // g_rp changed (or the game started): the serverinfo follows it, and
 // everyone in the game is shown as they now should be.
 void G_RPPublish( void ) {
 	const qboolean on = (qboolean)( g_rp.integer != 0 );
 	int i;
 
-	trap->Cvar_Set( "vrRP", ( on && rp.ready ) ? "1" : "0" );
+	G_RP_ServerInfo();
 	if ( !rp.ready || on == rp.on ) {
 		return;
 	}
@@ -1759,7 +1778,7 @@ void G_RPInit( void ) {
 	memset( rpLocks, 0, sizeof( rpLocks ) );
 	memset( rpMade, 0, sizeof( rpMade ) );
 	if ( !G_RP_LoadServer() ) {
-		trap->Cvar_Set( "vrRP", "0" );
+		G_RP_ServerInfo();
 		return;	// (not ready: off, whatever g_rp says)
 	}
 	G_RP_IndexBuild();
@@ -1768,7 +1787,7 @@ void G_RPInit( void ) {
 	}
 	rp.ready = qtrue;
 	rp.on = (qboolean)( g_rp.integer != 0 );
-	trap->Cvar_Set( "vrRP", rp.on ? "1" : "0" );
+	G_RP_ServerInfo();
 }
 
 void G_RPShutdown( void ) {

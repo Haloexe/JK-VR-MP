@@ -808,6 +808,7 @@ struct gclient_s {
 	int			rpDownDamage;		// ...with this blow (giving up, they die of it)
 	int			rpGiveUpFrom;		// level.time they've held attack since, giving up (0: not)
 	qboolean	rpAttackFree;		// attack let go of since they went down (held then, it doesn't give up)
+	int			rpDownHazard;		// what of a map's hazards they still bear, down, before one kills
 	int			rpHelping;			// whom they're getting up (client number + 1; 0: nobody)...
 	int			rpHelpFrom;			// ...since then
 	int			rpProvoked;			// NPCs' sides they attacked this life (1 << npcteam_t): those fight back
@@ -1066,6 +1067,7 @@ gentity_t	*G_BotTakeUpDuel( gentity_t *bot );
 void		G_RPInit( void );
 void		G_RPShutdown( void );
 void		G_RPPublish( void );
+void		G_RPPublishSettings( void );
 qboolean	G_RPOn( void );
 void		G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot );
 void		G_RPClientDisconnect( int clientNum );
@@ -1082,8 +1084,8 @@ qboolean	G_RPCapable( int clientNum );
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
 qboolean	G_RPDowned( const gentity_t *ent );
-qboolean	G_RPDownGuard( gentity_t *targ, gentity_t *attacker, int mod );
-qboolean	G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, const vec3_t point, int damage, int mod );
+qboolean	G_RPDownGuard( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, int damage, int dflags, int mod );
+qboolean	G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, const vec3_t point, int damage, int dflags, int mod );
 void		G_RPDownDied( gentity_t *self );
 void		G_RPGiveUp( gentity_t *ent );
 void		G_RPGiveUpCommand( gentity_t *ent );

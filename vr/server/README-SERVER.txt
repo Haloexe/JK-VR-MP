@@ -121,13 +121,17 @@ update.
                             until someone of their faction gets them up
                             (3 s holding use on them) or they give up
                             (attack held 1.5 s, the wheel, /kill: the kill
-                            is whoever put them down's); a map's hazards
-                            still kill; bots die as ever
+                            is whoever put them down's; going to spectate
+                            or another team is giving up); a map's hazards
+                            still kill (a door's bump, a breath of water
+                            borne); bots die as ever
 NPCs take sides by the players' factions: the light side's are with the
 Heroes, the dark side's with the Villains; Neutral are left alone until
 they attack one. Nobody's NPCs, turrets or sentries harm someone down.
 The log says who went down, by whom, who got whom up and who gave up
-(lines starting "Roleplay:").
+(lines starting "Roleplay:"). The serverinfo's "vrRP" says whether
+roleplay's on, and these settings: "<on> <g_rpCharacters> <g_rpTalkRange>
+<g_rpDowned>" ("0": roleplay isn't ready here - see the console).
   rp list                   who plays which character, on which account
   rp rename <player> <name> give someone's character another name
   rp delete <account> <character>   delete a character (online or not)

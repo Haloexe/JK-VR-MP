@@ -874,6 +874,10 @@ void SetTeam( gentity_t *ent, char *s ) {
 	// he starts at 'base'
 	client->pers.teamState.state = TEAM_BEGIN;
 	if ( oldTeam != TEAM_SPECTATOR ) {
+		if ( G_RPDowned( ent ) )
+		{//OpenJK VR: down in roleplay, going to spectate or another team is giving up first - the death whoever put them down's (g_vrdown.c)
+			G_RPGiveUp( ent );
+		}
 		// Kill him (makes sure he loses flags, etc)
 		ent->flags &= ~FL_GODMODE;
 		ent->client->ps.stats[STAT_HEALTH] = ent->health = 0;

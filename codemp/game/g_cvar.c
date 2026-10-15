@@ -71,6 +71,10 @@ static void CVU_RP(void) {
 	G_RPPublish();	// OpenJK VR: roleplay on or off, at once (g_vrrp.c)
 }
 
+static void CVU_RPSettings(void) {
+	G_RPPublishSettings();	// OpenJK VR: the serverinfo "vrRP" says g_rpCharacters, g_rpTalkRange and g_rpDowned (g_vrrp.c)
+}
+
 static void CVU_VRSaberWeights(void) {
 	G_VRSaberWeightsChanged();	// OpenJK VR: g_vrSaberLight / Medium / Heavy
 }

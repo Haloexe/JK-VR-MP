@@ -11,10 +11,13 @@ able to talk but not to move, fight, switch weapons, use things or the
 Force (a charge held - a thermal cooking - is let go of unfired). Nothing
 harms them there - there's no finishing blow, no shove, no seeker of theirs
 fights on - bar a map's own hazards, which kill as ever: a pit, its water,
-lava and slime, its doors, lifts and crushers, kill zones, lasers and
-lightning, a spawn or teleporter onto them (G_RP_Hazard: by what does it
-and whose - a rancor's foot, a walker's, a flamethrower, a thrown crate, a
-wreck blowing up aren't the map's). There's no timer: they stay down until
+lava and slime, its doors, lifts and crushers, kill zones, lasers, fire and
+lightning, its breakables blowing up, a spawn or teleporter onto them
+(G_RP_Hazard: by what does it and whose - a rancor's foot, a walker's, a
+flamethrower, a thrown crate, a turret's or a wreck's blast aren't the
+map's). Down, they bear RP_DOWN_HAZARD of a hazard first - a door's bump, a
+breath of water - and what comes past that kills. There's no timer: they
+stay down until
   - someone of their faction gets them up: looks at them (aims at them, or
     their headset looks: G_VRHeadGaze), near enough, and holds use (in the
     headset, the right grip) for RP_HELP_TIME; they get up with
@@ -26,10 +29,12 @@ wreck blowing up aren't the map's). There's no timer: they stay down until
     the pusher's), to respawn as ever; their character gone from under
     them (their account logged in somewhere else) is giving up too;
   - it no longer applies to them - roleplay or g_rpDowned off: they get up.
-Bots, players not playing a character, anyone riding something, at a gun
-or in a monster's jaws die as ever. A private duel's loser goes down
-instead (g_vrduel.c). Down, nothing of the character changes: no logging
-in or out, no switching, deleting or changing faction.
+Bots, players not playing a character (or whose game doesn't run this
+build: it would see itself standing), anyone riding something, at a gun or
+in a monster's jaws die as ever, and a body stays dead. A private duel's
+loser goes down instead (g_vrduel.c). Down, nothing of the character
+changes: no logging in or out, no switching, deleting or changing faction;
+going to spectate or another team is giving up first.
 
 NPCS. Each NPC is on a side (playerTeam): the light side (NPCTEAM_PLAYER:
 Jedi, Rebels), the dark side (NPCTEAM_ENEMY: Sith, Reborn, Imperials,
@@ -71,11 +76,12 @@ extern char *modNames[MOD_MAX];	// (g_combat.c)
 #define RP_HELP_WIDE	40.0f	// ...looking this close to it
 #define RP_SEE_DOWN		12.0f	// the middle of someone down: this far under where they are (on the floor)
 #define RP_HELP_TELL_GAP	250	// ms: what a player's hand is doing is told them at most this often (use pressed again and again)
+#define RP_DOWN_HAZARD	25		// what a map's hazards take of someone down before they kill (a door's bump, a breath of water: borne)
 
 static int rpDownTold[MAX_CLIENTS];	// what everyone was last told of each client: down (their faction) or up (-1)
 static int rpHelpTold[MAX_CLIENTS];	// whom each player, and they, were last told the player's getting up (-1: nobody)...
 static int rpHelpToldFrom[MAX_CLIENTS];	// ...since (level.time)
-static int rpHelpToldAt[MAX_CLIENTS];	// level.time either was last told anything of it (0: never)
+static int rpHelpToldAt[MAX_CLIENTS];	// level.time either was last told anything of it
 static int rpHelpDone[MAX_CLIENTS];	// whom each player just got up (-1: nobody), for the telling
 static qboolean rpDownInit;
 
@@ -94,10 +100,10 @@ static qboolean G_RP_InGame( const gentity_t *ent ) {
 		ent->client->sess.sessionTeam != TEAM_SPECTATOR && !( ent->client->ps.pm_flags & PMF_FOLLOW ) );
 }
 
-// A command for a player's game, if it runs this build.
+// A command for a player's game, if it runs this build (it said so, in
+// the game: g_vrrp.c - and is no longer, gone).
 static void G_RP_Tell( int clientNum, const char *text ) {
-	if ( clientNum >= 0 && clientNum < MAX_CLIENTS && g_entities[clientNum].inuse && g_entities[clientNum].client &&
-		g_entities[clientNum].client->pers.connected == CON_CONNECTED && G_RPCapable( clientNum ) ) {
+	if ( G_RPCapable( clientNum ) ) {
 		trap->SendServerCommand( clientNum, text );
 	}
 }
@@ -112,26 +118,30 @@ qboolean G_RPDowned( const gentity_t *ent ) {
 }
 
 // A map's own hazards kill as ever, down or not: somewhere no hand reaches.
-// By what does it and whose: what a player or an NPC does - a rancor's
-// foot, a walker's, a flamethrower, a crate thrown, a wreck blowing up -
-// isn't the map's.
-static qboolean G_RP_Hazard( const gentity_t *targ, const gentity_t *attacker, int mod ) {
+// By what does it and whose (G_Damage's inflictor and attacker - nobody's:
+// the world's - and how): what a player or an NPC does - a rancor's foot, a
+// walker's, a flamethrower, a crate thrown, a turret's shot - and a wreck's
+// blast aren't the map's.
+static qboolean G_RP_Hazard( const gentity_t *targ, const gentity_t *inflictor, const gentity_t *attacker, int dflags, int mod ) {
 	const qboolean world = (qboolean)( !attacker || attacker == targ || attacker->s.number == ENTITYNUM_WORLD );
 
 	switch ( mod ) {
 	case MOD_TELEFRAG:		// (two can't stand in one place: a spawn, a teleporter)
-	case MOD_TARGET_LASER:	// (a map's laser, whoever switched it on)
 	case MOD_TRIGGER_HURT:	// (a map's kill zone, whoever set it off)
 	case MOD_TEAM_CHANGE:
 		return qtrue;
+	case MOD_TARGET_LASER:	// (a map's laser, whoever switched it on; not a turret's shot)
+		return (qboolean)( inflictor && !Q_stricmp( inflictor->classname, "target_laser" ) );
 	case MOD_WATER:
 	case MOD_SLIME:
 	case MOD_LAVA:
 		return world;		// (under water, in a pool of it; not a flamethrower)
 	case MOD_CRUSH:
 		return (qboolean)( world || attacker->s.eType == ET_MOVER );	// (a door, a lift, a crusher; not a foot, nor a crate)
-	case MOD_SUICIDE:
-		return (qboolean)( world || ( attacker->classname && !Q_stricmpn( attacker->classname, "trigger_", 8 ) ) );	// (a map's lightning; not a wreck)
+	case MOD_SUICIDE:		// (a map's lightning; not a wreck's blast - nobody's, all round it)
+		return (qboolean)( ( world && !( dflags & DAMAGE_RADIUS ) ) || ( attacker && !Q_stricmpn( attacker->classname, "trigger_", 8 ) ) );
+	case MOD_UNKNOWN:		// (a map's fire, its breakables blowing up; not someone's)
+		return (qboolean)( world || !attacker->client );
 	case MOD_FALLING:
 		return (qboolean)( targ->client && targ->client->ps.fallingToDeath );	// (a pit: a fall that just hurts downs you)
 	default:
@@ -140,25 +150,28 @@ static qboolean G_RP_Hazard( const gentity_t *targ, const gentity_t *attacker, i
 }
 
 // Whether a player whose health is running out goes down (rather than dying).
-static qboolean G_RP_GoesDown( const gentity_t *targ, const gentity_t *attacker, int mod ) {
+static qboolean G_RP_GoesDown( const gentity_t *targ, const gentity_t *inflictor, const gentity_t *attacker, int dflags, int mod ) {
 	const gclient_t *cl = targ->client;
 
 	if ( !cl || targ->s.number < 0 || targ->s.number >= MAX_CLIENTS || !G_RPDownOn() || level.intermissiontime ) {
 		return qfalse;
 	}
-	if ( ( targ->r.svFlags & SVF_BOT ) || G_RPFaction( targ->s.number ) < 0 ) {
-		return qfalse;	// (bots as ever; and no faction, no one to get them up)
+	if ( cl->ps.pm_type == PM_DEAD ) {
+		return qfalse;	// (a body - shot at, kicked: dead already)
+	}
+	if ( ( targ->r.svFlags & SVF_BOT ) || G_RPFaction( targ->s.number ) < 0 || !G_RPCapable( targ->s.number ) ) {
+		return qfalse;	// (bots as ever; no faction, no one to get them up; a game that doesn't know down would see itself standing)
 	}
 	if ( cl->sess.sessionTeam == TEAM_SPECTATOR || cl->ps.m_iVehicleNum || cl->ps.emplacedIndex ||
 		( cl->ps.eFlags2 & EF2_HELD_BY_MONSTER ) ) {
 		return qfalse;	// (riding, at a gun, or in a monster's jaws: as ever)
 	}
-	return (qboolean)!G_RP_Hazard( targ, attacker, mod );
+	return (qboolean)!G_RP_Hazard( targ, inflictor, attacker, dflags, mod );
 }
 
 // Whether someone down stays down (qfalse: it no longer applies to them).
 static qboolean G_RP_StaysDown( const gentity_t *ent ) {
-	return (qboolean)( G_RPDownOn() && G_RP_InGame( ent ) && ent->health > 0 && G_RPFaction( ent->s.number ) >= 0 );
+	return (qboolean)( G_RPDownOn() && G_RP_InGame( ent ) && G_RPFaction( ent->s.number ) >= 0 );
 }
 
 // The sabers off (going down; and kept off, down).
@@ -179,8 +192,10 @@ static void G_RP_SabersAway( gentity_t *ent, qboolean quiet ) {
 }
 
 // Whom a death now would be credited to, as player_die works it out: a map
-// turret's to whoever switched it on; a fall (not a pit), a crush... the
-// world's to whoever pushed them into it lately.
+// turret's to whoever switched it on; a fall (not a pit), a crush (not a
+// door's)... the world's to whoever pushed them into it lately. (What else
+// player_die credits so - a kill zone, a map's own - are hazards: no one
+// goes down of them.)
 static gentity_t *G_RP_Credit( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, int mod ) {
 	const gclient_t *cl = targ->client;
 
@@ -191,8 +206,7 @@ static gentity_t *G_RP_Credit( gentity_t *targ, gentity_t *inflictor, gentity_t 
 		inflictor->activator->inuse && inflictor->s.weapon == WP_TURRET ) {
 		attacker = inflictor->activator;
 	}
-	if ( ( attacker == targ || !attacker->client ) &&
-		( mod == MOD_CRUSH || mod == MOD_FALLING || mod == MOD_TRIGGER_HURT || mod == MOD_UNKNOWN ) &&
+	if ( ( attacker == targ || !attacker->client ) && ( mod == MOD_CRUSH || mod == MOD_FALLING ) &&
 		cl->ps.otherKillerTime > level.time && cl->ps.otherKiller >= 0 && cl->ps.otherKiller < ENTITYNUM_MAX_NORMAL ) {
 		attacker = &g_entities[cl->ps.otherKiller];
 	}
@@ -238,20 +252,36 @@ Going down, getting up, giving up
 ================================================================================
 */
 
-// G_Damage, before anything's done: someone down takes no more harm, bar
-// a map's hazards (and a monster's jaws: grabbed, they're eaten).
-qboolean G_RPDownGuard( gentity_t *targ, gentity_t *attacker, int mod ) {
-	return (qboolean)( G_RPDowned( targ ) && !( targ->client->ps.eFlags2 & EF2_HELD_BY_MONSTER ) &&
-		!G_RP_Hazard( targ, attacker, mod ) );
+// G_Damage, before anything's done: someone down takes no more harm (qtrue)
+// - bar a monster's jaws (grabbed, they're eaten) and a map's hazards: of
+// those they bear RP_DOWN_HAZARD, and what comes past that kills.
+qboolean G_RPDownGuard( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, int damage, int dflags, int mod ) {
+	gclient_t *cl;
+
+	if ( !G_RPDowned( targ ) ) {
+		return qfalse;
+	}
+	cl = targ->client;
+	if ( cl->ps.eFlags2 & EF2_HELD_BY_MONSTER ) {
+		return qfalse;
+	}
+	if ( !G_RP_Hazard( targ, inflictor, attacker, dflags, mod ) ) {
+		return qtrue;
+	}
+	if ( damage < cl->rpDownHazard ) {
+		cl->rpDownHazard -= damage;	// (borne)
+		return qtrue;
+	}
+	return qfalse;
 }
 
 // G_Damage, a player's health run out: down instead of dying? (qtrue: down)
-qboolean G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, const vec3_t point, int damage, int mod ) {
+qboolean G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, const vec3_t point, int damage, int dflags, int mod ) {
 	gclient_t *cl = targ->client;
 	gentity_t *by;
 	int i;
 
-	if ( G_RPDowned( targ ) || !G_RP_GoesDown( targ, attacker, mod ) ) {
+	if ( G_RPDowned( targ ) || !G_RP_GoesDown( targ, inflictor, attacker, dflags, mod ) ) {
 		return qfalse;	// (down already, what still reaches them kills: a hazard; player_die says they're up)
 	}
 	by = G_RP_Credit( targ, inflictor, attacker, mod );
@@ -263,6 +293,7 @@ qboolean G_RPDown( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, c
 	cl->rpDownDamage = damage;
 	cl->rpGiveUpFrom = 0;
 	cl->rpAttackFree = qfalse;
+	cl->rpDownHazard = RP_DOWN_HAZARD;
 	targ->health = cl->ps.stats[STAT_HEALTH] = 1;
 	if ( point ) {
 		VectorCopy( point, targ->pos1 );	// (where the blow landed, for the death when they give up: G_Damage's)
@@ -306,8 +337,6 @@ static void G_RP_GetUp( gentity_t *ent, gentity_t *helper ) {
 	const int most = cl->ps.stats[STAT_MAX_HEALTH] > 0 ? cl->ps.stats[STAT_MAX_HEALTH] : 100;
 
 	cl->rpDowned = qfalse;
-	cl->rpGiveUpFrom = 0;
-	cl->rpAttackFree = qfalse;
 	if ( ent->health < RP_UP_HEALTH ) {
 		ent->health = Q_min( RP_UP_HEALTH, most );
 	}
@@ -334,6 +363,7 @@ void G_RPGiveUp( gentity_t *ent ) {
 	damage = cl->rpDownDamage;
 	G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " gave up\n", cl->pers.netname );
 	ent->health = cl->ps.stats[STAT_HEALTH] = 0;
+	cl->ps.otherKillerTime = 0;	// (whose it is was worked out going down: not whoever kicked the body since - player_die)
 	ent->enemy = by;
 	player_die( ent, by, by, damage, mod );	// (player_die: no longer down)
 }
@@ -350,8 +380,6 @@ void G_RPDownDied( gentity_t *self ) {
 	G_RP_HelpOver( self, qfalse );
 	if ( cl->rpDowned ) {
 		cl->rpDowned = qfalse;
-		cl->rpGiveUpFrom = 0;
-		cl->rpAttackFree = qfalse;
 		BG_VRPoseSet( &cl->ps, VRPOSE_NONE );	// (the body as it lies: the game's own death from there)
 	}
 }
@@ -417,7 +445,7 @@ static qboolean G_RP_CanHelp( const gentity_t *ent ) {
 	const gclient_t *cl = ent->client;
 
 	return (qboolean)( G_RPDownOn() && G_RP_InGame( ent ) && ent->health > 0 && cl->ps.pm_type != PM_DEAD &&
-		!cl->rpDowned && !cl->ps.duelInProgress && !cl->ps.m_iVehicleNum && G_RPFaction( ent->s.number ) >= 0 );
+		!cl->rpDowned && !cl->ps.duelInProgress && !cl->ps.m_iVehicleNum );	// (no faction: nobody's theirs to get up, G_RP_HelpWhom)
 }
 
 // Whom ent, holding use, is getting up: someone down, of their faction,
@@ -458,20 +486,23 @@ static void G_RP_Help( gentity_t *ent, const usercmd_t *ucmd ) {
 	}
 }
 
-// Down: giving up (attack held), and nothing else they press does anything
-// (the move keeps them still: bg_vrpose.c).
-static void G_RP_DownCommand( gentity_t *ent, usercmd_t *ucmd ) {
+// Down: giving up (attack held, where down still holds: mayGiveUp), and
+// nothing else they press does anything - here (pers.cmd: what's used,
+// TryUse...), and in the move (bg_vrpose.c).
+static void G_RP_DownCommand( gentity_t *ent, usercmd_t *ucmd, qboolean mayGiveUp ) {
 	gclient_t *cl = ent->client;
 
 	if ( !( ucmd->buttons & BUTTON_ATTACK ) ) {
 		cl->rpAttackFree = qtrue;
 		cl->rpGiveUpFrom = 0;
-	} else if ( cl->rpAttackFree ) {
+	} else if ( cl->rpAttackFree && mayGiveUp ) {
 		if ( !cl->rpGiveUpFrom ) {
 			cl->rpGiveUpFrom = level.time;
 		} else if ( level.time - cl->rpGiveUpFrom >= RP_GIVEUP_TIME ) {
 			G_RPGiveUp( ent );
-			return;
+			if ( !G_RPDowned( ent ) ) {
+				return;	// (dead: their command's their own; refused - the round over - down still)
+			}
 		}
 	}
 	ucmd->buttons &= ~( BUTTON_ATTACK | BUTTON_ALT_ATTACK | BUTTON_USE | BUTTON_USE_HOLDABLE | BUTTON_GESTURE |
@@ -488,9 +519,7 @@ void G_RPDownThink( gentity_t *ent, usercmd_t *ucmd ) {
 	}
 	if ( ent->client->rpDowned ) {
 		G_RP_HelpOver( ent, qfalse );	// (a hand they were giving: gone with them)
-		if ( G_RP_StaysDown( ent ) ) {
-			G_RP_DownCommand( ent, ucmd );
-		}	// (if not, G_RPDownFrame gets them up)
+		G_RP_DownCommand( ent, ucmd, G_RP_StaysDown( ent ) );	// (no longer down here: G_RPDownFrame gets them up)
 	} else {
 		G_RP_Help( ent, ucmd );
 	}
@@ -525,13 +554,13 @@ static int G_RP_Side( int faction ) {
 int G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent ) {
 	int faction, side;
 
-	if ( !npc || !npc->client || !ent || !ent->client || ent->s.number < 0 || ent->s.number >= MAX_CLIENTS || !G_RPOn() ) {
+	if ( !npc || !npc->client || !ent || !ent->client ) {
 		return -1;
 	}
 	if ( ent->client->rpDowned ) {
 		return 0;	// (nobody harms someone down)
 	}
-	faction = G_RPFaction( ent->s.number );
+	faction = G_RPFaction( ent->s.number );	// (-1: roleplay off, no character, not a player)
 	if ( faction < 0 || ( ent->r.svFlags & SVF_BOT ) || level.gametype == GT_SIEGE ) {
 		return -1;
 	}
@@ -555,7 +584,7 @@ void G_RPProvoke( gentity_t *attacker, gentity_t *targ ) {
 	int faction, side;
 
 	if ( !attacker || !attacker->client || attacker->s.number < 0 || attacker->s.number >= MAX_CLIENTS ||
-		!targ || targ == attacker || !targ->NPC || !targ->client || !G_RPOn() ) {
+		!targ || targ == attacker || !targ->NPC || !targ->client ) {
 		return;
 	}
 	faction = G_RPFaction( attacker->s.number );
@@ -603,8 +632,8 @@ static void G_RP_HelpTell( int i ) {
 	if ( now == rpHelpTold[i] && ( now < 0 || from == rpHelpToldFrom[i] ) ) {
 		return;	// (nothing new)
 	}
-	if ( here && rpHelpToldAt[i] && level.time - rpHelpToldAt[i] < RP_HELP_TELL_GAP ) {
-		return;	// (told a moment ago: this waits)
+	if ( here && level.time - rpHelpToldAt[i] < RP_HELP_TELL_GAP ) {
+		return;	// (told a moment ago: this waits; never told - the level's first frames run before anyone's in)
 	}
 	if ( rpHelpTold[i] >= 0 ) {
 		Com_sprintf( text, sizeof( text ), "rpup %i %i %i", i, rpHelpTold[i], ( rpHelpDone[i] == rpHelpTold[i] ) ? -1 : 0 );
@@ -618,8 +647,39 @@ static void G_RP_HelpTell( int i ) {
 	}
 	rpHelpTold[i] = now;
 	rpHelpToldFrom[i] = from;
-	rpHelpToldAt[i] = level.time ? level.time : 1;
+	rpHelpToldAt[i] = level.time;
 	rpHelpDone[i] = -1;
+}
+
+// Nobody told anything yet (the game started: the first frame, or a
+// player's game saying hello before it).
+static void G_RP_DownInit( void ) {
+	int i;
+
+	if ( rpDownInit ) {
+		return;
+	}
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		rpDownTold[i] = rpHelpTold[i] = rpHelpDone[i] = -1;
+		rpHelpToldFrom[i] = rpHelpToldAt[i] = 0;
+	}
+	rpDownInit = qtrue;
+}
+
+// Someone down who no longer stays down: dead some other way (the body as
+// it lies - not up), no longer down here (up), or their character gone
+// from under them (logged in somewhere else: no way up - given up).
+static void G_RP_DownCheck( gentity_t *ent ) {
+	if ( ent->health <= 0 || ent->client->ps.pm_type == PM_DEAD ) {
+		G_RPDownDied( ent );
+	} else if ( level.intermissiontime || level.intermissionQueued || G_RP_StaysDown( ent ) ) {
+		return;	// (as they are, the round over: it's all reset after)
+	} else if ( G_RPDownOn() && G_RP_InGame( ent ) ) {
+		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " lost their character, down\n", ent->client->pers.netname );
+		G_RPGiveUp( ent );
+	} else {
+		G_RP_GetUp( ent, NULL );
+	}
 }
 
 // G_RunFrame, before the players' end of frame: sides, who no longer stays
@@ -627,26 +687,15 @@ static void G_RP_HelpTell( int i ) {
 void G_RPDownFrame( void ) {
 	int i, j;
 
-	if ( !rpDownInit ) {
-		for ( i = 0; i < MAX_CLIENTS; i++ ) {
-			rpDownTold[i] = rpHelpTold[i] = rpHelpDone[i] = -1;
-			rpHelpToldFrom[i] = rpHelpToldAt[i] = 0;
-		}
-		rpDownInit = qtrue;
-	}
+	G_RP_DownInit();
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
 		gentity_t *ent = &g_entities[i];
 		int now = -1;
 
 		if ( i < level.maxclients && ent->inuse && ent->client && ent->client->pers.connected == CON_CONNECTED ) {
 			G_RP_Sides( ent );
-			if ( ent->client->rpDowned && !level.intermissiontime && !level.intermissionQueued && !G_RP_StaysDown( ent ) ) {
-				if ( G_RPDownOn() && G_RP_InGame( ent ) && ent->health > 0 ) {
-					G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " lost their character, down\n", ent->client->pers.netname );
-					G_RPGiveUp( ent );	// (their character gone from under them - logged in somewhere else: no way up)
-				} else {
-					G_RP_GetUp( ent, NULL );
-				}
+			if ( ent->client->rpDowned ) {
+				G_RP_DownCheck( ent );
 			}
 			if ( ent->client->rpDowned ) {
 				now = G_RPFaction( i );
@@ -667,16 +716,18 @@ void G_RPDownFrame( void ) {
 	}
 }
 
-// A player's game says it runs this build: who's down.
+// A player's game says it runs this build (again, after a restart): who's
+// down, and whom they're getting up or who's getting them up - as told.
 void G_RPDownHello( int clientNum ) {
 	int i;
 
-	if ( !rpDownInit ) {
-		return;
-	}
+	G_RP_DownInit();
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
 		if ( rpDownTold[i] >= 0 ) {
 			G_RP_Tell( clientNum, va( "rpdn %i %i", i, rpDownTold[i] ) );
+		}
+		if ( rpHelpTold[i] >= 0 && ( i == clientNum || rpHelpTold[i] == clientNum ) ) {
+			G_RP_Tell( clientNum, va( "rpup %i %i %i", i, rpHelpTold[i], rpHelpToldFrom[i] > 0 ? rpHelpToldFrom[i] : 1 ) );
 		}
 	}
 }

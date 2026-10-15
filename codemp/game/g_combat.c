@@ -4438,7 +4438,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		return;
 	}
 
-	if ( G_RPDownGuard( targ, attacker, mod ) )
+	if ( G_RPDownGuard( targ, inflictor, attacker, damage, dflags, mod ) )
 	{//OpenJK VR: roleplay - no more harm to someone down (no finishing blow), bar a map's hazards (g_vrdown.c)
 		return;
 	}
@@ -5474,7 +5474,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 
 		if ( targ->health <= 0 ) {
-			if ( G_RPDown( targ, inflictor, attacker, point, take, mod ) )
+			if ( G_RPDown( targ, inflictor, attacker, point, take, dflags, mod ) )
 			{//OpenJK VR: roleplay - a player playing a character goes down instead (g_vrdown.c)
 				return;
 			}

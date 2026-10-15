@@ -496,22 +496,35 @@ What the buttons do (uiScript vrRP <what> ...)
 --------------------------------------------------------------------------------
 */
 
-// A setting of the server you're on, for the Server page: as its
-// serverinfo has it - a server older than this doesn't say: what was set
-// here last, or the default.
-static void UI_VRRP_FromServer( const char *info, const char *key, const char *cvar, const char *def ) {
-	const char *value = Info_ValueForKey( info, key );
+// What was set here last, or the default.
+static void UI_VRRP_Keep( const char *cvar, const char *def ) {
 	char now[16];
 
-	if ( value[0] ) {
-		trap->Cvar_Set( cvar, !Q_stricmp( key, "g_rpDowned" ) ? ( atoi( value ) ? "1" : "0" ) :
-			!Q_stricmp( key, "g_rpCharacters" ) ? va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, atoi( value ) ) ) : va( "%i", atoi( value ) ) );
-		return;
-	}
 	UI_VRRP_Str( cvar, now, sizeof( now ) );
 	if ( !now[0] ) {
 		trap->Cvar_Set( cvar, def );
 	}
+}
+
+// The settings of the server you're on, for the Server page: as its
+// serverinfo has them ("vrRP": on, characters, talk range, down -
+// g_vrrp.c); a server older than this doesn't say: what was set here
+// last, or the defaults.
+static void UI_VRRP_FromServer( void ) {
+	char info[MAX_INFO_STRING];
+	int on, chars, range, downed;
+
+	info[0] = 0;
+	trap->GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
+	if ( sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d", &on, &chars, &range, &downed ) == 4 ) {
+		trap->Cvar_Set( "ui_rpSrvChars", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, chars ) ) );
+		trap->Cvar_Set( "ui_rpSrvRange", va( "%i", range ) );
+		trap->Cvar_Set( "ui_rpSrvDowned", downed ? "1" : "0" );
+		return;
+	}
+	UI_VRRP_Keep( "ui_rpSrvChars", "5" );
+	UI_VRRP_Keep( "ui_rpSrvRange", "510" );
+	UI_VRRP_Keep( "ui_rpSrvDowned", "1" );
 }
 
 // A page shown: what it needs, got.
@@ -536,13 +549,7 @@ static void UI_VRRP_Page( int page ) {
 			UI_VRRP_Str( "g_rpDowned", downed, sizeof( downed ) );	// ("": the game's not made it yet - its default)
 			trap->Cvar_Set( "ui_rpSrvDowned", ( !downed[0] || atoi( downed ) ) ? "1" : "0" );
 		} else {
-			// another server's: as its serverinfo has them
-			char info[MAX_INFO_STRING];
-			info[0] = 0;
-			trap->GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
-			UI_VRRP_FromServer( info, "g_rpCharacters", "ui_rpSrvChars", "5" );
-			UI_VRRP_FromServer( info, "g_rpTalkRange", "ui_rpSrvRange", "510" );
-			UI_VRRP_FromServer( info, "g_rpDowned", "ui_rpSrvDowned", "1" );
+			UI_VRRP_FromServer();	// (another server's: as its serverinfo has them)
 		}
 		break;
 	default:

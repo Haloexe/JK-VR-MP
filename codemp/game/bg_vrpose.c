@@ -228,7 +228,7 @@ qboolean BG_VRDowned( const playerState_t *ps ) {
 static qboolean BG_VRP_Downed( playerState_t *ps, usercmd_t *cmd, animation_t *animations ) {
 	const bgVRPose_t *vp = &bgVRPoses[VRPOSE_DOWNED];
 
-	if ( ps->pm_type == PM_NORMAL || ps->pm_type == PM_JETPACK || ps->pm_type == PM_FLOAT ) {
+	if ( ps->pm_type == PM_NORMAL || ps->pm_type == PM_FLOAT ) {	// (alive: a grip letting go - a moment still lifted - too)
 		const int phase = BG_VRPosePhase( ps, animations, NULL, NULL );
 		ps->forceHandExtend = HANDEXTEND_NONE;
 		ps->forceHandExtendTime = 0;

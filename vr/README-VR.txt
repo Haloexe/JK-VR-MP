@@ -434,13 +434,16 @@ the headset, the right grip) for 3 seconds, and you're up with 25 health;
 a bar fills for both of you as they do. Or you give up: hold attack (the
 trigger) for 1.5 s - a press made after going down - or Give up on the
 wheel's Roleplay ring, or /kill; you die as you would have (the kill is
-whoever put you down's) and respawn. A map's own hazards still kill, down
-or not: a pit, water (lying in it, a hand's depth drowns you in 12 s
-unless someone gets you up), lava and slime, doors, lifts and crushers,
-kill zones, lasers, lightning. A duel's loser goes down. Bots, players not
-playing a character, and anyone riding a vehicle, at a gun or in a
-monster's jaws die as ever. While you're down your character stays as it
-is: no logging in or out, switching, deleting or changing faction.
+whoever put you down's) and respawn; going to spectate, or to another
+team, while you're down is giving up too. A map's own hazards still kill,
+down or not - a door's bump or a breath of water is borne, but not much
+more: a pit, water (lying in it, a hand's depth drowns you in about 16 s
+unless someone gets you up), lava and slime, crushers, kill zones, lasers,
+fire, lightning, things of the map's blowing up. A duel's loser goes down.
+Bots, players not playing a character, and anyone riding a vehicle, at a
+gun or in a monster's jaws die as ever. While you're down your character
+stays as it is: no logging in or out, switching, deleting or changing
+faction.
   NPCs take sides: the light side's (Jedi, rebels) are with the Heroes and
 go after Villains, the dark side's (Sith, stormtroopers, mercenaries) are
 with the Villains and go after Heroes; Neutral characters are left alone -

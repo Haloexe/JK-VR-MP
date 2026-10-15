@@ -179,14 +179,16 @@ static qboolean CG_RP_DownSees( int n, const vec3_t start, const vec3_t dir, flo
 // Someone down you look at, near enough to get them up - by your aim (your
 // eye point and view, as the server has them: a VR player's right hand,
 // holding a gun) or where your headset looks (from the camera, as your
-// avatar tells the server) - the nearest your look; -1: nobody.
+// avatar tells the server) - the nearest your look, of your faction first
+// (whom use gets up: the server's G_RP_HelpWhom); -1: nobody.
 static int CG_RP_DownLook( void ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
+	const int mine = CG_RP_MyFaction();
 	vec3_t aimFrom, aim, headFrom, head;
 	matrix3_t axis;
 	qboolean gaze;
-	float bestOff = 0.0f, off;
-	int i, best = -1;
+	float bestOff = 0.0f, mineOff = 0.0f, off;
+	int i, best = -1, bestMine = -1;
 
 	if ( CG_RP_IsDown() || ps->clientNum != cg.clientNum || ps->pm_type == PM_DEAD || ps->stats[STAT_HEALTH] <= 0 ||
 		( cg.snap->ps.pm_flags & PMF_FOLLOW ) || cg.snap->ps.pm_type == PM_INTERMISSION ) {
@@ -201,19 +203,29 @@ static int CG_RP_DownLook( void ) {
 		VectorCopy( axis[0], head );
 	}
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		float seen = 0.0f;
+		qboolean sees;
 		if ( rpd.down[i] < 0 || i == cg.clientNum || !cg_entities[i].currentValid ) {
 			continue;
 		}
-		if ( CG_RP_DownSees( i, aimFrom, aim, &off ) && ( best < 0 || off < bestOff ) ) {
-			best = i;
-			bestOff = off;
+		sees = CG_RP_DownSees( i, aimFrom, aim, &seen );
+		if ( gaze && CG_RP_DownSees( i, headFrom, head, &off ) && ( !sees || off < seen ) ) {
+			seen = off;
+			sees = qtrue;
 		}
-		if ( gaze && CG_RP_DownSees( i, headFrom, head, &off ) && ( best < 0 || off < bestOff ) ) {
+		if ( !sees ) {
+			continue;
+		}
+		if ( best < 0 || seen < bestOff ) {
 			best = i;
-			bestOff = off;
+			bestOff = seen;
+		}
+		if ( rpd.down[i] == mine && ( bestMine < 0 || seen < mineOff ) ) {
+			bestMine = i;
+			mineOff = seen;
 		}
 	}
-	return best;
+	return ( bestMine >= 0 ) ? bestMine : best;
 }
 
 void CG_RP_DownFrame( void ) {
@@ -238,8 +250,7 @@ void CG_RP_DownFrame( void ) {
 			rpd.giveUpFrom = 0;
 		}
 	} else {
-		rpd.giveUpFrom = 0;
-		rpd.helper = -1;	// (up: nobody's getting you up)
+		rpd.helper = -1;	// (up: nobody's getting you up; giving up's counted afresh going down)
 	}
 	if ( rpd.helping >= 0 && rpd.down[rpd.helping] < 0 ) {
 		rpd.helping = -1;	// (up already, or gone)
