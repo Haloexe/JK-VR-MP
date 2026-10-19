@@ -12,7 +12,9 @@ one came - a companion saved), and the page changes them with "rpui comp
 <what>" (CG_RP_CompUI), which go to the server as rpcomp.
 
 WHOSE. The configstring CS_VR_COMPANIONS + owner says which entities are a
-player's companions, and their names ("<entity>\<name>", '\' between). A
+player's companions, their names, and a look whose skin was too long for
+the model's configstring ("<entity>\<name>\<look>", '\' between; the
+look "" but for those: its model's configstring has the default skin). A
 companion you look at shows its card (cg_vrrp.c: its name over its head,
 whose it is, its side); the wheel's Companions ring (cg_vrpose.c) gives
 your orders, greyed with none of yours out; one getting you up (rpup:
@@ -22,7 +24,7 @@ STAND-INS. A companion's model this PC hasn't got, or one not on the
 humanoid skeleton (another skeleton wants animations of its own, which
 may not be here either), is drawn as a stand-in for its kind - a Jedi, a
 trooper, anyone else - and never not at all (cg_players.c:
-CG_G2AnimEntModelLoad).
+CG_G2AnimEntModelLoad). A look told beside (above) is drawn in its skin.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -58,6 +60,7 @@ typedef struct {
 	int		count;
 	int		ent[RP_COMP_OUT_MAX];
 	char	name[RP_COMP_OUT_MAX][RPC_NAME_BUF];
+	char	look[RP_COMP_OUT_MAX][MAX_QPATH];	// one whose skin its model's configstring couldn't carry ("": none)
 } cgCompsOf_t;
 
 static cgCompsOf_t cgCompsOf[MAX_CLIENTS];
@@ -91,25 +94,28 @@ static const cgCompsOf_t *CG_RPC_Of( int owner ) {
 	Q_strncpyz( buf, cs, sizeof( buf ) );
 	p = buf;
 	while ( *p && c->count < RP_COMP_OUT_MAX ) {
-		char *name = strchr( p, '\\' ), *next;
-		int ent;
-		if ( !name ) {
-			break;
+		char *field[3];
+		int i, ent;
+		if ( !strchr( p, '\\' ) ) {
+			break;	// (an entity with nothing after it)
 		}
-		*name++ = '\0';
-		next = strchr( name, '\\' );
-		if ( next ) {
-			*next++ = '\0';
-		} else {
-			next = name + strlen( name );
+		for ( i = 0; i < 3; i++ ) {
+			char *end = strchr( p, '\\' );
+			field[i] = p;
+			if ( end ) {
+				*end = '\0';
+				p = end + 1;
+			} else {
+				p += strlen( p );
+			}
 		}
-		ent = atoi( p );
+		ent = atoi( field[0] );
 		if ( ent >= MAX_CLIENTS && ent < ENTITYNUM_MAX_NORMAL ) {
 			c->ent[c->count] = ent;
-			Q_strncpyz( c->name[c->count], name, sizeof( c->name[0] ) );
+			Q_strncpyz( c->name[c->count], field[1], sizeof( c->name[0] ) );
+			Q_strncpyz( c->look[c->count], BG_VRCompLookOk( field[2] ) ? field[2] : "", sizeof( c->look[0] ) );
 			c->count++;
 		}
-		p = next;
 	}
 	return c;
 }
@@ -148,6 +154,25 @@ const char *CG_RP_CompName( int entNum ) {
 		}
 	}
 	return NULL;
+}
+
+// A companion's look told beside its configstring (a skin too long for it:
+// "" - none, or the entity isn't one).
+static const char *CG_RPC_ToldLook( int entNum ) {
+	const int owner = CG_RP_CompOwner( entNum );
+	const cgCompsOf_t *c;
+	int k;
+
+	if ( owner < 0 ) {
+		return "";
+	}
+	c = CG_RPC_Of( owner );
+	for ( k = 0; k < c->count; k++ ) {
+		if ( c->ent[k] == entNum ) {
+			return c->look[k];
+		}
+	}
+	return "";
 }
 
 // How many of yours are out.
@@ -384,10 +409,24 @@ static qboolean CG_RPC_ModelOk( const char *path ) {
 // A companion's model, as CG_G2AnimEntModelLoad has it ("models/players/<model>/model.glm",
 // its skin taken off): if it won't do here, a stand-in for its kind instead, and its skin.
 int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID ) {
-	const char *standIn;
+	const char *standIn, *told = CG_RPC_ToldLook( cent->currentState.number );
 	char path[MAX_QPATH];
 
 	if ( CG_RPC_ModelOk( modelName ) ) {
+		if ( told[0] ) {
+			// its skin, told beside (too long for its model's configstring,
+			// which has the default): the skin the look names, on its model
+			char model[MAX_QPATH], skin[MAX_QPATH];
+			qhandle_t h;
+			BG_VRCompLookSplit( told, model, sizeof( model ), skin, sizeof( skin ) );
+			Com_sprintf( path, sizeof( path ), "models/players/%s/model.glm", model );
+			if ( !Q_stricmp( path, modelName ) ) {
+				h = trap->R_RegisterSkin( strchr( skin, '|' ) ? va( "models/players/%s/|%s", model, skin ) : va( "models/players/%s/model_%s.skin", model, skin ) );
+				if ( h ) {
+					return h;
+				}
+			}
+		}
 		return skinID;
 	}
 	switch ( cent->currentState.NPC_class ) {

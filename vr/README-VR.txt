@@ -524,8 +524,10 @@ comes back as hurt for 2 minutes. The server's owner sets how many come
 out with each player and on the whole server, and whether they may look
 like player models; a level near its limits holds them back for a while,
 and says so. Someone without the model a companion wears sees a stand-in
-(a Jedi, a trooper or a rebel). Without the headset, the same wheel (hold
-P) and the same page.
+(a Jedi, a trooper or a rebel). A custom character whose species and
+parts have long names (jedi_stkotor_european's, say) looks itself to
+players running this build; others see that species' default look.
+Without the headset, the same wheel (hold P) and the same page.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
 character there.

@@ -21,8 +21,9 @@ companions look as they like (g_rpCompanionModels 1), has the model, on the
 humanoid skeleton (another would take the server down: its model.glm's
 first bytes say, read - never loaded), and the skin; else it comes as its
 type does. Each look new to the level is a model configstring every player
-keeps till the map changes: a player's companions bring RPC_NEW_LOOKS new
-ones a level at most (then as their types come).
+keeps till the map changes, or a skin told beside one (too long for it)
+that every player's game seeing it keeps: a player's companions bring
+RPC_NEW_LOOKS new ones a level at most (then as their types come).
 
 ROOM. A companion comes out only where the level has room for it: entities
 G_Spawn would hand out, configstrings of each kind, and room in the
@@ -86,9 +87,11 @@ anyone in it, or brought to just by them): RPC_HELP_TIME there, as a hand of
 their faction does (g_vrdown.c).
 
 The players' games are told (configstring CS_VR_COMPANIONS + owner) which
-entities are whose companions, and their names: "<entity>\<name>", '\'
-between; and an owner, getting up by one of theirs: rpup <entity> <owner>
-<time | 0 stopped | -1 got them up> (cg_vrdown.c).
+entities are whose companions, their names, and a look whose skin is too
+long for the model's configstring to carry (it carries the default:
+BG_VRCompSkinInCs) - "<entity>\<name>\<look>", '\' between, the look ""
+but for those; and an owner, getting up by one of theirs: rpup <entity>
+<owner> <time | 0 stopped | -1 got them up> (cg_vrdown.c).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -149,7 +152,8 @@ extern float pm_friction;		// (bg_pmove.c: a body's on the ground - moving at v,
 #define RPC_ROOM_SOUNDS		8		// sound configstrings kept free (its sound sets: 4)
 #define RPC_ROOM_FX			2		// effect configstrings kept free
 #define RPC_ROOM_CHARS		3072	// room kept in the gamestate (for the level's own, and what a companion brings)
-#define RPC_NEW_LOOKS		8		// looks new to the level a player's companions bring (each a configstring kept till the map changes)
+#define RPC_NEW_LOOKS		8		// looks new to the level a player's companions bring (each a configstring, or a skin told beside one, kept till the map changes)
+#define RPC_TOLD_KEPT		256		// looks told beside their models' configstrings this level, kept (past that: each new again)
 #define RPC_MODELS_KEPT		64		// player models asked whether they're on the humanoid skeleton, kept
 #define RPC_HELP_HEIGHT		48.0f	// getting their owner up: no further above or below them than this
 #define RPC_WALK_FAR		512.0f	// further than this, a way isn't looked along (it's the trail's, or a teleport's)
@@ -179,6 +183,7 @@ typedef struct {
 	int			slot;			// the character's companion it is
 	char		type[RP_COMP_TYPE_SIZE];	// as it came out: the NPC's own type (its NPC_type points here)
 	char		look[MAX_QPATH];	// the look it was given, and colours (another: it comes out anew)
+	char		worn[MAX_QPATH];	// the look it came out in ("": as its type comes - the server's not letting looks, say)
 	byte		rgb[3];
 	int			order;			// RPCO_*
 	int			target;			// Attack's (-1: none)
@@ -239,6 +244,11 @@ static struct {
 	qboolean	ok;
 } rpcModels[RPC_MODELS_KEPT];
 static int rpcNumModels;
+
+// looks told beside their models' configstrings this level (G_RPC_Tell): a
+// skin each, every player's game that sees it keeps till the map changes
+static char rpcTold[RPC_TOLD_KEPT][MAX_QPATH];
+static int rpcNumTold;
 
 extern gNPC_t		*gNPCPtrs[MAX_GENTITIES];	// (NPC_spawn.c, g_utils.c: an NPC's memory, kept with its slot)
 extern gclient_t	*gClPtrs[MAX_GENTITIES];
@@ -874,7 +884,7 @@ static qboolean G_RPC_ModelCsThere( const char *model, const char *skin ) {
 	char want[MAX_QPATH * 2], cs[MAX_STRING_CHARS];
 	int i;
 
-	Com_sprintf( want, sizeof( want ), "models/players/%s/model.glm*%s", model, skin[0] ? skin : "default" );
+	Com_sprintf( want, sizeof( want ), "models/players/%s/model.glm*%s", model, ( skin[0] && BG_VRCompSkinInCs( model, skin ) ) ? skin : "default" );
 	for ( i = 1; i < MAX_MODELS; i++ ) {
 		trap->GetConfigstring( CS_MODELS + i, cs, sizeof( cs ) );
 		if ( !cs[0] ) {
@@ -885,6 +895,23 @@ static qboolean G_RPC_ModelCsThere( const char *model, const char *skin ) {
 		}
 	}
 	return qfalse;
+}
+
+// Whether a look's skin is one told beside its model's configstring (too
+// long for it: BG_VRCompSkinInCs) that's new to the level - every player's
+// game that sees it keeps it till the map changes, as a configstring.
+static qboolean G_RPC_ToldNew( const char *model, const char *skin, const char *look ) {
+	int i;
+
+	if ( BG_VRCompSkinInCs( model, skin ) ) {
+		return qfalse;	// (its configstring carries it: nothing told)
+	}
+	for ( i = 0; i < rpcNumTold; i++ ) {
+		if ( !Q_stricmp( rpcTold[i], look ) ) {
+			return qfalse;	// (as a player's game keeps skins: whatever their letters' case)
+		}
+	}
+	return qtrue;
 }
 
 // How many of a kind of configstring are free, as many as need at most
@@ -964,6 +991,7 @@ gentity_t *G_RPCompEntity( void ) {
 static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 	char model[MAX_QPATH], skin[MAX_QPATH];
 	rpcOwner_t *o = &rpco[clientNum];
+	qboolean toldNew;
 
 	if ( !c->look[0] || !g_rpCompanionModels.integer || !BG_VRCompLookOk( c->look ) ) {
 		return "";
@@ -972,7 +1000,8 @@ static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 	if ( !G_RPC_ModelOk( model ) || !G_RPC_SkinOk( model, skin ) ) {
 		return "";
 	}
-	if ( !G_RPC_ModelCsThere( model, skin ) ) {
+	toldNew = G_RPC_ToldNew( model, skin, c->look );
+	if ( !G_RPC_ModelCsThere( model, skin ) || toldNew ) {
 		if ( o->newLooks >= RPC_NEW_LOOKS ) {
 			if ( o->newLooks == RPC_NEW_LOOKS ) {
 				o->newLooks++;	// (said once)
@@ -982,6 +1011,9 @@ static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 			return "";
 		}
 		o->newLooks++;
+		if ( toldNew && rpcNumTold < RPC_TOLD_KEPT ) {
+			Q_strncpyz( rpcTold[rpcNumTold++], c->look, sizeof( rpcTold[0] ) );	// (told from now on: G_RPC_Tell)
+		}
 	}
 	return c->look;
 }
@@ -996,10 +1028,11 @@ const char *G_RPCompTypeProblem( const char *type ) {
 	if ( !BG_VRCompClassOk( cls ) ) {
 		return "A companion fights as one of the people: no droids, beasts or vehicles";
 	}
-	// its own model and skin: as a look would be (names the game takes, short
-	// enough for SetupGameGhoul2Model's buffer and the configstring)
+	// its own model and skin: as a look would be (names the game takes), and
+	// short enough for SetupGameGhoul2Model's buffer and the configstring
+	// together (its skin isn't told beside)
 	Com_sprintf( look, sizeof( look ), "%s/%s", model, skin[0] ? skin : "default" );
-	if ( !BG_VRCompLookOk( look ) || !G_RPC_ModelOk( model ) ) {
+	if ( !BG_VRCompLookOk( look ) || !BG_VRCompSkinInCs( model, skin ) || !G_RPC_ModelOk( model ) ) {
 		return "That one can't be a companion on this server";
 	}
 	return NULL;
@@ -1035,6 +1068,9 @@ void G_RPCompLook( gentity_t *npc, char *model, int modelSize, char *skin, int s
 		return;
 	}
 	BG_VRCompLookSplit( rpcSpawning->look, model, modelSize, skin, skinSize );
+	if ( !BG_VRCompSkinInCs( model, skin ) ) {
+		Q_strncpyz( skin, "default", skinSize );	// (too long for its configstring: the players' games are told it beside - G_RPC_Tell)
+	}
 }
 
 // NPC_Spawn_Do: whether a spawner's a companion's (its NPC type, kept with
@@ -1150,11 +1186,14 @@ static void G_RPC_Tell( int clientNum ) {
 	cs[0] = '\0';
 	for ( k = 0; k < RP_COMP_OUT_MAX; k++ ) {
 		const rpComp_t *c;
+		char model[MAX_QPATH], skin[MAX_QPATH];
 		if ( o->out[k].ent < 0 || o->out[k].knockedAt ) {
 			continue;
 		}
 		c = G_RPComp( clientNum, o->out[k].slot );
-		Q_strcat( cs, sizeof( cs ), va( "%s%i\\%s", cs[0] ? "\\" : "", o->out[k].ent, c ? c->name : "" ) );
+		BG_VRCompLookSplit( o->out[k].worn, model, sizeof( model ), skin, sizeof( skin ) );
+		Q_strcat( cs, sizeof( cs ), va( "%s%i\\%s\\%s", cs[0] ? "\\" : "", o->out[k].ent, c ? c->name : "",
+			( o->out[k].worn[0] && !BG_VRCompSkinInCs( model, skin ) ) ? o->out[k].worn : "" ) );
 	}
 	if ( strcmp( cs, o->cs ) ) {
 		Q_strncpyz( o->cs, cs, sizeof( o->cs ) );
@@ -1204,6 +1243,7 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	out->slot = slot;
 	Q_strncpyz( out->type, c->type, sizeof( out->type ) );
 	Q_strncpyz( out->look, c->look, sizeof( out->look ) );	// (as it was set: a change brings it out anew)
+	Q_strncpyz( out->worn, as.look, sizeof( out->worn ) );
 	memcpy( out->rgb, c->rgb, sizeof( out->rgb ) );
 	out->order = RPCO_DEFEND;
 	out->target = -1;
@@ -2489,4 +2529,5 @@ void G_RPCompInit( void ) {
 	}
 	rpcSpawning = NULL;
 	rpcNumModels = 0;
+	rpcNumTold = 0;
 }

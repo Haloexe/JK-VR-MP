@@ -399,7 +399,7 @@ static void UI_VRC_ReadTypeFile( const char *path ) {
 		t->kind = BG_VRCompClassWord( cls );
 		t->weapon = UI_VRC_WeaponWord( weapon );
 		t->usable = (qboolean)( t->kind && t->model[0] && BG_VRCompLookOk( va( "%s/%s", t->model, t->skin[0] ? t->skin : "default" ) ) &&
-			UI_VRC_Humanoid( t->model ) );	// (its model and skin as the server takes them: g_vrcomp.c)
+			BG_VRCompSkinInCs( t->model, t->skin ) && UI_VRC_Humanoid( t->model ) );	// (its model and skin as the server takes them: g_vrcomp.c)
 		vrcTypes.count++;
 	}
 }

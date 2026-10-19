@@ -18,8 +18,16 @@ character's three parts:
   model               (its default skin)
   model/skin          models/players/model/model_skin.skin
   model/head|torso|lower   a custom character's: head_a1|torso_b1|lower_e1
-Each part letters, digits, _ and -; short enough that the model's
-configstring - "models/players/<model>/model.glm*<skin>" - fits.
+Each part letters, digits, _ and -; short enough for every name the game
+makes of it (each held in MAX_QPATH): the skin's own path,
+"models/players/<model>/model_<skin>.skin" or a custom character's
+"models/players/<model>/|<head|torso|lower>" (a player's own custom
+character's limit); the model's configstring every player's game is told,
+"models/players/<model>/model.glm*<skin>" - a custom character too long to
+go there goes as the default skin, the look itself told to the players'
+games beside it (CS_VR_COMPANIONS); and, where the default skin's worn
+(the model alone, or a custom character told beside),
+"models/players/<model>/model_default.skin".
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -92,7 +100,8 @@ static int BG_VRCompPart( const char *s ) {
 }
 
 // A look as written above: "" (as its type comes), or a model, a skin, or
-// a custom character's three parts - and short enough for its configstring.
+// a custom character's three parts - each name the game makes of it short
+// enough.
 qboolean BG_VRCompLookOk( const char *look ) {
 	const char *p;
 	int n, parts = 0;
@@ -109,7 +118,7 @@ qboolean BG_VRCompLookOk( const char *look ) {
 	}
 	p = look + n;
 	if ( !*p ) {
-		return (qboolean)( 15 + n + 11 + 7 < MAX_QPATH );	// (models/players/ + model + /model.glm* + default)
+		return (qboolean)( 15 + n + 19 < MAX_QPATH );	// (models/players/ + model + /model_default.skin: its configstring's a character shorter)
 	}
 	if ( *p != '/' ) {
 		return qfalse;
@@ -133,7 +142,20 @@ qboolean BG_VRCompLookOk( const char *look ) {
 	if ( parts == 2 ) {
 		return qfalse;	// (one skin, or a custom character's three)
 	}
-	return (qboolean)( 15 + (int)strlen( look ) + 10 < MAX_QPATH );	// (the '/' between becomes "/model.glm*")
+	if ( parts == 1 ) {
+		return (qboolean)( 15 + (int)strlen( look ) + 6 + 5 < MAX_QPATH );	// (the '/' between becomes "/model_", and ".skin" after)
+	}
+	// a custom character's: the '/' between becomes "/|"; and where its
+	// model's configstring can't carry the three (BG_VRCompSkinInCs: the '/'
+	// becomes "/model.glm*"), the model's default skin as above
+	return (qboolean)( 15 + (int)strlen( look ) + 1 < MAX_QPATH && ( 15 + (int)strlen( look ) + 10 < MAX_QPATH || 15 + n + 19 < MAX_QPATH ) );
+}
+
+// Whether a model's configstring can carry its skin after it
+// ("models/players/<model>/model.glm*<skin>" in MAX_QPATH, as every
+// player's game holds it): else it carries the default skin.
+qboolean BG_VRCompSkinInCs( const char *model, const char *skin ) {
+	return (qboolean)( 15 + (int)strlen( model ) + 11 + (int)strlen( skin[0] ? skin : "default" ) < MAX_QPATH );
 }
 
 // Whether a model.glm's first bytes (BG_VRCOMP_GLM_HEAD of them: its ident,

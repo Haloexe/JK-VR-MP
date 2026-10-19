@@ -1714,7 +1714,7 @@ enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
 #define RP_COMP_MAX			6		// a character's companions...
 #define RP_COMP_OUT_MAX		2		// ...out at once (g_rpCompanions: the server's own limit)
 #define RP_COMP_TYPE_SIZE	64		// an NPC type's name, kept (ext_data/NPCs)
-#define CS_VR_COMPANIONS	CS_MAX	// one a player: their companions out - "<entity>\<name>" each, '\' between
+#define CS_VR_COMPANIONS	CS_MAX	// one a player: their companions out - "<entity>\<name>\<look>" each, '\' between (the look: one whose skin the model's configstring can't carry, else "")
 #if ( CS_VR_COMPANIONS + MAX_CLIENTS ) > MAX_CONFIGSTRINGS
 #error overflow: CS_VR_COMPANIONS
 #endif
@@ -1722,6 +1722,7 @@ qboolean	BG_VRCompClassOk( const char *className );
 const char	*BG_VRCompClassWord( const char *className );
 qboolean	BG_VRCompTypeOk( const char *type );
 qboolean	BG_VRCompLookOk( const char *look );
+qboolean	BG_VRCompSkinInCs( const char *model, const char *skin );
 void		BG_VRCompLookSplit( const char *look, char *model, int modelSize, char *skin, int skinSize );
 #define BG_VRCOMP_GLM_HEAD	( 8 + MAX_QPATH * 2 )	// a model.glm's first bytes: ident, version, name, its skeleton's name
 qboolean	BG_VRCompGlmHumanoid( const byte *head, int len );
