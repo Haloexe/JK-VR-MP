@@ -171,7 +171,7 @@ static const char *rpcFormations[RPCF_NUM] = { "behind you", "beside you", "an e
 
 typedef struct {
 	vec3_t		at;
-	qboolean	cut;			// not to be walked to from the point before (a lift, a jump, a drop, a teleport)
+	qboolean	cut;			// not walked to from the point before (a lift, a jump, a drop, a teleport): not followed (but down a way it can walk)
 } rpcPoint_t;
 
 typedef struct {
@@ -425,7 +425,7 @@ static qboolean G_RPC_Gone( const vec3_t at, int pass ) {
 // Whether a body can walk straight from from to to: nothing in the way
 // above a step's height, floor all along (no gap, no drop), and nowhere up
 // more than a step at a time (a straight line over a ledge's edge isn't a
-// way up it).
+// way up it), nor down off a sheer drop.
 static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
 	trace_t tr;
 	vec3_t d, at;
@@ -460,6 +460,9 @@ static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
 			if ( z - floorZ > RPC_STEP_UP ) {
 				return qfalse;	// (up more than a step)
 			}
+			if ( floorZ - z > 48.0f + STEPSIZE ) {
+				return qfalse;	// (down further than a body looks for its floor: a sheer drop)
+			}
 			floorZ = z;
 		}
 		if ( s >= len ) {
@@ -476,6 +479,15 @@ static qboolean G_RPC_Taken( const vec3_t at, int pass ) {
 	return (qboolean)( tr.startsolid || tr.allsolid );
 }
 
+// Whether a line from a to b is clear of what a body can't go through (the
+// two on one side of any wall - player clip's a wall too).
+static qboolean G_RPC_Clear( const vec3_t a, const vec3_t b, int pass ) {
+	trace_t tr;
+
+	trap->Trace( &tr, a, NULL, NULL, b, pass, RPC_MASK, qfalse, 0, 0 );
+	return (qboolean)( tr.fraction >= 1.0f && !tr.startsolid );
+}
+
 // Whether a line from a to b is clear of the world (what a look reaches).
 static qboolean G_RPC_Sees( const vec3_t a, const vec3_t b, int pass ) {
 	trace_t tr;
@@ -487,7 +499,7 @@ static qboolean G_RPC_Sees( const vec3_t a, const vec3_t b, int pass ) {
 // Whether a companion is by its spot with someone standing on it: near it
 // (RPC_LEAVE), and on its side of any wall - there, as near as it gets.
 static qboolean G_RPC_By( const gentity_t *npc, const vec3_t spot, float dist ) {
-	return (qboolean)( dist <= RPC_LEAVE && G_RPC_Taken( spot, npc->s.number ) && G_RPC_Sees( npc->r.currentOrigin, spot, npc->s.number ) );
+	return (qboolean)( dist <= RPC_LEAVE && G_RPC_Taken( spot, npc->s.number ) && G_RPC_Clear( npc->r.currentOrigin, spot, npc->s.number ) );
 }
 
 // A companion's spot (k of count), by the way the owner's spots face (pass:
@@ -651,7 +663,7 @@ static qboolean G_RPC_NearOwner( gentity_t *owner, rpcOwner_t *o, int pass, vec3
 		vec3_t f;
 		AngleVectors( a, f, NULL, NULL );
 		VectorMA( owner->client->ps.origin, RPC_BEHIND * 1.2f, f, at );
-		if ( G_RPC_Fits( at, pass ) && G_RPC_Sees( owner->client->ps.origin, at, owner->s.number ) ) {
+		if ( G_RPC_Fits( at, pass ) && G_RPC_Clear( owner->client->ps.origin, at, owner->s.number ) ) {
 			return qtrue;
 		}
 	}
@@ -1671,16 +1683,16 @@ static void G_RPC_Detour( const gentity_t *npc, vec3_t goal, qboolean last ) {
 	}
 }
 
-// How much of its speed a body can go at, its way dir to a goal far off
-// (run: running): lava, slime or a drop ahead (no floor near under a body,
-// the floor followed - stairs, a slope), no faster than it can stop short of
-// it - as far as its slide stopping (v / friction) and its move till its
-// next think, short of where it was seen; at its edge, 0. Looked at as far
-// as it could go before it stops; a gap short of its goal no wider than the
-// looks apart (one look with no floor) it runs over, as a player does - past
-// its goal (where it turns, or stops) any gap's one. Something in its way
-// there (a wall, a ledge up): no further looked at. In lava already, or in
-// the air: on, as it's going (out of it).
+// How much of its speed a body can go at, its way dir to where it stops far
+// off (run: running): lava, slime or a drop ahead (no floor near under a
+// body, the floor followed - stairs, a slope), no faster than it can stop
+// short of it - as far as its slide stopping (v / friction) and its move till
+// its next think, short of where it was seen; at its edge, 0. Looked at as
+// far as it could go before it stops; a gap no wider than the looks apart
+// (one look with no floor) it runs over, as a player does - but past where
+// it stops, any gap's one. Something in its way there (a wall, a ledge up):
+// no further looked at. In lava already, or in the air: on, as it's going
+// (out of it).
 static float G_RPC_Ahead( const gentity_t *npc, const vec3_t dir, float far, qboolean run ) {
 	const float speed = sqrtf( npc->client->ps.velocity[0] * npc->client->ps.velocity[0] + npc->client->ps.velocity[1] * npc->client->ps.velocity[1] );
 	const float top = Q_max( speed, run ? npc->NPC->stats.runSpeed * 1.3f : (float)npc->NPC->stats.walkSpeed );	// (as fast as it'll go this think: ClientThink_real's)
@@ -1708,7 +1720,7 @@ static float G_RPC_Ahead( const gentity_t *npc, const vec3_t dir, float far, qbo
 				gap = at;
 			}
 			if ( gap < at || at >= far ) {
-				break;	// (a gap from gap on: two looks with no floor, or past its goal)
+				break;	// (a gap from gap on: two looks with no floor, or past where it stops)
 			}
 		} else {
 			gap = -1.0f;
@@ -1738,7 +1750,7 @@ static qboolean G_RPC_MoveTo( gentity_t *npc, const vec3_t to, qboolean run, qbo
 	}
 	NPCS.NPCInfo->desiredYaw = vectoyaw( dir );
 	NPCS.NPCInfo->desiredPitch = 0.0f;
-	scale = G_RPC_Ahead( npc, dir, far, run );
+	scale = G_RPC_Ahead( npc, dir, ( last && VectorCompare( goal, to ) ) ? far : 65536.0f, run );	// (a point it runs on past, round a body: not where it stops)
 	if ( scale < RPC_SLOW ) {
 		return qfalse;	// (there: no further)
 	}
@@ -1819,10 +1831,11 @@ static void G_RPC_StuckFrame( gentity_t *npc, rpcOut_t *out, qboolean going ) {
 }
 
 // Where it heads, following: its spot, straight; else along the trail - the
-// newest point it can walk straight to, and on along it from there. qfalse:
-// no way (a cut in the trail ahead of it, no point it can get to, or the
-// floor gone from the point it's going to - a train, a lift they were on
-// moved off).
+// newest point it can walk straight to, and on along it from there (down
+// past a cut, where it can walk straight down). qfalse: no way (a cut in the
+// trail ahead of it it can't follow, no point it can get to, or the floor
+// gone from the point it's going to - a train, a lift they were on moved
+// off).
 static qboolean G_RPC_Goal( rpcOwner_t *o, gentity_t *npc, rpcOut_t *out, const vec3_t spot, vec3_t goal ) {
 	const int oldest = G_RPC_Oldest( o ), newest = G_RPC_Newest( o );
 	int n, step, tries;
@@ -1882,9 +1895,9 @@ static qboolean G_RPC_Goal( rpcOwner_t *o, gentity_t *npc, rpcOut_t *out, const 
 			if ( !G_RPC_At( o, out->trailAt + 1 )->cut ) {
 				out->trailAt++;
 			} else if ( next[2] < at[2] - STEPSIZE && G_RPC_Walkable( npc->r.currentOrigin, next, npc->s.number ) ) {
-				out->trailAt++;	// (a way down they came flying - stairs they ran down, a step they hopped off - it can walk straight: down after them)
+				out->trailAt++;	// (a way down they came flying - stairs they ran down - it can walk straight: down after them)
 			} else {
-				return qfalse;	// (a lift, a jump, a drop next: it can't follow there)
+				return qfalse;	// (a lift, a jump, a drop next it can't walk down: it can't follow there)
 			}
 		}
 	}
@@ -1973,7 +1986,7 @@ static void G_RPC_Help( gentity_t *owner, rpcOwner_t *o, gentity_t *npc, rpcOut_
 	dist = VectorLength( d );
 	VectorCopy( npc->r.currentOrigin, eye );
 	eye[2] += npc->client->ps.viewheight;
-	if ( dist > RPC_HELP_REACH || fabsf( dz ) > RPC_HELP_HEIGHT || !G_RPC_Sees( eye, owner->client->ps.origin, npc->s.number ) ) {
+	if ( dist > RPC_HELP_REACH || fabsf( dz ) > RPC_HELP_HEIGHT || !G_RPC_Clear( eye, owner->client->ps.origin, npc->s.number ) ) {
 		out->helpFrom = 0;
 		G_RPC_HelpTell( owner->s.number, out, 0 );
 		G_RPC_StuckFrame( npc, out, qtrue );
