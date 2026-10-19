@@ -130,10 +130,31 @@ too, from the in-game menu or the wheel.
 NPCs take sides by the players' factions: the light side's are with the
 Heroes, the dark side's with the Villains; Neutral are left alone until
 they attack one. Nobody's NPCs, turrets or sentries harm someone down.
-The log says who went down, by whom, who got whom up and who gave up
-(lines starting "Roleplay:"). The serverinfo's "vrRP" says whether
-roleplay's on, and these settings: "<on> <g_rpCharacters> <g_rpTalkRange>
-<g_rpDowned>" ("0": roleplay isn't ready here - see the console).
+  g_rpCompanions 2          companions each player has out with them
+                            (0 to 2; 0: none)
+  g_rpCompanionsMax 16      companions out on the whole server at once
+  g_rpCompanionModels 1     1: they may look like any player model the
+                            server has; 0: only as their NPC types come
+Companions: each character keeps up to 6 NPCs of its own, made in the
+Profile menu's Companions page (a name, the NPC type it fights as - one
+of the people, no droids, beasts or vehicles - and a look), and up to
+g_rpCompanions of them come out with the player while roleplay's on:
+following them, fighting for their faction, getting them up, taking
+orders from the wheel. Not in Duel, Power Duel or Siege. One whose
+health runs out is knocked out for 2 minutes. They come out only where
+the level has room for them (entities, models, sounds, effects, and the
+game state every player loads - past it, everyone would be dropped), and
+a player's companions bring at most 8 looks new to a level (after that
+they come as their types do until the next map); the player is told.
+A look must be a model the server has, on the humanoid skeleton, with
+its skin (or a custom character's three parts) - so a model or skin
+added to the server's files is one players can choose.
+The log says who went down, by whom, who got whom up and who gave up,
+and which companions came out and were knocked out (lines starting
+"Roleplay:"). The serverinfo's "vrRP" says whether roleplay's on, and
+these settings: "<on> <g_rpCharacters> <g_rpTalkRange> <g_rpDowned>
+<g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels>" ("0":
+roleplay isn't ready here - see the console).
   rp list                   who plays which character, on which account
   rp rename <player> <name> give someone's character another name
   rp delete <account> <character>   delete a character (online or not)

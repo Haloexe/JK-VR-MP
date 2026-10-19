@@ -15,7 +15,9 @@ asked: "rpui <what>", run from here.
                roleplay on or off; logged in: your characters (a list,
                feeder 65) - play one, stop, delete one (asked first), make
                one - log out, a new password
-  Editor       the character you play: faction, description, bio (Save)
+  Editor       the character you play: faction, description, bio (Save);
+               its look (the Profile), its companions (the Companions menu:
+               ui_vrcomp.c)
   People       who's here (feeder 66), with their faction and description,
                and the bio of the one picked
   Chat & cards speech bubbles, cards, remembering your login; how chat goes
@@ -23,6 +25,8 @@ asked: "rpui <what>", run from here.
   Server       the owner's: roleplay on or off, characters per account, how
                far talk reaches, whether running out of health downs players
                - straight to the game you host, by rcon to another server;
+               Companions: how many come out with a player, how many on the
+               server at once, whether they may look as players make them;
                and Admins: an account made an admin, or not (rp admin: only
                the server's console takes it - yours, hosting; another
                server's by rcon, its password typed - and it says so)
@@ -56,8 +60,10 @@ void			UI_ParseMenu( const char *menuFile );
 #define VRRP_NPCS_MAX		1024	// NPCs and vehicles the Admin page lists, at most
 #define VRRP_NPC_NAME		64
 #define VRRP_NPC_FILE_MAX	65536	// a file of them read (more of one: cut there)
+#define VRRP_COMPS_MOST		64		// companions out on the server at once, the most the page sets
 
 enum { RPP_CHARS, RPP_EDIT, RPP_PEOPLE, RPP_CHAT, RPP_HELP, RPP_SERVER, RPP_ADMIN, RPP_PAGES };
+enum { RPS_SETTINGS, RPS_ADMINS, RPS_COMPANIONS };	// the Server page's parts
 
 static const char *vrrpFactions[] = { "Heroes", "Villains", "Neutral" };
 
@@ -77,7 +83,7 @@ static struct {
 	int			numPeople;		// who's here, as the list has them
 	int			people[MAX_CLIENTS];
 	char		names[MAX_CLIENTS][MAX_QPATH];
-	qboolean	srvAdmins;		// the Server page shows Admins (making an account one)
+	int			srvPart;		// the Server page's part shown: RPS_*
 	char		adminFind[MAX_CVAR_VALUE_STRING];	// what the Admin page's list was lit from the top for
 } vrrp = { RPP_CHARS, qfalse, qfalse, -1, 0 };
 
@@ -168,8 +174,8 @@ static qboolean UI_VRRP_Taken( const menuDef_t *menu, float x, float y, float w,
 
 // The items of a menu that's never shown (at 0, 0: where they say is on the
 // screen) put on another menu - if they aren't there yet, and (free) where
-// there's room.
-static void UI_VRRP_Move( const char *from, const char *to, const char *first, qboolean free ) {
+// there's room. (The Companions menu's button goes on the Profile so too.)
+void UI_VRRP_Move( const char *from, const char *to, const char *first, qboolean free ) {
 	menuDef_t *src = Menus_FindByName( from ), *dst = Menus_FindByName( to );
 	int i;
 
@@ -212,6 +218,14 @@ void UI_VRRP_AddMenus( void ) {
 	}
 	UI_VRRP_Move( VRRP_TAB, "ingame", VRRP_TAB_ITEM, qfalse );
 	UI_VRRP_Move( VRRP_CREATE, "createserver", VRRP_CREATE_ITEM, qtrue );
+}
+
+// The Roleplay menu opened (on a page: -1, the one it was on).
+void UI_VRRP_Open( int page ) {
+	if ( page >= 0 ) {
+		vrrp.page = Com_Clampi( 0, RPP_PAGES - 1, page );
+	}
+	Menus_ActivateByName( VRRP_MENU );
 }
 
 /*
@@ -560,10 +574,13 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 		return vrrp.page == RPP_SERVER && !UI_VRRP_Local();
 	}
 	if ( !Q_stricmp( group, "rp_srv_set" ) ) {
-		return vrrp.page == RPP_SERVER && !vrrp.srvAdmins;
+		return vrrp.page == RPP_SERVER && vrrp.srvPart == RPS_SETTINGS;
 	}
 	if ( !Q_stricmp( group, "rp_srv_adm" ) ) {
-		return vrrp.page == RPP_SERVER && vrrp.srvAdmins;
+		return vrrp.page == RPP_SERVER && vrrp.srvPart == RPS_ADMINS;
+	}
+	if ( !Q_stricmp( group, "rp_srv_comp" ) ) {
+		return vrrp.page == RPP_SERVER && vrrp.srvPart == RPS_COMPANIONS;
 	}
 	return 0;
 }
@@ -734,31 +751,53 @@ static void UI_VRRP_Keep( const char *cvar, const char *def ) {
 	}
 }
 
+// A setting of the game you host, for the Server page (its default where
+// the game's not made it yet), kept between low and high.
+static void UI_VRRP_LocalKeep( const char *cvar, const char *setting, const char *def, int low, int high ) {
+	char value[16];
+
+	UI_VRRP_Str( setting, value, sizeof( value ) );
+	trap->Cvar_Set( cvar, va( "%i", Com_Clampi( low, high, atoi( value[0] ? value : def ) ) ) );
+}
+
 // The settings of the server you're on, for the Server page: as its
-// serverinfo has them ("vrRP": on, characters, talk range, down -
-// g_vrrp.c); a server older than this doesn't say: what was set here
-// last, or the defaults.
+// serverinfo has them ("vrRP": on, characters, talk range, down,
+// companions out with each player, on the server at once, their looks -
+// g_vrrp.c); a server older than this doesn't say (or not all): what was
+// set here last, or the defaults.
 static void UI_VRRP_FromServer( void ) {
 	char info[MAX_INFO_STRING];
-	int on, chars, range, downed;
+	int on, chars, range, downed, comps, compsMax, models;
+	int got;
 
 	info[0] = 0;
 	trap->GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
-	if ( sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d", &on, &chars, &range, &downed ) == 4 ) {
+	got = sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d %d %d %d", &on, &chars, &range, &downed, &comps, &compsMax, &models );
+	if ( got >= 4 ) {
 		trap->Cvar_Set( "ui_rpSrvChars", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, chars ) ) );
 		trap->Cvar_Set( "ui_rpSrvRange", va( "%i", range ) );
 		trap->Cvar_Set( "ui_rpSrvDowned", downed ? "1" : "0" );
-		return;
+	} else {
+		UI_VRRP_Keep( "ui_rpSrvChars", "5" );
+		UI_VRRP_Keep( "ui_rpSrvRange", "510" );
+		UI_VRRP_Keep( "ui_rpSrvDowned", "1" );
 	}
-	UI_VRRP_Keep( "ui_rpSrvChars", "5" );
-	UI_VRRP_Keep( "ui_rpSrvRange", "510" );
-	UI_VRRP_Keep( "ui_rpSrvDowned", "1" );
+	if ( got == 7 ) {
+		trap->Cvar_Set( "ui_rpSrvComps", va( "%i", Com_Clampi( 0, RP_COMP_OUT_MAX, comps ) ) );
+		trap->Cvar_Set( "ui_rpSrvCompsMax", va( "%i", Com_Clampi( 0, VRRP_COMPS_MOST, compsMax ) ) );
+		trap->Cvar_Set( "ui_rpSrvCompModels", models ? "1" : "0" );
+	} else {
+		UI_VRRP_Keep( "ui_rpSrvComps", "2" );
+		UI_VRRP_Keep( "ui_rpSrvCompsMax", "16" );
+		UI_VRRP_Keep( "ui_rpSrvCompModels", "1" );
+	}
 }
 
 // A page shown: what it needs, got.
 static void UI_VRRP_Page( int page ) {
 	vrrp.page = Com_Clampi( 0, RPP_PAGES - 1, page );
-	vrrp.newAccount = vrrp.password = vrrp.srvAdmins = qfalse;
+	vrrp.newAccount = vrrp.password = qfalse;
+	vrrp.srvPart = RPS_SETTINGS;
 	vrrp.deleting = -1;
 	vrrp.peopleTime = 0;
 	trap->Cvar_Set( "ui_rpMessage", "" );
@@ -776,6 +815,9 @@ static void UI_VRRP_Page( int page ) {
 			trap->Cvar_Set( "ui_rpSrvRange", va( "%i", UI_VRRP_Int( "g_rpTalkRange" ) ) );
 			UI_VRRP_Str( "g_rpDowned", downed, sizeof( downed ) );	// ("": the game's not made it yet - its default)
 			trap->Cvar_Set( "ui_rpSrvDowned", ( !downed[0] || atoi( downed ) ) ? "1" : "0" );
+			UI_VRRP_LocalKeep( "ui_rpSrvComps", "g_rpCompanions", "2", 0, RP_COMP_OUT_MAX );
+			UI_VRRP_LocalKeep( "ui_rpSrvCompsMax", "g_rpCompanionsMax", "16", 0, VRRP_COMPS_MOST );
+			UI_VRRP_LocalKeep( "ui_rpSrvCompModels", "g_rpCompanionModels", "1", 0, 1 );
 		} else {
 			UI_VRRP_FromServer();	// (another server's: as its serverinfo has them)
 		}
@@ -934,6 +976,9 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 	} else if ( !Q_stricmp( what, "look" ) ) {
 		Menus_CloseByName( VRRP_MENU );	// (to the game's own player menu)
 		Menus_ActivateByName( "ingame_player" );
+	} else if ( !Q_stricmp( what, "companions" ) ) {
+		Menus_CloseByName( VRRP_MENU );	// (to the Companions menu: its Back comes here)
+		UI_VRComp_Open( 1 );
 	} else if ( !Q_stricmp( what, "bio" ) ) {
 		if ( ( n = UI_VRRP_PickedPerson() ) >= 0 ) {
 			trap->Cvar_Set( "ui_rpBioName", va( "%s" S_COLOR_WHITE "'s bio", vrrp.names[n] ) );
@@ -953,8 +998,12 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 			UI_VRRP_ServerSet( "g_rpCharacters", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, UI_VRRP_Int( "ui_rpSrvChars" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpTalkRange", va( "%i", Com_Clampi( 0, 100000, UI_VRRP_Int( "ui_rpSrvRange" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpDowned", UI_VRRP_Int( "ui_rpSrvDowned" ) ? "1" : "0" );
-		} else if ( !Q_stricmp( how, "admins" ) || !Q_stricmp( how, "settings" ) ) {
-			vrrp.srvAdmins = (qboolean)( !Q_stricmp( how, "admins" ) );	// (the page's other half)
+		} else if ( !Q_stricmp( how, "compApply" ) ) {
+			UI_VRRP_ServerSet( "g_rpCompanions", va( "%i", Com_Clampi( 0, RP_COMP_OUT_MAX, UI_VRRP_Int( "ui_rpSrvComps" ) ) ) );
+			UI_VRRP_ServerSet( "g_rpCompanionsMax", va( "%i", Com_Clampi( 0, VRRP_COMPS_MOST, UI_VRRP_Int( "ui_rpSrvCompsMax" ) ) ) );
+			UI_VRRP_ServerSet( "g_rpCompanionModels", UI_VRRP_Int( "ui_rpSrvCompModels" ) ? "1" : "0" );
+		} else if ( !Q_stricmp( how, "admins" ) || !Q_stricmp( how, "settings" ) || !Q_stricmp( how, "companions" ) ) {
+			vrrp.srvPart = !Q_stricmp( how, "admins" ) ? RPS_ADMINS : !Q_stricmp( how, "companions" ) ? RPS_COMPANIONS : RPS_SETTINGS;
 			trap->Cvar_Set( "ui_rpMessage", "" );
 		} else if ( !Q_stricmp( how, "adminOn" ) || !Q_stricmp( how, "adminOff" ) ) {
 			char typed[MAX_CVAR_VALUE_STRING], account[32];

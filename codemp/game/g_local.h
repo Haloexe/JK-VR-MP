@@ -401,6 +401,8 @@ struct gentity_s {
 
 	// OpenJK add
 	int			useDebounceTime;	// for cultist_destroyer
+
+	int			rpCompOwner;		// OpenJK VR (g_vrcomp.c): roleplay - a player's companion: whose (client number + 1; 0: nobody's)
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -1064,6 +1066,16 @@ void		Cmd_VRDuel_f( gentity_t *ent );
 void		G_PrivateDuelThink( gentity_t *ent, usercmd_t *ucmd );
 gentity_t	*G_BotTakeUpDuel( gentity_t *bot );
 // g_vrrp.c (OpenJK VR: roleplay mode - the switch, accounts, characters, chat)
+typedef struct {				// (a character's companion: g_vrrp.c keeps them, g_vrcomp.c brings them out)
+	char		name[64];		// as a character's name is written (RP_NAME_BUF)
+	char		type[RP_COMP_TYPE_SIZE];	// the NPC type it fights as (lower case)
+	char		look[MAX_QPATH];	// "": as its type comes; else a model, skin or custom character (bg_vrcomp.c)
+	byte		rgb[3];			// a look's colours
+	qboolean	out;			// it comes out with the character
+} rpComp_t;
+const rpComp_t	*G_RPComp( int clientNum, int slot );
+int			G_RPCompChar( int clientNum );
+void		G_RPSendComps( int clientNum );
 void		G_RPInit( void );
 void		G_RPShutdown( void );
 void		G_RPPublish( void );
@@ -1098,6 +1110,27 @@ void		G_RPDownFrame( void );
 void		G_RPDownHello( int clientNum );
 int			G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent );
 void		G_RPProvoke( gentity_t *attacker, gentity_t *targ );
+void		G_RPCompGetUp( gentity_t *ent, const char *helper );
+// g_vrcomp.c (OpenJK VR: roleplay - a character's companions)
+void		G_RPCompInit( void );
+void		G_RPCompFrame( void );
+void		G_RPCompOwnerSpawned( gentity_t *ent );
+void		G_RPCompOwnerGone( int clientNum );
+void		G_RPCompDeleted( int clientNum, int slot );
+qboolean	G_RPCompThink( int *team, int *bState );
+int			G_RPCompEnemy( const gentity_t *npc, const gentity_t *ent );
+const gentity_t	*G_RPCompOwner( const gentity_t *ent );
+qboolean	G_RPCompNoHarm( const gentity_t *targ, const gentity_t *attacker );
+void		G_RPCompHurt( gentity_t *targ, gentity_t *attacker );
+gentity_t	*G_RPCompBlame( gentity_t *attacker );
+void		G_RPCompDied( gentity_t *self );
+int			G_RPCompWait( int clientNum, int slot );
+void		G_RPCompOrder( gentity_t *ent );
+void		G_RPCompLook( gentity_t *npc, char *model, int modelSize, char *skin, int skinSize );
+qboolean	G_RPCompSpawner( const gentity_t *spawner );
+gentity_t	*G_RPCompEntity( void );
+const char	*G_RPCompTypeProblem( const char *type );
+const char	*G_RPCompLookProblem( const char *look );
 
 //
 // g_items.c

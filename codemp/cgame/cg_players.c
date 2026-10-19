@@ -7166,6 +7166,10 @@ void CG_G2AnimEntModelLoad(centity_t *cent)
 		else
 		{
 			skinID = CG_HandleAppendedSkin(modelName); //get the skin if there is one.
+			if ( CG_RP_CompOwner( cent->currentState.number ) >= 0 )
+			{//OpenJK VR: roleplay - a player's companion: a look this PC hasn't got is a stand-in (cg_vrcomp.c)
+				skinID = CG_RP_CompModel( cent, modelName, sizeof( modelName ), skinID );
+			}
 		}
 
 		if (cent->ghoul2)

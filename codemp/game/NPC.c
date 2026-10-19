@@ -1327,6 +1327,11 @@ void NPC_RunBehavior( int team, int bState )
 		return;
 	}
 
+	if ( NPCS.NPC->rpCompOwner && G_RPCompThink( &team, &bState ) )
+	{//OpenJK VR: roleplay - a player's companion goes by them (g_vrcomp.c); fighting, it fights as NPCs do, below
+		return;
+	}
+
 	if ( bState == BS_CINEMATIC )
 	{
 		NPC_BSCinematic();

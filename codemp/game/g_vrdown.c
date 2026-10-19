@@ -331,8 +331,9 @@ static void G_RP_HelpOver( gentity_t *helper, qboolean done ) {
 	cl->rpHelping = 0;
 }
 
-// ent gets up (helper: who got them up; NULL: it no longer applies to them).
-static void G_RP_GetUp( gentity_t *ent, gentity_t *helper ) {
+// ent gets up (helper: the name of who got them up - a player, or a
+// companion of theirs; NULL: it no longer applies to them).
+static void G_RP_GetUp( gentity_t *ent, const char *helper ) {
 	gclient_t *cl = ent->client;
 	const int most = cl->ps.stats[STAT_MAX_HEALTH] > 0 ? cl->ps.stats[STAT_MAX_HEALTH] : 100;
 
@@ -343,7 +344,7 @@ static void G_RP_GetUp( gentity_t *ent, gentity_t *helper ) {
 	cl->ps.stats[STAT_HEALTH] = ent->health;
 	BG_VRPoseStandUp( &cl->ps, (animation_t *)G_RP_Anims( ent ) );	// (the game's getting up off the floor)
 	if ( helper ) {
-		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " got %s" S_COLOR_WHITE " up\n", helper->client->pers.netname, cl->pers.netname );
+		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " got %s" S_COLOR_WHITE " up\n", helper, cl->pers.netname );
 	} else {
 		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " got up (no longer down here)\n", cl->pers.netname );
 	}
@@ -482,7 +483,7 @@ static void G_RP_Help( gentity_t *ent, const usercmd_t *ucmd ) {
 	}
 	if ( who >= 0 && level.time - cl->rpHelpFrom >= RP_HELP_TIME ) {
 		G_RP_HelpOver( ent, qtrue );
-		G_RP_GetUp( &g_entities[who], ent );
+		G_RP_GetUp( &g_entities[who], ent->client->pers.netname );
 	}
 }
 
@@ -525,6 +526,13 @@ void G_RPDownThink( gentity_t *ent, usercmd_t *ucmd ) {
 	}
 }
 
+// A companion of theirs got ent up (g_vrcomp.c; helper: its name).
+void G_RPCompGetUp( gentity_t *ent, const char *helper ) {
+	if ( G_RPDowned( ent ) && G_RP_StaysDown( ent ) ) {
+		G_RP_GetUp( ent, helper );
+	}
+}
+
 // "rp giveup" (the wheel's Give up)
 void G_RPGiveUpCommand( gentity_t *ent ) {
 	if ( !G_RPDowned( ent ) ) {
@@ -550,25 +558,36 @@ static int G_RP_Side( int faction ) {
 }
 
 // Whether npc may have ent as its enemy, as roleplay has it: 1 yes, 0 no,
-// -1 roleplay doesn't say (as ever).
+// -1 roleplay doesn't say (as ever). A player's companion is on its
+// owner's side, and their grudges are its; whom a companion itself fights
+// is its owner's to say (g_vrcomp.c).
 int G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent ) {
+	const gentity_t *who;
 	int faction, side;
+	const int comp = G_RPCompEnemy( npc, ent );
 
+	if ( comp >= 0 ) {
+		return comp;	// (npc is a player's companion)
+	}
 	if ( !npc || !npc->client || !ent || !ent->client ) {
 		return -1;
 	}
 	if ( ent->client->rpDowned ) {
 		return 0;	// (nobody harms someone down)
 	}
-	faction = G_RPFaction( ent->s.number );	// (-1: roleplay off, no character, not a player)
-	if ( faction < 0 || ( ent->r.svFlags & SVF_BOT ) || level.gametype == GT_SIEGE ) {
+	who = G_RPCompOwner( ent );	// (ent is a player's companion: by its owner)
+	if ( !who ) {
+		who = ent;
+	}
+	faction = G_RPFaction( who->s.number );	// (-1: roleplay off, no character, not a player)
+	if ( faction < 0 || ( who->r.svFlags & SVF_BOT ) || level.gametype == GT_SIEGE ) {
 		return -1;
 	}
 	side = npc->client->playerTeam;
 	if ( side <= NPCTEAM_FREE || side >= NPCTEAM_NUM_TEAMS ) {
 		return -1;	// (monsters: no side)
 	}
-	if ( ent->client->rpProvoked & ( 1 << side ) ) {
+	if ( who->client->rpProvoked & ( 1 << side ) ) {
 		return 1;	// (attacked: they fight back)
 	}
 	switch ( faction ) {

@@ -72,7 +72,7 @@ static void CVU_RP(void) {
 }
 
 static void CVU_RPSettings(void) {
-	G_RPPublishSettings();	// OpenJK VR: the serverinfo "vrRP" says g_rpCharacters, g_rpTalkRange and g_rpDowned (g_vrrp.c)
+	G_RPPublishSettings();	// OpenJK VR: the serverinfo "vrRP" says g_rpCharacters, g_rpTalkRange, g_rpDowned and the companions' (g_vrrp.c)
 }
 
 static void CVU_VRSaberWeights(void) {

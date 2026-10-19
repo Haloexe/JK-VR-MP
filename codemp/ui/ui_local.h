@@ -66,6 +66,18 @@ int			UI_VRRP_FeederCount( int feeder );
 const char	*UI_VRRP_FeederText( int feeder, int index, int column );
 qboolean	UI_VRRP_FeederSelection( int feeder, int index );
 qboolean	UI_VRRP_Script( const char *name, char **args );
+void		UI_VRRP_Move( const char *from, const char *to, const char *first, qboolean free );
+void		UI_VRRP_Open( int page );
+
+// ui_vrcomp.c: OpenJK VR - roleplay's Companions menu
+void		UI_VRComp_AddMenus( void );
+void		UI_VRComp_Frame( void );
+void		UI_VRComp_Open( int from );
+int			UI_VRComp_FeederCount( int feeder );
+const char	*UI_VRComp_FeederText( int feeder, int index, int column );
+qhandle_t	UI_VRComp_FeederImage( int feeder, int index );
+qboolean	UI_VRComp_FeederSelection( int feeder, int index );
+qboolean	UI_VRComp_Script( const char *name, char **args );
 
 // ui_vrvoice.c (OpenJK VR: the voice chat settings)
 void		UI_VRVoice_AddSettings( void );

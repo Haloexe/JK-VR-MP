@@ -300,6 +300,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 	G_VRPoseInit();			// OpenJK VR: poses (g_vrpose.c)
 	G_RPInit();				// OpenJK VR: roleplay mode (g_vrrp.c)
+	G_RPCompInit();			// OpenJK VR: roleplay - companions (g_vrcomp.c)
 
 	NPC_InitGame();
 
@@ -3381,9 +3382,11 @@ void G_RunFrame( int levelTime ) {
 	trap->PrecisionTimer_Start(&timer_ClientEndframe);
 #endif
 	// OpenJK VR: roleplay - players' sides for the NPCs, who's down (g_vrdown.c);
-	// admins' games told what their Admin page shows (g_vrrp.c)
+	// admins' games told what their Admin page shows (g_vrrp.c); companions
+	// out or not, players' trails (g_vrcomp.c)
 	G_RPDownFrame();
 	G_RPFrame();
+	G_RPCompFrame();
 
 	// perform final fixups on the players
 	ent = &g_entities[0];

@@ -7,7 +7,8 @@
 //	Help, Server, and Admin for admins - are the items' groups (rp_...): the game's menu code (ui_vrrp.c) shows the
 //	page picked and, on it, what fits (logged in or not, playing a character or not...), fills
 //	the lists and the ui_rp... cvars the text shows, and runs what the buttons ask (uiScript
-//	vrRP ...) - what needs the server goes through the game ("rpui ...", cg_vrrp.c).
+//	vrRP ...) - what needs the server goes through the game ("rpui ...", cg_vrrp.c). The Editor's
+//	Companions opens the Companions menu (vr_comp.menu); the Server page's Companions, their settings.
 //
 //	vr_rp_tab and vr_rp_create are never shown themselves: their items go on the in-game bar
 //	(under it) and on Create game's settings (a free row), where the menus have room for them.
@@ -1519,6 +1520,41 @@
 
 		itemDef
 		{
+			name            rp_edit_comps
+			group           rp_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            320 288 100 24
+			text            "Companions"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      50
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Its companions: up to 6, and the 2 that come out with you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP companions ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_comps backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_comps backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
 			name            rp_edit_look
 			group           rp_edit
 			type            ITEM_TYPE_BUTTON
@@ -1802,7 +1838,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 84 545 136
-			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nWHEEL: hold Y. Up: Say... Right: Poses. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -2180,6 +2216,239 @@
 			mouseExit
 			{
 				setitemcolor	rp_srv_admins backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_comps
+			group           rp_srv_set
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            320 322 150 24
+			text            "Companions"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      75
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "How many come out with each player, and how they may look"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server companions ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_comps backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_comps backcolor 0 0 .3 .7
+			}
+		}
+
+		// Server: Companions (a character's, made on the Profile's Companions page)
+		itemDef
+		{
+			name            rp_scomp_l1
+			group           rp_srv_comp
+			rect            40 176 520 18
+			text            "Companions: the NPCs a character takes along, made on the Profile."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_scomp_out
+			group           rp_srv_comp
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 200 520 22
+			text            "Out with each player:"
+			cvar            "ui_rpSrvComps"
+			cvarFloatList
+			{
+				"None: no companions" 0 "1" 1 "2" 2
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_scomp_out bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_scomp_out bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_scomp_max
+			group           rp_srv_comp
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 226 520 22
+			text            "On the server at once:"
+			cvar            "ui_rpSrvCompsMax"
+			cvarFloatList
+			{
+				"2" 2 "4" 4 "8" 8 "12" 12 "16" 16 "24" 24 "32" 32 "48" 48 "64" 64
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Every one is an NPC the server runs: fewer on a busy server"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_scomp_max bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_scomp_max bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_scomp_looks
+			group           rp_srv_comp
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 252 520 22
+			text            "How they look:"
+			cvar            "ui_rpSrvCompModels"
+			cvarFloatList
+			{
+				"As players make them" 1 "As their type comes" 0
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      230
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Made: any player model the server has, or a custom character"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_scomp_looks bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_scomp_looks bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_scomp_apply
+			group           rp_srv_comp
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            40 288 110 24
+			text            "Apply"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server compApply ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_scomp_apply backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_scomp_apply backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_scomp_back
+			group           rp_srv_comp
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            170 288 110 24
+			text            "Back"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server settings ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_scomp_back backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_scomp_back backcolor 0 0 .3 .7
 			}
 		}
 

@@ -4547,8 +4547,8 @@ static void PM_CheckDuck (void)
 	// getting-down animation and back up with the getting up - and you're as
 	// big as crouching (up again where there's room, as from a crouch:
 	// bg_vrpose.c)
-	if ( pm->ps->clientNum < MAX_CLIENTS )
-	{
+	if ( pm->ps->clientNum < MAX_CLIENTS || BG_VRPose( pm->ps ) )
+	{//(an NPC in a pose too: a player's companion, posing with them - g_vrcomp.c)
 		int poseEyes;
 		if ( BG_VRPoseHeights( pm->ps, pm->animations, &poseEyes ) )
 		{

@@ -3520,6 +3520,10 @@ Ghoul2 Insert Start
 			//we put the $ in front to indicate a name and not a model
 			strcpy(playerModel, va("$%s", NPCName));
 		}
+		else
+		{
+			G_RPCompLook( NPC, playerModel, sizeof( playerModel ), customSkin, sizeof( customSkin ) );	// OpenJK VR: roleplay - a companion's own look (g_vrcomp.c)
+		}
 		SetupGameGhoul2Model(NPC, playerModel, customSkin);
 
 		if (!NPC->NPC_type)

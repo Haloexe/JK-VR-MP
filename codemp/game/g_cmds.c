@@ -3289,6 +3289,7 @@ command_t commands[] = {
 	{ "rp",					Cmd_VRRP_f,					0 },
 	{ "rpbio",				Cmd_VRRP_f,					0 },
 	{ "rpcard",				Cmd_VRRP_f,					0 },
+	{ "rpcomp",				Cmd_VRRP_f,					0 },
 	{ "rplogin",			Cmd_VRRP_f,					0 },
 	{ "rplogout",			Cmd_VRRP_f,					0 },
 	{ "rpnew",				Cmd_VRRP_f,					0 },

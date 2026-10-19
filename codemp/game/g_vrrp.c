@@ -6,9 +6,10 @@ accounts and logins, characters and factions, and roleplay chat.
 THE SWITCH. g_rp 1 turns roleplay on and 0 off, at any time, with no map
 change; the serverinfo "vrRP" says which (and, there at all, that this
 server knows roleplay): "<on> <g_rpCharacters> <g_rpTalkRange>
-<g_rpDowned>" ("0": not ready), games reading the first (atoi, older
-builds too), the Roleplay menu's Server page the rest (ui_vrrp.c). Off,
-the game plays as before; nothing is lost.
+<g_rpDowned> <g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels>"
+("0": not ready), games reading the first (atoi, older builds too), the
+Roleplay menu's Server page the rest (ui_vrrp.c). Off, the game plays as
+before; nothing is lost.
 
 ACCOUNTS. A player makes one with /new <name> <password> and logs in with
 /login <name> <password>. Their game (cg_vrrp.c) turns the password into a
@@ -46,6 +47,11 @@ DOWN, NOT DEAD (g_rpDowned): running out of health downs a player playing a
 character until someone of their faction gets them up or they give up; and
 NPCs take sides by faction - g_vrdown.c.
 
+COMPANIONS: up to RP_COMP_MAX NPCs a character keeps with it - a name,
+the NPC type it fights as, a look, its colours, whether it comes out (up
+to RP_COMP_OUT_MAX do) - made on the Companions page (rpcomp), and out
+with the character while roleplay is on - g_vrcomp.c.
+
 CHAT, with roleplay on: talk (the chat key) reaches those within
 g_rpTalkRange (510 units, 15 m), /me actions too; the team chat key or
 /ooc goes to everyone, out of character, under the player's own name;
@@ -54,13 +60,14 @@ each, for speech bubbles; other clients see plain chat.
 
 Client commands (most sent by the cgame or the menus, not typed):
   rpver <protocol>          this client runs this build (cg_vrrp.c); 4 and
-                            later: it takes rpadmin
+                            later: it takes rpadmin; 5: rpcmps, rpcmp
   rpnew <account> <key>     make an account (key: 64 hex digits)
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
   rplogout
   rp new|play|faction|desc|bio|delete|list|look|giveup ...
   rpcard <client>, rpbio <client>    what a character's card shows
+  rpcomp list|set|del|out|order ...  companions (G_RP_Comp; 5 and later)
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
 <most> <1: this answers a login or a new account | 0> then rpchar <i>
@@ -68,7 +75,10 @@ To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
 rpfail <1: the name or password was wrong | 0>, to end a request made
 with a key. A new password's proof is over "password <its key>". An
 admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
-4 no-clip, 8 no target; 0: not an admin>.
+4 no-clip, 8 no target; 0: not an admin>. With the account, to a game of
+protocol 5 or later: rpcmps <count | -1: no character> <how many may come
+out>, then rpcmp <slot> <out> <seconds before it can come again> "name"
+"type" "look" <r> <g> <b> each - the character's companions.
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
 rp password <account> <temporary>, rp admin <account> [on|off], rp admins.
@@ -91,6 +101,7 @@ static int G_RP_ClientArg( const char *arg );
 #define RP_PROTOCOL			3		// (2: rpacct says when it answers a login; a new password's proof is over its key;
 									// 3: down, not dead - rpdn, rpup, rp giveup, the pose: g_vrdown.c)
 #define RP_PROTOCOL_ADMIN	4		// a game this new takes rpadmin (one between, as ever, plays roleplay)
+#define RP_PROTOCOL_COMP	5		// a game this new takes rpcmps, rpcmp - companions (g_vrcomp.c)
 
 // what an admin's game is told (rpadmin)
 #define RPA_ADMIN			1
@@ -113,7 +124,9 @@ static int G_RP_ClientArg( const char *arg );
 #define RP_SWITCH_WAIT		10000	// between switching characters
 #define RP_HURT_WAIT		10000	// switching characters or faction waits this long after being hurt
 #define RP_CARDS_PER_SEC	10
-#define RP_FILE_MAX			16384
+#define RP_FILE_MAX			65536	// (ten characters, each with six companions)
+#define RP_COMP_EDITS		6		// companions changed (rpcomp set | del | out)...
+#define RP_COMP_EDIT_TIME	3000	// ...in this long, at most (each is the account's file written)
 
 #define RP_SERVER_FILE		"rp/server.txt"
 #define RP_SERVER_FILE_MAX	4096
@@ -131,6 +144,8 @@ typedef struct {
 	char	desc[RP_DESC_MAX + 1];
 	char	bio[RP_BIO_MAX + 1];
 	char	look[RP_LOOK_KEYS][MAX_QPATH];	// "" for what it doesn't set
+	int		numComps;
+	rpComp_t	comps[RP_COMP_MAX];		// its companions (g_vrcomp.c brings them out)
 } rpChar_t;
 
 typedef struct {
@@ -159,6 +174,8 @@ typedef struct {
 	qboolean	answering;			// the next rpacct answers their login or new account
 	int			cardTime, cards;	// card requests this second
 	qboolean	toldOld;			// told their build is older than this server's roleplay
+	int			playGen;			// counts the characters taken up and put down: whose companions are out (g_vrcomp.c)
+	int			compEditTime, compEdits;	// companions changed lately
 } rpClient_t;
 
 static struct {
@@ -467,6 +484,11 @@ static void G_RP_SaveAccount( const rpAccount_t *acc ) {
 				Q_strcat( text, sizeof( text ), va( "look %s \"%s\"\n", rpLookKeys[k], ch->look[k] ) );
 			}
 		}
+		for ( k = 0; k < ch->numComps; k++ ) {
+			const rpComp_t *cp = &ch->comps[k];
+			Q_strcat( text, sizeof( text ), va( "companion\ncname \"%s\"\nctype \"%s\"\nclook \"%s\"\nccolor %i %i %i\ncout %i\n",
+				cp->name, cp->type, cp->look, cp->rgb[0], cp->rgb[1], cp->rgb[2], cp->out ? 1 : 0 ) );
+		}
 		Q_strcat( text, sizeof( text ), "end\n" );
 	}
 	G_RP_WriteFile( G_RP_AccountPath( acc->name ), text );
@@ -488,6 +510,7 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 	static char text[RP_FILE_MAX];
 	const char *p, *tok;
 	rpChar_t *ch = NULL;
+	rpComp_t *cp = NULL;
 	qboolean haveKey = qfalse, inChar = qfalse;
 
 	if ( !G_RP_AccountNameOk( name ) || G_RP_ReadFile( G_RP_AccountPath( name ), text, sizeof( text ) ) < 0 ) {
@@ -512,13 +535,41 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 		} else if ( !Q_stricmp( tok, "character" ) ) {
 			inChar = qtrue;
 			ch = ( acc->numChars < RP_CHARS_MAX ) ? &acc->chars[acc->numChars++] : NULL;
+			cp = NULL;
 			if ( ch ) {
 				memset( ch, 0, sizeof( *ch ) );
 				ch->faction = RPF_NEUTRAL;
 			}
 		} else if ( !Q_stricmp( tok, "end" ) ) {
 			ch = NULL;
+			cp = NULL;
 			inChar = qfalse;
+		} else if ( ch && !Q_stricmp( tok, "companion" ) ) {
+			cp = ( ch->numComps < RP_COMP_MAX ) ? &ch->comps[ch->numComps++] : NULL;
+			if ( cp ) {
+				memset( cp, 0, sizeof( *cp ) );
+				cp->rgb[0] = cp->rgb[1] = cp->rgb[2] = 255;
+			}
+		} else if ( cp && !Q_stricmp( tok, "cname" ) ) {
+			G_RP_CleanText( COM_ParseExt( &p, qfalse ), cp->name, sizeof( cp->name ) );
+		} else if ( cp && !Q_stricmp( tok, "ctype" ) ) {
+			tok = COM_ParseExt( &p, qfalse );
+			if ( BG_VRCompTypeOk( tok ) ) {
+				Q_strncpyz( cp->type, tok, sizeof( cp->type ) );
+				Q_strlwr( cp->type );
+			}
+		} else if ( cp && !Q_stricmp( tok, "clook" ) ) {
+			tok = COM_ParseExt( &p, qfalse );
+			if ( (int)strlen( tok ) < (int)sizeof( cp->look ) && BG_VRCompLookOk( tok ) ) {
+				Q_strncpyz( cp->look, tok, sizeof( cp->look ) );
+			}
+		} else if ( cp && !Q_stricmp( tok, "ccolor" ) ) {
+			int k;
+			for ( k = 0; k < 3; k++ ) {
+				cp->rgb[k] = (byte)Com_Clampi( 0, 255, atoi( COM_ParseExt( &p, qfalse ) ) );
+			}
+		} else if ( cp && !Q_stricmp( tok, "cout" ) ) {
+			cp->out = (qboolean)( atoi( COM_ParseExt( &p, qfalse ) ) == 1 );
 		} else if ( ch && !Q_stricmp( tok, "name" ) ) {
 			G_RP_CleanText( COM_ParseExt( &p, qfalse ), ch->name, sizeof( ch->name ) );
 		} else if ( ch && !Q_stricmp( tok, "faction" ) ) {
@@ -540,9 +591,29 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 			SkipRestOfLine( &p );
 		}
 	}
-	// a character without a name (a damaged file) is dropped
+	// a character without a name (a damaged file) is dropped; and a companion
+	// without one, or what it fights as - and past the most that come out,
+	// the rest stay in
 	{
 		int i, n = 0;
+		for ( i = 0; i < acc->numChars; i++ ) {
+			rpChar_t *c = &acc->chars[i];
+			int k, m = 0, out = 0;
+			for ( k = 0; k < c->numComps; k++ ) {
+				if ( !c->comps[k].name[0] || !c->comps[k].type[0] ) {
+					continue;
+				}
+				c->comps[m] = c->comps[k];
+				if ( c->comps[m].out && ++out > RP_COMP_OUT_MAX ) {
+					c->comps[m].out = qfalse;
+				}
+				m++;
+			}
+			if ( m < c->numComps ) {
+				memset( &c->comps[m], 0, sizeof( c->comps[0] ) * ( c->numComps - m ) );
+			}
+			c->numComps = m;
+		}
 		for ( i = 0; i < acc->numChars; i++ ) {
 			if ( acc->chars[i].name[0] ) {
 				if ( n != i ) {
@@ -722,6 +793,7 @@ static void G_RP_SendAccount( int clientNum ) {
 	}
 	if ( !c->loggedIn ) {
 		trap->SendServerCommand( clientNum, va( "rpacct - -1 0 %i 0", G_RP_MostChars() ) );
+		G_RPSendComps( clientNum );
 		return;
 	}
 	trap->SendServerCommand( clientNum, va( "rpacct %s %i %i %i %i", c->acc.name, c->active, c->acc.numChars, G_RP_MostChars(), c->answering ? 1 : 0 ) );
@@ -730,6 +802,7 @@ static void G_RP_SendAccount( int clientNum ) {
 		const rpChar_t *ch = &c->acc.chars[i];
 		trap->SendServerCommand( clientNum, va( "rpchar %i %i \"%s\" \"%s\" \"%s\"", i, ch->faction, ch->name, ch->desc, ch->bio ) );
 	}
+	G_RPSendComps( clientNum );
 }
 
 // The login a client keeps across a map change (the game restarts, they
@@ -772,6 +845,43 @@ qboolean G_RPCapable( int clientNum ) {
 	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].capable );
 }
 
+// A companion of the character a client plays (NULL: no such one, no
+// character, or roleplay's off).
+const rpComp_t *G_RPComp( int clientNum, int slot ) {
+	const rpChar_t *ch = ( clientNum >= 0 && clientNum < MAX_CLIENTS ) ? G_RP_Active( clientNum ) : NULL;
+
+	return ( ch && slot >= 0 && slot < ch->numComps ) ? &ch->comps[slot] : NULL;
+}
+
+// The character a client plays, as their companions go by it: another
+// number for every character taken up or put down (-1: none - no
+// character, or roleplay's off).
+int G_RPCompChar( int clientNum ) {
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !G_RP_Active( clientNum ) ) {
+		return -1;
+	}
+	return rpc[clientNum].playGen & 0x7fffffff;
+}
+
+// A client's game told the companions of the character they play:
+//   rpcmps <count | -1: no character> <how many may come out>
+//   rpcmp <slot> <out> <seconds before it can come again> "<name>" "<type>" "<look>" <r> <g> <b>
+void G_RPSendComps( int clientNum ) {
+	const rpChar_t *ch;
+	int k;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !rpc[clientNum].capable || rpc[clientNum].protocol < RP_PROTOCOL_COMP ) {
+		return;
+	}
+	ch = G_RP_Active( clientNum );
+	trap->SendServerCommand( clientNum, va( "rpcmps %i %i", ch ? ch->numComps : -1, Com_Clampi( 0, RP_COMP_OUT_MAX, g_rpCompanions.integer ) ) );
+	for ( k = 0; ch && k < ch->numComps; k++ ) {
+		const rpComp_t *cp = &ch->comps[k];
+		trap->SendServerCommand( clientNum, va( "rpcmp %i %i %i \"%s\" \"%s\" \"%s\" %i %i %i", k, cp->out ? 1 : 0, G_RPCompWait( clientNum, k ),
+			cp->name, cp->type, cp->look, cp->rgb[0], cp->rgb[1], cp->rgb[2] ) );
+	}
+}
+
 static void G_RP_RememberLook( int clientNum ) {
 	char userinfo[MAX_INFO_STRING];
 	int k;
@@ -809,6 +919,7 @@ static void G_RP_Play( int clientNum, int index, qboolean respawn ) {
 		ent->client->rpProvoked = 0;	// (the NPCs' grudges were the last character's: g_vrdown.c)
 	}
 	c->active = index;
+	c->playGen++;	// (another character's companions, or none: g_vrcomp.c)
 	c->acc.last = index;
 	G_RP_RememberLook( clientNum );
 	G_RP_SaveAccount( &c->acc );
@@ -1028,6 +1139,7 @@ static void G_RP_LogOut( int clientNum, const char *why ) {
 	}
 	c->loggedIn = qfalse;
 	c->active = -1;
+	c->playGen++;
 	if ( g_entities[clientNum].client ) {
 		g_entities[clientNum].client->rpProvoked = 0;	// (the character's grudges go with it: g_vrdown.c)
 	}
@@ -1458,6 +1570,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " deleted", c->acc.chars[i].name ) );
 		if ( i == c->active ) {
 			c->active = -1;
+			c->playGen++;
 		} else if ( c->active > i ) {
 			c->active--;
 		}
@@ -1505,6 +1618,178 @@ static void G_RP_Rp( gentity_t *ent ) {
 	}
 	G_RP_SaveAccount( &c->acc );
 	G_RP_SendAccount( clientNum );
+}
+
+/*
+================================================================================
+Companions: rpcomp (the Companions page, ui_vrcomp.c; the wheel's orders,
+g_vrcomp.c)
+================================================================================
+*/
+
+// Whether a client may change their companions now (each change is the
+// account's file written): RP_COMP_EDITS in RP_COMP_EDIT_TIME at most.
+static qboolean G_RP_CompEditAllowed( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+
+	if ( !c->compEditTime || level.time - c->compEditTime >= RP_COMP_EDIT_TIME ) {
+		c->compEditTime = level.time ? level.time : 1;
+		c->compEdits = 0;
+	}
+	if ( ++c->compEdits > RP_COMP_EDITS ) {
+		G_RP_Msg( clientNum, "Not so fast: wait a moment" );
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// how many of a character's companions come out
+static int G_RP_CompsOut( const rpChar_t *ch ) {
+	int k, n = 0;
+
+	for ( k = 0; k < ch->numComps; k++ ) {
+		n += ch->comps[k].out ? 1 : 0;
+	}
+	return n;
+}
+
+// rpcomp - the companions of the character a client plays (numbered from 1):
+//   rpcomp list
+//   rpcomp set <number> "<name>" "<type>" "<look>" <r> <g> <b>   (the next number: a new one)
+//   rpcomp del <number>
+//   rpcomp out <number> 0|1        (whether it comes out with them: RP_COMP_OUT_MAX at most)
+//   rpcomp order <what>            (the wheel's Companions ring: g_vrcomp.c)
+static void G_RP_Comp( gentity_t *ent ) {
+	const int clientNum = ent - g_entities;
+	rpClient_t *c = &rpc[clientNum];
+	rpChar_t *ch;
+	rpComp_t *cp;
+	char sub[16], arg[MAX_TOKEN_CHARS];
+	const char *problem;
+	int number, k;
+
+	trap->Argv( 1, sub, sizeof( sub ) );
+	if ( !Q_stricmp( sub, "order" ) ) {
+		G_RPCompOrder( ent );
+		return;
+	}
+	if ( !G_RPOn() ) {
+		G_RP_Msg( clientNum, "Roleplay is off on this server right now" );
+		return;
+	}
+	ch = G_RP_Active( clientNum );
+	if ( !ch ) {
+		G_RP_Msg( clientNum, c->loggedIn ? "Companions are a character's: play one first" : "Log in and play a character first" );
+		return;
+	}
+	if ( !Q_stricmp( sub, "list" ) || !sub[0] ) {
+		G_RP_Print( clientNum, va( "%s" S_COLOR_WHITE "'s companions, %i of %i:", ch->name, ch->numComps, RP_COMP_MAX ) );
+		for ( k = 0; k < ch->numComps; k++ ) {
+			const int wait = G_RPCompWait( clientNum, k );
+			cp = &ch->comps[k];
+			G_RP_Print( clientNum, va( " %i  %s" S_COLOR_WHITE " - %s%s%s%s%s", k + 1, cp->name, cp->type, cp->look[0] ? ", looks " : "", cp->look,
+				cp->out ? " - comes out" : "", wait ? va( " (knocked out: %i s)", wait ) : "" ) );
+		}
+		G_RP_Print( clientNum, "rpcomp set <number> <name> <type> <look> <r> <g> <b> | del <number> | out <number> 0|1 | order <what>" );
+		G_RPSendComps( clientNum );
+		return;
+	}
+	trap->Argv( 2, arg, sizeof( arg ) );
+	number = ( arg[0] >= '1' && arg[0] <= '9' && ( !arg[1] || ( arg[1] >= '0' && arg[1] <= '9' && !arg[2] ) ) ) ? atoi( arg ) : 0;
+	if ( !Q_stricmp( sub, "set" ) ) {
+		char name[RP_NAME_BUF], type[RP_COMP_TYPE_SIZE], look[MAX_QPATH];
+		if ( number < 1 || number > ch->numComps + 1 ) {
+			G_RP_Msg( clientNum, "No companion by that number" );
+			return;
+		}
+		if ( number > RP_COMP_MAX ) {
+			G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " has %i companions, the most there are: delete one first", ch->name, RP_COMP_MAX ) );
+			return;
+		}
+		if ( !G_RP_CompEditAllowed( clientNum ) ) {
+			return;
+		}
+		trap->Argv( 3, arg, sizeof( arg ) );
+		G_RP_CleanText( arg, name, sizeof( name ) );
+		problem = G_RP_NameProblem( name );
+		if ( problem ) {
+			G_RP_Msg( clientNum, problem );
+			return;
+		}
+		trap->Argv( 4, arg, sizeof( arg ) );
+		Q_strncpyz( type, arg, sizeof( type ) );
+		Q_strlwr( type );
+		problem = ( strlen( arg ) >= sizeof( type ) ) ? "Pick what it fights as from the list" : G_RPCompTypeProblem( type );
+		if ( problem ) {
+			G_RP_Msg( clientNum, problem );
+			return;
+		}
+		trap->Argv( 5, arg, sizeof( arg ) );
+		Q_strncpyz( look, arg, sizeof( look ) );
+		problem = ( strlen( arg ) >= sizeof( look ) ) ? "That look's name isn't one the game takes" : G_RPCompLookProblem( look );
+		if ( problem ) {
+			G_RP_Msg( clientNum, problem );
+			return;
+		}
+		cp = &ch->comps[number - 1];
+		if ( number > ch->numComps ) {
+			memset( cp, 0, sizeof( *cp ) );
+			cp->out = (qboolean)( G_RP_CompsOut( ch ) < RP_COMP_OUT_MAX );	// (a new one comes out, if there's room)
+			ch->numComps++;
+		}
+		Q_strncpyz( cp->name, name, sizeof( cp->name ) );
+		Q_strncpyz( cp->type, type, sizeof( cp->type ) );
+		Q_strncpyz( cp->look, look, sizeof( cp->look ) );
+		for ( k = 0; k < 3; k++ ) {
+			trap->Argv( 6 + k, arg, sizeof( arg ) );
+			cp->rgb[k] = (byte)Com_Clampi( 0, 255, arg[0] ? atoi( arg ) : 255 );
+		}
+		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " saved", cp->name ) );
+	} else if ( !Q_stricmp( sub, "del" ) || !Q_stricmp( sub, "delete" ) ) {
+		if ( number < 1 || number > ch->numComps ) {
+			G_RP_Msg( clientNum, "No companion by that number" );
+			return;
+		}
+		if ( !G_RP_CompEditAllowed( clientNum ) ) {
+			return;
+		}
+		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " deleted", ch->comps[number - 1].name ) );
+		for ( k = number - 1; k < ch->numComps - 1; k++ ) {
+			ch->comps[k] = ch->comps[k + 1];
+		}
+		ch->numComps--;
+		memset( &ch->comps[ch->numComps], 0, sizeof( ch->comps[0] ) );
+		G_RPCompDeleted( clientNum, number - 1 );	// (one out goes; the others' numbers move up)
+	} else if ( !Q_stricmp( sub, "out" ) ) {
+		qboolean want;
+		if ( number < 1 || number > ch->numComps ) {
+			G_RP_Msg( clientNum, "No companion by that number" );
+			return;
+		}
+		trap->Argv( 3, arg, sizeof( arg ) );
+		want = (qboolean)( !Q_stricmp( arg, "1" ) || !Q_stricmp( arg, "on" ) );
+		cp = &ch->comps[number - 1];
+		if ( want == cp->out ) {
+			G_RPSendComps( clientNum );	// (as it is: the page shows it so)
+			return;
+		}
+		if ( want && G_RP_CompsOut( ch ) >= RP_COMP_OUT_MAX ) {
+			G_RP_Msg( clientNum, va( "%i come out at most: untick one first", RP_COMP_OUT_MAX ) );
+			G_RPSendComps( clientNum );
+			return;
+		}
+		if ( !G_RP_CompEditAllowed( clientNum ) ) {
+			G_RPSendComps( clientNum );
+			return;
+		}
+		cp->out = want;
+		G_RP_Msg( clientNum, va( want ? "%s" S_COLOR_WHITE " comes out with you" : "%s" S_COLOR_WHITE " stays in", cp->name ) );
+	} else {
+		G_RP_Print( clientNum, "usage: rpcomp list | set <number> <name> <type> <look> <r> <g> <b> | del <number> | out <number> 0|1 | order <what>" );
+		return;
+	}
+	G_RP_SaveAccount( &c->acc );
+	G_RPSendComps( clientNum );
 }
 
 // what a character's card shows: rpcard <client>
@@ -1719,6 +2004,8 @@ void Cmd_VRRP_f( gentity_t *ent ) {
 		G_RP_Card( ent, qfalse );
 	} else if ( !Q_stricmp( cmd, "rpbio" ) ) {
 		G_RP_Card( ent, qtrue );
+	} else if ( !Q_stricmp( cmd, "rpcomp" ) ) {
+		G_RP_Comp( ent );
 	}
 }
 
@@ -1859,6 +2146,7 @@ void G_RPClientDisconnect( int clientNum ) {
 	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
 		return;
 	}
+	G_RPCompOwnerGone( clientNum );	// (their companions go with them: g_vrcomp.c)
 	memset( &rpc[clientNum], 0, sizeof( rpc[0] ) );
 	rpc[clientNum].active = -1;
 	trap->Cvar_Set( va( "vrrp%i", clientNum ), "" );
@@ -1871,8 +2159,9 @@ static void G_RP_ServerInfo( void ) {
 		trap->Cvar_Set( "vrRP", "0" );	// (not ready: off, whatever g_rp says)
 		return;
 	}
-	trap->Cvar_Set( "vrRP", va( "%i %i %i %i", g_rp.integer ? 1 : 0, G_RP_MostChars(), g_rpTalkRange.integer,
-		g_rpDowned.integer ? 1 : 0 ) );
+	trap->Cvar_Set( "vrRP", va( "%i %i %i %i %i %i %i", g_rp.integer ? 1 : 0, G_RP_MostChars(), g_rpTalkRange.integer,
+		g_rpDowned.integer ? 1 : 0, Com_Clampi( 0, RP_COMP_OUT_MAX, g_rpCompanions.integer ), Q_max( 0, g_rpCompanionsMax.integer ),
+		g_rpCompanionModels.integer ? 1 : 0 ) );
 }
 
 // g_rpCharacters, g_rpTalkRange or g_rpDowned changed: the serverinfo follows.
@@ -2067,6 +2356,7 @@ qboolean G_RPConsoleCommand( void ) {
 			G_RP_Msg( who, va( "The server deleted %s", acc->chars[i].name ) );
 			if ( rpc[who].active == i ) {
 				rpc[who].active = -1;
+				rpc[who].playGen++;
 			} else if ( rpc[who].active > i ) {
 				rpc[who].active--;
 			}

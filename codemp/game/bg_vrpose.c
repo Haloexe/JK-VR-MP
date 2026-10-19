@@ -255,8 +255,8 @@ static qboolean BG_VRP_Downed( playerState_t *ps, usercmd_t *cmd, animation_t *a
 qboolean BG_VRPoseMove( playerState_t *ps, usercmd_t *cmd, animation_t *animations ) {
 	int pose, phase;
 
-	if ( ps->clientNum < 0 || ps->clientNum >= MAX_CLIENTS ) {
-		return qfalse;	// (players only)
+	if ( ps->clientNum < 0 || ( ps->clientNum >= MAX_CLIENTS && !BG_VRPose( ps ) ) ) {
+		return qfalse;	// (players; an NPC in a pose it was put in - a player's companion, posing with them: g_vrcomp.c)
 	}
 	if ( BG_VRPose( ps ) == VRPOSE_DOWNED ) {
 		return BG_VRP_Downed( ps, cmd, animations );

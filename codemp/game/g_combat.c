@@ -2111,6 +2111,7 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		return;
 
 	G_RPDownDied( self );	// OpenJK VR: roleplay - down no more (g_vrdown.c)
+	G_RPCompDied( self );	// OpenJK VR: roleplay - a companion knocked out (g_vrcomp.c)
 
 	//check player stuff
 	g_dontFrickinCheck = qfalse;
@@ -4587,7 +4588,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		attacker = &g_entities[ENTITYNUM_WORLD];
 	}
 
-	G_RPProvoke( attacker, targ );	// OpenJK VR: roleplay - an NPC's side that left them be fights back (g_vrdown.c)
+	if ( G_RPCompNoHarm( targ, attacker ) )
+	{//OpenJK VR: roleplay - a player and their companions don't hurt one another (g_vrcomp.c)
+		return;
+	}
+	G_RPCompHurt( targ, attacker );	// OpenJK VR: roleplay - whoever hurts a player or theirs, their companions fight (g_vrcomp.c)
+	G_RPProvoke( G_RPCompBlame( attacker ), targ );	// OpenJK VR: roleplay - an NPC's side that left them be fights back (g_vrdown.c; a companion's blow, its owner's)
 
 	// shootable doors / buttons don't actually have any health
 

@@ -1,0 +1,1390 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: COMPANIONS
+//
+//	The Companions menu (vr_comp): the companions of the character you play - made, changed,
+//	deleted, and which come out with you. Opened from the Profile menu (its COMPANIONS button)
+//	or the Roleplay menu's Editor page. Its parts - the list, making one, a custom character -
+//	are the items' groups (vc_...): the game's menu code (ui_vrcomp.c) shows what fits (the
+//	part you're in, the look chosen, why it can't be used here...), fills the lists and the
+//	ui_rpComp... cvars the text shows, keeps the preview ("character") as the companion will
+//	look, and runs what the buttons ask (uiScript vrComp ...) - what needs the server goes
+//	through the game ("rpui comp ...", cg_vrcomp.c).
+//
+//	A custom character is made with the Profile's own lists (feeders 19 to 23, on the ui_char_
+//	cvars, put back as they were when the menu shuts) and its scripts (characterchanged,
+//	char_skin, resetcharacterlistboxes), which work on this menu's "character", "headlistbox",
+//	"torsolistbox", "lowerlistbox" and "colorbox".
+//
+//	vr_comp_profile is never shown itself: its items go on the Profile menu (ingame_player), in
+//	the free place at the end of its row of buttons, where the server has roleplay.
+//
+//	feeder 68:	your companions		feeder 69:	what one can fight as		feeder 70:	models
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name                "vr_comp"
+		visible             0
+		fullScreen          0
+		rect                20 25 600 440
+		focusColor          1 1 1 1
+		descX               450
+		descY               438
+		descScale           0.8
+		descColor           1 .682 0 .8
+		descAlignment       ITEM_ALIGN_CENTER
+
+		onOpen
+		{
+			uiScript		vrComp opened
+		}
+		onClose
+		{
+			uiScript		vrComp closed
+		}
+
+		// the backdrop
+		itemDef
+		{
+			name            vc_back
+			group           none
+			style           WINDOW_STYLE_SHADER
+			rect            0 0 600 440
+			background      "gfx/menus/menu_box_ingame"
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_back2
+			group           none
+			style           WINDOW_STYLE_FILLED
+			rect            4 4 592 432
+			backcolor       0 0 .06 .55
+			visible         1
+			decoration
+		}
+
+		// the title, and whose they are (ui_rpCompStatus)
+		itemDef
+		{
+			name            vc_title
+			group           none
+			style           WINDOW_STYLE_EMPTY
+			rect            0 4 600 24
+			text            "COMPANIONS"
+			font            3
+			textscale       0.9
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      300
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_status
+			group           none
+			rect            10 30 580 18
+			cvar            "ui_rpCompStatus"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      290
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Where it can't be used: why, and the Roleplay menu if that's where to go
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_why1
+			group           vc_why
+			rect            30 84 540 18
+			cvar            "ui_rpCompWhy1"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_why2
+			group           vc_why
+			rect            30 102 540 18
+			cvar            "ui_rpCompWhy2"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_why_rp
+			group           vc_why_rp
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            30 132 170 24
+			text            "Roleplay menu"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      85
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Log in, and play one of your characters"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp roleplay ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_why_rp backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_why_rp backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// The list: your character's companions (feeder 68), which come out, New, Change, Delete
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_list
+			group           vc_list
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 54 390 100
+			elementwidth    370
+			elementheight   16
+			elementtype     LISTBOX_TEXT
+			feeder          68
+			columns         3 4 160 156  166 110 106  280 90 86
+			font            2
+			textscale       0.75
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 .2 .45
+			border          1
+			bordercolor     .35 .45 .8 .8
+			outlinecolor    .2 .45 .85 .6
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            vc_picked
+			group           vc_list
+			rect            10 158 390 18
+			cvar            "ui_rpCompPickedLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 .682 0 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_new
+			group           vc_list_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 180 120 24
+			text            "New"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "A new companion for this character"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp new ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_new backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_new backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_change
+			group           vc_list_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            140 180 120 24
+			text            "Change"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Its name, what it fights as, how it looks"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp change ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_change backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_change backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_delete
+			group           vc_list_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            270 180 130 24
+			text            "Delete"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp delete ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_delete backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_delete backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_out
+			group           vc_list_act
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 210 190 24
+			cvar            "ui_rpCompOutLine"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      95
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Whether the one picked comes out with you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp out ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_out backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_out backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_outcount
+			group           vc_list_act
+			rect            210 213 190 18
+			cvar            "ui_rpCompOutCount"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_del_line
+			group           vc_list_del
+			rect            10 183 390 18
+			cvar            "ui_rpCompDelLine"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 .682 0 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_del_yes
+			group           vc_list_del
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 210 120 24
+			text            "Delete it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp deleteYes ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_del_yes backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_del_yes backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_del_no
+			group           vc_list_del
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            140 210 120 24
+			text            "Keep it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp deleteNo ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_del_no backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_del_no backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_list_help
+			group           vc_list
+			type            ITEM_TYPE_TEXTSCROLL
+			style           WINDOW_STYLE_FILLED
+			rect            10 244 390 130
+			text            "Tick up to 2 to come out with you: they join you a moment after you spawn, and fight on your side.\nORDERS: hold Y, then Down - the Companions ring: follow me, formation, attack, defend me, hold here, come to me, pose with me. Look at one of them as you let go, and only it is ordered.\nKnocked out, one comes back after 2 minutes: Come to me calls it."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      4
+			textaligny      2
+			lineHeight      15
+			maxLineChars    80
+			forecolor       .85 .85 .9 1
+			backcolor       0 0 0 .35
+			visible         1
+		}
+
+		itemDef
+		{
+			name            vc_backbutton
+			group           vc_backbutton
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 404 120 28
+			text            "Back"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp back ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_backbutton backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_backbutton backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Making one: its name, what it fights as (feeder 69, and a box to find one), its look
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_name
+			group           vc_edit
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            10 54 390 22
+			text            "Name:"
+			cvar            "ui_rpCompEditName"
+			maxChars        32
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      70
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "Up to 32 letters: shown over its head, and on its card"
+			mouseEnter
+			{
+				setitemcolor	vc_name bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	vc_name bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_find
+			group           vc_edit
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            10 80 390 22
+			text            "Fights as - find:"
+			cvar            "ui_rpCompFind"
+			maxChars        24
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "Part of a name or a kind: jedi, trooper, rebel..."
+			mouseEnter
+			{
+				setitemcolor	vc_find bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	vc_find bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_types
+			group           vc_edit
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 106 390 132
+			elementwidth    370
+			elementheight   16
+			elementtype     LISTBOX_TEXT
+			feeder          69
+			columns         3 4 170 166  178 120 116  300 70 68
+			font            2
+			textscale       0.75
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 .2 .45
+			border          1
+			bordercolor     .35 .45 .8 .8
+			outlinecolor    .2 .45 .85 .6
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            vc_typeline
+			group           vc_edit
+			rect            10 242 390 18
+			cvar            "ui_rpCompTypeLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_looklabel
+			group           vc_edit
+			rect            10 268 60 18
+			text            "Look:"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .615 .615 .956 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_look0
+			group           vc_looks
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            70 264 110 24
+			text            "As it comes"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "As the one it fights as looks"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp look 0 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_look0 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_look0 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_look1
+			group           vc_looks
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            185 264 100 24
+			text            "A model"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      50
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Any of the models you can wear yourself"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp look 1 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_look1 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_look1 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_look2
+			group           vc_looks
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            290 264 110 24
+			text            "Custom"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Made as you make your own: species, colour, head, torso, legs"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp look 2 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_look2 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_look2 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_looksoff
+			group           vc_looks_off
+			rect            70 268 330 18
+			text            "This server keeps them as they come."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_lookline0
+			group           vc_look0
+			rect            10 300 390 18
+			cvar            "ui_rpCompLookLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_models
+			group           vc_look1
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 292 390 82
+			elementwidth    64
+			elementheight   64
+			elementtype     LISTBOX_IMAGE
+			feeder          70
+			horizontalscroll
+			border          1
+			bordersize      1
+			backcolor       .66 .66 1 .25
+			bordercolor     .66 .66 1 1
+			visible         1
+			action
+			{
+				play		"sound/interface/choose_head.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            vc_lookline2
+			group           vc_look2
+			rect            10 300 270 18
+			cvar            "ui_rpCompLookLine"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_custom
+			group           vc_look2
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            290 296 110 24
+			text            "Change it"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp custom ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_custom backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_custom backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_save
+			group           vc_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 404 120 28
+			text            "Save"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp save ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_save backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_save backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_cancel
+			group           vc_edit
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            140 404 120 28
+			text            "Cancel"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp cancel ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_cancel backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_cancel backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// A custom character: species (feeder 19), colour (23), head, torso, legs (20, 21, 22)
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_species
+			group           vc_custom
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            10 54 390 22
+			text            "Species:"
+			feeder          19
+			cvar            "ui_char_model"
+			cvarStrList     feeder
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      90
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		characterchanged ;
+				uiScript		resetcharacterlistboxes ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_species bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	vc_species bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            vc_colourlabel
+			group           vc_custom
+			rect            10 84 390 18
+			text            "Colour:"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .615 .615 .956 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            colorbox
+			group           vc_custom
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 102 390 52
+			elementwidth    32
+			elementheight   32
+			elementtype     LISTBOX_IMAGE
+			feeder          23
+			horizontalscroll
+			border          1
+			bordersize      1
+			backcolor       .66 .66 1 .25
+			bordercolor     .66 .66 1 1
+			visible         1
+			action
+			{
+				play		"sound/interface/choose_color.wav"
+			}
+		}
+
+		itemDef
+		{
+			name            vc_part0
+			group           vc_custom
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 160 120 22
+			text            "Head"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp part 0 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_part0 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_part0 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_part1
+			group           vc_custom
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            140 160 120 22
+			text            "Torso"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp part 1 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_part1 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_part1 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            vc_part2
+			group           vc_custom
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            270 160 130 22
+			text            "Legs"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp part 2 ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_part2 backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_part2 backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            headlistbox
+			group           vc_part0
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 186 390 92
+			elementwidth    72
+			elementheight   72
+			elementtype     LISTBOX_IMAGE
+			feeder          20
+			horizontalscroll
+			border          1
+			bordersize      1
+			backcolor       .66 .66 1 .25
+			bordercolor     .66 .66 1 1
+			forecolor       -1
+			visible         1
+			action
+			{
+				play		"sound/interface/choose_head.wav" ;
+				uiScript		char_skin
+			}
+		}
+
+		itemDef
+		{
+			name            torsolistbox
+			group           vc_part1
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 186 390 92
+			elementwidth    72
+			elementheight   72
+			elementtype     LISTBOX_IMAGE
+			feeder          21
+			horizontalscroll
+			border          1
+			bordersize      1
+			backcolor       .66 .66 1 .25
+			bordercolor     .66 .66 1 1
+			forecolor       -1
+			visible         1
+			action
+			{
+				play		"sound/interface/choose_torso.wav" ;
+				uiScript		char_skin
+			}
+		}
+
+		itemDef
+		{
+			name            lowerlistbox
+			group           vc_part2
+			type            ITEM_TYPE_LISTBOX
+			style           WINDOW_STYLE_FILLED
+			rect            10 186 390 92
+			elementwidth    72
+			elementheight   72
+			elementtype     LISTBOX_IMAGE
+			feeder          22
+			horizontalscroll
+			border          1
+			bordersize      1
+			backcolor       .66 .66 1 .25
+			bordercolor     .66 .66 1 1
+			forecolor       -1
+			visible         1
+			action
+			{
+				play		"sound/interface/choose_head.wav" ;
+				uiScript		char_skin
+			}
+		}
+
+		itemDef
+		{
+			name            vc_custom_l1
+			group           vc_custom
+			rect            10 290 390 18
+			text            "Made as you make your own custom character."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_done
+			group           vc_custom
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            10 404 120 28
+			text            "Done"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp done ;
+			}
+			mouseEnter
+			{
+				setitemcolor	vc_done backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	vc_done backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// The preview: the companion picked, or being made, as it will look ("character")
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_previewback
+			group           vc_previewback
+			style           WINDOW_STYLE_FILLED
+			rect            410 54 180 250
+			backcolor       0 0 .2 .35
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            character
+			group           vc_preview
+			type            ITEM_TYPE_MODEL
+			rect            410 54 180 250
+			model_g2anim    "BOTH_WALK1"
+			model_angle     180
+			model_g2mins    -30 -15 -14
+			model_g2maxs    20 15 30
+			model_rotation  50
+			model_fovx      50
+			model_fovy      50
+			isCharacter     1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_prevname
+			group           vc_previewback
+			rect            410 308 180 18
+			cvar            "ui_rpCompPrevName"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      90
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_prevkind
+			group           vc_previewback
+			rect            410 326 180 18
+			cvar            "ui_rpCompPrevKind"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      90
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            vc_prevlook
+			group           vc_previewback
+			rect            410 344 180 18
+			cvar            "ui_rpCompPrevLook"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      90
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------------
+		// the server's last word on what you asked (ui_rpMessage)
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            vc_message
+			group           none
+			rect            10 380 580 18
+			cvar            "ui_rpMessage"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      290
+			textaligny      0
+			forecolor       1 .85 .4 1
+			visible         1
+			decoration
+		}
+
+	}
+
+	//------------------------------------------------------------------------------------------
+	// COMPANIONS on the Profile menu (its items go on "ingame_player", at the end of its row of
+	// buttons; where the server has roleplay) - its glow one of the Profile's highlights, hidden as it opens
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_comp_profile"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name            vr_comp_profileglow
+			group           highlights
+			style           WINDOW_STYLE_SHADER
+			rect            445 437 105 32
+			background      "gfx/menus/menu_buttonback"
+			forecolor       1 1 1 1
+			visible         0
+			decoration
+		}
+
+		itemDef
+		{
+			name            vr_comp_profilebutton
+			group           none
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_EMPTY
+			rect            445 437 105 32
+			text            "COMPANIONS"
+			font            2
+			textscale       0.9
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      52
+			textaligny      2
+			forecolor       1 .682 0 1
+			visible         1
+			descText        "Your character's companions: make them, and choose who comes out with you"
+			cvarTest        "ui_rpServer"
+			showCvar
+			{
+				"1" ; "2" ; "3"
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrComp from 0 ;
+				close		ingame_player ;
+				open		vr_comp
+			}
+			mouseEnter
+			{
+				show		vr_comp_profileglow
+			}
+			mouseExit
+			{
+				hide		vr_comp_profileglow
+			}
+		}
+
+	}
+}

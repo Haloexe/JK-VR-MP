@@ -27,13 +27,18 @@ with "rpui <what>" (below).
 
 DOWN, NOT DEAD: being down, getting someone up, giving up - cg_vrdown.c.
 
+COMPANIONS: yours for the Companions page, whose others are, stand-ins
+for models this PC hasn't got - cg_vrcomp.c.
+
 SPEECH BUBBLES. With roleplay on, what someone near you says, and their
 /me, shows over their head for 6 seconds (cg_rpBubbles).
 
 CARDS. Look at someone playing a character, within 4 m, for half a
 second with your own weapon away (the saber off, or fists), and their
 card shows: name, faction, description (cg_rpCards). Their bio: Read
-their bio on the wheel's Roleplay ring, or /bio.
+their bio on the wheel's Roleplay ring, or /bio. A player's companion's
+card is its name (over its head too), whose it is and its side: known
+here, nothing asked of the server.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -46,7 +51,7 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			4		// (as the server's, g_vrrp.c: 4 takes rpadmin)
+#define RP_PROTOCOL			5		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions)
 
 // what the server says of an admin (rpadmin; as g_vrrp.c's)
 #define RPA_ADMIN			1
@@ -136,6 +141,7 @@ static struct {
 	qboolean	server;			// it has roleplay (serverinfo vrRP)...
 	qboolean	working;		// ...that works (a lone "0": its rp/server.txt can't be read)...
 	qboolean	on;				// ...and it's on
+	int			compsAllowed;	// companions a player may have out there (vrRP; 0: none, or a server before them)
 	char		address[MAX_QPATH];
 	int			firstSnap;
 	int			helloTime, helloTries;
@@ -178,6 +184,8 @@ static struct {
 
 static rpBubble_t	rpBubbles[MAX_CLIENTS];
 static rpCard_t		rpCards[MAX_CLIENTS];
+static rpCard_t		rpCompCard;		// a companion's (made here: CG_RP_CompCard)
+static char			rpCompCardWhose[MAX_QPATH * 2];
 
 /*
 ================================================================================
@@ -732,11 +740,40 @@ static qboolean CG_RP_CardsWanted( void ) {
 	return (qboolean)( cgrp.on && cg_rpCards.integer && cg.snap && cg.snap->ps.pm_type != PM_INTERMISSION && CG_RP_WeaponAway() );
 }
 
-// What a card shows of client n, if there's one to show (NULL: none).
+// A companion's card: its name, whose it is, its side (its owner's, as the
+// NPCs see it) - made here (NULL: n isn't a companion now).
+static const rpCard_t *CG_RP_CompCard( int n ) {
+	const char *name = CG_RP_CompName( n );
+	const int owner = CG_RP_CompOwner( n );
+	char whose[MAX_QPATH * 2], plain[MAX_QPATH * 2];
+
+	if ( !name || owner < 0 || !cg_entities[n].currentValid ) {
+		return NULL;
+	}
+	Com_sprintf( whose, sizeof( whose ), "%s's companion", cgs.clientinfo[owner].infoValid ? cgs.clientinfo[owner].name : "Someone" );
+	if ( strcmp( rpCompCard.name, name ) || strcmp( rpCompCardWhose, whose ) ) {
+		Q_strncpyz( rpCompCard.name, name, sizeof( rpCompCard.name ) );
+		Q_strncpyz( rpCompCardWhose, whose, sizeof( rpCompCardWhose ) );
+		CG_RP_Plain( whose, plain, sizeof( plain ) );
+		CG_RP_Layout( plain, RP_CARD_WIDTH, 2, &rpCompCard.desc );
+	}
+	switch ( cg_entities[n].currentState.teamowner ) {
+	case NPCTEAM_PLAYER:	rpCompCard.faction = RPF_HEROES; break;
+	case NPCTEAM_ENEMY:		rpCompCard.faction = RPF_VILLAINS; break;
+	default:				rpCompCard.faction = RPF_NEUTRAL; break;
+	}
+	rpCompCard.time = cg.time ? cg.time : 1;
+	return &rpCompCard;
+}
+
+// What a card shows of client n (or a companion), if there's one to show (NULL: none).
 static const rpCard_t *CG_RP_Card( int n ) {
 	const rpCard_t *c;
 
-	if ( n < 0 || n >= MAX_CLIENTS || !cgs.clientinfo[n].infoValid ) {
+	if ( n >= MAX_CLIENTS ) {
+		return CG_RP_CompCard( n );
+	}
+	if ( n < 0 || !cgs.clientinfo[n].infoValid ) {
 		return NULL;
 	}
 	c = &rpCards[n];
@@ -744,8 +781,12 @@ static const rpCard_t *CG_RP_Card( int n ) {
 }
 
 static void CG_RP_AskCard( int n ) {
-	rpCard_t *c = &rpCards[n];
+	rpCard_t *c;
 
+	if ( n < 0 || n >= MAX_CLIENTS ) {
+		return;	// (a companion's card is made here)
+	}
+	c = &rpCards[n];
 	if ( c->time && cg.time - c->time < RP_CARD_KEEP && !strcmp( c->name, cgs.clientinfo[n].name ) ) {
 		return;
 	}
@@ -783,6 +824,8 @@ static void CG_RP_Look( void ) {
 		CG_Trace( &tr, start, mins, maxs, end, self, CONTENTS_SOLID | CONTENTS_BODY );
 		if ( tr.entityNum >= 0 && tr.entityNum < MAX_CLIENTS && tr.entityNum != self && cgs.clientinfo[tr.entityNum].infoValid ) {
 			target = tr.entityNum;
+		} else if ( CG_RP_CompName( tr.entityNum ) ) {
+			target = tr.entityNum;	// (a player's companion)
 		}
 	}
 	if ( target >= 0 ) {
@@ -802,9 +845,10 @@ static void CG_RP_Look( void ) {
 	}
 }
 
-// Read their bio (the wheel can, while a card shows).
+// Read their bio (the wheel can, while a player's card shows: a companion has none).
 qboolean CG_RP_CanReadBio( void ) {
-	return (qboolean)( CG_RP_CardsWanted() && cgrp.target >= 0 && cg.time - cgrp.since >= RP_CARD_DWELL && CG_RP_Card( cgrp.target ) );
+	return (qboolean)( CG_RP_CardsWanted() && cgrp.target >= 0 && cgrp.target < MAX_CLIENTS && cg.time - cgrp.since >= RP_CARD_DWELL &&
+		CG_RP_Card( cgrp.target ) );
 }
 
 void CG_RP_ReadBio( void ) {
@@ -901,6 +945,7 @@ rpui <what>: the Roleplay menu's buttons.
   save              ...and what's changed there back
   bio               read the bio of who you look at
   admin <what>      the Admin page (CG_RP_Admin)
+  comp <what>       the Companions page (cg_vrcomp.c: CG_RP_CompUI)
 The passwords' cvars are emptied as they're read.
 */
 
@@ -1052,6 +1097,8 @@ static void CG_RP_UI_f( void ) {
 		cgrp.peopleUntil = cg.time + RP_PEOPLE_TIME;	// (everyone's card, one at a time: CG_RP_People)
 	} else if ( !Q_stricmp( what, "admin" ) ) {
 		CG_RP_Admin();
+	} else if ( !Q_stricmp( what, "comp" ) ) {
+		CG_RP_CompUI();	// (the Companions page: cg_vrcomp.c)
 	}
 }
 
@@ -1258,6 +1305,10 @@ qboolean CG_RP_ServerCommand( const char *cmd ) {
 		CG_RP_DownCmd();	// (who's down: cg_vrdown.c)
 	} else if ( !Q_stricmp( cmd, "rpup" ) ) {
 		CG_RP_UpCmd();
+	} else if ( !Q_stricmp( cmd, "rpcmps" ) ) {
+		CG_RP_CompsCmd();	// (your character's companions: cg_vrcomp.c)
+	} else if ( !Q_stricmp( cmd, "rpcmp" ) ) {
+		CG_RP_CompCmd();
 	} else {
 		return qfalse;
 	}
@@ -1378,6 +1429,7 @@ void CG_RP_Frame( void ) {
 	CG_RP_Look();
 	CG_RP_People();
 	CG_RP_DownFrame();	// (down, getting someone up: cg_vrdown.c)
+	CG_RP_CompFrame();	// (companions: cg_vrcomp.c)
 }
 
 /*
@@ -1542,7 +1594,7 @@ static void CG_RP_DrawCard( void ) {
 		return;
 	}
 	bio = (qboolean)( cgrp.bioWho == t && cgrp.bioTime && cg.time - cgrp.bioTime < RP_BIO_TIME );
-	name = cgs.clientinfo[t].name;
+	name = ( t < MAX_CLIENTS ) ? cgs.clientinfo[t].name : c->name;
 	faction = rpFactions[c->faction];
 	nameH = CG_Text_Height( "A", nameScale, RP_FONT ) * 1.1f;
 	lineH = CG_Text_Height( "A", scale, RP_FONT ) * 1.1f;
@@ -1568,6 +1620,22 @@ static void CG_RP_DrawCard( void ) {
 	if ( bio ) {
 		y += lineH * 0.5f;
 		CG_RP_DrawLines( &cgrp.bio, 320.0f, y, scale, lineH, grey );
+	}
+	if ( t >= MAX_CLIENTS ) {
+		// a companion's name over its head too (the top of its box, as it's sent)
+		const centity_t *cent = &cg_entities[t];
+		vec3_t point;
+		float x, hy, head = DEFAULT_MAXS_2;
+		if ( cent->currentState.solid && cent->currentState.solid != SOLID_BMODEL ) {
+			head = (float)( ( ( cent->currentState.solid >> 16 ) & 255 ) - 32 );
+		}
+		VectorCopy( cent->lerpOrigin, point );
+		point[2] += head + RP_BUBBLE_ABOVE;
+		if ( CG_RP_Project( point, &x, &hy ) && x > 0.0f && x < SCREEN_WIDTH && hy > 0.0f && hy < SCREEN_HEIGHT ) {
+			const float tw = (float)CG_Text_Width( name, scale, RP_FONT );
+			CG_AnchorAt( x );
+			CG_Text_Paint( x - tw * 0.5f, hy - CG_Text_Height( name, scale, RP_FONT ), scale, white, name, 0, 0, ITEM_TEXTSTYLE_SHADOWED, RP_FONT );
+		}
 	}
 }
 
@@ -1640,10 +1708,16 @@ void CG_RP_ServerInfo( const char *info ) {
 		memset( rpBubbles, 0, sizeof( rpBubbles ) );
 	}
 	cgrp.server = server;
-	// working: on, or its settings said ("<on> <characters> <talk range> <downed>"); a lone "0" is a
-	// server whose roleplay isn't (it answers nothing - or a first build's, off: no logging in then)
+	// working: on, or its settings said ("<on> <characters> <talk range> <downed> <companions>
+	// <companions on the server> <their models>"); a lone "0" is a server whose roleplay isn't (it
+	// answers nothing - or a first build's, off: no logging in then)
 	cgrp.working = (qboolean)( on || strchr( value, ' ' ) != NULL );
 	cgrp.on = on;
+	{
+		int fields[7] = { 0, 0, 0, 0, 0, 0, 0 };
+		const int n = sscanf( value, "%d %d %d %d %d %d %d", &fields[0], &fields[1], &fields[2], &fields[3], &fields[4], &fields[5], &fields[6] );
+		cgrp.compsAllowed = ( n >= 5 ) ? Com_Clampi( 0, RP_COMP_OUT_MAX, fields[4] ) : 0;	// (a server before companions: none)
+	}
 	CG_RP_UIServer();
 }
 
@@ -1662,6 +1736,7 @@ void CG_RP_Restart( void ) {
 	CG_RP_DownInit();	// (everyone up again; the server says who's down when we hello)
 	cgrp.admin = 0;		// (and whether we're an admin)
 	CG_RP_UIAdmin();
+	CG_RP_CompInit();	// (and our companions)
 }
 
 // The menus' cvars of a server's (its people, the editor's fields, the
@@ -1691,6 +1766,7 @@ void CG_RP_Init( void ) {
 	cgrp.bioWho = -1;
 	cgrp.menuBio = -1;
 	CG_RP_DownInit();
+	CG_RP_CompInit();
 	CG_RP_UIClear();	// (another server's)
 	trap->Cvar_VariableStringBuffer( "cl_currentServerIP", cgrp.address, sizeof( cgrp.address ) );
 	if ( !cgrp.address[0] ) {
@@ -1716,15 +1792,22 @@ void CG_RP_Shutdown( void ) {
 	cgrp.numChars = cgrp.most = 0;
 	cgrp.active = -1;
 	cgrp.admin = 0;
+	cgrp.compsAllowed = 0;
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
 	CG_RP_UIAdmin();
 	CG_RP_UIClear();
+	CG_RP_CompInit();
 }
 
 // For the wheel: roleplay's on here.
 qboolean CG_RP_On( void ) {
 	return cgrp.on;
+}
+
+// For the wheel: how many companions a player may have out here (0: none).
+int CG_RP_CompsAllowed( void ) {
+	return cgrp.on ? cgrp.compsAllowed : 0;
 }
 
 // For the wheel: why the Roleplay menu's of no use here (NULL: it is - roleplay

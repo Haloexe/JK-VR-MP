@@ -1399,7 +1399,7 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		}
 	}
 
-	newent = G_Spawn();
+	newent = G_RPCompSpawner( ent ) ? G_RPCompEntity() : G_Spawn();	// OpenJK VR: roleplay - a companion's: a slot an NPC's had before (g_vrcomp.c)
 
 	if ( newent == NULL )
 	{
@@ -1450,6 +1450,10 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	if ( ent->NPC_type == NULL )
 	{
 		ent->NPC_type = "random";
+	}
+	else if ( G_RPCompSpawner( ent ) )
+	{//OpenJK VR: roleplay - a player's companion: its type is kept with it (g_vrcomp.c), not a string spent a spawn
+		Q_strlwr( ent->NPC_type );
 	}
 	else
 	{
@@ -1577,6 +1581,11 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	if ( !NPC_ParseParms( ent->NPC_type, newent ) )
 	{
 		Com_Printf ( S_COLOR_RED "ERROR: Couldn't spawn NPC %s\n", ent->NPC_type );
+		if ( newent->NPC && newent->NPC->tempGoal )
+		{//OpenJK VR: not left behind, an entity for good
+			G_FreeEntity( newent->NPC->tempGoal );
+			newent->NPC->tempGoal = NULL;
+		}
 		G_FreeEntity( newent );
 		//get rid of the spawner, too, I guess
 		G_FreeEntity( ent );

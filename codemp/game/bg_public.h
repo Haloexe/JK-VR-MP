@@ -1710,6 +1710,22 @@ int BG_AnimLength( int index, animNumber_t anim );
 // OpenJK VR: roleplay's factions (g_vrrp.c, cg_vrrp.c; NPCs' sides by them: g_vrdown.c)
 enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
 
+// OpenJK VR: roleplay's companions (bg_vrcomp.c, g_vrcomp.c): a character's NPCs
+#define RP_COMP_MAX			6		// a character's companions...
+#define RP_COMP_OUT_MAX		2		// ...out at once (g_rpCompanions: the server's own limit)
+#define RP_COMP_TYPE_SIZE	64		// an NPC type's name, kept (ext_data/NPCs)
+#define CS_VR_COMPANIONS	CS_MAX	// one a player: their companions out - "<entity>\<name>" each, '\' between
+#if ( CS_VR_COMPANIONS + MAX_CLIENTS ) > MAX_CONFIGSTRINGS
+#error overflow: CS_VR_COMPANIONS
+#endif
+qboolean	BG_VRCompClassOk( const char *className );
+const char	*BG_VRCompClassWord( const char *className );
+qboolean	BG_VRCompTypeOk( const char *type );
+qboolean	BG_VRCompLookOk( const char *look );
+void		BG_VRCompLookSplit( const char *look, char *model, int modelSize, char *skin, int skinSize );
+#define BG_VRCOMP_GLM_HEAD	( 8 + MAX_QPATH * 2 )	// a model.glm's first bytes: ident, version, name, its skeleton's name
+qboolean	BG_VRCompGlmHumanoid( const byte *head, int len );
+
 // OpenJK VR: poses - sit, sit cross-legged, kneel, lie down (bg_vrpose.c) -
 // and, in roleplay, down (g_vrdown.c): on the floor until helped up
 typedef enum {

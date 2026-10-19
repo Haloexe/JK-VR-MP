@@ -10,6 +10,10 @@ trigger) for 1.5 seconds to give up, a bar filling as you hold it (as the
 server counts it: from a press made after you went down). In the headset
 your hands feel it as you go down, and as you're got up.
 
+YOUR COMPANIONS get you up too, once they aren't fighting: one coming to
+you and at it shows as anyone getting you up does (rpup: the companion's
+entity, its name from the configstring - cg_vrcomp.c).
+
 SOMEONE DOWN - the server says who, and their faction (rpdn): look at them
 near enough - aim at them, or (in the headset, when the server sees where
 it looks: CG_VRB_GazeShared) look at them - and a line says so, and, of
@@ -83,7 +87,11 @@ static void CG_RP_DownFeel( float peak, int hold, float tail, int decay ) {
 }
 
 static const char *CG_RP_DownName( int n ) {
-	return ( n >= 0 && n < MAX_CLIENTS && cgs.clientinfo[n].infoValid ) ? cgs.clientinfo[n].name : "Someone";
+	if ( n >= MAX_CLIENTS ) {
+		const char *name = CG_RP_CompName( n );	// (a companion of yours: cg_vrcomp.c)
+		return name ? name : "Your companion";
+	}
+	return ( n >= 0 && cgs.clientinfo[n].infoValid ) ? cgs.clientinfo[n].name : "Someone";
 }
 
 /*
@@ -113,12 +121,16 @@ void CG_RP_DownCmd( void ) {
 }
 
 // rpup <helper> <client> <time>: helper is getting client up since time
-// (the server's); 0: stopped; -1: got them up
+// (the server's); 0: stopped; -1: got them up. helper: a player, or (getting
+// you up) a companion of yours - its entity.
 void CG_RP_UpCmd( void ) {
 	const int h = atoi( CG_Argv( 1 ) ), n = atoi( CG_Argv( 2 ) ), t = atoi( CG_Argv( 3 ) );
 
-	if ( trap->Cmd_Argc() < 4 || h < 0 || h >= MAX_CLIENTS || n < 0 || n >= MAX_CLIENTS ) {
+	if ( trap->Cmd_Argc() < 4 || h < 0 || n < 0 || n >= MAX_CLIENTS ) {
 		return;
+	}
+	if ( h >= MAX_CLIENTS && ( h >= ENTITYNUM_MAX_NORMAL || n != cg.clientNum ) ) {
+		return;	// (a companion gets only its owner up: us)
 	}
 	if ( h == cg.clientNum ) {
 		if ( t > 0 ) {
@@ -303,8 +315,8 @@ void CG_RP_DrawDown( void ) {
 			CG_RP_DownBar( y, rpd.helperFrom, RPD_HELP_TIME );
 			y += 14.0f;
 		} else {
-			CG_RP_DownLine( y, scale, soft, ( mine >= 0 ) ? va( "Someone of the %s can get you up", rpdFactions[mine] ) :
-				"Someone of your side can get you up" );
+			CG_RP_DownLine( y, scale, soft, CG_RP_CompsUp() ? "Your companions, or someone of your side, can get you up" :
+				( mine >= 0 ) ? va( "Someone of the %s can get you up", rpdFactions[mine] ) : "Someone of your side can get you up" );
 			y += lineH;
 		}
 		CG_RP_DownLine( y, scale, soft, vr ? "Hold the trigger to give up" : "Hold attack to give up" );

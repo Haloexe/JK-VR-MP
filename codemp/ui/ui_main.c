@@ -1470,6 +1470,8 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	UI_VRVideo_AddSettings();
 	// OpenJK VR: the Roleplay menu, its tab under the in-game bar, its row on Create game
 	UI_VRRP_AddMenus();
+	// OpenJK VR: the Companions menu, and its button on the Profile menu
+	UI_VRComp_AddMenus();
 
 	trap->PC_RemoveAllGlobalDefines ( );
 }
@@ -6440,6 +6442,9 @@ static void UI_RunMenuScript(char **args)
 		else if ( UI_VRRP_Script( name, args ) )	// OpenJK VR: the Roleplay menu
 		{
 		}
+		else if ( UI_VRComp_Script( name, args ) )	// OpenJK VR: the Companions menu
+		{
+		}
 		else if (Q_stricmp(name, "setMovesListDefault") == 0)
 		{
 			uiInfo.movesTitleIndex = 2;
@@ -7917,6 +7922,11 @@ static int UI_FeederCount(float feederID)
 		case FEEDER_VR_RPNPCS:
 			return UI_VRRP_FeederCount( (int)feederID );
 
+		case FEEDER_VR_RPCOMPS:	// OpenJK VR: roleplay's companions
+		case FEEDER_VR_RPCOMPTYPES:
+		case FEEDER_VR_RPCOMPLOOKS:
+			return UI_VRComp_FeederCount( (int)feederID );
+
 		case FEEDER_SABER_SINGLE_INFO:
 
 			for (i=0;i<MAX_SABER_HILTS;i++)
@@ -8209,6 +8219,10 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	else if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE || feederID == FEEDER_VR_RPNPCS)	// OpenJK VR: roleplay
 	{
 		return UI_VRRP_FeederText((int)feederID, index, column);
+	}
+	else if (feederID == FEEDER_VR_RPCOMPS || feederID == FEEDER_VR_RPCOMPTYPES || feederID == FEEDER_VR_RPCOMPLOOKS)	// OpenJK VR: companions
+	{
+		return UI_VRComp_FeederText((int)feederID, index, column);
 	}
 	else if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
@@ -8533,6 +8547,10 @@ static qhandle_t UI_FeederItemImage(float feederID, int index) {
 	int	validCnt,i;
 	static char info[MAX_STRING_CHARS];
 
+	if (feederID == FEEDER_VR_RPCOMPLOOKS)	// OpenJK VR: the models a companion can look like
+	{
+		return UI_VRComp_FeederImage((int)feederID, index);
+	}
 	if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
 		return 0;
@@ -8804,6 +8822,10 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 	if (feederID == FEEDER_VR_RPCHARS || feederID == FEEDER_VR_RPPEOPLE || feederID == FEEDER_VR_RPNPCS)	// OpenJK VR: roleplay
 	{
 		return UI_VRRP_FeederSelection(feederID, index);
+	}
+	if (feederID == FEEDER_VR_RPCOMPS || feederID == FEEDER_VR_RPCOMPTYPES || feederID == FEEDER_VR_RPCOMPLOOKS)	// OpenJK VR: companions
+	{
+		return UI_VRComp_FeederSelection(feederID, index);
 	}
 
 	if (feederID == FEEDER_Q3HEADS)
@@ -10142,6 +10164,7 @@ void UI_Refresh( int realtime )
 		UI_VRVoice_Frame();
 		UI_VRVideo_Frame();
 		UI_VRRP_Frame();	// (the Roleplay menu, as things stand)
+		UI_VRComp_Frame();	// (the Companions menu)
 		// paint all the menus
 		Menu_PaintAll();
 		// refresh server browser list

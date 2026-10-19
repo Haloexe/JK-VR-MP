@@ -9,7 +9,11 @@ one. Out of the middle:
   right   Poses >        sit (on a chair or a bench), kneel, lie down, sit
                          cross-legged (the poses: bg_vrpose.c); the pose
                          you're in reads "Stand up"
-  down    Companions >   (to come)
+  down    Companions >   orders to your companions (cg_vrcomp.c; the
+                         server's, g_vrcomp.c): follow me, formation,
+                         attack whom you look at, defend me, hold here,
+                         come to me, pose with me - to them all, or the
+                         one you look at as you let go
   left    Roleplay >     read the bio of whom you look at, challenge them
                          to a duel, give up (when you're down: cg_vrdown.c),
                          the Roleplay menu (roleplay on or off: logging in
@@ -53,7 +57,7 @@ enum {
 	PWA_DUEL,		// challenge them to a duel
 	PWA_GIVEUP,		// give up, down (cg_vrdown.c)
 	PWA_MENU,		// the Roleplay menu
-	PWA_COMPANION	// an order to your companions (to come)
+	PWA_COMPANION	// an order to your companions (arg: cg_vrcomp.c's)
 };
 
 enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_RINGS };
@@ -164,7 +168,7 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 			return "Not while you're down";
 		}
 		if ( slot->arg == PW_COMPANIONS ) {
-			return "Companions are still to come";
+			return CG_RP_CompsWhy();
 		}
 		return NULL;
 	case PWA_POSE:
@@ -187,7 +191,7 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 	case PWA_MENU:
 		return CG_RP_MenuWhy();	// (roleplay off: logging in there all the same)
 	case PWA_COMPANION:
-		return "Companions are still to come";
+		return CG_RP_CompOrderWhy( slot->arg );
 	default:
 		return NULL;
 	}
@@ -256,6 +260,9 @@ static void CG_PW_Do( const pwSlot_t *slot ) {
 		break;
 	case PWA_MENU:
 		trap->SendConsoleCommand( "ui_openmenu vr_rp\n" );	// (ui/vr_rp.menu)
+		break;
+	case PWA_COMPANION:
+		CG_RP_CompOrder( slot->arg );
 		break;
 	default:
 		break;	// (a ring, Back: rested on, not let go on)

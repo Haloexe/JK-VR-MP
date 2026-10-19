@@ -135,6 +135,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define FEEDER_VR_RPCHARS					0x41			// OpenJK VR: your roleplay characters (65 in ui/vr_rp.menu)
 #define FEEDER_VR_RPPEOPLE					0x42			// OpenJK VR: the people here (66 in ui/vr_rp.menu)
 #define FEEDER_VR_RPNPCS					0x43			// OpenJK VR: NPCs and vehicles to spawn, for admins (67 in ui/vr_rp.menu)
+#define FEEDER_VR_RPCOMPS					0x44			// OpenJK VR: your character's companions (68 in ui/vr_comp.menu)
+#define FEEDER_VR_RPCOMPTYPES				0x45			// OpenJK VR: what a companion can fight as (69 in ui/vr_comp.menu)
+#define FEEDER_VR_RPCOMPLOOKS				0x46			// OpenJK VR: models a companion can look like (70 in ui/vr_comp.menu)
 
 
 // Xbox specific, hope no one minds

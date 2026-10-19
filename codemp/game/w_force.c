@@ -552,6 +552,11 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 		return 0;
 	}
 
+	if ( forcePower != FP_TEAM_HEAL && forcePower != FP_TEAM_FORCE && G_RPCompNoHarm( other, attacker ) )
+	{//OpenJK VR: roleplay - a player and their companions (teammates and theirs too) don't turn the Force on one another (g_vrcomp.c)
+		return 0;
+	}
+
 	if (attacker && attacker->client && !BG_CanUseFPNow(level.gametype, &attacker->client->ps, level.time, forcePower))
 	{
 		return 0;

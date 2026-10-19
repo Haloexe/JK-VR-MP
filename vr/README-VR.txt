@@ -34,7 +34,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     only those near you with speech bubbles over their heads, /me and
     out-of-character chat, and character cards; down instead of dead,
     until someone of your faction gets you up; NPCs that take sides by
-    faction (see ROLEPLAY)
+    faction; companions of your own - up to 6 a character, 2 out with you -
+    that follow you, fight for you, get you up and take orders from the
+    wheel (see ROLEPLAY)
   * A keyboard in the headset for typing in menus, chat and the console
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
@@ -374,7 +376,8 @@ quick press of Y still picks the next Force power):
   up     Say...       the chat line, with the headset's keyboard
   right  Poses        sit (on a chair or a bench: stand with your back to
                       it first), kneel, lie down, sit cross-legged
-  down   Companions   (still to come)
+  down   Companions   orders to your companions (see COMPANIONS, under
+                      ROLEPLAY)
   left   Roleplay     read the bio of whom you look at, challenge them to a
                       duel, give up (when you're down), the Roleplay menu
                       (roleplay on or off: you log in there either way -
@@ -470,6 +473,59 @@ your Server page does it straight away - and rcon reaches it too while
 your game has an rcon password, such as one you typed on that page for
 another server; its Admins says so). A player typing rp admin is turned
 away, and the server's log says who tried.
+  COMPANIONS: each of your characters keeps up to 6 NPCs of its own. Make
+them in the Profile menu's Companions page (COMPANIONS at the bottom of
+the game's player menu, or Companions on the Roleplay menu's Editor
+page); it shows the companions of the character you play. New makes one:
+a name (up to 32 letters - shown over its head when you look at it, and
+on its card), what it fights as (the game's NPCs that are people: Jedi,
+Reborn, troopers, officers, mercenaries... - Find narrows the list; no
+droids, beasts or vehicles), and its look: as its type comes, one of the
+player models (on the server), or a custom character made as your own is
+(species, colour, head, torso, legs). The preview shows it as it'll look.
+Save sends it to the server, which says if it won't do. Tick up to 2 to
+come out with you (Comes out); Change and Delete (asked first) the one
+picked.
+  While roleplay is on and you play that character, the ticked ones come
+out a moment after you spawn, and go when you die, spectate, log out,
+switch characters or roleplay goes off. They're on your side: they fight
+for your faction, and you and they can't hurt one another (nor turn the
+Force on one another), nor your teammates and theirs in a team game. Not
+in Duel, Power Duel or Siege.
+  Orders - the wheel's Companions ring (down): Follow me (they walk with
+you and don't fight), Formation (behind you, beside you, or an escort:
+one ahead and one behind - each choice the next), Attack (whoever you're
+looking at), Defend me (they fight whoever hurts you or them, or goes
+after you: what they do unordered), Hold here, Come to me (to you at once,
+every 10 s at most - it also calls back one knocked out whose wait is
+over), Pose with me (once they're at their spots they take your pose: you
+sit, they sit on the floor). Look at one of them as you let go and the
+order is that one's alone. What can't be ordered now is greyed, and says
+why.
+  They keep their spots - 1.5 m behind you side by side, 1.2 m beside, 2 m
+ahead and behind - turning with you once you've turned past 45 degrees for
+a second; where the way to you isn't straight they follow your trail
+(round corners and pillars, up and down stairs), in single file where
+there's no room for two (the one nearer you along the way takes the nearer
+place), and step round anyone in their way - someone standing on a spot,
+they stop by them. With nowhere behind you (your back to a wall) they wait
+near you, or come your way. Stuck for 5 s (a second at the foot of a lift
+you went up), more than 40 m away, or where your trail can't be walked (a
+lift, a train, a jump up a ledge, lava), they come to just behind you -
+you in mid-air, to just behind where you left the ground. They keep out of
+lava and slime, and slow down at an edge rather than walk off it. They
+fight no further than 15 m from you (5 m from where they hold). When
+you're down, one of yours (one not fighting, if there is one) comes to you
+and gets you up (3 s by you), as someone of your side would.
+  A companion whose health runs out is knocked out: it lies there 10 s,
+then goes, and can come again 2 minutes later (Come to me, or your next
+life) - the page shows the wait. One put away hurt (unticked, or changed)
+comes back as hurt for 2 minutes. The server's owner sets how many come
+out with each player and on the whole server, and whether they may look
+like player models; a level near its limits holds them back for a while,
+and says so. Someone without the model a companion wears sees a stand-in
+(a Jedi, a trooper or a rebel). Without the headset, the same wheel (hold
+P) and the same page.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
 character there.
@@ -478,14 +534,18 @@ me on or off: cg_rpBubbles, cg_rpCards, cg_rpRemember), Help, and Server,
 for the owner: roleplay on or off, characters per account, how far talk
 reaches and whether running out of health downs players - straight into a
 game you host; on your own server, after typing its rcon password into the
-page (it shows the server's settings as they are). Its Admins makes an
+page (it shows the server's settings as they are). Its Companions: how
+many come out with each player (none, 1 or 2), how many on the server at
+once, and whether they may look like player models. Its Admins makes an
 account an admin, or not (the console shows the server's answer).
   In the console (Shift+~):  new <account> <password>,  login <account>
 <password>,  logout,  changepassword <old> <new>,  bio (of whom you look
 at), and  rp  for your characters: rp new <name>, rp play <name or
 number>, rp faction heroes|villains|neutral, rp desc <text>, rp bio
 <text>, rp delete <name>, rp giveup (down); rp look <player> shows anyone's
-card. A password
+card; rpcomp list (your character's companions), rpcomp order follow|
+formation|attack|defend|hold|come|pose (bind one to a key, if you like:
+bind F1 rpcomp order come). A password
 typed in the console shows as *s and isn't kept in its history (one with a
 ; or // in it goes in quotes; one with a " in it can only be typed in the
 menu), and a line that would cut a password short doesn't run.
@@ -731,8 +791,14 @@ no client. Source files:
   codemp/game/g_vrdown.c       roleplay: down, not dead; NPCs taking sides
   codemp/cgame/cg_vrdown.c     being down, getting someone up: the panel,
                                the prompts, Give up
+  codemp/game/g_vrcomp.c       roleplay: companions, the server's side -
+                               coming out, following, orders, fighting
+  codemp/cgame/cg_vrcomp.c     companions, the player's side: the wheel's
+                               orders, whose they are, stand-in models
+  codemp/game/bg_vrcomp.c      what a companion may fight as and look like
   codemp/game/bg_vrcrypt.c     SHA-256, HMAC and PBKDF2 for the logins
   codemp/ui/ui_vrrp.c          the Roleplay menu (base\ui\vr_rp.menu)
+  codemp/ui/ui_vrcomp.c        the Companions menu (base\ui\vr_comp.menu)
   shared/sdl/sdl_window.cpp    session creation after the GL context
   vr/build-win64.sh            how these binaries were built
   vr/build-linux-server.sh     the Linux dedicated server (vr/server/)

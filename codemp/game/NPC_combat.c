@@ -2919,8 +2919,10 @@ qboolean NPC_FreeCombatPoint( int combatPointID, qboolean failed )
 		NPCS.NPCInfo->lastFailedCombatPoint = combatPointID;
 	}
 	//Make sure it's valid
-	if ( combatPointID > level.numCombatPoints )
+	if ( combatPointID < 0 || combatPointID >= level.numCombatPoints )
+	{//OpenJK VR: none (-1: an NPC dying without one, as most do - player_die) is none, not the memory before them
 		return qfalse;
+	}
 
 	//Make sure it's currently occupied
 	if ( level.combatPoints[combatPointID].occupied == qfalse )
