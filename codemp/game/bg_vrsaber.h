@@ -52,7 +52,7 @@ static QINLINE int BG_VRFeel( int saberAnimLevel ) {
 static QINLINE float BG_VRFeelTurn( int feel ) {
 	switch ( feel ) {
 	case VR_FEEL_BLUE:	return 2000.0f;
-	case VR_FEEL_RED:	return 460.0f;
+	case VR_FEEL_RED:	return 490.0f;
 	case VR_FEEL_STAFF:	return 540.0f;
 	case VR_FEEL_DUAL:	return 750.0f;
 	default:			return 620.0f;

@@ -242,7 +242,7 @@ server running this build: your real blade is the weapon.
     The heavier a blade feels in your hand (below), the slower it can
     move - so the swing speeds a cut needs come down by the same share,
     and a full swing still hits as hard: the blue style's are 77% of the
-    light weight's, yellow's 83% of medium's, red's 84% of heavy's, and
+    light weight's, yellow's 83% of medium's, red's 89% of heavy's, and
     the staff's 72% of medium's (it hits and clashes as medium does - it's
     heavier in feel only); two sabers need the speeds they always have.
     Held with both hands, the same share of the heavier weight's speeds.
@@ -250,10 +250,10 @@ server running this build: your real blade is the weapon.
       - a blade can't be whipped about faster than its weight lets it: it
         has a top speed and takes a moment to get going and to turn back.
         It turns at most 2000 degrees a second with the blue style, 620
-        with yellow, 460 with red; the staff 540, between yellow and red;
+        with yellow, 490 with red; the staff 540, between yellow and red;
         two sabers 750 each. Swing faster than that and the blade - and
         your character's hand, which keeps hold of it - falls behind your
-        real hand (blue 25 degrees at most, yellow 55, red 65, the staff
+        real hand (blue 25 degrees at most, yellow 55, red 63, the staff
         60, two sabers 50), catching up as you slow. Slow, careful moves
         stay exact, and it never carries on past where your hand stops;
         only swung back hard, its weight carries it on a little first.

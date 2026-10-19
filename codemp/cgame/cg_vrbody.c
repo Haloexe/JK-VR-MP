@@ -2225,7 +2225,7 @@ The blade in your hand - and the hand with it (the arm turns your fist to
 hold it, so the hilt never leaves the fist). It has a top speed and takes a
 moment to get going and to turn back, as heavy as it feels (bg_vrsaber.h):
 the blue style's hardly (2000 degrees a second), yellow's more (620), the
-staff's more again (540), red's most (460); two sabers each 750 - swing
+staff's more again (540), red's most (490); two sabers each 750 - swing
 faster than that and the blade, and the fist holding it, fall behind the
 controller (you feel them strain, CG_VRB_Heft), catching up as you slow.
 Slow, careful moves stay exact, and it never carries on past where your
@@ -2246,8 +2246,8 @@ on it (CG_VRB_BladeSolid).
 
 // by feel - blue, yellow, red, the staff, two sabers (and how fast it turns at
 // most: BG_VRFeelTurn)
-static const float	vrbBladeMaxAccel[VR_NUM_FEELS] = { 120000.0f, 11500.0f, 8000.0f, 9000.0f, 14000.0f };	// deg/s/s it gets going (or turns back) at most
-static const float	vrbBladeMaxLag[VR_NUM_FEELS] = { 25.0f, 55.0f, 65.0f, 60.0f, 50.0f };	// degrees behind the hand at most
+static const float	vrbBladeMaxAccel[VR_NUM_FEELS] = { 120000.0f, 11500.0f, 8700.0f, 9000.0f, 14000.0f };	// deg/s/s it gets going (or turns back) at most
+static const float	vrbBladeMaxLag[VR_NUM_FEELS] = { 25.0f, 55.0f, 63.0f, 60.0f, 50.0f };	// degrees behind the hand at most
 static const int	vrbBladeHold[VR_NUM_FEELS] = { 35, 60, 75, 68, 60 };					// ms another blade stops it for
 
 // world yaw minus room (tracking) yaw
@@ -5289,7 +5289,7 @@ those are felt as such. cg_vrSaberWeight scales it (0: weightless; up to
 #define VRB_HEFT_QUIET_MS	250		// after meeting someone or a blade: that's what's felt
 
 // by feel: blue, yellow, red, the staff, two sabers
-static const float	vrbHeftPull[VR_NUM_FEELS] = { 0.24f, 0.46f, 0.55f, 0.50f, 0.40f };	// at full speed
+static const float	vrbHeftPull[VR_NUM_FEELS] = { 0.24f, 0.46f, 0.53f, 0.50f, 0.40f };	// at full speed
 static const float	vrbHeftStop[VR_NUM_FEELS] = { 0.24f, 0.50f, 0.60f, 0.55f, 0.50f };	// a full-speed swing stopped short...
 static const int	vrbHeftStopHold[VR_NUM_FEELS] = { 22, 30, 39, 35, 30 };			// ...held this long (ms)...
 static const int	vrbHeftStopDecay[VR_NUM_FEELS] = { 65, 100, 140, 120, 100 };		// ...dying away over this
