@@ -239,25 +239,34 @@ server running this build: your real blade is the weapon.
     the right one is then a light saber, as in the normal game. With the
     staff it switches the second blade off (click again for both). Held
     with both hands (above), a saber or staff swings one weight heavier.
+    The heavier a blade feels in your hand (below), the slower it can
+    move - so the swing speeds a cut needs come down by the same share,
+    and a full swing still hits as hard: the blue style's are 77% of the
+    light weight's, yellow's 83% of medium's, red's 84% of heavy's, and
+    the staff's 72% of medium's (it hits and clashes as medium does - it's
+    heavier in feel only); two sabers need the speeds they always have.
+    Held with both hands, the same share of the heavier weight's speeds.
   * The weight is something you feel, not just numbers:
-      - a heavier blade can't be whipped about like a light one: it has a
-        top speed (heavy, the strong style, turns at most 550 degrees a
-        second; medium 750; light as fast as your hand) and takes a
-        moment to get going and to turn back. Swing faster than that
-        and the blade - and your character's hand, which keeps hold of it
-        - falls behind your real hand, catching up as you slow. Slow,
-        careful moves stay exact, and it never carries on past where your
-        hand stops; only swung back hard, its weight carries it on a
-        little first. Two hands on it turn it a fifth faster.
-        cg_vrSaberInertia sets how much (1; 0 = the blade exactly where
-        the controller points it; 2 or 3 = heavier still)
+      - a blade can't be whipped about faster than its weight lets it: it
+        has a top speed and takes a moment to get going and to turn back.
+        It turns at most 2000 degrees a second with the blue style, 620
+        with yellow, 460 with red; the staff 540, between yellow and red;
+        two sabers 750 each. Swing faster than that and the blade - and
+        your character's hand, which keeps hold of it - falls behind your
+        real hand (blue 25 degrees at most, yellow 55, red 65, the staff
+        60, two sabers 50), catching up as you slow. Slow, careful moves
+        stay exact, and it never carries on past where your hand stops;
+        only swung back hard, its weight carries it on a little first.
+        Two hands on it turn it a fifth faster. cg_vrSaberInertia sets
+        how much (1; 0 = the blade exactly where the controller points
+        it; 2 or 3 = heavier still)
       - swinging it, your hands feel the blade's weight: the faster it
-        goes, the harder it pulls - a heavy blade a deep, rough rumble, a
-        medium one a little less, a light one a light buzz; swung faster
-        than it can go, it strains as it falls behind your hand; and a fast swing
-        stopped short, or turned back, lands in your hand with a thud.
-        cg_vrSaberWeight sets how heavy it feels (0 weightless, 1 normal,
-        up to 2)
+        goes, the harder it pulls - red a deep, rough rumble, the staff a
+        little less, yellow less again, blue a light buzz (held with both
+        hands, one heavier); swung faster than it can go, it strains as it
+        falls behind your hand; and a fast swing stopped short, or turned
+        back, lands in your hand with a thud. cg_vrSaberWeight sets how
+        heavy it feels (0 weightless, 1 normal, up to 2)
       - swings whoosh, deeper and heavier the heavier the style (other
         players hear your swings too)
       - another blade stops yours dead for a moment; cutting through
@@ -275,8 +284,15 @@ server running this build: your real blade is the weapon.
           harder the harder you push, and a sharp give if it slips by; a
           grind when it scrapes a wall;
           getting cut: a jolt in both hands.
-        Holding the saber with both hands, both feel it. cg_vrHaptics
-        sets how strong it all is (0 off, 1 normal, up to 2).
+        Holding the saber with both hands, both feel all of it, the left
+        as strongly as the right. cg_vrHaptics sets how strong it all is
+        (0 off, 1 normal, up to 2).
+  * Setup has a VR page (the VR button under Video, Sound and the rest,
+    in the main menu and in game) with Saber Inertia, Saber Weight and
+    Vibration: point at a slider and click or drag it, or push the stick
+    up or down (the mouse wheel) to move it a tenth at a time; or pick it
+    with the arrow keys (or Tab) and move it with left and right. Each
+    shows its value.
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
@@ -667,12 +683,13 @@ SETTINGS (console cvars, saved automatically)
                          still stops them where they met)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
-                         up to 2)
+                         up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
-                         vibration of its weight: 0 none, up to 2)
-  cg_vrSaberInertia 1    how much a medium or heavy blade resists being
-                         whipped about (0 = none: exactly where the
-                         controller points it; up to 3)
+                         vibration of its weight: 0 none, up to 2; Setup,
+                         VR: Saber Weight)
+  cg_vrSaberInertia 1    how much a blade's weight holds it back as you
+                         swing it (0 = none: exactly where the controller
+                         points it; up to 3; Setup, VR: Saber Inertia)
   cg_vrLog 1             0 = don't write vrdebug.log
   cg_vrTwoHandLever 0.7  how much the line between your hands steers a
                          two-handed blade when they are far apart
@@ -777,6 +794,9 @@ no client. Source files:
                                poses sent to the server, haptics
   codemp/qcommon/vr_net.h      blade poses on the wire
   codemp/game/g_vrsaber.c      physical saber combat on the server
+  codemp/game/bg_vrsaber.h     how heavy a blade feels, and the share of
+                               its cut speeds that makes up for it
+  codemp/ui/ui_vrsetup.c       the VR page of Setup (base\ui\vr_setup.menu)
   codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,
                                receiving (clc_voice / svc_voice, only with
                                servers whose systeminfo has sv_voice)

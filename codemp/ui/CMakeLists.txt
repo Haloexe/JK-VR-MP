@@ -80,6 +80,7 @@ set(MPUIUIFiles
 	"${MPDir}/ui/ui_vrcomp.c"
 	"${MPDir}/ui/ui_vrrp.c"
 	"${MPDir}/ui/ui_vrvideo.c"
+	"${MPDir}/ui/ui_vrsetup.c"
 	"${MPDir}/ui/ui_vrvoice.c"
 	"${MPDir}/ui/keycodes.h"
 	"${MPDir}/ui/menudef.h"

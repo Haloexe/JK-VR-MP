@@ -1463,8 +1463,11 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 
 	trap->PC_FreeSource( handle );
 
-	// OpenJK VR: the voice chat settings, on the Sound page of Setup (with
-	// menudef.h's definitions still loaded)
+	// OpenJK VR: the VR page of Setup - laid out as the Sound page is before
+	// the voice chat settings go on it (with menudef.h's definitions still
+	// loaded)
+	UI_VRSetup_AddPage();
+	// OpenJK VR: the voice chat settings, on the Sound page of Setup
 	UI_VRVoice_AddSettings();
 	// OpenJK VR: display mode and the monitor's resolutions, on the Video page
 	UI_VRVideo_AddSettings();

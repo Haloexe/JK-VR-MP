@@ -38,6 +38,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "cg_local.h"
 #include "ghoul2/G2.h"
+#include "game/bg_vrsaber.h"
 
 #define VRB_TURN_OFF		0x00000100	// G2SURFACEFLAG_NODESCENDANTS: surface and its children off
 #define VRB_HEAD_BIT		( 1 << ( G2_MODELPART_HEAD - 10 ) )
@@ -319,6 +320,7 @@ static struct {
 
 // what your hands feel (below)
 static void CG_VRB_Feel( int hand, float peak, int hold, float tail, int decay, float grain );
+static void CG_VRB_FeelBlade( int hand, float peak, int hold, float tail, int decay, float grain );
 static void CG_VRB_NoteOtherBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
 static void CG_VRB_BladeSolid( int h, const vrClientState_t *vr, const vec3_t pivot, const vec3_t want, vec3_t out );
 static void CG_VRB_TouchFeel( void );
@@ -538,6 +540,36 @@ static int CG_VRB_Weight( qboolean withHands ) {
 		w++;
 	}
 	return w;
+}
+
+// How heavy your blade feels in your hand (bg_vrsaber.h): blue, yellow,
+// red, the staff or two sabers - and, if withHands, one heavier held with
+// both hands (blue as yellow; yellow and the staff as red).
+static const char *const vrbFeelNames[VR_NUM_FEELS] = { "blue", "yellow", "red", "staff", "two-saber" };
+
+static int CG_VRB_BladeFeel( qboolean withHands ) {
+	const int feel = BG_VRFeel( cg.predictedPlayerState.fd.saberAnimLevel );
+
+	if ( withHands && CG_VRB_TwoHanded() ) {
+		switch ( feel ) {
+		case VR_FEEL_BLUE:
+			return VR_FEEL_YELLOW;
+		case VR_FEEL_YELLOW:
+		case VR_FEEL_STAFF:
+		case VR_FEEL_DUAL:
+			return VR_FEEL_RED;
+		default:
+			break;
+		}
+	}
+	return feel;
+}
+
+// The share of its weight's swing speeds your blade needs to cut, as the
+// server reckons it: a heavier-feeling blade can't move as fast, so less
+// (bg_vrsaber.h).
+static float CG_VRB_CutScale( void ) {
+	return BG_VRFeelCutScale( BG_VRFeel( cg.predictedPlayerState.fd.saberAnimLevel ) );
 }
 
 static void CG_VRB_Init( void ) {
@@ -2190,9 +2222,10 @@ done:
 CG_VRB_BladeInertia
 
 The blade in your hand - and the hand with it (the arm turns your fist to
-hold it, so the hilt never leaves the fist). A light blade turns as fast
-as your hand does. A heavier one has a top speed and takes a moment to get
-going and to turn back: medium a little, heavy (strong style) much - swing
+hold it, so the hilt never leaves the fist). It has a top speed and takes a
+moment to get going and to turn back, as heavy as it feels (bg_vrsaber.h):
+the blue style's hardly (2000 degrees a second), yellow's more (620), the
+staff's more again (540), red's most (460); two sabers each 750 - swing
 faster than that and the blade, and the fist holding it, fall behind the
 controller (you feel them strain, CG_VRB_Heft), catching up as you slow.
 Slow, careful moves stay exact, and it never carries on past where your
@@ -2211,17 +2244,18 @@ on it (CG_VRB_BladeSolid).
 #define VRB_BLADE_STRAIN	25.0f	// falling well behind, it's dragged faster by this much (rad/s per rad)
 #define VRB_BLADE_TWOHANDS	1.2f	// two hands on it turn it this much faster
 
-static const float	vrbBladeMaxRate[3] = { 2600.0f, 750.0f, 550.0f };		// deg/s it turns at most: light, medium, heavy
-static const float	vrbBladeMaxAccel[3] = { 150000.0f, 14000.0f, 10000.0f };	// deg/s/s it gets going (or turns back) at most
-static const float	vrbBladeMaxLag[3] = { 20.0f, 50.0f, 60.0f };			// degrees behind the hand at most
-static const int	vrbBladeHold[3] = { 35, 60, 75 };						// ms another blade stops it for
+// by feel - blue, yellow, red, the staff, two sabers (and how fast it turns at
+// most: BG_VRFeelTurn)
+static const float	vrbBladeMaxAccel[VR_NUM_FEELS] = { 120000.0f, 11500.0f, 8000.0f, 9000.0f, 14000.0f };	// deg/s/s it gets going (or turns back) at most
+static const float	vrbBladeMaxLag[VR_NUM_FEELS] = { 25.0f, 55.0f, 65.0f, 60.0f, 50.0f };	// degrees behind the hand at most
+static const int	vrbBladeHold[VR_NUM_FEELS] = { 35, 60, 75, 68, 60 };					// ms another blade stops it for
 
 // world yaw minus room (tracking) yaw
 static float CG_VRB_RoomYaw( const vrClientState_t *vr ) {
 	return VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw;
 }
 
-static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t want, int weight, qboolean twoHands,
+static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t want, int feel, qboolean twoHands,
 	vec3_t out ) {
 	const float yaw = CG_VRB_RoomYaw( vr );
 	const float inertia = Com_Clamp( 0.0f, 3.0f, cg_vrSaberInertia.value );
@@ -2241,14 +2275,14 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 		vrb.blade[h].holdUntil = 0;
 		vrb.blade[h].valid = qtrue;
 	} else if ( dt > 0.0f ) {
-		const float maxLag = DEG2RAD( vrbBladeMaxLag[weight] );
+		const float maxLag = DEG2RAD( vrbBladeMaxLag[feel] );
 		float maxRate, maxAccel, handRate, ang;
 		vec3_t handVel;
 		int n, k;
 
 		if ( inertia > 0.0f ) {
-			maxRate = DEG2RAD( vrbBladeMaxRate[weight] ) / inertia;
-			maxAccel = DEG2RAD( vrbBladeMaxAccel[weight] ) / inertia;
+			maxRate = DEG2RAD( BG_VRFeelTurn( feel ) ) / inertia;
+			maxAccel = DEG2RAD( vrbBladeMaxAccel[feel] ) / inertia;
 		} else {
 			maxRate = maxAccel = 1.0e5f;	// as the controller points it: only clashes and cuts show
 		}
@@ -2269,9 +2303,12 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 			for ( k = 1; k <= n; k++ ) {
 				const float step = dt / n;
 				vec3_t tgt, wWant, dw;
-				float e, close, lim, rate, d;
+				float e, close, lim, rate, d, accel, handOn, closing;
 
-				VRB_Slerp( vrb.blade[h].hand, target, (float)k / n, tgt );
+				// (the gap to where the hand is as this step begins: going with
+				// the hand through the step, closing it, it ends where the hand
+				// ends - not a step ahead)
+				VRB_Slerp( vrb.blade[h].hand, target, (float)( k - 1 ) / n, tgt );
 				CrossProduct( vrb.blade[h].dir, tgt, axis );
 				e = atan2f( VectorNormalize( axis ), DotProduct( vrb.blade[h].dir, tgt ) );
 				// keep up with the hand and close the gap - at once while it's
@@ -2286,11 +2323,22 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 				if ( rate > lim ) {
 					VectorScale( wWant, lim / rate, wWant );
 				}
-				// ...and getting to that speed no quicker than it can
+				// ...and getting to that speed no quicker than it can - but
+				// slowing as hard as it takes not to carry on past a hand
+				// that has stopped, or goes on (dragged along faster than it
+				// turns, it can be going faster than its weight would stop it
+				// in time); a hand turned back meets it, and it carries on a
+				// little past where the hand turned
 				VectorSubtract( wWant, vrb.blade[h].vel, dw );
 				d = VectorLength( dw );
-				if ( d > maxAccel * step ) {
-					VectorMA( vrb.blade[h].vel, maxAccel * step / d, dw, vrb.blade[h].vel );
+				accel = maxAccel;
+				handOn = DotProduct( handVel, axis );
+				closing = DotProduct( vrb.blade[h].vel, axis ) - handOn;
+				if ( handOn >= 0.0f && closing > 0.0f && e > 1e-4f ) {
+					accel = Q_max( accel, closing * closing / ( 2.0f * e ) );
+				}
+				if ( d > accel * step ) {
+					VectorMA( vrb.blade[h].vel, accel * step / d, dw, vrb.blade[h].vel );
 				} else {
 					VectorCopy( wWant, vrb.blade[h].vel );
 				}
@@ -2298,10 +2346,26 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 					vrb.blade[h].vel );	// (it doesn't spin about itself)
 				rate = VectorLength( vrb.blade[h].vel );
 				if ( rate > 1e-5f ) {
-					vec3_t kAxis;
+					vec3_t kAxis, was, ahead, tgtEnd;
 					VectorScale( vrb.blade[h].vel, 1.0f / rate, kAxis );
+					VectorCopy( vrb.blade[h].dir, was );
 					VRB_Rotate( vrb.blade[h].dir, kAxis, rate * step, vrb.blade[h].dir );
 					VectorNormalize( vrb.blade[h].dir );
+					// ...and whatever it weighs, it never goes on past a hand
+					// that's stopped, or going its way: having caught it up,
+					// it goes with it (caught up: the hand was within this
+					// step's reach - not off to the side of its way, as when
+					// the hand turns a corner, where it curves round to it)
+					VRB_Slerp( vrb.blade[h].hand, target, (float)k / n, tgtEnd );
+					CrossProduct( kAxis, was, ahead );	// (which way it went)
+					if ( DotProduct( handVel, vrb.blade[h].vel ) >= 0.0f && DotProduct( ahead, tgtEnd ) > -1e-4f &&
+						DotProduct( was, tgtEnd ) >= cosf( rate * step ) - 1e-5f ) {
+						CrossProduct( kAxis, vrb.blade[h].dir, ahead );
+						if ( DotProduct( ahead, tgtEnd ) < -1e-4f ) {
+							VectorCopy( tgtEnd, vrb.blade[h].dir );
+							VectorCopy( handVel, vrb.blade[h].vel );
+						}
+					}
 				}
 			}
 		}
@@ -2324,7 +2388,7 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 
 static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
 	const qboolean twoHands = (qboolean)( vrb.twoHand && vrb.twoHandTime == cg.time );
-	const int weight = CG_VRB_Weight( qfalse );
+	const int feel = CG_VRB_BladeFeel( qfalse );
 	int h;
 
 	if ( vrb.bladeTime == cg.time ) {
@@ -2351,7 +2415,7 @@ static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
 			VRB_Slerp( want, vrb.twoHandDir, vrb.twoHandEase, tmp );	// (held with both hands)
 			VectorCopy( tmp, want );
 		}
-		CG_VRB_BladeSpring( h, vr, want, weight, (qboolean)( twoHands && h == VR_HAND_RIGHT ), out );
+		CG_VRB_BladeSpring( h, vr, want, feel, (qboolean)( twoHands && h == VR_HAND_RIGHT ), out );
 		CG_VRB_BladeSolid( h, vr, pos, want, out );	// (another blade in the way stops it)
 		VectorCopy( out, vrb.blade[h].out );
 		vrb.blade[h].outTime = cg.time;
@@ -2371,14 +2435,14 @@ static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
 
 // Your blade met another one (clash) or cut through someone (strength 0..1).
 static void CG_VRB_BladeImpulse( int h, qboolean clash, float strength ) {
-	const int weight = CG_VRB_Weight( qfalse );
+	const int feel = CG_VRB_BladeFeel( qfalse );
 
 	if ( h < 0 || h > 1 || !vrb.blade[h].valid ) {
 		return;
 	}
 	strength = Com_Clamp( 0.0f, 1.0f, strength );
 	if ( clash ) {
-		vrb.blade[h].holdUntil = cg.time + (int)( vrbBladeHold[weight] * ( 0.5f + 0.5f * strength ) );
+		vrb.blade[h].holdUntil = cg.time + (int)( vrbBladeHold[feel] * ( 0.5f + 0.5f * strength ) );
 		VectorClear( vrb.blade[h].vel );
 	} else {
 		VectorScale( vrb.blade[h].vel, 1.0f - 0.6f * strength, vrb.blade[h].vel );
@@ -3884,8 +3948,10 @@ void CG_VR_BodyArms( centity_t *cent ) {
 // The whoosh of your swings. The stock game plays it from its attack
 // animations, which a swing of your arm doesn't have: here it comes from how
 // fast your blade really moves (two thirds along it, in your room), heavier
-// for a heavier weight, with a light tick in the hand. (Everyone else hears
-// it from the server, g_vrsaber.c.)
+// for a heavier weight, with a light tick in the hand(s) holding it. A blade
+// that feels heavier needs a little less (it can't move as fast: as the
+// speeds its cuts need, CG_VRB_CutScale). (Everyone else hears it from the
+// server, g_vrsaber.c.)
 static const float vrbWhooshSpeed[3] = { 3.0f, 3.5f, 4.0f };	// m/s: light, medium, heavy
 
 static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
@@ -3894,6 +3960,7 @@ static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
 	float speed = 0.0f, handSpeed[2] = { 0.0f, 0.0f };
 	vec3_t where = { 0.0f, 0.0f, 0.0f };
 	int s, b, mask[VR_POSE_MAX_SABERS], hand = VR_HAND_RIGHT, weight;
+	float whoosh;
 
 	if ( !vr || vrbSaber.time != cg.time || !vrbSaber.pose.valid || vr->worldScale <= 0.0f ) {
 		vrb.swing.prevMask[0] = vrb.swing.prevMask[1] = 0;
@@ -3940,14 +4007,15 @@ static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
 	}
 
 	weight = CG_VRB_Weight( qtrue );
+	whoosh = vrbWhooshSpeed[weight] * CG_VRB_CutScale();
 	if ( !vrb.swing.armed ) {
-		if ( vrb.swing.speed < 0.5f * vrbWhooshSpeed[weight] ) {
+		if ( vrb.swing.speed < 0.5f * whoosh ) {
 			vrb.swing.armed = qtrue;	// slowed down: the next swing whooshes again
-		} else if ( cg.time - vrb.swing.lastTime > 450 && vrb.swing.speed >= 1.3f * vrbWhooshSpeed[weight] ) {
+		} else if ( cg.time - vrb.swing.lastTime > 450 && vrb.swing.speed >= 1.3f * whoosh ) {
 			vrb.swing.armed = qtrue;	// still swinging hard (spinning it)
 		}
 	}
-	if ( vrb.swing.armed && vrb.swing.speed >= vrbWhooshSpeed[weight] && cg.time - vrb.swing.lastTime > 150 ) {
+	if ( vrb.swing.armed && vrb.swing.speed >= whoosh && cg.time - vrb.swing.lastTime > 150 ) {
 		const clientInfo_t *ci = &cgs.clientinfo[cg.clientNum];
 		qhandle_t sfx;
 		vrb.swing.armed = qfalse;
@@ -3960,7 +4028,7 @@ static void CG_VRB_SwingSound( const vrClientState_t *vr ) {
 		trap->S_StartSound( where, cg.clientNum, CHAN_AUTO, sfx );
 		{
 			static const float tick[3] = { 0.16f, 0.20f, 0.22f };
-			CG_VRB_Feel( hand, tick[weight], 20, 0.0f, 0, 0.0f );
+			CG_VRB_FeelBlade( hand, tick[weight], 20, 0.0f, 0, 0.0f );
 		}
 		CG_VRB_Log( "swing: %s%s, %.1f m/s (the blade trailed your hand by up to %.0f deg)\n", vrbWeightNames[weight],
 			CG_VRB_TwoHanded() ? " (two hands)" : "", vrb.swing.speed, vrb.swing.lag );
@@ -4286,7 +4354,8 @@ while it's in them. When the game says it cut, a deeper rumble follows
 (longer the heavier the blade, and a long one for a kill). Meeting another
 blade knocks at once too; the game's word on it then only adds a little.
 And swinging the blade through the air, its weight pulls at your hand
-(CG_VRB_Heft). cg_vrHaptics scales all of it (0 turns it off).
+(CG_VRB_Heft). A second hand holding the hilt feels all of it as strongly
+as the first. cg_vrHaptics scales all of it (0 turns it off).
 --------------------------------------------------------------------------------
 */
 
@@ -4299,7 +4368,8 @@ And swinging the blade through the air, its weight pulls at your hand
 #define VRB_OTHER_BLADES	16
 
 // the swing speeds a blade starts to cut at and does full damage from, by
-// weight (m/s, as the server's g_vrSaberLight/Medium/Heavy have them)
+// weight (m/s, as the server's g_vrSaberLight/Medium/Heavy have them; for a
+// blade that feels heavier, a share of them: CG_VRB_CutScale)
 static const float	vrbCutFrom[3] = { 1.8f, 2.5f, 3.2f };
 static const float	vrbFullAt[3] = { 5.3f, 7.1f, 8.8f };
 
@@ -4415,28 +4485,32 @@ static void CG_VRB_Feel( int hand, float peak, int hold, float tail, int decay, 
 	slot->grain = Com_Clamp( 0.0f, 1.0f, grain );
 }
 
-// The same in the hand holding the blade - and, holding it with both, a
-// little less in the left one too.
+// The same in the hand holding the blade - and, holding it with both, in the
+// left one too, as strongly.
 static void CG_VRB_FeelBlade( int hand, float peak, int hold, float tail, int decay, float grain ) {
 	CG_VRB_Feel( hand, peak, hold, tail, decay, grain );
 	if ( hand == VR_HAND_RIGHT && CG_VRB_TwoHanded() ) {
-		CG_VRB_Feel( VR_HAND_LEFT, 0.8f * peak, hold, 0.8f * tail, decay, grain );
+		CG_VRB_Feel( VR_HAND_LEFT, peak, hold, tail, decay, grain );
 	}
 }
 
-// Something lasting, this frame only.
+// Something lasting, this frame only (in both hands holding the blade, as
+// CG_VRB_FeelBlade).
 static void CG_VRB_FeelSteady( int hand, float amp, float grain ) {
+	int h;
+
 	if ( hand < VR_HAND_LEFT || hand > VR_HAND_RIGHT ) {
 		return;
 	}
 	CG_VRB_HandsInit();
-	if ( amp > vrbHands.steady[hand] ) {
-		vrbHands.steady[hand] = Com_Clamp( 0.0f, 1.0f, amp );
-		vrbHands.steadyGrain[hand] = Com_Clamp( 0.0f, 1.0f, grain );
-	}
-	if ( hand == VR_HAND_RIGHT && CG_VRB_TwoHanded() && 0.8f * amp > vrbHands.steady[VR_HAND_LEFT] ) {
-		vrbHands.steady[VR_HAND_LEFT] = Com_Clamp( 0.0f, 1.0f, 0.8f * amp );
-		vrbHands.steadyGrain[VR_HAND_LEFT] = Com_Clamp( 0.0f, 1.0f, grain );
+	for ( h = VR_HAND_LEFT; h <= VR_HAND_RIGHT; h++ ) {
+		if ( h != hand && !( hand == VR_HAND_RIGHT && CG_VRB_TwoHanded() ) ) {
+			continue;
+		}
+		if ( amp > vrbHands.steady[h] ) {
+			vrbHands.steady[h] = Com_Clamp( 0.0f, 1.0f, amp );
+			vrbHands.steadyGrain[h] = Com_Clamp( 0.0f, 1.0f, grain );
+		}
 	}
 }
 
@@ -4861,12 +4935,13 @@ static qboolean CG_VRB_SolidFoe( const vrbOtherBlade_t *o ) {
 // Would a blow of the blade in hand h go on through that one, as the game
 // reckons it (VRS_Breaks)? A heavy blade swung at full speed, two or more
 // stronger than the other (its weight, and one more if it moves as fast as
-// it hits hardest) - and the faster of the two.
+// it hits hardest: a share of its weight's full-damage speed for a blade
+// that feels heavier, bg_vrsaber.h) - and the faster of the two.
 static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbOtherBlade_t *o ) {
 	const float speed = vrb.swing.handSpeed[h];
 	int mine, theirs, theirWeight;
 
-	if ( CG_VRB_Weight( qtrue ) != VRB_HEAVY || speed < vrbFullAt[VRB_HEAVY] ) {
+	if ( CG_VRB_Weight( qtrue ) != VRB_HEAVY || speed < vrbFullAt[VRB_HEAVY] * CG_VRB_CutScale() ) {
 		return qfalse;
 	}
 	mine = VRB_HEAVY + 2;	// (heavy, and one for full speed)
@@ -4902,7 +4977,7 @@ static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbO
 		if ( v >= speed ) {
 			return qfalse;	// (theirs is the faster: their blow decides)
 		}
-		if ( v >= vrbFullAt[theirWeight] ) {
+		if ( v >= vrbFullAt[theirWeight] * BG_VRFeelCutScale( BG_VRFeel( cg_entities[o->ent].currentState.fireflag ) ) ) {
 			theirs++;
 		}
 	}
@@ -5070,6 +5145,7 @@ see it - the game's word on it comes a moment later (CG_VR_SaberEventFeel).
 */
 static void CG_VRB_TouchFeel( void ) {
 	const int weight = CG_VRB_Weight( qtrue );
+	const float cutFrom = vrbCutFrom[weight] * CG_VRB_CutScale(), fullAt = vrbFullAt[weight] * CG_VRB_CutScale();
 	const float speed = vrb.swing.speed;	// (m/s, two thirds along the blade: about where it meets them)
 	const qboolean havePrev = (qboolean)( vrbHands.prevTime && cg.time - vrbHands.prevTime > 0 && cg.time - vrbHands.prevTime < 100 );
 	// (your blade only cuts where the server fights with it - "vrSaber 1" in
@@ -5142,9 +5218,9 @@ static void CG_VRB_TouchFeel( void ) {
 		// drag of cutting through while the blade is in them
 		if ( in[h] >= 0 ) {
 			const qboolean friendly = CG_VRB_Teammate( in[h] );
-			const float f = Com_Clamp( 0.0f, 1.0f, ( speed - vrbCutFrom[weight] ) / ( vrbFullAt[weight] - vrbCutFrom[weight] ) );
+			const float f = Com_Clamp( 0.0f, 1.0f, ( speed - cutFrom ) / ( fullAt - cutFrom ) );
 			if ( in[h] != vrbHands.inEnt[h] || cg.time - vrbHands.inTime[h] > VRB_CONTACT_GAP ) {
-				if ( friendly || speed < vrbCutFrom[weight] ) {
+				if ( friendly || speed < cutFrom ) {
 					CG_VRB_FeelBlade( h, 0.4f, 25, 0.25f, 70, 0.0f );	// (a touch)
 				} else {
 					static const int hold[3] = { 35, 47, 55 }, decay[3] = { 110, 145, 170 };
@@ -5155,7 +5231,7 @@ static void CG_VRB_TouchFeel( void ) {
 				vrbHands.blowTime[h] = cg.time;
 				CG_VRB_Log( "feel: your %s blade into %i at %.1f m/s\n", vrbWeightNames[weight], in[h], speed );
 			}
-			CG_VRB_FeelSteady( h, friendly ? 0.2f : 0.3f + 0.4f * Com_Clamp( 0.0f, 1.0f, speed / vrbFullAt[weight] ), 0.45f );
+			CG_VRB_FeelSteady( h, friendly ? 0.2f : 0.3f + 0.4f * Com_Clamp( 0.0f, 1.0f, speed / fullAt ), 0.45f );
 			vrbHands.inEnt[h] = in[h];
 			vrbHands.inTime[h] = cg.time;
 		} else if ( cg.time - vrbHands.inTime[h] > VRB_CONTACT_GAP ) {
@@ -5173,7 +5249,7 @@ static void CG_VRB_TouchFeel( void ) {
 			if ( met[h] ) {
 				if ( !vrbHands.touching[h] && cg.time - vrbHands.knockTime[h] > 100 ) {
 					static const int knock[3] = { 60, 75, 90 }, decay[3] = { 85, 105, 130 };
-					const float hard = Com_Clamp( 0.0f, 1.0f, vrb.swing.handSpeed[h] / vrbFullAt[weight] );
+					const float hard = Com_Clamp( 0.0f, 1.0f, vrb.swing.handSpeed[h] / fullAt );
 					CG_VRB_FeelBlade( h, 0.45f + 0.55f * hard, knock[weight], 0.25f + 0.3f * hard, decay[weight], 0.0f );
 					vrbHands.knockTime[h] = cg.time;
 					CG_VRB_Log( "feel: your %s blade met another at %.1f m/s\n", vrbWeightNames[weight], vrb.swing.handSpeed[h] );
@@ -5195,12 +5271,15 @@ static void CG_VRB_TouchFeel( void ) {
 CG_VRB_Heft
 
 The blade's weight in your hand as it swings. The faster it goes, the
-harder it pulls - a heavy blade a deep, rough rumble, a medium one a
-little less, a light one a light buzz; swung faster than it can go, it strains as it
-falls behind your hand (CG_VRB_BladeInertia); and a fast swing stopped
-short, or turned back, lands its weight in your hand with a thud. Not while
-it's in someone or against another blade, or just after: those are felt as
-such. cg_vrSaberWeight scales it (0: weightless; up to 2).
+harder it pulls, most as fast as it cuts hardest - red a deep, rough
+rumble, the staff a little less, yellow less again, blue a light buzz (two
+sabers each as yellow was; held with both hands, one heavier: blue as
+yellow, yellow and the staff as red); swung faster than it can go, it
+strains as it falls behind your hand (CG_VRB_BladeInertia); and a fast
+swing stopped short, or turned back, lands its weight in your hand with a
+thud. Not while it's in someone or against another blade, or just after:
+those are felt as such. cg_vrSaberWeight scales it (0: weightless; up to
+2).
 =================
 */
 
@@ -5209,17 +5288,18 @@ such. cg_vrSaberWeight scales it (0: weightless; up to 2).
 #define VRB_HEFT_STOP_FRAC	0.35f	// ...to this much of its speed has stopped short
 #define VRB_HEFT_QUIET_MS	250		// after meeting someone or a blade: that's what's felt
 
-static const float	vrbHeftPull[3] = { 0.18f, 0.40f, 0.48f };	// at full speed: light, medium, heavy
-static const float	vrbHeftStop[3] = { 0.24f, 0.50f, 0.60f };	// a full-speed swing stopped short...
-static const int	vrbHeftStopHold[3] = { 22, 30, 39 };		// ...held this long (ms)...
-static const int	vrbHeftStopDecay[3] = { 65, 100, 140 };		// ...dying away over this
-static const float	vrbHeftGrain[3] = { 0.1f, 0.3f, 0.4f };		// rougher the heavier
-static const float	vrbHeftStrain[3] = { 0.15f, 0.40f, 0.45f };	// as far behind your hand as it can fall
+// by feel: blue, yellow, red, the staff, two sabers
+static const float	vrbHeftPull[VR_NUM_FEELS] = { 0.24f, 0.46f, 0.55f, 0.50f, 0.40f };	// at full speed
+static const float	vrbHeftStop[VR_NUM_FEELS] = { 0.24f, 0.50f, 0.60f, 0.55f, 0.50f };	// a full-speed swing stopped short...
+static const int	vrbHeftStopHold[VR_NUM_FEELS] = { 22, 30, 39, 35, 30 };			// ...held this long (ms)...
+static const int	vrbHeftStopDecay[VR_NUM_FEELS] = { 65, 100, 140, 120, 100 };		// ...dying away over this
+static const float	vrbHeftGrain[VR_NUM_FEELS] = { 0.1f, 0.3f, 0.4f, 0.35f, 0.3f };		// rougher the heavier
+static const float	vrbHeftStrain[VR_NUM_FEELS] = { 0.15f, 0.40f, 0.45f, 0.43f, 0.40f };	// as far behind your hand as it can fall
 
 static void CG_VRB_Heft( void ) {
 	const float scale = Com_Clamp( 0.0f, 2.0f, cg_vrSaberWeight.value );
-	const int weight = CG_VRB_Weight( qtrue );
-	const float full = vrbFullAt[weight];
+	const int feel = CG_VRB_BladeFeel( qtrue );
+	const float full = vrbFullAt[CG_VRB_Weight( qtrue )] * CG_VRB_CutScale();
 	int h;
 
 	if ( cg.secondEye ) {
@@ -5242,12 +5322,12 @@ static void CG_VRB_Heft( void ) {
 		// the pull of it moving: little at first, most at full speed; and
 		// the strain of it falling behind your hand
 		pull = Com_Clamp( 0.0f, 1.0f, ( v - VRB_HEFT_FROM ) / ( full - VRB_HEFT_FROM ) );
-		pull = vrbHeftPull[weight] * pull * sqrtf( pull ) * scale;
+		pull = vrbHeftPull[feel] * pull * sqrtf( pull ) * scale;
 		if ( vrb.blade[h].valid && vrb.blade[h].outTime == cg.time ) {
-			pull = Q_max( pull, vrbHeftStrain[CG_VRB_Weight( qfalse )] * Com_Clamp( 0.0f, 1.0f, vrb.blade[h].behind ) * scale );
+			pull = Q_max( pull, vrbHeftStrain[CG_VRB_BladeFeel( qfalse )] * Com_Clamp( 0.0f, 1.0f, vrb.blade[h].behind ) * scale );
 		}
 		if ( pull > 0.0f && !quiet ) {
-			CG_VRB_FeelSteady( h, Q_min( 1.0f, pull ), vrbHeftGrain[weight] );
+			CG_VRB_FeelSteady( h, Q_min( 1.0f, pull ), vrbHeftGrain[feel] );
 		}
 
 		// a fast swing stopped short (or turned back): a thud as its weight
@@ -5258,9 +5338,9 @@ static void CG_VRB_Heft( void ) {
 		} else if ( v < VRB_HEFT_STOP_FRAC * vrbHands.heftPeak[h] && vrbHands.heftPeak[h] >= 0.55f * full ) {
 			const float k = Com_Clamp( 0.0f, 1.0f, vrbHands.heftPeak[h] / full ) * scale;
 			if ( !quiet ) {
-				CG_VRB_FeelBlade( h, vrbHeftStop[weight] * k, vrbHeftStopHold[weight], 0.6f * vrbHeftStop[weight] * k,
-					vrbHeftStopDecay[weight], vrbHeftGrain[weight] );
-				CG_VRB_Log( "feel: your %s swing stopped short from %.1f m/s\n", vrbWeightNames[weight], vrbHands.heftPeak[h] );
+				CG_VRB_FeelBlade( h, vrbHeftStop[feel] * k, vrbHeftStopHold[feel], 0.6f * vrbHeftStop[feel] * k,
+					vrbHeftStopDecay[feel], vrbHeftGrain[feel] );
+				CG_VRB_Log( "feel: your %s swing stopped short from %.1f m/s\n", vrbFeelNames[feel], vrbHands.heftPeak[h] );
 			}
 			vrbHands.heftPeak[h] = v;
 			vrbHands.heftPeakTime[h] = cg.time;

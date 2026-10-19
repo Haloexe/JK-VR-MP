@@ -40,9 +40,11 @@ mkdir -p "$OUT/base"
 cp "$BUILD/openjk.x86_64.exe" "$BUILD/rd-vanilla_x86_64.dll" "$BUILD/openjkded.x86_64.exe" "$OUT/"
 cp "$BUILD/cgamex86_64.dll" "$BUILD/uix86_64.dll" "$BUILD/jampgamex86_64.dll" "$OUT/base/"
 # the voice chat settings for the Sound page of Setup (ui_vrvoice.c reads it),
-# the Roleplay menu (ui_vrrp.c) and the Companions menu (ui_vrcomp.c)
+# the VR page of Setup (ui_vrsetup.c), the Roleplay menu (ui_vrrp.c) and the
+# Companions menu (ui_vrcomp.c)
 mkdir -p "$OUT/base/ui"
 cp "$ROOT/vr/ui/vr_voice.menu" "$OUT/base/ui/"
+cp "$ROOT/vr/ui/vr_setup.menu" "$OUT/base/ui/"
 cp "$ROOT/vr/ui/vr_rp.menu" "$OUT/base/ui/"
 cp "$ROOT/vr/ui/vr_comp.menu" "$OUT/base/ui/"
 cp "$ROOT/lib/SDL2/bin/x64/SDL2.dll" "$ROOT/lib/openxr/bin/x64/libopenxr_loader.dll" "$OUT/"

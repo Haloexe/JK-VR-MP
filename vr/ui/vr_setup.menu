@@ -1,0 +1,90 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: THE VR PAGE OF SETUP
+//
+//	The game's menu code (ui_vrsetup.c) puts a "VR" button on Setup - in the main menu and in
+//	game - under the page's own (Video, Sound...), and the settings below where the page shows
+//	the others', in this order. Where they go, and the font, size and colour of their text,
+//	follow the page's own Sound settings, so their rects and fonts here don't matter there.
+//
+//	showValue:	the slider shows its value after it; the arrow keys move it a tenth at a time
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name				"vr_setup"
+		visible				0
+		fullScreen			0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vr_saberinertia
+			group			vrsetup
+			type			ITEM_TYPE_SLIDER
+			text			"Saber Inertia"
+			cvarfloat		"cg_vrSaberInertia" 1 0 3
+			showValue
+			rect			260 188 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How your blade's weight holds it back as you swing: 0, none - it's where you point it; up to 3, heavier"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_saberweight
+			group			vrsetup
+			type			ITEM_TYPE_SLIDER
+			text			"Saber Weight"
+			cvarfloat		"cg_vrSaberWeight" 1 0 2
+			showValue
+			rect			260 216 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How strongly you feel your blade's weight as it swings: 0, not at all; up to 2, twice as much"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_vibration
+			group			vrsetup
+			type			ITEM_TYPE_SLIDER
+			text			"Vibration"
+			cvarfloat		"cg_vrHaptics" 1 0 2
+			showValue
+			rect			260 244 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How strongly the controllers vibrate: 0, never; up to 2, twice as strongly"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+	}
+}

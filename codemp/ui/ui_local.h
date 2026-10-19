@@ -52,6 +52,9 @@ void UI_LoadMenus( const char *menuFile, qboolean reset );
 void		UI_Anchor2D( float anchorX );
 void		UI_AnchorRect( float *x, float *w );
 
+// ui_vrsetup.c (OpenJK VR: the VR page of Setup)
+void		UI_VRSetup_AddPage( void );
+
 // ui_vrvideo.c (OpenJK VR: display mode and resolutions on the Video page)
 void		UI_VRVideo_AddSettings( void );
 void		UI_VRVideo_GetSetup( void );

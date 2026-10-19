@@ -3869,6 +3869,15 @@ static void Scroll_ListBox_ThumbFunc(void *p) {
 	}
 }
 
+// OpenJK VR: a slider's value as it's set - one showing its value (showValue)
+// goes in tenths, as it's shown
+static const char *Item_Slider_Value( const editFieldDef_t *editDef, float value ) {
+	if ( editDef && editDef->showValue ) {
+		return va( "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value * 10.0f + 0.5f ) * 0.1f ) );
+	}
+	return va( "%f", value );
+}
+
 static void Scroll_Slider_ThumbFunc(void *p) {
 	float x, value, cursorx;
 	scrollInfo_t *si = (scrollInfo_t*)p;
@@ -3891,7 +3900,7 @@ static void Scroll_Slider_ThumbFunc(void *p) {
 	value /= SLIDER_WIDTH;
 	value *= (editDef->maxVal - editDef->minVal);
 	value += editDef->minVal;
-	DC->setCVar(si->item->cvar, va("%f", value));
+	DC->setCVar(si->item->cvar, Item_Slider_Value( editDef, value ));	// OpenJK VR: (in tenths, showing its value)
 }
 
 void Item_StartCapture(itemDef_t *item, int key)
@@ -3976,6 +3985,26 @@ void Item_StopCapture(itemDef_t *item) {
 qboolean Item_Slider_HandleKey(itemDef_t *item, int key, qboolean down) {
 	float x, value, width, work;
 
+	// OpenJK VR: one showing its value (showValue), shown, with the focus: the
+	// arrow keys move it a tenth, wherever the mouse is - and so does the
+	// mouse wheel (the VR controller's stick, pointing at it). (Hidden, it
+	// can keep the focus - its page closed, or another shown: nothing.)
+	if ( ( item->window.flags & ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) ) == ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) && item->cvar && item->typeData.edit &&
+		( (editFieldDef_t *)item->typeData.edit )->showValue ) {
+		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
+		float step = 0.0f;
+		if ( key == A_CURSOR_RIGHT || key == A_KP_6 || key == A_MWHEELUP ) {
+			step = 0.1f;
+		} else if ( key == A_CURSOR_LEFT || key == A_KP_4 || key == A_MWHEELDOWN ) {
+			step = -0.1f;
+		}
+		if ( step != 0.0f ) {
+			value = Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) );
+			DC->setCVar( item->cvar, Item_Slider_Value( editDef, value + step ) );
+			return qtrue;
+		}
+	}
+
 	//DC->Print("slider handle key\n");
 	if (item->window.flags & WINDOW_HASFOCUS && item->cvar && Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory)) {
 		if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3) {
@@ -4003,7 +4032,7 @@ qboolean Item_Slider_HandleKey(itemDef_t *item, int key, qboolean down) {
 					// vm fuckage
 					// value = (((float)(DC->cursorx - x)/ SLIDER_WIDTH) * (editDef->maxVal - editDef->minVal));
 					value += editDef->minVal;
-					DC->setCVar(item->cvar, va("%f", value));
+					DC->setCVar(item->cvar, Item_Slider_Value( editDef, value ));	// OpenJK VR: (in tenths, showing its value)
 					return qtrue;
 				}
 			}
@@ -5178,6 +5207,14 @@ void Item_Slider_Paint(itemDef_t *item) {
 	}
 	DC->setColor(newColor);
 	DC->drawHandlePic( x, y, SLIDER_WIDTH, SLIDER_HEIGHT, DC->Assets.sliderBar );
+
+	// OpenJK VR ("showValue"): its value, after it
+	if ( item->cvar && item->typeData.edit && ( (editFieldDef_t *)item->typeData.edit )->showValue ) {
+		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
+		DC->drawText( x + SLIDER_WIDTH + SLIDER_THUMB_WIDTH / 2 + 6, item->text ? item->textRect.y : y + item->textaligny, item->textscale, newColor,
+			va( "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) ) ), 0, 0, item->textStyle, item->iMenuFont );
+		DC->setColor( newColor );
+	}
 
 	x = Item_Slider_ThumbPosition(item);
 	DC->drawHandlePic( x - (SLIDER_THUMB_WIDTH / 2), y - 2, SLIDER_THUMB_WIDTH, SLIDER_THUMB_HEIGHT, DC->Assets.sliderThumb );
@@ -8203,6 +8240,31 @@ qboolean ItemParse_clipToBox( itemDef_t *item, int handle ) {
 	return qtrue;
 }
 
+// OpenJK VR: showValue - a slider whose value is shown after it, which the
+// arrow keys and the mouse wheel move a tenth at a time (Item_Slider_Paint,
+// Item_Slider_HandleKey). A slider's, after its type: anything else's is
+// passed over (its type's data isn't a slider's).
+qboolean ItemParse_showValue( itemDef_t *item, int handle ) {
+	editFieldDef_t *editPtr;
+
+	if ( item->type != ITEM_TYPE_SLIDER ) {
+		char filename[128];
+		int line = 0;
+		filename[0] = '\0';
+		trap->PC_SourceFileAndLine( handle, filename, &line );
+		Com_Printf( S_COLOR_YELLOW "WARNING: %s, line %d: showValue on %s, not a slider (or before its type): passed over\n", filename, line,
+			item->window.name ? item->window.name : "an item" );
+		return qtrue;
+	}
+	Item_ValidateTypeData( item );
+	editPtr = (editFieldDef_t *)item->typeData.edit;
+	if ( !editPtr ) {
+		return qfalse;
+	}
+	editPtr->showValue = qtrue;
+	return qtrue;
+}
+
 qboolean ItemParse_maxPaintChars( itemDef_t *item, int handle ) {
 	editFieldDef_t *editPtr;
 
@@ -8611,6 +8673,7 @@ keywordHash_t itemParseKeywords[] = {
 	{"rect",			ItemParse_rect,				NULL	},
 	{"rectcvar",		ItemParse_rectcvar,			NULL	},
 	{"showCvar",		ItemParse_showCvar,			NULL	},
+	{"showValue",		ItemParse_showValue,		NULL	},	// OpenJK VR
 	{"special",			ItemParse_special,			NULL	},
 	{"style",			ItemParse_style,			NULL	},
 	{"text",			ItemParse_text,				NULL	},
