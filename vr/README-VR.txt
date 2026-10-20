@@ -175,13 +175,13 @@ and while you hold the grip the saber is in both hands:
   * Passing it over: holding it with both hands, squeeze the grip of the
     hand that held it first. That hand lets go, and the saber stays in the
     other one - where it holds it on the hilt, and the way round it holds
-    it - even once you let go of its grip. It doesn't turn as it changes
-    hands: the blade points where it pointed and the hilt doesn't roll
-    over, and from then on it moves with that hand at the angle that hand
-    took hold of it (until you put it away, throw it or pass it on again;
-    cg_vrSaberPitch doesn't tilt it). It's then your weapon hand: its
-    trigger lights the saber and puts it out. (That squeeze isn't use or
-    the Force.)
+    it - even once you let go of its grip. Nothing turns as it changes
+    hands: the blade points where it pointed, the hilt doesn't roll over,
+    and the hand stays round it as it held it. From then on hand and saber
+    move together, as they lay as you passed it (until you put it away,
+    throw it or pass it on again; cg_vrSaberPitch doesn't tilt it). It's
+    then your weapon hand: its trigger lights the saber and puts it out.
+    (That squeeze isn't use or the Force.)
   * The reverse grip: take hold with your second hand the other way round
     (its thumb toward the pommel), then pass it over: the blade comes out
     of the little finger's side of your fist, below it. To turn it back,
@@ -723,7 +723,7 @@ SETTINGS (console cvars, saved automatically)
   cg_vrSaber 1           0 = saber in third person, as in the stock game
   cg_vrSaberPitch 0      tilt the blade forward from your fist (degrees;
                          not a saber passed over from the other hand: it
-                         stays at the angle you took hold of it)
+                         stays at the angle it lay at as you passed it)
   cg_vrSaberSolid 1      0 = blades pass through each other (the game
                          still stops them where they met)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
