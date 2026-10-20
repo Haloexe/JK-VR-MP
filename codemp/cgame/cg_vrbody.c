@@ -21,7 +21,8 @@ How the arms work: the game animates the model as usual, then
 Where the hand must be comes from what it holds: a gun's grip is put in the
 hand exactly the way the game holds it in third person (the hand's "*r_hand"
 tag is where a weapon model's origin sits), and the saber's blade points
-along your fist, like a real hilt.
+along your fist, like a real hilt (or, passed into it from the other hand,
+the way that hand took hold of it).
 
 A saber goes in either hand: your first one in the hand you use (the right;
 the left with vr_leftHanded on - and your guns with it), a second one in the
@@ -35,7 +36,12 @@ of the grip, or pulling the hand well away, lets go. Squeezing the grip of
 the hand that held it first passes it over: that hand lets go, and the other
 one goes on holding it - where it held it, and the way round it held it (the
 blade below the fist, if it took hold of it so: the reverse grip; take it
-back the other way round to turn it back).
+back the other way round to turn it back) - just as it held it: the blade
+pointing, and the hilt turned about itself, as they were, it moves with
+that hand from then on as if gripped there (not swung round onto that
+fist's line, nor turned over to the way that hand's tag would hang it).
+Only the fist, the saber in it, settles from where it held the hilt onto
+its controller over a moment.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -133,7 +139,8 @@ typedef struct {
 #define VRB_HILT_TOP		1.5f	// ...and a hand's half width short of an emitter (the blade can't be taken hold of)
 #define VRB_TWO_HAND_IN		0.08f	// seconds the hands take to settle onto the hilt together...
 #define VRB_TWO_HAND_OUT	0.15f	// ...and to come apart again
-#define VRB_PASS_MS			150		// ms a saber passed from hand to hand takes to settle in the new one
+#define VRB_PASS_MS			150		// ms the fist a saber is passed into takes to settle onto its controller
+#define VRB_FACE_MS			250		// a saber drawn this lately goes over to the other hand turned as it was drawn
 
 typedef struct {
 	qboolean	solved;
@@ -235,9 +242,24 @@ typedef struct vrbState_s {
 		float	sign;				// 1: the blade out of the thumb's side of the fist; -1: below it (reversed)
 		float	t;					// where the fist is along the hilt: from where the saber's own tag holds it, toward its first blade
 		int		passTime;			// cg.time it was passed into this hand (0: it wasn't lately)...
-		vec3_t	passDir;			// ...where its blade pointed then...
-		vec3_t	passOfs;			// ...and where the fist held it then, from the controller (both in its frame)
+		vec3_t	passOfs;			// ...and where the fist held it then, from the controller (in its frame)
+		// Passed into this hand, a saber lies in it the way it lay as it was
+		// passed - not swung round onto the fist's line, nor turned about
+		// itself to the way this hand's tag would hang it.
+		qboolean	kept;			// its blade this way (yours: another player's avatar says)...
+		vec3_t	keptDir;
+		qboolean	keptFace;		// ...and its face this way (another player's too), as it was with
+		vec3_t	keptFaceDir;		// its blade that way (wherever the blade's drawn, the face is turned
+		vec3_t	keptFaceRef;		// with it from there, CG_VRB_KeptFace)...
+		int		keptHand;			// ...in this hand (all in its controller's frame)
 	}			hold[MAX_SABERS];
+	// each saber as last drawn in a hand (CG_VRB_PlaceSaber): where its blade
+	// pointed, and which way its face was turned (a line square to its blade
+	// that turns with the hilt), in that hand's controller's frame
+	vec3_t		drawnBlade[MAX_SABERS];
+	vec3_t		drawnFace[MAX_SABERS];
+	int			drawnTime[MAX_SABERS];
+	int			drawnHand[MAX_SABERS];
 	int			holdTime;			// cg.time they were last worked out for
 	int			holdKey;			// what they were set up for (handedness, the sabers): when that changes, afresh
 	qboolean	grabBlocked[2];		// that hand let go of the hilt it held (passed it, or was pulled off it): it
@@ -1373,41 +1395,79 @@ static void CG_VRB_ModelMove( centity_t *cent, vrbMat_t R, const vec3_t from, co
 	}
 }
 
+static qboolean CG_VRB_KeptFace( const vrbGrip_t *grip, int h, vec3_t ax[3], const vec3_t want, vec3_t out );
+
 /*
-The saber in hand h where the hilt runs through the fist (after the arm and
-wrist are posed for it: H, the wrist turn): its tag bone moved to carry it
-there from where the model's tag would - its blade out of the thumb's side
-of the fist (sign 1) or the little finger's (-1, reversed), the fist the
-way along the hilt from where its own tag holds it that hilt says. Gives
-that line (o, dir: toward the thumb).
+The saber held in hand h (grip) where the hilt runs through the fist (after
+the arm and wrist are posed for it: H, the wrist turn; ctrl, its
+controller's axes): its tag bone moved to carry it there from where the
+model's tag would - its blade out of the thumb's side of the fist (sign 1)
+or the little finger's (-1, reversed), the fist the way along the hilt from
+where its own tag holds it that hilt says. Gives that line (o, dir: toward
+the thumb).
+
+Turned about itself: its face (its blade bolt's +X, a line square to the
+blade that turns with the hilt) the way it lay as it was passed into this
+hand (CG_VRB_KeptFace) - else as the hand's tag hangs it, turned the least
+that puts its blade along the fist; held reversed, that then turned end
+over end about the palm's axis (the least turn straight from the tag would
+be a half turn about no axis in particular: it would spin as the hand
+moved). How it ends up is noted (drawnBlade, drawnFace), for the other
+hand.
 */
-static qboolean CG_VRB_PlaceSaber( centity_t *cent, int h, const mdxaBone_t *H, int saberModel, float sign, float hilt,
+static qboolean CG_VRB_PlaceSaber( centity_t *cent, int h, const mdxaBone_t *H, const vrbGrip_t *grip, vec3_t ctrl[3],
 	vec3_t o, vec3_t dir ) {
+	const int s = grip->saber;
 	vrbBone_t w, t, i, l, tag;
 	mdxaBone_t m, E;
-	vec3_t ax[3], blade, want, at;
+	vec3_t ax[3], blade, want, at, faceNow, faceWant;
 	vrbMat_t R;
 	float length;
+	qboolean haveFace;
+	int k;
 
 	if ( !CG_VRB_Bone( cent, vrbArmBones[h][VRB_HAND], 1, &w ) || !CG_VRB_Bone( cent, vrbArmBones[h][VRB_THUMB], 1, &t ) ||
 		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_INDEX], 1, &i ) || !CG_VRB_Bone( cent, vrbArmBones[h][VRB_LITTLE], 1, &l ) ||
 		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) ||
 		!VRB_HandFrame( w.origin, t.origin, i.origin, l.origin, ax, &length ) ||
-		!trap->G2API_GetBoltMatrix( cent->ghoul2, saberModel, 0, &m, cent->turAngles, cent->lerpOrigin, cg.time,
+		!trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 0, &m, cent->turAngles, cent->lerpOrigin, cg.time,
 			cgs.gameModels, cent->modelScale ) ) {
 		return qfalse;
 	}
 	VRB_GripLine( h, w.origin, ax, length, o, dir );
 	BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, blade );
+	BG_GiveMeVectorFromMatrix( &m, POSITIVE_X, faceNow );
 	if ( VectorNormalize( blade ) < 0.5f ) {
 		return qfalse;
 	}
+	VectorMA( faceNow, -DotProduct( faceNow, blade ), blade, faceNow );
+	haveFace = (qboolean)( VectorNormalize( faceNow ) > 0.5f );
 	// the saber's blade along the line, the way round it's held, and its
 	// origin (where its tag holds it) on it, as far back from the fist as the
 	// fist is along the hilt from there
-	VectorScale( dir, ( sign < 0.0f ) ? -1.0f : 1.0f, want );
-	VectorMA( o, -hilt, want, at );
-	VRB_Arc( blade, want, R );
+	VectorScale( dir, ( grip->sign < 0.0f ) ? -1.0f : 1.0f, want );
+	VectorMA( o, -grip->hilt, want, at );
+	if ( haveFace && CG_VRB_KeptFace( grip, h, ctrl, want, faceWant ) ) {
+		vec3_t from[3], to[3];
+		VectorCopy( blade, from[0] );
+		VectorCopy( faceNow, from[1] );
+		CrossProduct( blade, faceNow, from[2] );
+		VectorCopy( want, to[0] );
+		VectorCopy( faceWant, to[1] );
+		CrossProduct( want, faceWant, to[2] );
+		VRB_FrameMap( from, to, R );
+	} else {
+		VRB_Arc( blade, dir, R );
+		if ( grip->sign < 0.0f ) {
+			// (about the palm's axis as it lies square to the fist's line)
+			vrbMat_t F;
+			vec3_t palm;
+			VectorMA( ax[2], -DotProduct( ax[2], dir ), dir, palm );
+			VectorNormalize( palm );
+			VRB_AxisAngle( palm, M_PI, F );
+			VRB_Mul( F, R, R );
+		}
+	}
 	CG_VRB_ModelMove( cent, R, tag.origin, at, &E );
 	if ( vrb.handBoneTurn[h][1] ) {
 		VRB_Compose( &E, H, &E );	// (on top of the wrist turn it already has)
@@ -1416,6 +1476,16 @@ static qboolean CG_VRB_PlaceSaber( centity_t *cent, int h, const mdxaBone_t *H, 
 		return qfalse;
 	}
 	vrb.curlG2 = cent->ghoul2;	// (cleared with the fingers)
+	if ( haveFace && s >= 0 && s < MAX_SABERS ) {
+		vec3_t face;
+		VRB_Apply( R, faceNow, face );
+		for ( k = 0; k < 3; k++ ) {
+			vrb.drawnBlade[s][k] = DotProduct( want, ctrl[k] );
+			vrb.drawnFace[s][k] = DotProduct( face, ctrl[k] );
+		}
+		vrb.drawnTime[s] = cg.time ? cg.time : 1;
+		vrb.drawnHand[s] = h;
+	}
 	return qtrue;
 }
 
@@ -1951,7 +2021,40 @@ static void CG_VRB_Holds( centity_t *cent ) {
 		vrb.hold[0].sign = 1.0f;
 		vrb.hold[0].t = 0.0f;
 		vrb.hold[0].passTime = 0;
+		vrb.hold[0].kept = vrb.hold[0].keptFace = qfalse;
 	}
+}
+
+// v given in the frame ax (components along ax[0], ax[1], ax[2]), in the world
+static void VRB_FromFrame( vec3_t ax[3], const vec3_t v, vec3_t out ) {
+	vec3_t t;
+
+	VectorScale( ax[0], v[0], t );
+	VectorMA( t, v[1], ax[1], t );
+	VectorMA( t, v[2], ax[2], out );
+}
+
+// Saber s, going over to hand h (its controller's axes ax), turned there the
+// way it was last drawn in the other hand - as that hand has it now (its
+// controller's axes now: from): its face, and the blade it goes with, kept
+// in h's frame. Not drawn lately (put away, or not moved into a fist), it
+// hangs as h's tag has it.
+static void CG_VRB_KeepFace( int s, int h, vec3_t from[3], vec3_t ax[3] ) {
+	vec3_t face, ref;
+	int i;
+
+	vrb.hold[s].keptFace = qfalse;
+	VRB_FromFrame( from, vrb.drawnFace[s], face );
+	VRB_FromFrame( from, vrb.drawnBlade[s], ref );
+	if ( cg.time - vrb.drawnTime[s] < 0 || cg.time - vrb.drawnTime[s] > VRB_FACE_MS || !( DotProduct( face, face ) > 0.25f ) ) {
+		return;	// (or no face to keep: never drawn, that hand not on its controller)
+	}
+	for ( i = 0; i < 3; i++ ) {
+		vrb.hold[s].keptFaceDir[i] = DotProduct( face, ax[i] );
+		vrb.hold[s].keptFaceRef[i] = DotProduct( ref, ax[i] );
+	}
+	vrb.hold[s].keptFace = qtrue;
+	vrb.hold[s].keptHand = h;
 }
 
 // A saber just passed into its hand: how far it has gone over from where it
@@ -1970,13 +2073,40 @@ static float CG_VRB_PassEase( int s ) {
 	return VRB_SmoothStep( 0.0f, 1.0f, (float)t / VRB_PASS_MS );
 }
 
-// v given in the frame ax (components along ax[0], ax[1], ax[2]), in the world
-static void VRB_FromFrame( vec3_t ax[3], const vec3_t v, vec3_t out ) {
-	vec3_t t;
+// Where the blade of a saber in a hand points as the hand holds it (its
+// controller's axes ax): along the fist, or the other way held reversed - or,
+// passed into the hand, the way it lay in it then, for as long as it's in
+// that hand (CG_VRB_PassSaber; cg_vrSaberPitch doesn't tilt it then).
+// Another player's never: their avatar says where theirs points.
+static void CG_VRB_HeldBladeDir( const vrbGrip_t *grip, vec3_t ax[3], vec3_t want ) {
+	if ( grip->saber >= 0 && grip->saber < MAX_SABERS && vrb.hold[grip->saber].kept ) {
+		VRB_FromFrame( ax, vrb.hold[grip->saber].keptDir, want );
+		VectorNormalize( want );
+		return;
+	}
+	CG_VRB_SaberDir( ax, want );
+	VectorScale( want, ( grip->sign < 0.0f ) ? -1.0f : 1.0f, want );
+}
 
-	VectorScale( ax[0], v[0], t );
-	VectorMA( t, v[1], ax[1], t );
-	VectorMA( t, v[2], ax[2], out );
+// Which way the face of the saber in hand h (its controller's axes ax) is to
+// be turned, its blade drawn pointing want (world): as it lay as it was
+// passed into that hand, turned with the blade from where it pointed then
+// (the least turn - however far the blade's drawn from there, its weight
+// trailing it or another blade stopping it, a true turn: never undone). Into
+// out (world); qfalse: as the hand's tag hangs it (CG_VRB_PlaceSaber).
+static qboolean CG_VRB_KeptFace( const vrbGrip_t *grip, int h, vec3_t ax[3], const vec3_t want, vec3_t out ) {
+	vec3_t ref, face;
+	vrbMat_t R;
+
+	if ( grip->saber < 0 || grip->saber >= MAX_SABERS || !vrb.hold[grip->saber].keptFace ||
+		vrb.hold[grip->saber].keptHand != h ) {
+		return qfalse;
+	}
+	VRB_FromFrame( ax, vrb.hold[grip->saber].keptFaceRef, ref );
+	VRB_FromFrame( ax, vrb.hold[grip->saber].keptFaceDir, face );
+	VRB_Arc( ref, want, R );
+	VRB_Apply( R, face, out );
+	return qtrue;
 }
 
 // What hand h holds this frame.
@@ -2131,11 +2261,22 @@ static float CG_VRB_RangeDistance( const vec3_t p, const vec3_t o, const vec3_t 
 	return CG_VRB_SegmentDistance( p, a, b );
 }
 
-// A frame for the hilt: along it, and the first hand's left (its up if the
-// hilt runs along that) square to it.
-static void CG_VRB_HiltFrame( const vec3_t dir, vec3_t axM[3], vec3_t e[3] ) {
+// A frame for the hilt held in the first hand (grip; its controller's axes
+// axM): along it (dir), and the left of that hand's fist square to it (its
+// up if the hilt runs along that) - a fist holding it as it was passed into
+// it (CG_VRB_HeldBladeDir) turned with it from its own line, the least, so
+// the hilt doesn't run along that left however it lies in the hand.
+static void CG_VRB_HiltFrame( const vrbGrip_t *grip, vec3_t axM[3], const vec3_t dir, vec3_t e[3] ) {
+	vec3_t fist, held, side;
+	vrbMat_t R;
+
+	CG_VRB_SaberDir( axM, fist );
+	VectorScale( fist, ( grip->sign < 0.0f ) ? -1.0f : 1.0f, fist );
+	CG_VRB_HeldBladeDir( grip, axM, held );
+	VRB_Arc( fist, held, R );
+	VRB_Apply( R, axM[1], side );
 	VectorCopy( dir, e[0] );
-	VectorMA( axM[1], -DotProduct( axM[1], dir ), dir, e[1] );
+	VectorMA( side, -DotProduct( side, dir ), dir, e[1] );
 	if ( VectorNormalize( e[1] ) < 0.1f ) {
 		VectorMA( axM[2], -DotProduct( axM[2], dir ), dir, e[1] );
 		VectorNormalize( e[1] );
@@ -2168,29 +2309,46 @@ static const char *VRB_HandName( int h ) {
 }
 
 static void CG_VRB_BoltHands( centity_t *cent );
+static float CG_VRB_RoomYaw( const vrClientState_t *vr );
 
 // The first saber passed over from hand "from", which let go of it, to hand
-// "to" (its controller at pos, ax), which held it with it: it goes on holding
-// it where it holds it on the hilt and the way round it holds it, settling
-// into the hand from where it was drawn holding it (CG_VRB_PassEase).
-static void CG_VRB_PassSaber( centity_t *cent, int from, int to, const vec3_t pos, vec3_t ax[3] ) {
-	vec3_t rel, drawn;
+// "to", which held it with it: it goes on holding it where it holds it on
+// the hilt and the way round it holds it, and from then on it moves with
+// that hand as if gripped there - the blade pointing, to that hand, where
+// both hands pointed it; the hilt turned about itself as it was drawn (as
+// the first hand has it this frame). Nothing jumps: the fist, the saber in
+// it, settles from where it's drawn holding the hilt onto its controller
+// (CG_VRB_PassEase); the blade goes on from where it's drawn, as it's moving
+// (its weight may have it trailing the hands, mid-swing: the same blade,
+// CG_VRB_BladeSpring), and resting on another blade it rests on it still
+// (CG_VRB_BladeSolid, from the new hand).
+static void CG_VRB_PassSaber( centity_t *cent, const vrClientState_t *vr, int from, int to ) {
+	vec3_t posF, axF[3], pos, ax[3], drawn, rel;
 	int i;
 
+	CG_VRB_Controller( vr, from, posF, axF );
+	CG_VRB_Controller( vr, to, pos, ax );
+	// where the other hand holds the hilt as it's drawn: a blade trailing the
+	// hands has the hilt with it (CG_VRB_BladeInertia)
+	VectorCopy( vrb.twoHandDir, drawn );
+	if ( vrb.blade[from].valid ) {
+		VRB_RotZ( vrb.blade[from].dir, CG_VRB_RoomYaw( vr ), drawn );
+	}
+	VectorMA( posF, vrb.twoHandT, drawn, rel );
+	VectorSubtract( rel, pos, rel );
 	vrb.hold[0].hand = to;
 	vrb.hold[0].sign = vrb.twoHandSign;
 	vrb.hold[0].t = Com_Clamp( -VR_POSE_MAX_HILT, VR_POSE_MAX_HILT, vrb.hold[0].t + vrb.twoHandT );
 	vrb.hold[0].passTime = cg.time ? cg.time : 1;
-	VectorSubtract( vrb.twoHandPoint, pos, rel );
-	// (from where its blade is drawn: its weight may have it trailing where
-	// both hands have it, mid-swing)
-	VectorCopy( vrb.twoHandDir, drawn );
-	if ( vrb.blade[from].outTime && cg.time - vrb.blade[from].outTime >= 0 && cg.time - vrb.blade[from].outTime < 100 ) {
-		VectorCopy( vrb.blade[from].out, drawn );
-	}
 	for ( i = 0; i < 3; i++ ) {
-		vrb.hold[0].passDir[i] = DotProduct( drawn, ax[i] );
+		vrb.hold[0].keptDir[i] = DotProduct( vrb.twoHandDir, ax[i] );
 		vrb.hold[0].passOfs[i] = DotProduct( rel, ax[i] );
+	}
+	vrb.hold[0].kept = qtrue;
+	CG_VRB_KeepFace( 0, to, axF, ax );
+	if ( vrb.blade[from].valid ) {
+		vrb.blade[to] = vrb.blade[from];
+		VectorCopy( pos, vrb.blade[to].pivot );		// (resting on another blade: found again from the new hand)
 	}
 	vrb.hold[1].hand = from;
 	vrb.hold[1].sign = 1.0f;
@@ -2215,7 +2373,7 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 	vrbGrip_t gripM, gripO;
 	vrbBone_t tag;
 	mdxaBone_t m;
-	vec3_t posM, axM[3], posO, axO[3], dirM, dirO, blade, bladeNow, emitter, tmp;
+	vec3_t posM, axM[3], posO, axO[3], dirO, blade, bladeNow, emitter, tmp;
 	float lo, hi, tAbove[2], tBelow[2], dAbove, dBelow;
 	qboolean canAbove, canBelow;
 	int i, h;
@@ -2302,13 +2460,12 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 		goto off;
 	}
 
-	// both controllers: the hilt's way (toward the first blade, as the first
-	// hand holds it), and the other's fist
+	// both controllers: the hilt's way (toward the first blade, as it lies in
+	// the first hand), and the other's fist
 	CG_VRB_Controller( vr, main, posM, axM );
 	CG_VRB_Controller( vr, off, posO, axO );
-	CG_VRB_SaberDir( axM, dirM );
+	CG_VRB_HeldBladeDir( &gripM, axM, blade );
 	CG_VRB_SaberDir( axO, dirO );
-	VectorScale( dirM, ( gripM.sign < 0.0f ) ? -1.0f : 1.0f, blade );
 	VectorCopy( posO, vrb.twoHandGrip2 );
 	dAbove = canAbove ? CG_VRB_RangeDistance( posO, posM, blade, tAbove ) : 1e9f;
 	dBelow = canBelow ? CG_VRB_RangeDistance( posO, posM, blade, tBelow ) : 1e9f;
@@ -2358,7 +2515,7 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 			int k;
 			VectorSubtract( posO, posM, tmp );
 			vrb.twoHandT = DotProduct( tmp, dir );
-			CG_VRB_HiltFrame( dir, axM, e );
+			CG_VRB_HiltFrame( &gripM, axM, dir, e );
 			for ( i = 0; i < 3; i++ ) {
 				for ( k = 0; k < 3; k++ ) {
 					vrb.twoHandGrip[i][k] = DotProduct( axO[i], e[k] );
@@ -2393,7 +2550,7 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 		// Passing it over: held with both hands, a new squeeze of the first
 		// hand's grip lets go with that hand, and the other goes on holding it.
 		if ( squeezed[main] && !vrb.grabBlocked[main] ) {
-			CG_VRB_PassSaber( cent, main, off, posO, axO );
+			CG_VRB_PassSaber( cent, vr, main, off );
 			return;
 		}
 		vrb.grabZones |= 1 << main;	// (its grip squeezed now passes it over)
@@ -2427,7 +2584,7 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 		VectorScale( posO, 1.0f - vrb.twoHandEase, vrb.twoHandHand );
 		VectorMA( vrb.twoHandHand, vrb.twoHandEase, vrb.twoHandPoint, vrb.twoHandHand );
 		// the hand as it lies round the hilt, the controller eased onto that
-		CG_VRB_HiltFrame( vrb.twoHandDir, axM, e );
+		CG_VRB_HiltFrame( &gripM, axM, vrb.twoHandDir, e );
 		for ( i = 0; i < 3; i++ ) {
 			VectorClear( held[i] );
 			for ( k = 0; k < 3; k++ ) {
@@ -2622,24 +2779,6 @@ static void CG_VRB_BladeSpring( int h, const vrClientState_t *vr, const vec3_t w
 	}
 	vrb.blade[h].time = cg.time;
 	VRB_RotZ( vrb.blade[h].dir, yaw, out );
-}
-
-// Where the blade in hand h points as the hand holds it (its controller
-// axes ax): along the fist, or the other way held reversed - and, just
-// passed into it, still on its way over from where it was (CG_VRB_PassEase).
-static void CG_VRB_HeldBladeDir( const vrbGrip_t *grip, vec3_t ax[3], vec3_t want ) {
-	const float ease = CG_VRB_PassEase( grip->saber );
-
-	CG_VRB_SaberDir( ax, want );
-	VectorScale( want, ( grip->sign < 0.0f ) ? -1.0f : 1.0f, want );
-	if ( ease < 1.0f ) {
-		vec3_t from, tmp;
-		VRB_FromFrame( ax, vrb.hold[grip->saber].passDir, from );
-		if ( VectorNormalize( from ) > 0.5f ) {
-			VRB_Slerp( from, want, ease, tmp );
-			VectorCopy( tmp, want );
-		}
-	}
 }
 
 static void CG_VRB_BladeInertia( centity_t *cent, const vrClientState_t *vr ) {
@@ -3231,9 +3370,10 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	} else {
 		memcpy( Y, Y0, sizeof( Y ) );
 		if ( grip->kind == VRB_GRIP_SABER ) {
-			// the blade along your fist (tilted by cg_vrSaberPitch) - out of
-			// the little finger's side held reversed - the hand turned as
-			// little as that allows from lying naturally
+			// the blade where the hand holds it (CG_VRB_HeldBladeDir: along
+			// your fist, tilted by cg_vrSaberPitch, out of the little finger's
+			// side held reversed - or, passed into it, the way it took it), the
+			// hand turned as little as that allows from lying naturally
 			mdxaBone_t m;
 			vec3_t bladeNow, bladeWant, fistWant;
 			if ( trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 0, &m, cent->turAngles,
@@ -3507,8 +3647,7 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		if ( grip->kind == VRB_GRIP_HILT ) {
 			// (only while it holds it, closing as it settles on)
 			CG_VRB_CurlFingers( cent, h, &H, grip->origin, grip->dir, vrb.twoHand ? grip->blend : 0.0f );
-		} else if ( grip->kind == VRB_GRIP_SABER && inFist &&
-			CG_VRB_PlaceSaber( cent, h, &H, grip->saberModel, grip->sign, grip->hilt, holdO, holdDir ) ) {
+		} else if ( grip->kind == VRB_GRIP_SABER && inFist && CG_VRB_PlaceSaber( cent, h, &H, grip, gA, holdO, holdDir ) ) {
 			// the saber moved into the fist, the fingers round it there
 			CG_VRB_CurlFingers( cent, h, &H, holdO, holdDir, 1.0f );
 		} else if ( grip->kind == VRB_GRIP_SABER && have[VRB_TAG] ) {
@@ -4067,26 +4206,43 @@ static void CG_VRB_AvatarInWorld( centity_t *cent, vrAvatar_t *world ) {
 	}
 }
 
-// Another VR player's arms: the hands where theirs are, holding what they
-// hold - the same solver as yours, their avatar standing in for the headset.
-static void CG_VRB_OtherArms( centity_t *cent ) {
-	const int n = cent->currentState.number;
+// Another VR player's sabers (vrb, vrbRemote: theirs): one gone over to
+// their other hand lies in it turned about itself as it was last drawn - as
+// the hand it was drawn in has it now (as their own game has it,
+// CG_VRB_PassSaber). Not drawn lately (put away, say), or that hand off its
+// controller now, as the hand's tag hangs it.
+static void CG_VRB_OtherFaces( void ) {
+	int s, i;
+
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		const int h = CG_VRB_SaberHand( s );
+		if ( h < 0 ) {
+			continue;
+		}
+		if ( cg.time - vrb.drawnTime[s] < 0 || cg.time - vrb.drawnTime[s] > VRB_FACE_MS ) {
+			vrb.hold[s].keptFace = qfalse;
+		} else if ( h != vrb.drawnHand[s] ) {
+			vec3_t from[3], ax[3];
+			for ( i = 0; i < 3; i++ ) {
+				VectorCopy( vrbRemote->hand[h ^ 1].axis[i], from[i] );	// (no hand on it: no axes)
+				VectorCopy( vrbRemote->hand[h].axis[i], ax[i] );
+			}
+			CG_VRB_KeepFace( s, h, from, ax );
+		}
+	}
+}
+
+// Another VR player's arms (vrb: theirs) from their avatar, in the world.
+static void CG_VRB_PoseOther( centity_t *cent, const vrAvatar_t *world ) {
 	vrClientState_t vr;
-	vrAvatar_t world;
 	int h;
 
-	if ( !CG_VRB_OtherUsable( cent ) ) {
-		return;
-	}
-	vrbCur = &vrbOthers[n];
-	CG_VRB_Init();
-	CG_VRB_AvatarInWorld( cent, &world );
-	vrbRemote = &world;
+	vrbRemote = world;
 	if ( cg_vrBodyArms.integer ) {
 		memset( &vr, 0, sizeof( vr ) );
 		vr.active = qtrue;
 		for ( h = 0; h < 2; h++ ) {
-			const vrAvatarHand_t *ah = &world.hand[h];
+			const vrAvatarHand_t *ah = &world->hand[h];
 			vr.handValid[h] = ( ah->grip != VR_GRIP_NONE ) ? qtrue : qfalse;
 			// a blade points where theirs does (not where a controller would)
 			if ( ah->grip == VR_GRIP_SABER ) {
@@ -4097,12 +4253,13 @@ static void CG_VRB_OtherArms( centity_t *cent ) {
 				vrb.blade[h].valid = qfalse;
 			}
 		}
+		CG_VRB_OtherFaces();
 		// a hand on the other hand's hilt
 		vrb.twoHandTime = cg.time;
-		vrb.twoHandOff = ( world.hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ) ? VR_HAND_LEFT :
-			( world.hand[VR_HAND_RIGHT].grip == VR_GRIP_HILT ) ? VR_HAND_RIGHT : -1;
+		vrb.twoHandOff = ( world->hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ) ? VR_HAND_LEFT :
+			( world->hand[VR_HAND_RIGHT].grip == VR_GRIP_HILT ) ? VR_HAND_RIGHT : -1;
 		vrb.twoHand = vrb.twoHandArms = ( vrb.twoHandOff >= 0 ) ? qtrue : qfalse;
-		vrb.twoHandEase = vrb.twoHand ? world.hand[vrb.twoHandOff].blend : 0.0f;
+		vrb.twoHandEase = vrb.twoHand ? world->hand[vrb.twoHandOff].blend : 0.0f;
 		CG_VRB_Arms( cent, &vr, vrb.avatar.bodyYaw );
 	} else {
 		CG_VRB_ResetArms( cent->ghoul2 );
@@ -4111,6 +4268,21 @@ static void CG_VRB_OtherArms( centity_t *cent ) {
 		CG_VRB_UnboltHands( cent );	// (no hands to hold them: as the game holds them)
 	}
 	vrbRemote = NULL;
+}
+
+// Another VR player's arms: the hands where theirs are, holding what they
+// hold - the same solver as yours, their avatar standing in for the headset.
+static void CG_VRB_OtherArms( centity_t *cent ) {
+	const int n = cent->currentState.number;
+	vrAvatar_t world;
+
+	if ( !CG_VRB_OtherUsable( cent ) ) {
+		return;
+	}
+	vrbCur = &vrbOthers[n];
+	CG_VRB_Init();
+	CG_VRB_AvatarInWorld( cent, &world );
+	CG_VRB_PoseOther( cent, &world );
 	vrbCur = &vrbSelf;
 }
 
