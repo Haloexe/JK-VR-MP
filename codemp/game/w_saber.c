@@ -8893,9 +8893,10 @@ nextStep:
 			//for now I'm keeping a broken right arm swingable, it will just look and act damaged
 			//but still be useable
 
-			if (rSaberNum == 1 && (self->client->ps.brokenLimbs & (1 << BROKENLIMB_LARM)))
-			{ //don't to saber 1 if the left arm is broken
-				break;
+			if ( G_VRSaberArmBroken( self, rSaberNum ) )
+			{ //don't to saber 1 if the left arm is broken (OpenJK VR: a VR player's saber in their left hand, either one)
+				rSaberNum++;
+				continue;
 			}
 			if (rSaberNum > 0
 				&& self->client->saber[1].model[0]

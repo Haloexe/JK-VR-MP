@@ -7,13 +7,15 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Stereo 3D with the headset's own field of view and lens geometry
   * Head tracking (rotation + limited positional movement)
   * VR controllers: thumbstick movement, snap/smooth turning, buttons
-  * Guns are held in and aimed with your right hand, with a 3D aim dot
+  * Guns are held in and aimed with your right hand - your left, playing
+    left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
     and its arms and hands follow your controllers, gripping what they
     hold (works with any player model on the standard skeleton, custom
     models included)
   * First-person lightsaber: the hilt in your hand, the blade where your
-    controller points
+    controller points - in either hand, held anywhere along the hilt, the
+    usual way or reversed, passed from hand to hand
   * Physical saber combat in games you host (and on servers running this
     build): your real blade cuts, blocks and clashes, harder the faster you
     swing; blades are solid - yours rests on another blade and slides along
@@ -76,14 +78,20 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Right stick up/down  next / previous weapon
   Right stick click    change saber style
   Right trigger        attack (saber in your hand, where blades are real:
-                       switch it on and off)
-  Left trigger         alternate attack
+                       switch it on and off) - the trigger of the hand that
+                       holds your weapon: your saber in your left hand, the
+                       left one
+  Left trigger         alternate attack (the other trigger)
   Right grip           use (doors, switches, pick-ups)
   Left grip            use the selected Force power (or, at your saber's
                        hilt, take hold of it with both hands)
   A / B                jump / crouch
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
+LEFT-HANDED (Setup > VR, or vr_leftHanded 1): your guns go in your left hand
+and you aim with it, your saber goes in your left fist, and the grips swap:
+the Force on the right grip, use on the left. A trigger or grip goes on
+doing what it did when you pressed it until you let go.
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
 where it points.
@@ -105,11 +113,11 @@ clicking, going back and scrolling, so to put a command on one of those use
 the console (see the AUX key names below); the other buttons (grips, A, X,
 Y, stick clicks) can be bound right there.
 
-With a gun out you aim with your right hand: the gun is in your hand (the
-complete third-person model, so it looks right from every angle) and a
-small crosshair floats where your shots will land. With the saber, fists or
-a scope you aim where you look. Keyboard and mouse still work; the mouse
-turns your body.
+With a gun out you aim with your right hand (your left, left-handed): the
+gun is in your hand (the complete third-person model, so it looks right
+from every angle) and a small crosshair floats where your shots will land.
+With the saber, fists or a scope you aim where you look. Keyboard and mouse
+still work; the mouse turns your body.
 
 YOUR BODY: look down and you see your character. Its hands are on your
 controllers, its elbows bend on their own, its wrists bend, and its torso
@@ -117,8 +125,8 @@ turns with your head (it follows once you look more than 45 degrees to the
 side, and straightens out while you walk). The head is hidden so it never
 gets in your eyes. Your character's model is measured every frame, so a
 small or a tall model, the stock characters or a custom one all get arms
-that fit. A gun sits in the right hand exactly the way the game holds it
-in third person, fingers around the grip. When you reach further than your
+that fit. A gun sits in your hand exactly the way the game holds it in
+third person, fingers around the grip. When you reach further than your
 character's arm, the body leans in a little so the hand still gets there.
 Standing still, your character stands up straight, as you do (the game's
 saber stances crouch, which put your hands up at its chest), so its head
@@ -139,39 +147,55 @@ forward as you reach out or across. Other players running this build see
 your arms the same way.
 
 LIGHTSABER: with the saber out you stay in first person. The hilt is
-locked in your right fist (a second saber in your left), the fingers closed
-round it whatever your body is doing, and the blade points along your fist
-the way you would hold a real hilt, so it follows every turn of your wrist.
+locked in your right fist - your left, left-handed (a second saber in the
+other) - the fingers closed round it whatever your body is doing, and the
+blade points along your fist the way you would hold a real hilt, so it
+follows every turn of your wrist. Its trigger lights it and puts it out;
+the other trigger is the alternate attack.
 Through flips, force jumps, cartwheels and rolls your body stays upright
 (in an in-air pose, or a crouch for a roll) with the saber in your hands,
 so you can keep fighting mid-air. Fists, saber locks, knockdowns and
 vehicles still use the third-person camera.
 
-BOTH HANDS ON THE HILT: bring your left hand to the saber's hilt (below
-your right hand, above it on a long hilt, or anywhere along a staff) and
-squeeze the left grip. Your left hand closes round the hilt with a short
-buzz, and while you hold the grip the saber is in both hands:
+BOTH HANDS ON THE HILT: bring your other hand to the saber's hilt -
+anywhere from the pommel to just short of the emitter (the blade can't be
+taken hold of), above or below your first hand, anywhere along a staff -
+and squeeze its grip. That hand closes round the hilt with a short buzz,
+and while you hold the grip the saber is in both hands:
   * The blade follows both wrists, and the further apart your hands are,
     the more it follows the line between them, so pushing with one hand
     and pulling with the other levers it round like a real two-handed hilt.
-  * Your left hand grips the hilt where it took hold: it doesn't slide
+  * Your second hand grips the hilt where it took hold: it doesn't slide
     along it or turn round it. To hold it somewhere else, let go and take
     hold again.
   * Let go of the grip to let go. Moving your hands about doesn't make it
-    slip off: only pulling your left hand a long way (about 70 cm) from
-    where it holds breaks the hold. Taking hold and letting go settle
-    smoothly over a few frames.
+    slip off: only pulling that hand a long way (about 70 cm) from where it
+    holds breaks the hold. Taking hold and letting go settle smoothly over
+    a few frames.
+  * Passing it over: holding it with both hands, squeeze the grip of the
+    hand that held it first. That hand lets go, and the saber stays in the
+    other one - where it holds it on the hilt, and the way round it holds
+    it - even once you let go of its grip. It's then your weapon hand: its
+    trigger lights the saber and puts it out. (That squeeze isn't use or
+    the Force.)
+  * The reverse grip: take hold with your second hand the other way round
+    (its thumb toward the pommel), then pass it over: the blade comes out
+    of the little finger's side of your fist, below it. To turn it back,
+    take hold with the other hand the usual way round and pass it back.
+    There's no flipping it in one hand.
+  * Held at the pommel, the blade reaches a hand's width further; a staff
+    held at both ends is held with both hands however far apart they are.
   * Both hands hold the hilt in the hole of the fist, the way a real hand
     holds a handle, and wrap their fingers round it whatever the body is
     doing (running, jumping, flipping). (Models whose gloves are one solid
     piece, with no finger bones, can't close their fingers.)
-  * Near the hilt the left grip takes hold instead of using the Force;
-    anywhere else it uses the Force as usual. cg_vrTwoHand 0 turns taking
-    hold off.
+  * Near the hilt the second hand's grip takes hold instead of using the
+    Force (or Use); anywhere else it does that as usual. cg_vrTwoHand 0
+    turns taking hold (and passing) off.
   * On servers with VR saber combat a two-handed saber swings one weight
     heavier (light becomes medium, medium becomes heavy, and a heavy saber
     in both hands wins clashes against a one-handed heavy), and either hand
-    drives the swing (sliding your left hand along the hilt doesn't count
+    drives the swing (sliding your second hand along the hilt doesn't count
     as a swing). Hits and clashes buzz both hands.
 
 SABER COMBAT in games you host (Create Game, bots included) and on any
@@ -284,15 +308,17 @@ server running this build: your real blade is the weapon.
           harder the harder you push, and a sharp give if it slips by; a
           grind when it scrapes a wall;
           getting cut: a jolt in both hands.
-        Holding the saber with both hands, both feel all of it, the left
-        as strongly as the right. cg_vrHaptics sets how strong it all is
+        Holding the saber with both hands, both feel all of it, the second
+        as strongly as the first. cg_vrHaptics sets how strong it all is
         (0 off, 1 normal, up to 2).
   * Setup has a VR page (the VR button under Video, Sound and the rest,
-    in the main menu and in game) with Saber Inertia, Saber Weight and
-    Vibration: point at a slider and click or drag it, or push the stick
-    up or down (the mouse wheel) to move it a tenth at a time; or pick it
-    with the arrow keys (or Tab) and move it with left and right. Each
-    shows its value.
+    in the main menu and in game) with Left-Handed (above), Saber Inertia,
+    Saber Weight and Vibration: point at Left-Handed and click it, or pick
+    it with the arrow keys (or Tab) and set it with left (No) or right
+    (Yes), or change it with Enter; point at a slider and click or drag
+    it, or push the stick up or down (the mouse wheel) to move it a tenth
+    at a time, or pick it with the arrow keys and move it with left and
+    right. Each slider shows its value.
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
@@ -312,8 +338,11 @@ sees a VR player as they really move, in a game hosted with this build:
   * their body faces where theirs does, their head turns, nods and tilts
     where they look, and their arms and hands are where their real ones
     are, fingers round whatever they hold: the saber along their real
-    blade (which is what their blows are judged by), both hands on the
-    hilt when they hold it with both, a gun where they hold it
+    blade (which is what their blows are judged by), in whichever hand
+    and wherever along the hilt they hold it, reversed if they hold it so,
+    both hands on the hilt when they hold it with both, a gun where they
+    hold it (the normal game draws a left-handed player's saber and gun in
+    the right hand, as the game animates it)
   * they stay upright through flips and rolls, as they do in their headset
   * cg_vrOthers 0 shows them with the game's animations instead.
 Players without VR - this build's desktop copy (below), or the normal game

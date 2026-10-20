@@ -96,6 +96,7 @@ static itemDef_t *itemCapture = NULL;   // item that has the mouse captured ( if
 displayContextDef_t *DC = NULL;
 
 static qboolean g_waitingForKey = qfalse;
+static itemDef_t *g_keyFocusItem = NULL;	// OpenJK VR: the item the keys (Tab, the arrows) moved the focus to, until the mouse moves
 static qboolean g_editingField = qfalse;
 
 static itemDef_t *g_bindItem = NULL;
@@ -3285,6 +3286,25 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 }
 
 qboolean Item_YesNo_HandleKey(itemDef_t *item, int key) {
+	// OpenJK VR: shown and usable (its cvarTest: a disabled one gets no keys
+	// at all, Menu_HandleKey), the keys having taken the focus to it - or the
+	// mouse (the VR pointer) on it, not just where it last was: the focus
+	// stays on what the mouse left - Enter changes it, and the arrows set it:
+	// left No, right Yes
+	if ( ( item->window.flags & ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) ) == ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) && item->cvar &&
+		( item == g_keyFocusItem || Rect_ContainsPoint( &item->window.rect, DC->cursorx, DC->cursory ) ) &&
+		!( ( item->cvarFlags & ( CVAR_ENABLE | CVAR_DISABLE ) ) && !Item_EnableShowViaCvar( item, CVAR_ENABLE ) ) &&
+		!( ( item->cvarFlags & ( CVAR_SHOW | CVAR_HIDE ) ) && !Item_EnableShowViaCvar( item, CVAR_SHOW ) ) ) {
+		if ( key == A_ENTER || key == A_KP_ENTER ) {
+			DC->setCVar( item->cvar, va( "%i", !DC->getCVarValue( item->cvar ) ) );
+			return qtrue;
+		}
+		if ( key == A_CURSOR_LEFT || key == A_KP_4 || key == A_CURSOR_RIGHT || key == A_KP_6 ) {
+			const qboolean yes = (qboolean)( key == A_CURSOR_RIGHT || key == A_KP_6 );
+			DC->setCVar( item->cvar, ( yes != ( item->invertYesNo ? qtrue : qfalse ) ) ? "1" : "0" );
+			return qtrue;
+		}
+	}
   if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS && item->cvar)
 	{
 		if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3)
@@ -4166,6 +4186,7 @@ itemDef_t *Menu_SetPrevCursorItem(menuDef_t *menu) {
 
 		if (Item_SetFocus(menu->items[menu->cursorItem], DC->cursorx, DC->cursory)) {
 			Menu_HandleMouseMove(menu, menu->items[menu->cursorItem]->window.rect.x + 1, menu->items[menu->cursorItem]->window.rect.y + 1);
+			g_keyFocusItem = menu->items[menu->cursorItem];	// OpenJK VR
 			return menu->items[menu->cursorItem];
 		}
 	}
@@ -4194,6 +4215,7 @@ itemDef_t *Menu_SetNextCursorItem(menuDef_t *menu) {
     }
 		if (Item_SetFocus(menu->items[menu->cursorItem], DC->cursorx, DC->cursory)) {
 			Menu_HandleMouseMove(menu, menu->items[menu->cursorItem]->window.rect.x + 1, menu->items[menu->cursorItem]->window.rect.y + 1);
+			g_keyFocusItem = menu->items[menu->cursorItem];	// OpenJK VR
       return menu->items[menu->cursorItem];
     }
 
@@ -9691,6 +9713,8 @@ qboolean Display_MouseMove(void *p, int x, int y) {
 	menuDef_t *menu = (menuDef_t *) p;
 
 	if (menu == NULL) {
+		g_keyFocusItem = NULL;	// OpenJK VR: the mouse moved: the focus is where it goes now
+
     menu = Menu_GetFocused();
 		if (menu) {
 			if (menu->window.flags & WINDOW_POPUP) {

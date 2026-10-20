@@ -6,10 +6,11 @@ A VR player's client sends the pose of the saber blades in their hands with
 every usercmd (see qcommon/vr_public.h). For those players the server
 fights with those blades instead of the animated ones:
 
-  - The blade is where the hand put it (but the hilt never goes through a
-	wall, and walls stop the blade). Between server frames the damage sweep
-	goes through every pose that arrived, so fast swings don't skip through
-	people.
+  - The blade is where the hand put it - either hand, anywhere along the
+	hilt, either way round: as far from the hand as the hilt reaches
+	(VRS_Hilt) - but the hilt never goes through a wall, and walls stop the
+	blade. Between server frames the damage sweep goes through every pose
+	that arrived, so fast swings don't skip through people.
   - Damage comes from how fast the blade moves where it hits, measured in
 	the player's real room (so running, snap turning or the camera easing
 	down a step doesn't cut), and only as far as the arm drives it (a flick
@@ -26,7 +27,8 @@ fights with those blades instead of the animated ones:
   - Whichever blade it is (dual sabers, a staff's two ends), a player cuts
 	the same opponent at most once in VR_SABER_CUT_REPEAT ms.
   - A saber held with both hands swings one weight heavier (a heavy one
-	counts one stronger in clashes), and either hand drives the swing.
+	counts one stronger in clashes), and either hand drives the swing - the
+	hands as far apart as the hilt lets them be (a staff held at both ends).
   - Blocking is whatever your blade physically stops, both ways: blades
 	meet only where their cores touch, at the same moment (every blade is
 	followed through the frame, a VR one pose by pose, an animated one
@@ -86,8 +88,18 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_THROUGH_MS	200		// a blow that broke a guard cuts for half damage this long
 #define VR_SABER_BURN		1		// damage of a blade just touching someone
 #define VR_SABER_ACTIVITY	8.0f	// moving a hand this far counts as activity (g_inactivity)
-#define VR_SABER_TWO_HANDS	40.0f	// two hands on one hilt are no further apart than this (the client lets
-									// go 24 from where it holds, which can be a hilt-length from the first)
+#define VR_SABER_TWO_HANDS	40.0f	// two hands on one hilt are no further apart than this - or, on a longer
+									// hilt, than it is long and 24 more (the client lets go 24 from where it
+									// holds it, which can be the hilt's length from the first)
+#define VR_SABER_GRAB_BREAK	24.0f	// (cg_vrbody.c VRB_GRAB_BREAK)
+#define VR_SABER_POMMEL		6.5f	// a single saber is held this far below where its own tag holds it at most
+									// (the pommel: cg_vrbody.c VRB_HILT_BELOW)...
+#define VR_SABER_HAND_HALF	1.5f	// ...and a hand's half width short of an emitter (VRB_HILT_TOP)
+#define VR_SABER_HILT_SLACK	2.0f	// (a hand not quite on its controller, rounding)
+#define VR_SABER_HILT_ONE	16.0f	// the saber's model unknown: a blade's base from the hand holding it, and how far
+									// apart two hands on it - a single hilt (two blades or more: any hilt)...
+#define VR_SABER_HILT_ANY	48.0f	// ...or any hilt
+#define VR_SABER_HILT_RETRY	1000	// ms: its model wasn't there - look again then
 #define VR_UNITS_PER_METRE	34.0f	// (default vr_worldScale) for the m/s in prints and the weight cvars
 #define VR_SABER_CORE		1.5f	// a blade's core: two blades meet where their cores touch (not their glow)
 #define VR_SABER_BLOCK_MS	250		// an animated swing stopped on a VR blade cuts nothing this long
@@ -107,7 +119,8 @@ typedef struct vrSaberSample_s {
 	int				teleport;		// the player's EF_TELEPORT_BIT then
 	int				bladeMask[VR_POSE_MAX_SABERS];
 	int				breakMask[VR_POSE_MAX_SABERS];	// blades that don't carry on from the pose before
-	vec3_t			grip[VR_POSE_MAX_SABERS];		// the hand holding the saber (world)
+	int				hand[VR_POSE_MAX_SABERS];		// which hand holds the saber (VR_HAND_*)...
+	vec3_t			grip[VR_POSE_MAX_SABERS];		// ...there (world)
 	qboolean		twoHanded[VR_POSE_MAX_SABERS];	// the other hand holds it too...
 	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (world; else the same as grip)
 	vec3_t			base[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// world
@@ -151,7 +164,21 @@ typedef struct vrSaberState_s {
 
 static vrSaberState_t	vrSabers[MAX_CLIENTS];
 static qboolean			vrPosesAvailable;	// the engine hands out poses (sv_vrx, vr_engine)
-static qboolean			vrsAvatarSet[MAX_CLIENTS];	// an avatar was handed to the engine (VRS_TakeAvatar)
+static qboolean			vrsAvatarSet[MAX_CLIENTS];	// an avatar was handed to the engine (VRS_TakeAvatar)...
+static qboolean			vrsGunLeft[MAX_CLIENTS];	// ...holding a gun in the left hand (G_VRGunHandLeft)
+
+// A saber's hilt as hands can hold it (VRS_Hilt): how far a blade's base can
+// be from the hand holding it, how far apart two hands on it can hold it, and
+// where along it they can (from where its tag holds it, toward its first
+// blade).
+typedef struct {
+	int				key;			// the saber it was worked out for (0: not yet)
+	qboolean		known;			// ...from its model (else as long as any hilt)
+	int				retry;			// level.time to look at its model again
+	float			reach, span;
+	float			lo, hi;
+} vrsHilt_t;
+static vrsHilt_t		vrsHilts[MAX_CLIENTS][VR_POSE_MAX_SABERS];
 
 static void VRS_ResetUnlag( int clientNum );			// (lag compensation, below)
 static void VRS_RecordHistory( void );
@@ -431,15 +458,137 @@ static void VRS_ClampLength( vec3_t v, float max ) {
 	}
 }
 
-// cam + ofs, but no further than arm's reach from the camera or the eye.
-static void VRS_ClampReach( const vec3_t eye, const vec3_t cam, vec3_t ofs, vec3_t out ) {
+// cam + ofs, but no further than max from the camera or the eye.
+static void VRS_ClampReachTo( const vec3_t eye, const vec3_t cam, vec3_t ofs, float max, vec3_t out ) {
 	vec3_t d;
 
-	VRS_ClampLength( ofs, VR_SABER_REACH );
+	VRS_ClampLength( ofs, max );
 	VectorAdd( cam, ofs, out );
 	VectorSubtract( out, eye, d );
-	VRS_ClampLength( d, VR_SABER_REACH );
+	VRS_ClampLength( d, max );
 	VectorAdd( eye, d, out );
+}
+
+// cam + ofs, but no further than arm's reach from the camera or the eye.
+static void VRS_ClampReach( const vec3_t eye, const vec3_t cam, vec3_t ofs, vec3_t out ) {
+	VRS_ClampReachTo( eye, cam, ofs, VR_SABER_REACH, out );
+}
+
+/*
+How far a saber's blades can be from a hand holding it, and how far apart
+two hands on it can be (vrsHilt_t). A hand holds it anywhere from its
+pommel - a single hilt's isn't known: VR_SABER_POMMEL below where the
+saber's own tag holds it - or a staff's other emitter, to a hand's half
+width short of its emitter (cg_vrbody.c CG_VRB_TwoHand); where its emitters
+are, along it and off it, comes from its model on the player (its blades'
+tags, from the hand's tag it hangs on: the same wherever the hand is). Once
+for each saber they take up; without the model, as far as any hilt.
+*/
+static int VRS_HiltKey( const gclient_t *cl, int s ) {
+	const char *p = cl->saber[s].model;
+	unsigned int k = 1 + cl->saber[s].numBlades + ( ( cl->saber[s].saberFlags & SFL_BOLT_TO_WRIST ) ? 64 : 0 );
+
+	while ( *p ) {
+		k = k * 31u + (unsigned int)tolower( (unsigned char)*p++ );
+	}
+	k &= 0x7fffffff;
+	return k ? (int)k : 1;
+}
+
+static void VRS_Hilt( gentity_t *ent, int s, float *reach, float *span ) {
+	static const vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	const int n = ent - g_entities;
+	gclient_t *cl = ent->client;
+	vrsHilt_t *hl;
+	mdxaBone_t m;
+	vec3_t tagO, emitter[VR_POSE_MAX_BLADES], dir[VR_POSE_MAX_BLADES];
+	float lo, hi, at[VR_POSE_MAX_BLADES] = { 0.0f }, off[VR_POSE_MAX_BLADES] = { 0.0f };
+	int key, b, numBlades;
+
+	*reach = *span = VR_SABER_HILT_ANY;
+	if ( n < 0 || n >= MAX_CLIENTS || s < 0 || s >= VR_POSE_MAX_SABERS || !cl ) {
+		return;
+	}
+	if ( cl->saber[s].numBlades <= 1 ) {
+		*reach = *span = VR_SABER_HILT_ONE;
+	}
+	hl = &vrsHilts[n][s];
+	key = VRS_HiltKey( cl, s );
+	if ( hl->key == key && ( hl->known || level.time - hl->retry < 0 ) ) {
+		*reach = hl->reach;
+		*span = hl->span;
+		return;
+	}
+	hl->key = key;
+	hl->known = qfalse;
+	hl->retry = level.time + VR_SABER_HILT_RETRY;
+	hl->reach = *reach;
+	hl->span = *span;
+	hl->lo = -*span;
+	hl->hi = *span;
+	numBlades = Com_Clampi( 0, VR_POSE_MAX_BLADES, cl->saber[s].numBlades );
+	if ( !numBlades || !ent->ghoul2 || !trap->G2API_GetBoltMatrix( ent->ghoul2, 0,
+			s + ( ( cl->saber[s].saberFlags & SFL_BOLT_TO_WRIST ) ? 3 : 0 ), &m, zero, zero, level.time, NULL, ent->modelScale ) ) {
+		return;
+	}
+	BG_GiveMeVectorFromMatrix( &m, ORIGIN, tagO );
+	for ( b = 0; b < numBlades; b++ ) {
+		if ( !trap->G2API_GetBoltMatrix( ent->ghoul2, s + 1, b, &m, zero, zero, level.time, NULL, ent->modelScale ) ) {
+			if ( !b ) {
+				return;
+			}
+			numBlades = b;	// (a blade its model has no place for: the blades it has)
+			break;
+		}
+		BG_GiveMeVectorFromMatrix( &m, ORIGIN, emitter[b] );
+		BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, dir[b] );
+		if ( !( VectorNormalize( dir[b] ) > 0.5f ) ) {
+			return;
+		}
+	}
+	// the emitters along the first blade's way from where the tag holds it,
+	// and off that line
+	for ( b = 0; b < numBlades; b++ ) {
+		vec3_t rel;
+		VectorSubtract( emitter[b], tagO, rel );
+		at[b] = DotProduct( rel, dir[0] );
+		VectorMA( rel, -at[b], dir[0], rel );
+		off[b] = VectorLength( rel );
+	}
+	// where hands can hold it (where its tag holds it, always)
+	hi = Q_max( 0.0f, at[0] - VR_SABER_HAND_HALF );
+	lo = -VR_SABER_POMMEL;
+	if ( numBlades > 1 && DotProduct( dir[1], dir[0] ) < -0.5f && at[1] < 0.0f ) {
+		lo = at[1] + VR_SABER_HAND_HALF;	// (a staff: down to its other emitter)
+	}
+	lo = Q_min( 0.0f, lo );
+	hl->reach = 0.0f;
+	for ( b = 0; b < numBlades; b++ ) {
+		const float a = Q_max( fabsf( at[b] - lo ), fabsf( at[b] - hi ) );
+		hl->reach = Q_max( hl->reach, sqrtf( a * a + off[b] * off[b] ) );
+	}
+	hl->reach += VR_SABER_HILT_SLACK;
+	hl->span = hi - lo;
+	hl->lo = lo;
+	hl->hi = hi;
+	hl->known = qtrue;
+	*reach = hl->reach;
+	*span = hl->span;
+}
+
+// Where along saber s's hilt hands can hold it (VRS_Hilt).
+static void VRS_HiltRange( gentity_t *ent, int s, float *lo, float *hi ) {
+	const int n = ent - g_entities;
+	float reach, span;
+
+	VRS_Hilt( ent, s, &reach, &span );
+	if ( n < 0 || n >= MAX_CLIENTS || s < 0 || s >= VR_POSE_MAX_SABERS ) {
+		*lo = -span;
+		*hi = span;
+		return;
+	}
+	*lo = vrsHilts[n][s].lo;
+	*hi = vrsHilts[n][s].hi;
 }
 
 /*
@@ -453,6 +602,8 @@ void G_VRSaberInit( void ) {
 
 	memset( vrSabers, 0, sizeof( vrSabers ) );
 	memset( vrsAvatarSet, 0, sizeof( vrsAvatarSet ) );
+	memset( vrsGunLeft, 0, sizeof( vrsGunLeft ) );
+	memset( vrsHilts, 0, sizeof( vrsHilts ) );
 	VRS_ResetUnlag( -1 );
 
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
@@ -484,6 +635,8 @@ void G_VRSaberClientReset( int clientNum ) {
 			trap->ext.VR_SetAvatar( clientNum, NULL );
 		}
 		vrsAvatarSet[clientNum] = qfalse;
+		vrsGunLeft[clientNum] = qfalse;
+		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
 	}
 }
 
@@ -666,11 +819,60 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 		CrossProduct( hand->axis[2], hand->axis[0], hand->axis[1] );
 		VRS_SafeDir( hand->dir, hand->axis[0] );
 		hand->blend = Com_Clamp( 0.0f, 1.0f, hand->blend == hand->blend ? hand->blend : 0.0f );
+		// which saber, where along its hilt and which way round
+		hand->saber = ( ( hand->grip == VR_GRIP_SABER || hand->grip == VR_GRIP_HILT ) && hand->saber == 1 ) ? 1 : 0;
+		if ( hand->grip == VR_GRIP_SABER ) {
+			// (on its hilt: where hands can hold that saber)
+			float lo, hi;
+			VRS_HiltRange( ent, hand->saber, &lo, &hi );
+			hand->hilt = Com_Clamp( lo - VR_SABER_HILT_SLACK, hi + VR_SABER_HILT_SLACK, hand->hilt == hand->hilt ? hand->hilt : 0.0f );
+			hand->hilt = Com_Clamp( -VR_POSE_MAX_HILT, VR_POSE_MAX_HILT, hand->hilt );
+			hand->reversed = hand->reversed ? qtrue : qfalse;
+		} else {
+			hand->hilt = 0.0f;
+			hand->reversed = qfalse;
+		}
 		VectorSubtract( hand->origin, cl->ps.origin, hand->origin );
 	}
 	trap->ext.VR_SetAvatar( clientNum, &a );
 	vrsAvatarSet[clientNum] = qtrue;
 	vrsBodyYaw[clientNum] = a.bodyYaw;
+	vrsGunLeft[clientNum] = (qboolean)( a.hand[VR_HAND_LEFT].grip == VR_GRIP_GUN && a.hand[VR_HAND_RIGHT].grip != VR_GRIP_GUN );
+}
+
+// Whether a VR player holds their gun in their left hand (left-handed), as
+// their avatar shows it: their shots come from that side (CalcMuzzlePoint).
+qboolean G_VRGunHandLeft( const gentity_t *ent ) {
+	const int n = ent ? ent->s.number : -1;
+
+	return (qboolean)( n >= 0 && n < MAX_CLIENTS && vrsAvatarSet[n] && vrsGunLeft[n] );
+}
+
+// The hand a VR player holds saber s in, fighting with their real blades
+// (VR_HAND_*); -1: they aren't, or that saber has no blade in their hands.
+static int VRS_SaberHand( gentity_t *ent, int s ) {
+	vrSaberState_t *vs;
+	const vrSaberSample_t *smp;
+
+	if ( s < 0 || s >= VR_POSE_MAX_SABERS || !G_VRSaberActive( ent ) ) {
+		return -1;
+	}
+	vs = VRS_State( ent );
+	smp = VRS_Sample( vs, 0 );
+	return smp->bladeMask[s] ? smp->hand[s] : -1;
+}
+
+// Whether saber s can't fight for the arm holding it being broken (only a
+// broken left arm stops one, w_saber.c): the second saber - in the left hand
+// - or, held in a VR player's hands, whichever is in their left hand.
+qboolean G_VRSaberArmBroken( gentity_t *ent, int s ) {
+	int h;
+
+	if ( !ent || !ent->client || !( ent->client->ps.brokenLimbs & ( 1 << BROKENLIMB_LARM ) ) ) {
+		return qfalse;
+	}
+	h = VRS_SaberHand( ent, s );
+	return (qboolean)( ( h >= 0 ) ? ( h == VR_HAND_LEFT ) : ( s == 1 ) );
 }
 
 // The game's poses for standing still - most of them the saber stances, which
@@ -844,27 +1046,35 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 
 	for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
 		const int mask = pose.bladeMask[s] & ( ( 1 << VR_POSE_MAX_BLADES ) - 1 );
+		float reach, span;
 		vec3_t ofs;
 
 		if ( !mask ) {
 			continue;
 		}
+		// the hand holding it - either can, but not both sabers - within reach
+		smp->hand[s] = ( pose.hand[s] == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+		if ( s == 1 && smp->bladeMask[0] && smp->hand[1] == smp->hand[0] ) {
+			smp->hand[1] = smp->hand[0] ^ 1;
+		}
 		VectorCopy( pose.grip[s], ofs );
 		VRS_ClampReach( eye, smp->cam, ofs, smp->grip[s] );
 		VectorCopy( smp->grip[s], smp->grip2[s] );
+		VRS_Hilt( ent, s, &reach, &span );
 		if ( pose.twoHanded[s] && s == 0 && !( pose.bladeMask[1] & ( ( 1 << VR_POSE_MAX_BLADES ) - 1 ) ) ) {
-			// the other hand on this hilt too (it can't be holding another saber)
+			// the other hand on this hilt too (it can't be holding another
+			// saber), as far apart as the hilt lets them be
 			vec3_t grip2;
 			VectorCopy( pose.grip2[s], ofs );
 			VRS_ClampReach( eye, smp->cam, ofs, grip2 );
-			if ( Distance( grip2, smp->grip[s] ) <= VR_SABER_TWO_HANDS ) {
+			if ( Distance( grip2, smp->grip[s] ) <= Q_max( VR_SABER_TWO_HANDS, span + VR_SABER_GRAB_BREAK + VR_SABER_HILT_SLACK ) ) {
 				VectorCopy( grip2, smp->grip2[s] );
 				smp->twoHanded[s] = qtrue;
 			}
 		}
 
 		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
-			vec3_t dir;
+			vec3_t dir, d;
 			trace_t tr;
 
 			if ( !( mask & ( 1 << b ) ) ) {
@@ -876,18 +1086,24 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 			}
 			VectorCopy( dir, smp->dir[s][b] );
 
-			// within arm's reach, and a hand can go through a wall but the
-			// hilt stays on this side of it
+			// within reach of the hand holding it (wherever along the hilt it
+			// holds it), and a hand can go through a wall but the hilt stays
+			// on this side of it
 			VectorCopy( pose.blade[s][b].base, ofs );
-			VRS_ClampReach( eye, smp->cam, ofs, smp->base[s][b] );
+			VRS_ClampReachTo( eye, smp->cam, ofs, VR_SABER_REACH + reach, smp->base[s][b] );
+			VectorSubtract( smp->base[s][b], smp->grip[s], d );
+			VRS_ClampLength( d, reach );
+			VectorAdd( smp->grip[s], d, smp->base[s][b] );
 			trap->Trace( &tr, eye, NULL, NULL, smp->base[s][b], clientNum, MASK_SOLID, qfalse, 0, 0 );
 			if ( tr.fraction < 1.0f && !tr.startsolid && !tr.allsolid ) {
 				VectorCopy( tr.endpos, smp->base[s][b] );
 			}
 			smp->bladeMask[s] |= 1 << b;
 
-			// a blade that jumped (faster than any hand) doesn't carry on
-			if ( jumped ) {
+			// a blade that jumped (faster than any hand), or went from one hand
+			// to the other (passed over: the hand holding it jumped), doesn't
+			// carry on
+			if ( jumped || ( prev && ( prev->bladeMask[s] & ( 1 << b ) ) && prev->hand[s] != smp->hand[s] ) ) {
 				smp->breakMask[s] |= 1 << b;
 			} else if ( prev && ( prev->bladeMask[s] & ( 1 << b ) ) ) {
 				vec3_t p0, p1;

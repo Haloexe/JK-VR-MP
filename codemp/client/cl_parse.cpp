@@ -830,7 +830,17 @@ for the cgame, which draws those players' bodies with them
 static void CL_ParseVRAvatars( msg_t *msg ) {
 	const int count = MSG_ReadByte( msg );
 	const qboolean keep = cl.vrSnapParsed;
-	int i;
+	int i, protocol = VR_POSE_PROTOCOL;
+
+	if ( clc.demoplaying ) {
+		// a demo recorded with an older build: its avatars as that wrote them
+		const char *systemInfo = cl.gameState.stringData + cl.gameState.stringOffsets[ CS_SYSTEMINFO ];
+		protocol = atoi( Info_ValueForKey( systemInfo, "sv_vrx" ) );
+		if ( protocol != 3 && protocol != VR_POSE_PROTOCOL ) {
+			Com_Error( ERR_DROP, "This demo's VR players were recorded with another OpenJK VR build (protocol %d, this one reads %d)",
+				protocol, VR_POSE_PROTOCOL );
+		}
+	}
 
 	if ( keep ) {
 		cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].messageNum = cl.snap.messageNum;
@@ -840,7 +850,7 @@ static void CL_ParseVRAvatars( msg_t *msg ) {
 	for ( i = 0; i < count; i++ ) {
 		const int n = MSG_ReadByte( msg );
 		vrAvatar_t a;
-		VR_ReadAvatar( msg, &a );
+		VR_ReadAvatarProtocol( msg, &a, protocol );
 		if ( keep && n >= 0 && n < MAX_CLIENTS ) {
 			cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].avatar[n] = a;
 			cl.vrAvatars[cl.snap.messageNum & PACKET_MASK].clientMask |= 1u << n;

@@ -11,14 +11,17 @@ settings are and looking like them. Choosing VR shows them and hides
 whatever the page's own buttons show; choosing any of those (or opening
 Setup) hides them again. The page is otherwise left as it is.
 
+  Left-Handed     guns and the saber in the left hand, the     vr_leftHanded Yes/No
+                  Force on the right grip, Use on the left
   Saber Inertia   how far a blade's weight holds it back      cg_vrSaberInertia 0-3
   Saber Weight    how strongly its weight is felt as it swings cg_vrSaberWeight 0-2
   Vibration       how strongly the controllers vibrate        cg_vrHaptics 0-2
 
-Each shows its value after it, and goes in tenths; with the keyboard, the
-arrow keys move the one picked (ui_shared.c: showValue). They're the game's
-own settings (cgame's), registered here too so that set from the main
-menu, before a game, they're kept.
+The sliders show their value after them, and go in tenths; with the
+keyboard, the arrow keys move the one picked (ui_shared.c: showValue), and
+change Left-Handed (as Enter does: Item_YesNo_HandleKey). They're the
+game's own settings (the engine's, the cgame's), registered here too so
+that set from the main menu, before a game, they're kept.
 
 A page with no room for the button or the settings (one a menu mod has
 changed) is left as it is, and says so in the console; the settings still
@@ -52,6 +55,7 @@ static const struct {
 	const char	*value;
 	uint32_t	flags;
 } vrsCvars[] = {
+	{ "vr_leftHanded",		"0",	CVAR_ARCHIVE },
 	{ "cg_vrSaberInertia",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrSaberWeight",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrHaptics",		"1",	CVAR_ARCHIVE },
@@ -427,7 +431,7 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 	button->window.rectClient = r;
 	button->type = ITEM_TYPE_BUTTON;
 	button->text = String_Alloc( "VR" );
-	button->descText = String_Alloc( "Settings for playing in VR: your saber's weight, and the controllers' vibration" );
+	button->descText = String_Alloc( "Settings for playing in VR: the hand you use, your saber's weight, and the controllers' vibration" );
 	button->iMenuFont = last->iMenuFont;
 	button->textscale = last->textscale;
 	button->textStyle = last->textStyle;

@@ -1471,6 +1471,8 @@ qboolean	G_VRSaberClient( gentity_t *ent );
 qboolean	G_VRHeadGaze( const gentity_t *ent, vec3_t start, vec3_t dir );
 qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
 qboolean	G_VRSaberActive( gentity_t *ent );
+qboolean	G_VRSaberArmBroken( gentity_t *ent, int s );
+qboolean	G_VRGunHandLeft( const gentity_t *ent );
 qboolean	G_VRSaberBlade( gentity_t *ent, int saberNum, int bladeNum, vec3_t base, vec3_t dir );
 void		G_VRSaberBodyAnim( gentity_t *ent, int *legsAnim, int *torsoAnim );
 void		G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum );

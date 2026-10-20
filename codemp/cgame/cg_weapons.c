@@ -493,13 +493,15 @@ static void CG_VR_AxisToAngles( matrix3_t a, vec3_t angles ) {
 =================
 CG_VR_HeldWeaponPose
 
-Where the gun in your right hand is this frame: its model origin (the grip,
-where a third-person hand holds it) at the controller, its barrel along the
+Where the gun in your hand is this frame (the right, or the left when you
+play left-handed: CG_VR_GunHand): its model origin (the grip, where a
+third-person hand holds it) at the controller, its barrel along the
 controller's aim. The body (cg_vrbody.c) puts its hand on exactly this.
 =================
 */
 qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matrix3_t axis ) {
 	const vrClientState_t *vr = CG_VR();
+	const int h = CG_VR_GunHand();
 	void *g2;
 	int flashBolt;
 	vec3_t zero = { 0.0f, 0.0f, 0.0f };
@@ -537,9 +539,9 @@ qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matr
 	CrossProduct( ul, fl, ll );
 
 	// controller pose in the world
-	VectorCopy( vr->gripOrigin[VR_HAND_RIGHT], gripLocal );
+	VectorCopy( vr->gripOrigin[h], gripLocal );
 	for ( i = 0; i < 3; i++ ) {
-		VectorCopy( vr->aimAxis[VR_HAND_RIGHT][i], aimLocal[i] );
+		VectorCopy( vr->aimAxis[h][i], aimLocal[i] );
 	}
 	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gripLocal, aimLocal, grip, aim );
 
@@ -552,10 +554,11 @@ qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matr
 	CG_VR_AxisToAngles( model, angles );
 	AnglesToAxis( angles, axis );	// exactly what gets drawn
 
-	// the model's origin is its grip; player-tunable nudge on top
+	// the model's origin is its grip; player-tunable nudge on top (sideways
+	// out from your palm in either hand)
 	VectorCopy( grip, origin );
 	VectorMA( origin, cg_vrGunX.value, aim[0], origin );
-	VectorMA( origin, cg_vrGunY.value, aim[1], origin );
+	VectorMA( origin, ( h == VR_HAND_LEFT ) ? -cg_vrGunY.value : cg_vrGunY.value, aim[1], origin );
 	VectorMA( origin, cg_vrGunZ.value, aim[2], origin );
 	return qtrue;
 }
@@ -598,11 +601,12 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	} else {
 		// no bolt: put the flash a little ahead of the grip, along the barrel
 		const vrClientState_t *vr = CG_VR();
+		const int h = CG_VR_GunHand();
 		vec3_t gl, al[3], g, aim[3];
 		int i;
-		VectorCopy( vr->gripOrigin[VR_HAND_RIGHT], gl );
+		VectorCopy( vr->gripOrigin[h], gl );
 		for ( i = 0; i < 3; i++ ) {
-			VectorCopy( vr->aimAxis[VR_HAND_RIGHT][i], al[i] );
+			VectorCopy( vr->aimAxis[h][i], al[i] );
 		}
 		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gl, al, g, aim );
 		VectorMA( origin, 12.0f, aim[0], cg_vrHeld.flashOrigin );

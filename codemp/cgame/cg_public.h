@@ -747,6 +747,9 @@ typedef struct cgameImport_s {
 		// draws things (1: not at all). Every frame starts stretched.
 		void			(*R_Anchor2D)							( float anchorX );
 		float			(*R_Aspect2D)							( void );
+		// OpenJK VR: the hand holding your weapon (VR_HAND_*) - its trigger
+		// attacks, the other alt-attacks (call every frame)
+		void			(*VR_SetWeaponHand)						( int hand );
 	} ext;
 } cgameImport_t;
 

@@ -10532,6 +10532,7 @@ stillDoSaber:
 			if (/*cent->bolt4 && */!g2HasWeapon)
 			{
 				trap->G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, WP_SABER), 0, cent->ghoul2, 1);
+				CG_VR_BodyRebolt( cent );	// OpenJK VR: on the hand that holds it
 
 				if (saberEnt && saberEnt->ghoul2)
 				{

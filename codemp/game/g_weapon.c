@@ -3656,6 +3656,10 @@ void CalcMuzzlePoint ( gentity_t *ent, const vec3_t inForward, const vec3_t inRi
 	VectorCopy( ent->s.pos.trBase, muzzlePoint );
 
 	VectorCopy(WP_MuzzlePoint[weapontype], muzzleOffPoint);
+	if ( G_VRGunHandLeft( ent ) )
+	{ // OpenJK VR: a left-handed player's gun is in their left hand
+		muzzleOffPoint[1] = -muzzleOffPoint[1];
+	}
 
 	if (weapontype > WP_NONE && weapontype < WP_NUM_WEAPONS)
 	{	// Use the table to generate the muzzlepoint;

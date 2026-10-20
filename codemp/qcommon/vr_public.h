@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-9"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-10"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -28,6 +28,10 @@ General Public License version 2, like the rest of OpenJK.
 												//     widescreen 2D)
 												// -9: vrClientState_t.stick, poseWheel (the pose
 												//     wheel, Y held)
+												// -10: ext.VR_SetWeaponHand; vrUserPose_t.hand,
+												//     vrAvatarHand_t.saber, hilt, reversed (a saber
+												//     in either hand, anywhere along its hilt, either
+												//     way round)
 
 // ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
 // drawn is stretched across the window again, as always (any other x is a
@@ -57,13 +61,17 @@ valid means a lit saber is in the player's VR hands: the arm swings it and
 the attack button doesn't. Its blades can still be missing for a moment (a
 flip or roll animates the body, a hitch delayed the pose).
 
+Saber s is the player's first or second saber (saber[0], saber[1]); hand[s]
+says which hand holds it - either can hold either (a left-handed player's
+first saber is in the left hand; a saber passed from one hand to the other).
 twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		3		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars
-#define VR_POSE_MAX_SABERS		2		// right hand, left hand
+#define VR_POSE_PROTOCOL		4		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed
+#define VR_POSE_MAX_SABERS		2		// the first saber, the second (each in either hand)
 #define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
 #define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
+#define VR_POSE_MAX_HILT		63.5f	// units: where along its hilt a hand holds a saber, either way (8 bits, 1/2 unit)
 
 typedef struct vrBladePose_s {
 	vec3_t			base;		// blade start (the muzzle point), offset from the camera
@@ -103,6 +111,10 @@ typedef struct vrAvatarHand_s {
 	vec3_t		axis[3];		// the controller as the hand lies on it (forward along it, left, up); GUN: the gun's axes
 	vec3_t		dir;			// SABER: along the blade; HILT: along the hilt, toward the thumb
 	float		blend;			// HILT: how far the hold has taken the hand over (0..1)
+	int			saber;			// SABER, HILT: which of the player's sabers (0: the first, 1: the second)
+	float		hilt;			// SABER: where along the hilt the fist is - from where the saber's own tag holds it, toward
+								// its (first) blade (units; -VR_POSE_MAX_HILT..VR_POSE_MAX_HILT)
+	qboolean	reversed;		// SABER: held the other way round - the blade out of the little finger's side of the fist
 } vrAvatarHand_t;
 
 typedef struct vrAvatar_s {
@@ -118,6 +130,7 @@ typedef struct vrUserPose_s {
 	float			trackYaw;	// world yaw minus tracking yaw (degrees)
 	vec3_t			viewOffset;	// camera minus eye point
 	int				bladeMask[VR_POSE_MAX_SABERS];	// blades with a pose (bit per blade)
+	int				hand[VR_POSE_MAX_SABERS];		// the hand holding the saber (VR_HAND_*; with a blade)
 	vec3_t			grip[VR_POSE_MAX_SABERS];		// the hand holding the saber, offset from the camera
 	qboolean		twoHanded[VR_POSE_MAX_SABERS];	// the other hand holds it too...
 	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (offset from the camera)
@@ -151,9 +164,9 @@ typedef struct vrClientState_s {
 	// headset running and tracked
 	qboolean	active;
 
-	// the usercmd angles come from the right hand's aim (ranged weapons),
-	// so the cgame camera points where the gun points while the player
-	// looks around freely
+	// the usercmd angles come from the gun hand's aim (ranged weapons: the
+	// right hand, the left with vr_leftHanded on), so the cgame camera
+	// points where the gun points while the player looks around freely
 	qboolean	handAim;
 
 	// tracking yaw (degrees) that corresponds to the game camera's yaw, and

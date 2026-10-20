@@ -1934,6 +1934,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_Haptic						= VR_Haptic;
 		cgi.ext.VR_SetGrabZones					= VR_SetGrabZones;
 		cgi.ext.VR_GetAvatar					= CL_VR_GetAvatar;
+		cgi.ext.VR_SetWeaponHand				= VR_SetWeaponHand;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
@@ -1942,6 +1943,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_Haptic						= NULL;
 		cgi.ext.VR_SetGrabZones					= NULL;
 		cgi.ext.VR_GetAvatar					= NULL;
+		cgi.ext.VR_SetWeaponHand				= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

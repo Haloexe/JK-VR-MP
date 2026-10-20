@@ -1894,6 +1894,7 @@ void CG_AddViewWeapon (playerState_t *ps);
 
 // cg_vr.c (OpenJK VR)
 const vrClientState_t *CG_VR( void );
+int CG_VR_GunHand( void );
 qboolean CG_VR_HandAim( void );
 qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis );
 void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles );
@@ -1911,6 +1912,8 @@ void CG_VR_NetStats( void );
 qboolean CG_VR_Engine( void );
 void CG_VR_SaberBlade( centity_t *cent, int saberNum, int bladeNum, const vec3_t base, const vec3_t dir, float length );
 qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qboolean *twoHanded );
+int CG_VR_SaberHand( int saberNum );
+void CG_VR_BodyRebolt( centity_t *cent );
 float CG_VR_PoseEyeAdjust( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );

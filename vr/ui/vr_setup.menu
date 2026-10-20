@@ -8,6 +8,7 @@
 //	follow the page's own Sound settings, so their rects and fonts here don't matter there.
 //
 //	showValue:	the slider shows its value after it; the arrow keys move it a tenth at a time
+//	YESNO:		Yes or No after it; clicking it, Enter or the arrow keys change it
 //
 //----------------------------------------------------------------------------------------------
 {
@@ -17,6 +18,28 @@
 		visible				0
 		fullScreen			0
 		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vr_lefthanded
+			group			vrsetup
+			type			ITEM_TYPE_YESNO
+			text			"Left-Handed"
+			cvar			"vr_leftHanded"
+			rect			260 160 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Guns and your saber in your left hand (its trigger attacks); the Force on the right grip, Use on the left"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
 
 		itemDef
 		{

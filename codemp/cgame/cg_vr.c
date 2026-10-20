@@ -58,25 +58,32 @@ qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis ) {
 	return qtrue;
 }
 
-// True when the gun should be drawn in (and aimed with) the right hand.
+// The hand guns go in: the right, or the left when you play left-handed
+// (vr_leftHanded, the engine's setting - it aims them with that hand too).
+int CG_VR_GunHand( void ) {
+	return vr_leftHanded.integer ? VR_HAND_LEFT : VR_HAND_RIGHT;
+}
+
+// True when the gun should be drawn in (and aimed with) the gun hand.
 qboolean CG_VR_HandAim( void ) {
 	const vrClientState_t *vr = CG_VR();
-	return ( vr && vr->handAim && vr->handValid[VR_HAND_RIGHT] ) ? qtrue : qfalse;
+	return ( vr && vr->handAim && vr->handValid[CG_VR_GunHand()] ) ? qtrue : qfalse;
 }
 
 /*
 =================
 CG_VR_PlaceWeaponInHand
 
-Moves the first-person weapon's "hand" model so the gun sits in the right
-controller and points along its aim ray. The hand model is invisible; it
-only carries the "tag_weapon" the gun is mounted on. Its tag offset (which
-normally puts the gun in front of the camera) is cancelled using frame 0,
-so recoil/reload animations still move the gun.
+Moves the first-person weapon's "hand" model so the gun sits in the gun
+hand's controller and points along its aim ray. The hand model is invisible;
+it only carries the "tag_weapon" the gun is mounted on. Its tag offset
+(which normally puts the gun in front of the camera) is cancelled using
+frame 0, so recoil/reload animations still move the gun.
 =================
 */
 void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles ) {
 	const vrClientState_t *vr = CG_VR();
+	const int h = CG_VR_GunHand();
 	vec3_t gripLocal, aimLocal[3];
 	vec3_t gripWorld, aimWorld[3];
 	orientation_t tag;
@@ -88,9 +95,9 @@ void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles ) {
 
 	// position from the grip pose (the palm), direction from the aim pose
 	// (where the shots go)
-	VectorCopy( vr->gripOrigin[VR_HAND_RIGHT], gripLocal );
+	VectorCopy( vr->gripOrigin[h], gripLocal );
 	for ( i = 0; i < 3; i++ ) {
-		VectorCopy( vr->aimAxis[VR_HAND_RIGHT][i], aimLocal[i] );
+		VectorCopy( vr->aimAxis[h][i], aimLocal[i] );
 	}
 	// (the engine already applied vr_gunPitch to the aim axis, so the gun
 	// and the shots stay lined up)
@@ -116,9 +123,10 @@ void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles ) {
 		}
 	}
 
-	// player-tunable offsets (game units: forward, left, up)
+	// player-tunable offsets (game units: forward, left - out from your palm
+	// in the left hand, as in the right - and up)
 	VectorMA( hand->origin, cg_vrGunX.value, aimWorld[0], hand->origin );
-	VectorMA( hand->origin, cg_vrGunY.value, aimWorld[1], hand->origin );
+	VectorMA( hand->origin, ( h == VR_HAND_LEFT ) ? -cg_vrGunY.value : cg_vrGunY.value, aimWorld[1], hand->origin );
 	VectorMA( hand->origin, cg_vrGunZ.value, aimWorld[2], hand->origin );
 
 	VectorCopy( gripWorld, hand->lightingOrigin );

@@ -131,7 +131,10 @@ static qboolean CG_VRD_Salute( const vrClientState_t *vr, const vec3_t head, con
 				fabsf( DotProduct( rel, left ) ) > VRD_FACE_SIDE * m ) {
 				continue;	// (not close in front of your face)
 			}
-			*hand = ( s == 1 ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+			*hand = CG_VR_SaberHand( s );	// (either saber can be in either hand)
+			if ( *hand < 0 ) {
+				continue;
+			}
 			return qtrue;
 		}
 	}

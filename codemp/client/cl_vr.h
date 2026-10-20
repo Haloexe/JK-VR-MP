@@ -79,6 +79,10 @@ void		VR_Haptic( int hand, float seconds, float amplitude );
 // of pressing its key (cgameImport_t.ext.VR_SetGrabZones, every frame).
 void		VR_SetGrabZones( int handMask );
 
+// The hand holding your weapon (VR_HAND_*): its trigger attacks, the other
+// alt-attacks (cgameImport_t.ext.VR_SetWeaponHand, every frame).
+void		VR_SetWeaponHand( int hand );
+
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.
 void		VR_DrawOverlay( void );

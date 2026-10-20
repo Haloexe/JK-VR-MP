@@ -6,7 +6,7 @@ Written by the client right after each usercmd it sends, only to servers
 that put "sv_vrx" in their systeminfo, and then in clc_moveVR /
 clc_moveNoDeltaVR messages, so the server always knows whether to read it.
 
-Format (VR_POSE_PROTOCOL 3):
+Format (VR_POSE_PROTOCOL 4):
 	1 bit		valid: a lit saber in the VR hands
 	1 bit		avatar valid
 	(nothing else follows if both are 0)
@@ -15,7 +15,8 @@ Format (VR_POSE_PROTOCOL 3):
 	[48 bits	viewOffset x, y, z]
 	if valid, per saber:
 				VR_POSE_MAX_BLADES bits of blade mask
-				if any blade: grip x, y, z
+				if any blade: 1 bit hand (VR_HAND_*)
+				              grip x, y, z
 				              1 bit two-handed [grip2 x, y, z]
 				per blade:	base x, y, z
 							dir pitch, yaw		16 bits each
@@ -34,6 +35,10 @@ origin; with a usercmd they are offsets from the camera):
 				origin x, y, z
 				axis as pitch, yaw, roll		16 bits each
 				SABER, HILT: dir pitch, yaw
+				             1 bit saber (0: the first, 1: the second)
+				SABER: 1 bit reversed
+				       8 bits hilt (signed, 1/2 units: -127..127)
+				(3, in older demos: no saber, reversed or hilt bits)
 				HILT: 8 bits blend (0..255)
 
 All fields are written as plain 16-bit values and sign-extended by hand on
@@ -94,6 +99,16 @@ static inline void VR_ReadPoseDir( msg_t *msg, vec3_t dir ) {
 	AngleVectors( angles, dir, NULL, NULL );
 }
 
+// where along its hilt a hand holds a saber (vrAvatarHand_t.hilt): 8 bits,
+// signed, in half units (-127..127)
+static inline int VR_HiltQuantize( float f ) {
+	if ( f != f ) {
+		f = 0.0f;	// NaN
+	}
+	f = Com_Clamp( -VR_POSE_MAX_HILT, VR_POSE_MAX_HILT, f );
+	return (int)floorf( f * 2.0f + 0.5f );
+}
+
 static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 	VR_WritePoseAngle( msg, a->bodyYaw );
 	VR_WritePoseAngle( msg, a->headAngles[PITCH] );
@@ -122,6 +137,11 @@ static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 		VR_WritePoseAngle( msg, angles[ROLL] );
 		if ( grip == VR_GRIP_SABER || grip == VR_GRIP_HILT ) {
 			VR_WritePoseDir( msg, hand->dir );
+			MSG_WriteBits( msg, hand->saber == 1 ? 1 : 0, 1 );
+		}
+		if ( grip == VR_GRIP_SABER ) {
+			MSG_WriteBits( msg, hand->reversed ? 1 : 0, 1 );
+			MSG_WriteBits( msg, VR_HiltQuantize( hand->hilt ) & 0xff, 8 );
 		}
 		if ( grip == VR_GRIP_HILT ) {
 			float b = hand->blend;
@@ -133,7 +153,9 @@ static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 	}
 }
 
-static inline void VR_ReadAvatar( msg_t *msg, vrAvatar_t *a ) {
+// (protocol: the format it was written in - a demo recorded with an older
+// build has its own: 3 had no saber, reversed or hilt)
+static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protocol ) {
 	Com_Memset( a, 0, sizeof( *a ) );
 	a->valid = qtrue;
 	a->bodyYaw = VR_ReadPoseAngle( msg );
@@ -160,11 +182,27 @@ static inline void VR_ReadAvatar( msg_t *msg, vrAvatar_t *a ) {
 		AnglesToAxis( angles, hand->axis );
 		if ( hand->grip == VR_GRIP_SABER || hand->grip == VR_GRIP_HILT ) {
 			VR_ReadPoseDir( msg, hand->dir );
+			if ( protocol >= 4 ) {
+				hand->saber = MSG_ReadBits( msg, 1 ) & 1;
+			}
+		}
+		if ( hand->grip == VR_GRIP_SABER && protocol >= 4 ) {
+			int v;
+			hand->reversed = ( MSG_ReadBits( msg, 1 ) & 1 ) ? qtrue : qfalse;
+			v = MSG_ReadBits( msg, 8 ) & 0xff;
+			if ( v & 0x80 ) {
+				v -= 0x100;
+			}
+			hand->hilt = Q_max( -127, v ) * 0.5f;	// (-128: never written)
 		}
 		if ( hand->grip == VR_GRIP_HILT ) {
 			hand->blend = MSG_ReadBits( msg, 8 ) * ( 1.0f / 255.0f );
 		}
 	}
+}
+
+static inline void VR_ReadAvatar( msg_t *msg, vrAvatar_t *a ) {
+	VR_ReadAvatarProtocol( msg, a, VR_POSE_PROTOCOL );
 }
 
 static inline void VR_WriteUserPose( msg_t *msg, const vrUserPose_t *pose ) {
@@ -192,6 +230,7 @@ static inline void VR_WriteUserPose( msg_t *msg, const vrUserPose_t *pose ) {
 		if ( !mask ) {
 			continue;
 		}
+		MSG_WriteBits( msg, pose->hand[s] == VR_HAND_LEFT ? VR_HAND_LEFT : VR_HAND_RIGHT, 1 );
 		VR_WritePoseCoord( msg, pose->grip[s][0] );
 		VR_WritePoseCoord( msg, pose->grip[s][1] );
 		VR_WritePoseCoord( msg, pose->grip[s][2] );
@@ -238,6 +277,7 @@ static inline void VR_ReadUserPose( msg_t *msg, vrUserPose_t *pose ) {
 		if ( !pose->bladeMask[s] ) {
 			continue;
 		}
+		pose->hand[s] = ( MSG_ReadBits( msg, 1 ) & 1 ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
 		pose->grip[s][0] = VR_ReadPoseCoord( msg );
 		pose->grip[s][1] = VR_ReadPoseCoord( msg );
 		pose->grip[s][2] = VR_ReadPoseCoord( msg );
