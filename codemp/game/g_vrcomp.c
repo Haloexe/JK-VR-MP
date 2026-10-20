@@ -64,16 +64,30 @@ where they left the ground), out of their sight where there's room. The
 player riding something, they wait where they are.
 
 FIGHTING, with the NPCs' own combat (G_RPCompThink returns qfalse to
-NPC_RunBehavior), on a leash: no further than RPC_LEASH from the player
-(Hold here: RPC_HOLD_LEASH from where they hold), then back. Who they may
-fight is theirs alone (G_RPCompEnemy, asked through G_RPNPCEnemy): never
-their owner, the other of theirs, anyone down, anyone while their owner
-duels, or their owner's teammates (a team game, friendly fire off); Defend
-me, whoever hurt their owner or them in RPC_HURT_TIME (a duel's blows
-aside), or an NPC going after them; Attack, the one they were set on too;
-Follow me, nobody. To the NPCs and the players they're on their owner's
-side; neither they nor their owner can hurt one another, or turn the Force
-on one another (w_force.c), nor teammates and theirs.
+NPC_RunBehavior: a saber's, a Jedi's; anything else, a trooper's), on a
+leash: no further than RPC_LEASH from the player (Hold here: RPC_HOLD_LEASH
+from where they hold - one with a gun or thermals taking on what's as far
+off as following), then back. By its weapon (G_RPC_Weapon), as a squad's
+commander would send it, no nearer the leash's end than RPC_GUN_MARGIN: a
+gun with no clear shot steps aside till it has one (G_RPC_ShotSpot), else
+goes after its enemy (a disruptor's fired as it comes, never sniping; a
+rocket, never nearer than RPC_ROCKET_NEAR); thermals go after a clear
+throw, lobbed to burst at their target's feet (G_RPCompLob), never within
+RPC_THROW_NEAR of the thrower - fists for anyone that near; fists and a
+baton go after their enemy till a blow would land (G_RPC_Blow), swinging
+only then. Getting nowhere at its enemy RPC_FIGHT_STUCK (a wall, a ledge,
+lava in its way, its leash's end), it lets them be RPC_FIGHT_IGNORE, or
+till they come at it: back to its owner. Their first shot comes as soon as a
+hero's NPC's would (G_AttackDelay), a villain's companions' too; and they
+back their owner up against a saber, where the game's NPCs hold their fire.
+Who they may fight is theirs alone (G_RPCompEnemy, asked through
+G_RPNPCEnemy): never their owner, the other of theirs, anyone down, anyone
+while their owner duels, or their owner's teammates (a team game, friendly
+fire off); Defend me, whoever hurt their owner or them in RPC_HURT_TIME (a
+duel's blows aside), or an NPC going after them; Attack, the one they were
+set on too; Follow me, nobody. To the NPCs and the players they're on their
+owner's side; neither they nor their owner can hurt one another, or turn
+the Force on one another (w_force.c), nor teammates and theirs.
 
 KNOCKED OUT, not lost: one whose health runs out falls; RPC_BODY later it's
 gone, and it can be called again (Come to me, or the player spawning) after
@@ -110,6 +124,7 @@ extern void NPC_Begin( gentity_t *ent );
 extern qboolean NPC_SpotWouldTelefrag( gentity_t *npc );
 extern char NPCParms[];		// (NPC_stats.c: the NPC files, read)
 extern float pm_friction;		// (bg_pmove.c: a body's on the ground - moving at v, it slides v / this further, stopping)
+extern void ChangeWeapon( gentity_t *ent, int newWeapon );	// (NPC_combat.c: an NPC's weapon, and how fast it fires it)
 
 #define RPC_SPAWN_DELAY		500		// ms after their owner spawns, they come
 #define RPC_RETRY			1000	// ms before another try at bringing one out (nowhere for it)
@@ -137,7 +152,24 @@ extern float pm_friction;		// (bg_pmove.c: a body's on the ground - moving at v,
 #define RPC_MOVING			40.0f	// faster than this, the player's walking (and their way is their walk's)
 #define RPC_RUNNING			180.0f	// faster than this, running
 #define RPC_LEASH			510.0f	// fighting, no further than 15 m from them...
-#define RPC_HOLD_LEASH		170.0f	// ...or 5 m from where they hold
+#define RPC_HOLD_LEASH		170.0f	// ...or 5 m from where they hold (a gun there shoots at what's as far off as following)
+#define RPC_GUN_MARGIN		80.0f	// a gun going after a clear shot stops this short of its leash (its way on brings it nearer)
+#define RPC_BLOW			8.0f	// fists' or a baton's blow: this far on from where it begins (MELEE_RANGE, STUN_BATON_RANGE: G_RPC_Blow)
+#define RPC_THROW_NEAR		160.0f	// a thermal never thrown at anyone nearer, nor to burst nearer (its blast, 128 round, would reach the thrower): fists...
+#define RPC_THROW_BACK		224.0f	// ...till they're further than this
+#define RPC_THROW_SPEED		900.0f	// a thermal thrown no faster (TD_VELOCITY: a player's, held to the full)
+#define RPC_LOB_STEPS		8		// a thermal's arc, looked along in this many steps...
+#define RPC_LOB_LANDS		48.0f	// ...ending this near the feet of whom it's thrown at (or on them)
+#define RPC_LOB_KEEP		1000	// ms a thermal's aim's kept: its enemy gone as it lets go, there still (not at its own feet)
+#define RPC_SPOT_STEP		64.0f	// a gun with no clear shot looks for one this far to its side, and further (G_RPC_ShotSpot)
+#define RPC_SPOT_LOOK		500		// ms between such looks (one found, it's going there meanwhile, while its shot from there's clear)...
+#define RPC_SPOT_THERE		8.0f	// ...there, this near it - its shot clear in RPC_SPOT_LOOK, or it's on elsewhere...
+#define RPC_SPOT_GO			1500	// ...and there in this many ms (or someone's standing there): else elsewhere
+#define RPC_ROCKET_NEAR		192.0f	// a rocket's never fired at anyone nearer (its blast, 160 round, would reach the shooter - NPC_BSST_Attack's own 128 wouldn't keep it out)
+#define RPC_FIGHT_STUCK		2000	// ms going after its enemy, on its feet, getting nowhere (a wall, a ledge, lava in its way)...
+#define RPC_FIGHT_MOVED		16.0f	// ...moved less than this...
+#define RPC_FIGHT_IGNORE	5000	// ...it lets them be this long...
+#define RPC_FIGHT_SHIFT		64.0f	// ...or till they've come this much nearer (G_RPC_Ignored)
 #define RPC_FAR				1360.0f	// 40 m from them: to just behind them
 #define RPC_STUCK			5000	// ms getting nowhere: to just behind them
 #define RPC_CUT_STUCK		1000	// ms getting nowhere, the trail cut just ahead (a lift gone up with them, a jump): to them
@@ -145,6 +177,9 @@ extern float pm_friction;		// (bg_pmove.c: a body's on the ground - moving at v,
 #define RPC_TELE_WAIT		2000	// ms between going to them that way
 #define RPC_PASS			24.0f	// a trail point reached, this near
 #define RPC_PATH			250		// ms between looks along the trail for a way straight on
+#define RPC_NEAR			256.0f	// not on the trail: a point of it this near, it can walk to...
+#define RPC_NEAR_TRIES		8		// ...the nearest this many looked at...
+#define RPC_NEAR_SPREAD		2		// ...none within this many points of a nearer one
 #define RPC_LOOK			2048.0f	// whom a player looks at, at most this far (an order's)
 #define RPC_ADDRESS			0.985f	// looking at one of theirs: cos of 10 degrees off it
 #define RPC_ROOM_ENTS		64		// entities kept free (each companion takes up to 3)
@@ -206,6 +241,18 @@ typedef struct {
 	int			walkSpeed, runSpeed;	// its own (following, it keeps up with a player)
 	int			hurtAt;			// level.time it was last hurt
 	int			startHealth;	// its health to start with, per mille of its most (0: as it comes - full)
+	vec3_t		lobAt;			// where its thermal's aimed (its enemy's feet)...
+	int			lobTime;		// ...then (0: never)
+	int			spotTime;		// a gun's last look for a clear shot from beside it...
+	vec3_t		spotAt;			// ...where it's going for one...
+	int			spotEnemy;		// ...at whom (their entity + 1; 0: nowhere)...
+	int			spotThere;		// ...there since (0: not there)
+	int			chaseSince;		// going after its enemy, getting nowhere, since (0: it isn't)...
+	vec3_t		chaseAt;		// ...there...
+	int			chaseEnemy;		// ...them (their entity + 1)
+	int			ignoreEnemy;	// whom it lets be, having got nowhere going after them (their entity + 1; 0: nobody)...
+	int			ignoreUntil;	// ...till then...
+	vec3_t		ignoreAt;		// ...or till they've moved from there
 } rpcOut_t;
 
 typedef struct {
@@ -1151,14 +1198,28 @@ static void G_RPC_Sides( gentity_t *npc, int owner ) {
 	}
 }
 
+// A companion's alt-fire: a thermal's only - it bursts where it lands, at
+// its target's feet or on them (G_RPCompLob), not bouncing on; anything else
+// as it comes (fists the thrower takes up: a punch, not a kick or a grab, with
+// g_debugMelee on). (An NPC file's altFire never lasts: NPC_DefaultScriptFlags.)
+static void G_RPC_AltFire( gentity_t *npc ) {
+	if ( npc->client->ps.weapon == WP_THERMAL ) {
+		npc->NPC->scriptFlags |= SCF_ALT_FIRE;
+	} else {
+		npc->NPC->scriptFlags &= ~SCF_ALT_FIRE;
+	}
+}
+
 // How a companion goes about things: by its owner, not as an NPC of the
 // level - no squads, alerts, chatter or mind tricks, enemies only as
-// G_RPCompEnemy says (fighting: chasing them).
+// G_RPCompEnemy says (fighting: chasing them); holding its fire only as
+// G_RPC_Weapon says; alt-firing only as G_RPC_AltFire does.
 static void G_RPC_Flags( gentity_t *npc, qboolean fighting ) {
 	gNPC_t *info = npc->NPC;
 
 	info->scriptFlags |= SCF_NO_GROUPS | SCF_NO_MIND_TRICK | SCF_IGNORE_ALERTS | SCF_NO_COMBAT_TALK | SCF_NO_ALERT_TALK;
-	info->scriptFlags &= ~( SCF_LOOK_FOR_ENEMIES | SCF_RUNNING | SCF_WALKING | SCF_FORCED_MARCH );
+	info->scriptFlags &= ~( SCF_LOOK_FOR_ENEMIES | SCF_RUNNING | SCF_WALKING | SCF_FORCED_MARCH | SCF_DONT_FIRE );
+	G_RPC_AltFire( npc );
 	if ( fighting ) {
 		info->scriptFlags |= SCF_CHASE_ENEMIES;
 	} else {
@@ -1678,6 +1739,8 @@ static void G_RPC_Disengage( gentity_t *npc, rpcOut_t *out ) {
 	npc->NPC->tempBehavior = BS_DEFAULT;
 	npc->NPC->behaviorState = BS_DEFAULT;
 	npc->NPC->goalEntity = NULL;
+	out->spotEnemy = 0;	// (its spot for a shot: not for the next fight)
+	out->chaseSince = 0;	// (nor the time it's been getting nowhere)
 	if ( npc->NPC->combatPoint >= 0 ) {
 		NPC_FreeCombatPoint( npc->NPC->combatPoint, qfalse );
 		npc->NPC->combatPoint = -1;
@@ -1906,18 +1969,35 @@ static qboolean G_RPC_Goal( rpcOwner_t *o, gentity_t *npc, rpcOut_t *out, const 
 		}
 	}
 	if ( out->trailAt < 0 ) {
-		// not on it yet: the nearest point near it it can walk to
-		float best = 0.0f;
-		int tried = 0;
-		for ( n = newest; n >= oldest && tried < 8; n-- ) {
-			const float d = Distance( npc->r.currentOrigin, G_RPC_At( o, n )->at );
-			if ( d > 256.0f || ( out->trailAt >= 0 && d >= best ) ) {
-				continue;
+		// not on it yet: the nearest point near it it can walk to - the
+		// nearest few looked at, nearest first (not the newest few: those
+		// can all be beyond a wall from it, round a bend it isn't round yet),
+		// none by a nearer one (its stretch beyond a wall, the next tried)
+		int near[RPC_NEAR_TRIES], numNear = 0, i;
+		while ( numNear < RPC_NEAR_TRIES ) {
+			int best = -1;
+			float bestDist = RPC_NEAR;
+			for ( n = newest; n >= oldest; n-- ) {
+				const float d = Distance( npc->r.currentOrigin, G_RPC_At( o, n )->at );
+				if ( d > bestDist ) {
+					continue;
+				}
+				for ( i = 0; i < numNear && ( near[i] - n > RPC_NEAR_SPREAD || n - near[i] > RPC_NEAR_SPREAD ); i++ ) {
+				}
+				if ( i == numNear ) {
+					best = n;
+					bestDist = d;
+				}
 			}
-			tried++;
-			if ( G_RPC_Walkable( npc->r.currentOrigin, G_RPC_At( o, n )->at, npc->s.number ) ) {
-				out->trailAt = n;
-				best = d;
+			if ( best < 0 ) {
+				break;
+			}
+			near[numNear++] = best;
+		}
+		for ( i = 0; i < numNear; i++ ) {
+			if ( G_RPC_Walkable( npc->r.currentOrigin, G_RPC_At( o, near[i] )->at, npc->s.number ) ) {
+				out->trailAt = near[i];
+				break;
 			}
 		}
 		if ( out->trailAt < 0 ) {
@@ -2059,8 +2139,19 @@ static void G_RPC_Help( gentity_t *owner, rpcOwner_t *o, gentity_t *npc, rpcOut_
 	G_RPC_HelpTell( owner->s.number, out, out->helpFrom );
 }
 
+// Whether it lets someone be a while, having got nowhere going after them
+// (G_RPC_Weapon): till RPC_FIGHT_IGNORE's up, or they've come at it -
+// RPC_FIGHT_SHIFT nearer where it holds or its owner (anchor) than they were,
+// or, on their feet, up or down more than a step from there (off a ledge, a
+// crate) - not for pacing about where they are.
+static qboolean G_RPC_Ignored( const rpcOut_t *out, const gentity_t *e, const vec3_t anchor ) {
+	return (qboolean)( out->ignoreEnemy == e->s.number + 1 && level.time < out->ignoreUntil &&
+		Distance( e->r.currentOrigin, anchor ) > Distance( out->ignoreAt, anchor ) - RPC_FIGHT_SHIFT &&
+		!( e->client && e->client->ps.groundEntityNum != ENTITYNUM_NONE && fabsf( e->r.currentOrigin[2] - out->ignoreAt[2] ) > STEPSIZE ) );
+}
+
 // Looks about for whom to fight: whoever's after them, or hurt them
-// lately, near enough and in sight (every RPC_SCAN).
+// lately, near enough and in sight (every RPC_SCAN) - not one it lets be.
 static gentity_t *G_RPC_Scan( gentity_t *npc, rpcOut_t *out, const vec3_t anchor, float leash ) {
 	int i;
 
@@ -2070,13 +2161,375 @@ static gentity_t *G_RPC_Scan( gentity_t *npc, rpcOut_t *out, const vec3_t anchor
 	out->scanTime = level.time;
 	for ( i = 0; i < level.num_entities; i++ ) {
 		gentity_t *e = &g_entities[i];
-		if ( !e->inuse || !e->client || e == npc || Distance( e->r.currentOrigin, anchor ) > leash ||
+		if ( !e->inuse || !e->client || e == npc || Distance( e->r.currentOrigin, anchor ) > leash || G_RPC_Ignored( out, e, anchor ) ||
 			G_RPCompEnemy( npc, e ) != 1 || !G_RPC_Sees( npc->r.currentOrigin, e->r.currentOrigin, npc->s.number ) ) {
 			continue;
 		}
 		return e;
 	}
 	return NULL;
+}
+
+// Whether a weapon's a gun: fired at what it's aimed at (not a saber, fists
+// or a baton, a thermal thrown over what's in the way, nor a mine or charge
+// laid; nor a turret's or an emplaced gun's).
+static qboolean G_RPC_Gun( int weapon ) {
+	switch ( weapon ) {
+	case WP_BRYAR_PISTOL:
+	case WP_BLASTER:
+	case WP_DISRUPTOR:
+	case WP_BOWCASTER:
+	case WP_REPEATER:
+	case WP_DEMP2:
+	case WP_FLECHETTE:
+	case WP_ROCKET_LAUNCHER:
+	case WP_CONCUSSION:
+	case WP_BRYAR_OLD:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+// Whether a weapon's fists or a baton: a blow at whom's in reach.
+static qboolean G_RPC_Fist( int weapon ) {
+	return (qboolean)( weapon == WP_MELEE || weapon == WP_STUN_BATON );
+}
+
+// Whether a companion throws thermals - its type's weapon (fists too, given
+// it by G_RPC_Weapon for anyone near).
+static qboolean G_RPC_Thrower( const gentity_t *npc ) {
+	return (qboolean)( ( npc->client->ps.stats[STAT_WEAPONS] & ( 1 << WP_THERMAL ) ) != 0 );
+}
+
+// Whether a companion fights at range - a gun, or thermals: holding, it takes
+// on what's as far off as following (G_RPCompThink).
+static qboolean G_RPC_Ranged( const gentity_t *npc ) {
+	return (qboolean)( G_RPC_Gun( npc->client->ps.weapon ) || G_RPC_Thrower( npc ) );
+}
+
+static const vec3_t rpcLobMins = { -3.0f, -3.0f, -3.0f }, rpcLobMaxs = { 3.0f, 3.0f, 3.0f };	// (a thermal's: WP_FireThermalDetonator)
+
+// Where a thermal's thrown at someone: their feet.
+static void G_RPC_Feet( const gentity_t *target, vec3_t at ) {
+	VectorSet( at, target->r.currentOrigin[0], target->r.currentOrigin[1], target->r.currentOrigin[2] + target->r.mins[2] + 4.0f );
+}
+
+// A thermal thrown from start to land at (on targetNum, if it's on the way):
+// vel - along the lowest of a few arcs that gets there no faster than
+// RPC_THROW_SPEED with nothing else in its way, bursting (an alt-fired one
+// bursts on whatever it hits) no nearer the thrower than RPC_THROW_NEAR
+// (qfalse: none does - vel as it was).
+static qboolean G_RPC_Lob( const gentity_t *npc, const vec3_t start, const vec3_t at, int targetNum, vec3_t vel ) {
+	static const float angles[] = { 30.0f, 45.0f, 60.0f };
+	vec3_t flat, from, to, v;
+	float d, h;
+	int a, i;
+
+	VectorSubtract( at, start, flat );
+	h = flat[2];
+	flat[2] = 0.0f;
+	d = VectorNormalize( flat );
+	if ( d < 1.0f ) {
+		return qfalse;
+	}
+	for ( a = 0; a < (int)ARRAY_LEN( angles ); a++ ) {
+		const float c = cosf( DEG2RAD( angles[a] ) ), s = sinf( DEG2RAD( angles[a] ) ), rise = d * s / c - h;
+		float speed, flight;
+		trace_t tr;
+
+		if ( rise <= 0.0f ) {
+			continue;	// (too high for this arc)
+		}
+		speed = sqrtf( DEFAULT_GRAVITY * d * d / ( 2.0f * c * c * rise ) );
+		if ( !( speed <= RPC_THROW_SPEED ) ) {
+			continue;	// (too far for this arc)
+		}
+		VectorScale( flat, speed * c, v );
+		v[2] = speed * s;
+		flight = d / ( speed * c );
+		// its arc, a step at a time - two past their feet: down to the floor there
+		VectorCopy( start, from );
+		for ( i = 1; i <= RPC_LOB_STEPS + 2; i++ ) {
+			const float t = flight * i / RPC_LOB_STEPS;
+			VectorMA( start, t, v, to );
+			to[2] -= 0.5f * DEFAULT_GRAVITY * t * t;
+			trap->Trace( &tr, from, rpcLobMins, rpcLobMaxs, to, npc->s.number, MASK_SHOT, qfalse, 0, 0 );
+			if ( tr.startsolid || tr.fraction < 1.0f ) {
+				break;
+			}
+			VectorCopy( to, from );
+		}
+		if ( i <= RPC_LOB_STEPS + 2 && !tr.startsolid && ( tr.entityNum == targetNum ||
+			( DistanceHorizontal( tr.endpos, at ) <= RPC_LOB_LANDS && fabsf( tr.endpos[2] - at[2] ) <= RPC_LOB_LANDS ) ) &&
+			Distance( tr.endpos, npc->r.currentOrigin ) >= RPC_THROW_NEAR ) {
+			VectorCopy( v, vel );
+			return qtrue;	// (there: on them, or the floor at their feet - its blast not reaching the thrower)
+		}
+	}
+	return qfalse;
+}
+
+// WP_FireThermalDetonator: a companion's thermal, lobbed at its enemy
+// (G_RPC_Lob) - an NPC's throw is never held as long as it'd need to be; its
+// enemy gone as it lets go (the throw goes 50 ms after the fight's last
+// look: NPC_Think), where it was aiming. qfalse: no throw that's safe now
+// (something come into its way since, say) - the thermal's not thrown.
+qboolean G_RPCompLob( const gentity_t *ent, const vec3_t start, vec3_t vel ) {
+	const int k = ( ent && ent->rpCompOwner ) ? G_RPC_Which( ent ) : -1;
+	const int n = ( k >= 0 ) ? G_RPC_OwnerNum( ent ) : -1;
+	rpcOut_t *out;
+
+	if ( n < 0 ) {
+		return qtrue;	// (not a companion's: as the game throws it)
+	}
+	out = &rpco[n].out[k];
+	if ( ent->enemy && ent->enemy->inuse && ent->enemy->client ) {
+		G_RPC_Feet( ent->enemy, out->lobAt );
+		out->lobTime = level.time ? level.time : 1;
+		return G_RPC_Lob( ent, start, out->lobAt, ent->enemy->s.number, vel );
+	}
+	if ( out->lobTime && level.time - out->lobTime <= RPC_LOB_KEEP ) {
+		return G_RPC_Lob( ent, start, out->lobAt, ENTITYNUM_NONE, vel );
+	}
+	return qfalse;
+}
+
+// A thrower's weapon, to its fists or back (an NPC's never weighed against
+// what it has: PM_Weapon fires what it holds) - alt-firing as that weapon
+// does at once (its first throw back not a bouncing one).
+static void G_RPC_Arm( gentity_t *npc, int weapon ) {
+	ChangeWeapon( npc, weapon );
+	if ( weapon == WP_MELEE ) {
+		npc->NPC->burstSpacing = 0;	// (blow on blow, as an NPC of fists has it: ChangeWeapon would leave the thermal's)
+	}
+	G_RPC_AltFire( npc );
+}
+
+// Whether a gun companion standing at at would have a clear shot at its
+// enemy, and sight of them, as the NPCs' fighting would find (NPC_ShotEntity,
+// NPC_ClearLOS4): its gun held facing them as CalcMuzzlePoint has it, the
+// shot a little round (a blaster's), nothing in it at the start (a wall
+// there, a body); a rocket's no nearer them than RPC_ROCKET_NEAR.
+static qboolean G_RPC_ShotFrom( gentity_t *npc, gentity_t *enemy, const vec3_t at ) {
+	static const vec3_t shotMins = { -2.0f, -2.0f, -2.0f }, shotMaxs = { 2.0f, 2.0f, 2.0f };
+	const float *off = WP_MuzzlePoint[npc->client->ps.weapon];
+	vec3_t toward, muzzle, chest, eyes;
+	trace_t tr;
+
+	if ( npc->client->ps.weapon == WP_ROCKET_LAUNCHER && Distance( at, enemy->r.currentOrigin ) < RPC_ROCKET_NEAR ) {
+		return qfalse;
+	}
+	VectorSubtract( enemy->r.currentOrigin, at, toward );
+	toward[2] = 0.0f;
+	VectorNormalize( toward );
+	VectorMA( at, off[0], toward, muzzle );
+	muzzle[0] += off[1] * toward[1];	// (its right: forward turned a quarter clockwise)
+	muzzle[1] -= off[1] * toward[0];
+	muzzle[2] += npc->client->ps.viewheight + off[2];
+	CalcEntitySpot( enemy, SPOT_CHEST, chest );
+	trap->Trace( &tr, muzzle, shotMins, shotMaxs, chest, npc->s.number, MASK_SHOT, qfalse, 0, 0 );
+	if ( tr.startsolid || tr.entityNum != enemy->s.number ) {
+		return qfalse;
+	}
+	VectorCopy( at, eyes );
+	eyes[2] += npc->client->ps.viewheight;
+	return G_ClearLOS3( npc, eyes, enemy );
+}
+
+// A spot near a gun companion with a clear shot at its enemy from there
+// (G_RPC_ShotFrom: round its owner, the other of theirs, a pillar, a
+// doorway's side): a step to either side of its line to them - its left
+// first - two, three, then a step and a half back to either side, straight
+// back, and twice that; on the floor there, nobody standing there, one it
+// can walk straight to (G_RPC_Walkable: no wall, gap or drop on the way - an
+// NPC goes round a wall only by the map's waypoints, which most maps
+// haven't), no nearer its leash's end than RPC_GUN_MARGIN - a rocket's, a
+// little further from its enemy than RPC_ROCKET_NEAR (qfalse: none).
+static qboolean G_RPC_ShotSpot( gentity_t *npc, gentity_t *enemy, const vec3_t anchor, float leash, vec3_t spot ) {
+	static const float steps[][2] = { { 1, 0 }, { -1, 0 }, { 2, 0 }, { -2, 0 }, { 3, 0 }, { -3, 0 }, { 1, 1.5f }, { -1, 1.5f }, { 0, 1.5f }, { 0, 3 } };	// (aside, back)
+	vec3_t toward, side;
+	int i;
+
+	VectorSubtract( enemy->r.currentOrigin, npc->r.currentOrigin, toward );
+	toward[2] = 0.0f;
+	if ( VectorNormalize( toward ) < 1.0f ) {
+		return qfalse;	// (straight above or below it)
+	}
+	VectorSet( side, -toward[1], toward[0], 0.0f );
+	for ( i = 0; i < (int)ARRAY_LEN( steps ); i++ ) {
+		float z;
+
+		VectorMA( npc->r.currentOrigin, steps[i][0] * RPC_SPOT_STEP, side, spot );
+		VectorMA( spot, -steps[i][1] * RPC_SPOT_STEP, toward, spot );
+		if ( Distance( spot, anchor ) > leash - RPC_GUN_MARGIN || G_RPC_Floor( spot, npc->s.number, &z ) <= 0 ) {
+			continue;
+		}
+		spot[2] = z;
+		if ( npc->client->ps.weapon == WP_ROCKET_LAUNCHER && Distance( spot, enemy->r.currentOrigin ) < RPC_ROCKET_NEAR + RPC_SPOT_THERE + 16.0f ) {
+			continue;	// (there, but for a step, too near to fire at them: RPC_SPOT_THERE)
+		}
+		if ( !G_RPC_Taken( spot, npc->s.number ) && G_RPC_ShotFrom( npc, enemy, spot ) && G_RPC_Walkable( npc->r.currentOrigin, spot, npc->s.number ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Whether a companion's fists or baton would land a blow on its enemy, swung
+// now facing them (as the NPCs' fighting has it, at them): WP_FireMelee's,
+// WP_FireStunBaton's - from its eyes' height less 6, 20 on and 4 to its
+// right, RPC_BLOW further, a box 6 round - on them, nothing else first (one
+// crouching or below it too; not through a door, glass, a body).
+static qboolean G_RPC_Blow( const gentity_t *npc, gentity_t *enemy ) {
+	static const vec3_t blowMins = { -6.0f, -6.0f, -6.0f }, blowMaxs = { 6.0f, 6.0f, 6.0f };
+	vec3_t from, chest, dir, start, end;
+	trace_t tr;
+
+	VectorCopy( npc->client->ps.origin, from );
+	from[2] += npc->client->ps.viewheight - 6.0f;
+	CalcEntitySpot( enemy, SPOT_CHEST, chest );
+	VectorSubtract( chest, from, dir );
+	VectorNormalize( dir );
+	VectorMA( from, 20.0f, dir, start );
+	if ( dir[0] || dir[1] ) {
+		const float flat = sqrtf( dir[0] * dir[0] + dir[1] * dir[1] );
+		start[0] += 4.0f * dir[1] / flat;	// (its right: forward turned a quarter clockwise)
+		start[1] -= 4.0f * dir[0] / flat;
+	}
+	VectorMA( start, RPC_BLOW, dir, end );
+	trap->Trace( &tr, start, blowMins, blowMaxs, end, npc->s.number, MASK_SHOT, qfalse, 0, 0 );
+	return (qboolean)( tr.entityNum == enemy->s.number );
+}
+
+// Fighting by its weapon, with the NPCs' own fighting (NPC_BSST_Attack - a
+// trooper's, every companion's but a saber's: G_RPCompThink). A trooper moves
+// only where its squad's commander sends it (ST_Commander), and a companion
+// is in no squad (G_RPC_Flags): it would stand where the fight found it,
+// often its spot just behind its owner - never firing past them (the NPCs'
+// fighting won't shoot through one of its side), nor past the other of
+// theirs, nor round a wall; fists swung at the air. So, no nearer the end of
+// its leash than RPC_GUN_MARGIN:
+//   a gun with no clear shot goes where it has one, near it (G_RPC_ShotSpot,
+// every RPC_SPOT_LOOK), else after its enemy as a commander sends a lone
+// trooper that has none (scouting: ST_HuntEnemy); a rocket, never fired
+// nor going nearer than RPC_ROCKET_NEAR; with one, it stands there and
+// shoots;
+//   thermals go after their enemy, the arc to them clear (G_RPC_Lob), and
+// none thrown till it is - nor at anyone within RPC_THROW_NEAR: fists for
+// them, till they're further than RPC_THROW_BACK;
+//   fists or a baton go after their enemy till a blow would land
+// (G_RPC_Blow), swinging only then;
+// all on its own feet (G_RPC_MoveTo: round bodies, never into lava nor off
+// an edge - the NPCs' goals go anywhere, and stop 31 short: NAV_HitNavGoal),
+// no goal for the NPCs' fighting to move it by - it faces its enemy, firing
+// on the way if a shot comes clear. Getting nowhere at them RPC_FIGHT_STUCK
+// on its feet - a wall, a ledge, a counter, lava or a gap in its way (no way
+// round but by the map's waypoints), its leash's end, a rocket too near
+// them - it lets them be (G_RPC_Ignored) - qfalse: out of the fight, back to
+// its owner. Not the Jedi's (their own way).
+static qboolean G_RPC_Weapon( gentity_t *npc, rpcOut_t *out, gentity_t *enemy, const vec3_t anchor, float leash ) {
+	gNPC_t *info = npc->NPC;
+	const float dist = Distance( npc->r.currentOrigin, enemy->r.currentOrigin );
+	const qboolean nearRocket = (qboolean)( npc->client->ps.weapon == WP_ROCKET_LAUNCHER && dist < RPC_ROCKET_NEAR );
+	const int chased = out->chaseSince;	// (getting nowhere since - kept only while it's after them still: below)
+	qboolean ready;
+
+	if ( npc->client->NPC_class == CLASS_JEDI || npc->client->NPC_class == CLASS_REBORN || npc->client->NPC_class == CLASS_BOBAFETT ||
+		npc->client->ps.weapon == WP_SABER ) {
+		return qtrue;	// (the Jedi's fighting, its own way: NPC_RunBehavior)
+	}
+	out->chaseSince = 0;
+	if ( G_RPC_Thrower( npc ) ) {
+		if ( npc->client->ps.weapon == WP_THERMAL && dist < RPC_THROW_NEAR ) {
+			G_RPC_Arm( npc, WP_MELEE );
+		} else if ( npc->client->ps.weapon == WP_MELEE && ( dist > RPC_THROW_BACK || ( dist >= RPC_THROW_NEAR && chased && level.time - chased >= RPC_FIGHT_STUCK / 2 ) ) ) {
+			G_RPC_Arm( npc, WP_THERMAL );	// (further off again - or no nearer, its fists getting nowhere at them: a throw that's safe)
+		}
+	}
+	if ( G_RPC_Fist( npc->client->ps.weapon ) ) {
+		ready = (qboolean)( G_RPC_Blow( npc, enemy ) && NPC_ClearLOS4( enemy ) && NPC_ShotEntity( enemy, NULL ) == enemy->s.number );	// (and its fighting swings: it sees them, nothing in the way)
+	} else if ( G_RPC_Gun( npc->client->ps.weapon ) || npc->client->ps.weapon == WP_THERMAL ) {
+		ready = (qboolean)( NPC_ClearLOS4( enemy ) && NPC_ShotEntity( enemy, NULL ) == enemy->s.number && !nearRocket );
+		if ( ready && npc->client->ps.weapon == WP_THERMAL ) {
+			vec3_t muzzle, at, vel;
+			CalcEntitySpot( npc, SPOT_WEAPON, muzzle );
+			G_RPC_Feet( enemy, at );
+			ready = G_RPC_Lob( npc, muzzle, at, enemy->s.number, vel );
+			if ( ready ) {
+				VectorCopy( at, out->lobAt );	// (where it's thrown, its enemy gone as it lets go: G_RPCompLob)
+				out->lobTime = level.time ? level.time : 1;
+			}
+		}
+	} else {
+		return qtrue;	// (with nothing, nothing)
+	}
+	if ( !ready && ( !G_RPC_Gun( npc->client->ps.weapon ) || nearRocket ) ) {
+		info->scriptFlags |= SCF_DONT_FIRE;	// (no blow at the air, no thermal into a wall, no rocket at its own feet)
+	}
+	if ( ready ) {
+		info->goalEntity = NULL;	// (a clear shot or throw now, or a blow that lands: from here - ST_CheckMoveState stands it)
+		return qtrue;
+	}
+	if ( G_RPC_Gun( npc->client->ps.weapon ) ) {
+		// going to a spot with a clear shot from it still: on there (no goal for
+		// the NPCs' fighting to move it by - it faces its enemy, firing on the
+		// way if a shot comes clear)
+		if ( out->spotEnemy == enemy->s.number + 1 && G_RPC_ShotFrom( npc, enemy, out->spotAt ) &&
+			( out->spotThere || ( level.time - out->spotTime < RPC_SPOT_GO && !G_RPC_Taken( out->spotAt, npc->s.number ) ) ) ) {
+			if ( DistanceHorizontal( npc->r.currentOrigin, out->spotAt ) > RPC_SPOT_THERE && G_RPC_MoveTo( npc, out->spotAt, qtrue, qtrue ) ) {
+				out->spotThere = 0;
+				info->goalEntity = NULL;
+				return qtrue;
+			}
+			if ( !out->spotThere ) {
+				out->spotThere = level.time ? level.time : 1;
+			}
+			if ( level.time - out->spotThere < RPC_SPOT_LOOK ) {
+				info->goalEntity = NULL;	// (there: a moment to face them and fire)
+				return qtrue;
+			}
+		}
+		out->spotEnemy = 0;	// (there with no shot after all, its shot from there gone, someone there, not there in time, another enemy)
+		out->spotThere = 0;
+		if ( level.time - out->spotTime >= RPC_SPOT_LOOK ) {
+			out->spotTime = level.time;
+			if ( G_RPC_ShotSpot( npc, enemy, anchor, leash, out->spotAt ) ) {
+				out->spotEnemy = enemy->s.number + 1;
+				G_RPC_MoveTo( npc, out->spotAt, qtrue, qtrue );
+				info->goalEntity = NULL;
+				return qtrue;
+			}
+		}
+	}
+	// after them, on its own feet - round bodies, never into lava nor off an
+	// edge (the NPCs' own going walks anywhere: NPC_MoveToGoal) - but no
+	// nearer its leash's end than RPC_GUN_MARGIN (back in toward them, yes), a
+	// rocket no nearer them: there it stands; getting nowhere RPC_FIGHT_STUCK
+	// (knocked down or gripped meanwhile: from when it's up, or let go), it
+	// lets them be
+	info->goalEntity = NULL;
+	if ( chased && out->chaseEnemy == enemy->s.number + 1 && Distance( npc->r.currentOrigin, out->chaseAt ) < RPC_FIGHT_MOVED &&
+		!BG_InKnockDown( npc->client->ps.legsAnim ) && npc->client->ps.fd.forceGripBeingGripped <= level.time ) {
+		if ( level.time - chased >= RPC_FIGHT_STUCK ) {
+			out->ignoreEnemy = enemy->s.number + 1;
+			out->ignoreUntil = level.time + RPC_FIGHT_IGNORE;
+			VectorCopy( enemy->r.currentOrigin, out->ignoreAt );
+			G_RPC_Disengage( npc, out );
+			return qfalse;
+		}
+		out->chaseSince = chased;
+	} else {
+		out->chaseSince = level.time ? level.time : 1;
+		out->chaseEnemy = enemy->s.number + 1;
+		VectorCopy( npc->r.currentOrigin, out->chaseAt );
+	}
+	if ( !nearRocket && ( Distance( npc->r.currentOrigin, anchor ) <= leash - RPC_GUN_MARGIN ||
+		( enemy->r.currentOrigin[0] - npc->r.currentOrigin[0] ) * ( anchor[0] - npc->r.currentOrigin[0] ) +
+		( enemy->r.currentOrigin[1] - npc->r.currentOrigin[1] ) * ( anchor[1] - npc->r.currentOrigin[1] ) > 0.0f ) ) {
+		G_RPC_MoveTo( npc, enemy->r.currentOrigin, qtrue, qtrue );
+	}
+	return qtrue;
 }
 
 // NPC_RunBehavior: a companion's think (qtrue: it's done; qfalse - it's
@@ -2088,7 +2541,7 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 	vec3_t spot, goal, anchor;
 	const int k = G_RPC_Which( npc );
 	const int n = ( k >= 0 ) ? G_RPC_OwnerNum( npc ) : -1;
-	float dist, leash;
+	float dist, leash, reach;
 	qboolean run, helper;
 
 	if ( n < 0 ) {
@@ -2106,26 +2559,29 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 	G_RPC_Sides( npc, n );
 	helper = (qboolean)( owner->client->rpDowned && G_RPC_Helper( n ) == k );
 
-	// the fight: its own, on the leash
+	// the fight: its own, on the leash - itself no further from them (or
+	// where it holds) than the leash, its enemy no further than reach (a gun
+	// or thermals holding take on what's as far off as following)
 	VectorCopy( ( out->order == RPCO_HOLD ) ? out->hold : owner->client->ps.origin, anchor );
 	leash = ( out->order == RPCO_HOLD ) ? RPC_HOLD_LEASH : RPC_LEASH;
+	reach = G_RPC_Ranged( npc ) ? RPC_LEASH : leash;
 	if ( out->order == RPCO_ATTACK ) {
 		gentity_t *t = ( out->target >= 0 && out->target < ENTITYNUM_MAX_NORMAL ) ? &g_entities[out->target] : NULL;
 		if ( !t || !t->inuse || !t->client || t->health <= 0 || G_RPDowned( t ) ) {
 			out->order = RPCO_DEFEND;	// (done with it)
 			out->target = -1;
-		} else if ( !helper && npc->enemy != t && Distance( t->r.currentOrigin, anchor ) < leash ) {
+		} else if ( !helper && npc->enemy != t && !G_RPC_Ignored( out, t, anchor ) && Distance( t->r.currentOrigin, anchor ) < leash ) {
 			G_SetEnemy( npc, t );
 		}
 	}
 	enemy = npc->enemy;
 	if ( enemy && ( helper || G_RPCompEnemy( npc, enemy ) != 1 || Distance( npc->r.currentOrigin, anchor ) > leash ||
-		Distance( enemy->r.currentOrigin, anchor ) > leash * 1.5f ) ) {
-		G_RPC_Disengage( npc, out );	// (not theirs to fight, its owner to get up, or off the leash: back)
+		Distance( enemy->r.currentOrigin, anchor ) > reach * 1.5f || G_RPC_Ignored( out, enemy, anchor ) ) ) {
+		G_RPC_Disengage( npc, out );	// (not theirs to fight, its owner to get up, off the leash, or one it lets be - hurt by them, say: back)
 		enemy = NULL;
 	}
-	if ( !enemy && !helper && out->order != RPCO_FOLLOW && !owner->client->ps.m_iVehicleNum ) {
-		enemy = G_RPC_Scan( npc, out, anchor, leash );
+	if ( !enemy && !helper && out->order != RPCO_FOLLOW && !owner->client->ps.m_iVehicleNum && Distance( npc->r.currentOrigin, anchor ) <= leash ) {
+		enemy = G_RPC_Scan( npc, out, anchor, reach );	// (not off its leash: back first - else taken on, let go, taken on...)
 		if ( enemy ) {
 			G_SetEnemy( npc, enemy );
 			enemy = npc->enemy;
@@ -2135,6 +2591,9 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 		// fighting: as NPCs do (a neutral one too - the neutrals' ways are droids')
 		G_RPC_Flags( npc, qtrue );
 		G_RPC_Speeds( npc, out, qfalse );
+		enemy = G_RPC_Weapon( npc, out, enemy, anchor, leash ) ? enemy : NULL;	// (NULL: getting nowhere at them, it lets them be - back)
+	}
+	if ( enemy ) {
 		if ( out->helpFrom ) {
 			out->helpFrom = 0;
 			G_RPC_HelpTell( n, out, 0 );
@@ -2142,8 +2601,8 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 		out->arrived = qfalse;
 		out->trailAt = -1;
 		out->stuckSince = 0;
-		if ( *team == NPCTEAM_NEUTRAL ) {
-			*team = NPCTEAM_PLAYER;
+		if ( *team == NPCTEAM_NEUTRAL || npc->client->ps.weapon == WP_THERMAL || npc->client->ps.weapon == WP_STUN_BATON ) {
+			*team = NPCTEAM_PLAYER;	// (a villain's with thermals or a baton too: a trooper's fighting, as a hero's - the grenadiers' would chase off its leash, its throw and blow held back for good)
 		}
 		if ( *bState == BS_CINEMATIC ) {
 			*bState = BS_DEFAULT;
@@ -2153,8 +2612,12 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 	G_RPC_Flags( npc, qfalse );
 	G_RPC_Speeds( npc, out, qtrue );
 	npc->NPC->goalEntity = NULL;
+	out->chaseSince = 0;	// (not fighting: the time it was getting nowhere, not for the next fight - its enemy dropped by the NPCs' own think, say)
 	if ( npc->client->ps.weapon == WP_SABER && npc->client->ps.saberHolstered < 2 && level.time - out->fightEnd >= RPC_HOLSTER ) {
 		WP_DeactivateSaber( npc, qfalse );	// (the fight's over)
+	}
+	if ( npc->client->ps.weapon == WP_MELEE && G_RPC_Thrower( npc ) ) {
+		G_RPC_Arm( npc, WP_THERMAL );	// (and its thermals again)
 	}
 	NPCS.NPCInfo->desiredPitch = 0.0f;
 
@@ -2417,6 +2880,7 @@ void G_RPCompOrder( gentity_t *ent ) {
 		} else {
 			out->order = RPCO_ATTACK;
 			out->target = target->s.number;
+			out->ignoreEnemy = 0;	// (one it let be, getting nowhere at them: at them again)
 			G_RPC_Disengage( npc, out );
 		}
 	}

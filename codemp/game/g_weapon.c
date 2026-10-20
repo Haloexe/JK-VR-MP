@@ -2121,6 +2121,12 @@ gentity_t *WP_FireThermalDetonator( gentity_t *ent, qboolean altFire )
 		bolt->s.pos.trDelta[2] += 120;
 	}
 
+	if ( ent->rpCompOwner && !G_RPCompLob( ent, start, bolt->s.pos.trDelta ) )
+	{//OpenJK VR: a player's companion lobs it at its enemy (g_vrcomp.c) - with no throw that's safe now, it isn't thrown
+		G_FreeEntity( bolt );
+		return NULL;
+	}
+
 	if ( !altFire )
 	{
 		bolt->flags |= FL_BOUNCE_HALF;

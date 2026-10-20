@@ -530,9 +530,19 @@ you went up), more than 40 m away, or where your trail can't be walked (a
 lift, a train, a jump up a ledge, lava), they come to just behind you -
 you in mid-air, to just behind where you left the ground. They keep out of
 lava and slime, and slow down at an edge rather than walk off it. They
-fight no further than 15 m from you (5 m from where they hold). When
-you're down, one of yours (one not fighting, if there is one) comes to you
-and gets you up (3 s by you), as someone of your side would.
+fight no further than 15 m from you (5 m from where they hold - one with
+a gun or thermals still takes on anyone up to 15 m off). One with a gun
+and no clear shot (you, your other companion, a pillar or a doorway's
+side in the way) steps aside till it has one, or goes after its enemy,
+inside those limits (a rocket never nearer than 5.5 m); it backs you up in
+a saber fight, fires the disruptor without sniping, and opens fire within
+2 s, a villain's too. Thermals are lobbed to burst at their target's
+feet, never within 5 m of the thrower (fists for anyone that near); fists
+and a baton go up to their enemy and hit. One that can't get at its enemy
+(a wall, a ledge or lava in the way) gives up after 2 s and comes back,
+leaving them be for 5 s, or till they come at you. When you're down, one of
+yours (one not fighting, if there is one) comes to you and gets you up (3 s
+by you), as someone of your side would.
   A companion whose health runs out is knocked out: it lies there 10 s,
 then goes, and can come again 2 minutes later (Come to me, or your next
 life) - the page shows the wait. One put away hurt (unticked, or changed)

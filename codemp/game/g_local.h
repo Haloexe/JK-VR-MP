@@ -1118,6 +1118,7 @@ void		G_RPCompOwnerSpawned( gentity_t *ent );
 void		G_RPCompOwnerGone( int clientNum );
 void		G_RPCompDeleted( int clientNum, int slot );
 qboolean	G_RPCompThink( int *team, int *bState );
+qboolean	G_RPCompLob( const gentity_t *ent, const vec3_t start, vec3_t vel );
 int			G_RPCompEnemy( const gentity_t *npc, const gentity_t *ent );
 const gentity_t	*G_RPCompOwner( const gentity_t *ent );
 qboolean	G_RPCompNoHarm( const gentity_t *targ, const gentity_t *attacker );

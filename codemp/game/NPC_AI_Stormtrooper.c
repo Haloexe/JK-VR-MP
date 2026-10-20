@@ -2548,8 +2548,8 @@ void NPC_BSST_Attack( void )
 	}
 	else if ( enemyDist > 65536 )//256 squared
 	{
-		if ( NPCS.NPC->client->ps.weapon == WP_DISRUPTOR )
-		{//sniping... should be assumed
+		if ( NPCS.NPC->client->ps.weapon == WP_DISRUPTOR && !NPCS.NPC->rpCompOwner )
+		{//sniping... should be assumed (OpenJK VR: not a player's companion - its charged shot needs the scope, which an NPC never raises: it'd never fire, g_vrcomp.c)
 			if ( !(NPCS.NPCInfo->scriptFlags&SCF_ALT_FIRE) )
 			{//use primary fire
 				NPCS.NPCInfo->scriptFlags |= SCF_ALT_FIRE;
@@ -2714,8 +2714,8 @@ void NPC_BSST_Attack( void )
 		shoot = qfalse;
 	}
 
-	if ( NPCS.NPC->enemy && NPCS.NPC->enemy->enemy )
-	{
+	if ( NPCS.NPC->enemy && NPCS.NPC->enemy->enemy && !NPCS.NPC->rpCompOwner )
+	{//(OpenJK VR: a player's companion backs them up, their saber against a saber or not - g_vrcomp.c)
 		if ( NPCS.NPC->enemy->s.weapon == WP_SABER && NPCS.NPC->enemy->enemy->s.weapon == WP_SABER )
 		{//don't shoot at an enemy jedi who is fighting another jedi, for fear of injuring one or causing rogue blaster deflections (a la Obi Wan/Vader duel at end of ANH)
 			shoot = qfalse;

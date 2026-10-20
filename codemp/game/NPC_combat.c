@@ -305,8 +305,8 @@ void G_AttackDelay( gentity_t *self, gentity_t *enemy )
 		*/
 		}
 
-		if ( self->client->playerTeam == NPCTEAM_PLAYER )
-		{//clamp it
+		if ( self->client->playerTeam == NPCTEAM_PLAYER || self->rpCompOwner )
+		{//clamp it (OpenJK VR: a player's companion on either side - g_vrcomp.c)
 			if ( attDelay > 2000 )
 			{
 				attDelay = 2000;
@@ -903,6 +903,13 @@ void NPC_ApplyWeaponFireDelay(void)
 	if ( NPCS.NPC->attackDebounceTime > level.time )
 	{//Just fired, if attacking again, must be a burst fire, so don't add delay
 		//NOTE: Borg AI uses attackDebounceTime "incorrectly", so this will always return for them!
+		return;
+	}
+
+	if ( NPCS.NPC->rpCompOwner && ( NPCS.client->ps.weapon == WP_THERMAL || NPCS.client->ps.weapon == WP_STUN_BATON ) )
+	{//OpenJK VR: a player's companion - the delays below hold back the very press they follow (PM_Weapon fires nothing while
+		//weaponTime runs), so its thermal would never be thrown nor its baton swung (g_vrcomp.c)
+		NPCS.client->ps.weaponTime = 0;
 		return;
 	}
 
