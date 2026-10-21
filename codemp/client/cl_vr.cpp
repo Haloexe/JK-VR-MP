@@ -419,6 +419,7 @@ typedef struct vrState_s {
 	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
 	int						numGenCmds;		// command that has none, in turn
 	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
+	qboolean				grabHolds;		// ...and grabs hold what they've taken (VR_GRAB_HOLDS): let go of only well open
 	int						wheelState;		// Y: VR_WHEEL_* (tapped, or held for the pose wheel)
 	int						wheelPressTime;	// ...pressed then (ms)
 	int						grabZones;		// hands the cgame says could grab now (bit per hand)...
@@ -1315,16 +1316,23 @@ static void VR_WheelButton( qboolean down ) {
 	vr.keyBlocked[VR_KEY_Y] = qfalse;	// (let go already)
 }
 
-// Lets go of every held controller button (focus lost, session ended).
-// Whatever is still held when input comes back is not a new press.
-static void VR_ReleaseAllKeys( void ) {
-	VR_DropWheel( qfalse );
+// Lets go of every held controller button's key (focus lost, session
+// ended). Whatever is still held when input comes back is not a new press. A
+// grab - a hilt held - goes on till the grip's let go, input back: a saber
+// held by its grip isn't let go of for a system menu.
+static void VR_ReleaseKeys( void ) {
 	for ( int k = 0; k < VR_NUM_BUTTONS; k++ ) {
-		if ( vr.keyDown[k] ) {
+		const int gripHand = VR_GripHand( k );
+		if ( vr.keyDown[k] && !( gripHand >= 0 && vr.grabbing[gripHand] ) ) {
 			VR_SetKey( k, qfalse );
 			vr.keyBlocked[k] = qtrue;
 		}
 	}
+}
+
+static void VR_ReleaseAllKeys( void ) {
+	VR_DropWheel( qfalse );
+	VR_ReleaseKeys();
 	vr.moveX = vr.moveY = vr.turnX = vr.turnY = 0.0f;
 	// snap turns, weapon switches and menu scrolling wait for their stick to recentre
 	vr.turnLatched = vr.weapLatched = vr.scrollLatched = qtrue;
@@ -1432,6 +1440,10 @@ static qboolean VR_PointerHit( int hand, float *x, float *y ) {
 
 // A trigger that crosses this clicks (VR_HandControl).
 #define VR_TRIGGER_PRESS	0.6f
+// A grip held as a grab that holds (a saber held by its grip: the cgame's,
+// VR_GRAB_HOLDS) is let go of only under this - others under 0.4: a hand
+// holding a saber needn't keep squeezing hard.
+#define VR_GRAB_LET_GO		0.25f
 
 // Where the menu cursor goes this frame. Runs before the buttons are read,
 // which click where it points.
@@ -1789,12 +1801,13 @@ static int VR_ControlKey( int control, int h ) {
 }
 
 // Hand h's trigger or grip, read as value (0..1): pressed past VR_TRIGGER_PRESS,
-// let go under 0.4. Pressed, it presses the key for what it does then (the
-// other one if the other hand's is pressing that already); let go, that key
-// goes up.
+// let go under 0.4 (a grip held as a grab that holds, under VR_GRAB_LET_GO).
+// Pressed, it presses the key for what it does then (the other one if the
+// other hand's is pressing that already); let go, that key goes up.
 static void VR_HandControl( int control, int h, float value ) {
 	const qboolean was = vr.ctlDown[control][h];
-	const qboolean down = (qboolean)( value > VR_TRIGGER_PRESS || ( was && value > 0.4f ) );
+	const float letGo = ( control == VR_CTL_GRIP && vr.grabbing[h] && vr.grabHolds ) ? VR_GRAB_LET_GO : 0.4f;
+	const qboolean down = (qboolean)( value > VR_TRIGGER_PRESS || ( was && value > letGo ) );
 	int key;
 
 	if ( down && !was ) {
@@ -2827,6 +2840,7 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {
 
 void VR_SetGrabZones( int handMask ) {
 	vr.grabZones = handMask & ( ( 1 << VR_HAND_LEFT ) | ( 1 << VR_HAND_RIGHT ) );
+	vr.grabHolds = ( handMask & VR_GRAB_HOLDS ) ? qtrue : qfalse;
 	vr.grabZoneTime = cls.realtime;
 }
 

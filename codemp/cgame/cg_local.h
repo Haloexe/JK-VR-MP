@@ -1934,6 +1934,8 @@ void CG_VR_PutSaber( int saberNum );
 void CG_VR_SwapSaberHolds( void );
 int CG_VR_TwoHandZones( void );
 void CG_VR_BlockGrab( int hand );
+qboolean CG_VR_BothHandsHold( void );
+void CG_VR_PassSaberOver( qboolean pass );
 qboolean CG_VR_OtherHoldsSaber( int clientNum, int saberNum );
 void QDECL CG_VR_Log( const char *fmt, ... );
 // cg_vrholster.c (OpenJK VR: holsters - your weapons hang on your body)
@@ -1942,6 +1944,7 @@ void		CG_VRH_Shutdown( void );
 qboolean	CG_VRH_On( void );
 void		CG_VRH_HandsFrame( const vrClientState_t *vr );
 int			CG_VRH_Zones( void );
+qboolean	CG_VRH_GripHolds( void );
 int			CG_VRH_WeaponHand( void );
 int			CG_VRH_CmdButtons( void );
 void		CG_VRH_SayButtons( void );

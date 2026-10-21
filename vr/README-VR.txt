@@ -84,10 +84,13 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        left one
   Left trigger         alternate attack (the other trigger)
   Right grip           use (doors, switches, pick-ups) - at a holster, take
-                       out or put away (see HOLSTERS)
+                       out or put away (see HOLSTERS); holding your saber
+                       (Saber Grip: Hold), it holds it - no use meanwhile;
+                       let go and it's back in its holster
   Left grip            use the selected Force power (or, at your saber's
                        hilt, take hold of it with both hands; at a
-                       holster, take out or put away)
+                       holster, take out or put away; holding a saber
+                       (Saber Grip: Hold), it holds it - no Force meanwhile)
   A / B                jump / crouch
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
@@ -188,7 +191,10 @@ and while you hold the grip the saber is in both hands:
     move together, as they lay as you passed it (until you put it away,
     throw it or pass it on again; cg_vrSaberPitch doesn't tilt it). It's
     then your weapon hand: its trigger lights the saber and puts it out.
-    (That squeeze isn't use or the Force.)
+    (That squeeze isn't use or the Force.) With Saber Grip on Hold (as it
+    comes: see HOLSTERS) you're holding that grip all along, so let go of
+    it instead: the saber passes over, and the other hand keeps it while
+    you hold its grip.
   * The reverse grip: take hold with your second hand the other way round
     (its thumb toward the pommel), then pass it over: the blade comes out
     of the little finger's side of your fist, below it. To turn it back,
@@ -222,10 +228,18 @@ They're on your character's own hips and shoulders, so they fit any size
 of model: a hilt hangs at your belt, emitter up (or down: Hilts Hang,
 below), a pistol along your thigh, a rifle across your back from the
 shoulder.
-  * Reach for one: a hand within about 15 cm of what hangs at a hip, or
-    reached over your shoulder for what's on your back (from behind the
-    shoulder, not in front of it), feels a light tick where a squeeze would
-    do something there - a firmer one if there's something to take.
+  * Reach for one: your hand feels a light tick where a squeeze would do
+    something there - a firmer one if there's something to take. An empty
+    hand reaches what hangs at a hip from about 16 cm away, anywhere up or
+    down along it (your own hip needn't be just where your character's
+    is), and what's on your back reached over your shoulder from about
+    28 cm (no more than about 10 cm in front of the shoulder, nor below
+    it); a squeeze a quarter of a second after it's left a holster still
+    counts there, so pulling away as you squeeze isn't a miss. A hand
+    holding something has to be nearer to put it in or swap - about 15 cm
+    from a hip's, 22 cm over a shoulder and hardly in front of it - so a
+    hand resting at your side, squeezed for use, doesn't put your gun
+    away. Holster Reach (below) makes all of these further or nearer.
     Squeeze that hand's grip:
       - an empty hand takes out what's there. A hilt is in your fist where
         it closed on it, the way round you took it (the blade out of your
@@ -241,6 +255,37 @@ shoulder.
     your other hand's hilt still takes hold of it with both hands, even
     beside a holster; anywhere else the grips are use and the Force, as
     ever.
+  * Hold the grip (Saber Grip: Hold, as it comes): your saber stays in
+    your hand only while you hold that hand's grip, as in Blade & Sorcery.
+    Let go (a tenth of a second: a moment's slack doesn't count, and a
+    grip that's holding something only lets go once your hand has mostly
+    opened) and it goes straight back to its holster. Let go of a lit
+    saber and it switches off first, with its sound, then goes back (its
+    triggers do nothing meanwhile; mid-swing, or with a Force power's hand
+    out, it goes out as soon as the game lets it); in a saber lock or a
+    duel's countdown it stays in your hand, lit, till you squeeze and let
+    go again. Unlit, let go of over an empty holster, it goes in there
+    instead (from then on it goes back there): a light tick, and that
+    holster's ring bright, say where - over a full one, or lit, it goes
+    back where it's kept. With every holster full (a gun swapped into its
+    own) there's nowhere to put it: it stays in your hand, with a firm
+    buzz. Your headset's own menu doesn't make you let go. While a hand
+    holds a saber its grip only holds it: no use and no Force from that
+    grip, so to use something with that hand let go of the saber first
+    (it's back on your belt at once) - the other hand's grip is as ever.
+      - both hands on the hilt: let go with the first and the other goes
+        on holding it; let go with the other and it lets go of the hilt
+      - two sabers: each hand's grip holds its own. Let go of the second
+        and the first stays lit (with the first thrown, the second waits
+        for it to come back); let go of the first and both switch off,
+        and the one still in your hand becomes your first (light it again)
+        - a siege class's both go back. Let go of both and both go back.
+      - a saber that comes to your hand any other way (the stick, caught
+        after a throw with that grip let go, or a menu was up when you let
+        go) stays there until you squeeze that grip and let go
+    Saber Grip: Toggle is the other way: a squeeze takes it out, it stays
+    in your hand when you let go, and a squeeze at a holster puts it back.
+    Guns are always that way.
   * The quick draw: hold the trigger as you take a hilt out and it lights
     as it comes out. Otherwise it comes out unlit, and its trigger lights
     it.
@@ -279,18 +324,24 @@ shoulder.
       Holsters          Yes (No: weapons switch as they always have, and
                         only your hilt hangs on you - on your belt while
                         it's not in your hand, as everyone's does)
+      Saber Grip        Hold (above) or Toggle
+      Holster Reach     how far from a holster your hand can be: 1 as it
+                        comes, up to 2 (twice as far), down to 0.5
       Hilts Hang        Emitter Up or Emitter Down (taken out, a hilt is
                         held the way you took it)
       Holster Markers   a faint ring at each holster: Off, Near a Hand (as
                         a hand comes near it), or Always - brighter where a
-                        squeeze would do something
+                        squeeze would do something, or a saber you let go
+                        of would go
       Quick Draw        Yes (above) or No
       Reset Holsters    your saber back on your right hip, a second on your
                         left, the shoulders empty
-    In the console: cg_vrHolsters, cg_vrHiltsDown, cg_vrHolsterMarkers (0,
+    In the console: cg_vrHolsters, cg_vrGripHold (1 hold, 0 toggle),
+    cg_vrHolsterReach, cg_vrHiltsDown, cg_vrHolsterMarkers (0,
     1 or 2), cg_vrQuickDraw, cg_vrHolsterLayout (what each holster holds -
     right hip, left hip, right shoulder, left shoulder; "1,2,0,0"), and
-    cg_vrHolsterDraw 0 (nothing drawn hanging on anyone).
+    cg_vrHolsterDraw 0 (nothing drawn hanging on anyone - your holsters
+    still there to reach).
 Servers with holsters show "vrHolsters 1" in their server info; the server
 setting g_vrHolsters 0 turns them off. On normal servers, and without the
 headset, weapons switch as they always have.
@@ -416,8 +467,8 @@ server running this build: your real blade is the weapon.
     point at a slider and click or drag it, or push the stick up or down
     (the mouse wheel) to move it a tenth at a time, or pick it with the
     arrow keys and move it with left and right. Each slider shows its
-    value. A setting with named choices (Hilts Hang, Holster Markers)
-    steps on as you click it (or push the stick up, or press right or
+    value. A setting with named choices (Saber Grip, Hilts Hang, Holster
+    Markers) steps on as you click it (or push the stick up, or press right or
     Enter) and back as you right-click it (the other trigger), push the
     stick down, or press left.
   * Cutting someone ends your spawn protection, like attacking always has.

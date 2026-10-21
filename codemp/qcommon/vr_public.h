@@ -36,7 +36,13 @@ General Public License version 2, like the rest of OpenJK.
 												//     triggers press nothing; 2: either attacks),
 												//     ext.VR_SetCmdButtons,
 												//     ext.VR_GenericCmd, vrClientState_t.trigger
-												//     (holsters)
+												//     (holsters); VR_GRAB_HOLDS (either way round
+												//     with -11 builds: not set or not read, as before)
+
+// ext.VR_SetGrabZones( hands | VR_GRAB_HOLDS ): the grips hold what they've
+// taken hold of (holsters, Saber Grip: Hold) - a grab is let go of only once
+// the hand's mostly open
+#define VR_GRAB_HOLDS			( 1 << 2 )
 
 // ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
 // drawn is stretched across the window again, as always (any other x is a

@@ -5,10 +5,17 @@ OpenJK VR (multiplayer) - holsters: your weapons hang on your body
 Four holsters (bg_vrholster.h): your right hip, your left hip, and over
 your right and left shoulders (what's in those hangs on your back). Each
 holds one weapon, any weapon; your saber starts on your right hip, a
-second one on your left, the shoulders empty. Reach a hand to one - within
-15 cm of what hangs at a hip, over the shoulder for a shoulder's - and you
+second one on your left, the shoulders empty. Reach a hand to one and you
 feel a tick (a firmer one if it holds something) where a squeeze would do
-something there; squeeze that hand's grip and:
+something there: an empty hand, to take out what's there, within 16 cm of
+what hangs at a hip, anywhere up or down along it, or within 28 cm of what's
+on your back, reached over the shoulder (no more than 4 units in front of
+it, nor below it) - and a squeeze a quarter of a second after it's gone
+from there still counts (pulling away as you squeeze); a hand holding
+something, to put it in or swap, nearer (15 cm, 22 cm hardly in front of
+the shoulder: a hand at your side squeezed for Use doesn't put your gun
+away). cg_vrHolsterReach (0.5 to 2) scales them all. Squeeze that hand's
+grip and:
 
 - an empty hand takes what's in it: a hilt where your hand closed on it,
   the right way round or reversed as you took it, unlit (the quick draw:
@@ -21,6 +28,29 @@ something there; squeeze that hand's grip and:
 A squeeze at your other hand's hilt takes hold of it as ever, even beside a
 holster (cg_vrbody.c, CG_VRB_TwoHand); elsewhere the grips are Use and the
 Force, as ever.
+
+Hold the grip (cg_vrGripHold, on): a saber stays in your hand while you hold
+that hand's grip (the engine lets go of a grip that holds only once the hand's
+mostly open: VR_GRAB_HOLDS). Let go (VRH_LETGO_MS: a moment's slack isn't)
+and it goes back to its holster - or, unlit, into an empty one your hand's at
+as you let go (a light tick there, as for putting it in) - switched off first
+if it's lit: the game's own switch, with its sound, asked for as the game
+will take it (after an attack, a Force power's hand; again if turned down),
+the saber waiting in your hand meanwhile, the triggers doing nothing; in a
+saber lock or a duel's countdown, or not off in VRH_OFF_MS, it stays in your
+hand. Nowhere to go (a gun swapped into its holster, every other full): it
+stays in your hand, a firm buzz. Held with both hands, let go with the first
+and the other goes on holding it (CG_VR_PassSaberOver); let go of the second
+of two sabers and the first stays lit (as the first's grip slackens a moment
+too, once it's held again; the first thrown, once it's back); let go of the
+first, the second still in hand, and both go out and the second becomes the
+first (a siege class's: both go back). A saber that comes to your hand any
+other way (the stick, caught after a throw with the grip let go, a menu
+closed) stays till you squeeze its grip and let go; a system menu over the
+game doesn't let go of anything. While a hand holds a saber its squeeze only
+holds it - not Use nor the Force - and the holsters take nothing from it.
+Off: a squeeze takes a saber out and a squeeze at a holster puts it away, as
+for everything else.
 
 One weapon at a time, as the game has it: taking a gun puts a saber in hand
 back in its holster, taking a saber puts the gun back. The stick still
@@ -61,8 +91,21 @@ General Public License version 2, like the rest of OpenJK.
 #include "cg_local.h"
 #include "game/bg_vrholster.h"
 
-#define VRH_REACH_HIP		0.15f	// m: a hand this close to what hangs at a hip is at that holster
-#define VRH_REACH_SHOULDER	0.22f	// m: ...this close to what hangs on your back, reached over the shoulder (not in front of it)
+#define VRH_REACH_HIP		0.16f	// m: an empty hand this close to what hangs at a hip...
+#define VRH_HIP_SPAN		5.0f	// ...anywhere this far above or below where it's taken (along the body's up), takes it out
+#define VRH_REACH_SHOULDER	0.28f	// m: ...this close to what hangs on your back, reached over the shoulder...
+#define VRH_SHOULDER_FRONT	4.0f	// ...the hand no further than this in front of the shoulder's tag...
+#define VRH_SHOULDER_BELOW	4.0f	// ...nor below it
+#define VRH_PUT_HIP			0.15f	// m: a hand holding something puts it in (or swaps) this close to where it's taken at a hip...
+#define VRH_PUT_SHOULDER	0.22f	// m: ...or on your back, reached over the shoulder...
+#define VRH_PUT_FRONT		1.0f	// ...the hand no further than this in front of the shoulder's tag...
+#define VRH_PUT_BELOW		2.0f	// ...nor below it
+#define VRH_GRACE_MS		250		// an empty hand gone from a holster is still at it this long (a squeeze as you pull away)
+#define VRH_LETGO_MS		100		// hold the grip: a grip let go this long lets go of the saber (a moment's slack doesn't)
+#define VRH_OFF_MS			2000	// ...a lit saber let go of waits this long at most for the game to switch it off...
+#define VRH_SEEN_MS			100		// ...the server's done the command that asked once it's done one this much later...
+#define VRH_REPEAT_MS		350		// ...and it's asked again (turned down) no sooner than this (the server takes the same command again only after 300 ms)
+#define VRH_GAP_MS			1000	// ...the hands not worked out this long (the body not drawn): what's in them stays
 #define VRH_SEND_MS			2500	// what's in your holsters goes out with your info no more often than this
 #define VRH_SWAP_MS			5000	// your sabers changing over: given up on if the server hasn't by then
 #define VRH_DRAW_MS			1500	// a quick draw waits this long at most for the game to have the saber out
@@ -129,7 +172,20 @@ static struct {
 	int			wantTime;					// ...then (cg.time; 0: none): it's the one in hand till the game's switch is done
 	int			at[2];						// the holster each hand is at, where a squeeze does something (-1: none)
 	int			zones;						// hands whose squeeze takes, puts or swaps now
+	int			graceAt[2];					// the holster each hand was last really at (-1: none)...
+	int			graceTime[2];				// ...then (cg.time)
 	qboolean	grabWas[2];					// that hand's grip was held as a grab last frame
+	qboolean	held[2];					// hold the grip: that hand's grip holds the saber it has (let go: it goes back)
+	int			slackTime[2];				// ...its grip let go since (cg.time; 0: held) - not yet long enough to let go (held only)...
+	int			slackNear[2];				// ...and where its saber goes, let go of as the grip opened (CG_VRH_DropNear then)
+	int			holdZones;					// ...hands holding a saber: their squeeze holds it (a grab), not Use or the Force
+	int			dropNear[2];				// ...the holster that hand's saber would go in, let go of now (-1: where it's kept)
+	int			dropTime[MAX_SABERS];		// ...saber s let go of lit then, switching off in the hand (0: not)...
+	int			dropAt[MAX_SABERS];			// ...and the holster it then goes to (-1: where it's kept)
+	int			offTime;					// ...cg.time the game was asked to switch it off, not seen through yet (0: none on its way)...
+	int			offAskTime;					// ...and when it last was
+	qboolean	firstGone;					// ...the first let go of, the second maybe still in hand: CG_VRH_FirstGone
+	int			gripTime;					// ...cg.time the hands' grips were last worked out
 	int			swapTime;					// cg.time you asked for your sabers to change over (0: not waiting)
 	int			swapsSeen;					// how often they've changed over, as the server last said ("vs")...
 	qboolean	swapsKnown;					// ...as this game has it (from its first frame)
@@ -670,7 +726,7 @@ void CG_VRH_AddHolstered( centity_t *cent, vec3_t body[3], int renderfx ) {
 	int i;
 
 	if ( n < 0 || n >= MAX_CLIENTS || !cent->ghoul2 || cent->localAnimIndex > 1 ||
-		( cent->currentState.eFlags & ( EF_DEAD | EF_NODRAW ) ) || !cg_vrHolsterDraw.integer ) {
+		( cent->currentState.eFlags & ( EF_DEAD | EF_NODRAW ) ) ) {
 		return;
 	}
 	if ( !mine && ( cent->currentState.powerups & ( 1 << PW_CLOAKED ) ) ) {
@@ -683,13 +739,14 @@ void CG_VRH_AddHolstered( centity_t *cent, vec3_t body[3], int renderfx ) {
 		vrhModel_t *m;
 
 		if ( mine ) {
-			// (an empty holster too: where things go in)
+			// (an empty holster too: where things go in - and where they hang
+			// with nothing drawn hanging, cg_vrHolsterDraw 0: they're there to reach)
 			if ( !CG_VRH_HangPose( cent, cent->turAngles, body, i, item, n, &vrh.hang[i] ) ) {
 				CG_VRH_HangPose( cent, cent->turAngles, body, i, VR_HOLSTER_EMPTY, n, &vrh.hang[i] );
 			}
 			vrh.hangTime = cg.time;
 		}
-		if ( item == VR_HOLSTER_EMPTY || !( m = CG_VRH_ItemModel( n, item ) ) ) {
+		if ( item == VR_HOLSTER_EMPTY || !cg_vrHolsterDraw.integer || !( m = CG_VRH_ItemModel( n, item ) ) ) {
 			continue;
 		}
 		if ( mine ) {
@@ -743,9 +800,25 @@ static void CG_VRH_Ring( const vec3_t p, const vec3_t n, float r, float alpha ) 
 	}
 }
 
+// How much further or nearer than as it comes a hand reaches a holster
+// (cg_vrHolsterReach: 0.5 to 2).
+static float CG_VRH_ReachScale( void ) {
+	return Com_Clamp( 0.5f, 2.0f, cg_vrHolsterReach.value );
+}
+
+// How far a hand reaches holster i (units): an empty hand taking out what
+// hangs at a hip, 16 cm; on your back, 28 cm; a hand putting something in (or
+// swapping), 15 and 22 - as cg_vrHolsterReach scales them.
+static float CG_VRH_Reach( const vrClientState_t *vr, int i, qboolean take ) {
+	const qboolean shoulder = (qboolean)( i == VR_HOLSTER_SHOULDER_R || i == VR_HOLSTER_SHOULDER_L );
+
+	return vr->worldScale * CG_VRH_ReachScale() * ( shoulder ? ( take ? VRH_REACH_SHOULDER : VRH_PUT_SHOULDER ) :
+		( take ? VRH_REACH_HIP : VRH_PUT_HIP ) );
+}
+
 // Your holsters' markers (cg_vrHolsterMarkers: 0 none, 1 where a hand is
 // near, 2 always): a faint ring round each - brighter where a squeeze would
-// do something now.
+// do something now, or a saber let go of would go.
 static void CG_VRH_AddMarkers( const vrClientState_t *vr ) {
 	int i, h;
 
@@ -759,14 +832,13 @@ static void CG_VRH_AddMarkers( const vrClientState_t *vr ) {
 		if ( !g->valid ) {
 			continue;
 		}
-		reach = vr->worldScale * ( ( i == VR_HOLSTER_SHOULDER_R || i == VR_HOLSTER_SHOULDER_L ) ? VRH_REACH_SHOULDER :
-			VRH_REACH_HIP );
+		reach = CG_VRH_Reach( vr, i, qtrue );
 		for ( h = 0; h < 2; h++ ) {
 			vec3_t pos;
 			if ( CG_VR_HandGrip( h, pos, NULL ) ) {
 				near = Q_max( near, 1.0f - Distance( pos, g->grab ) / ( 2.5f * reach ) );
 			}
-			live |= (qboolean)( vrh.at[h] == i );
+			live |= (qboolean)( vrh.at[h] == i || vrh.dropNear[h] == i );
 		}
 		if ( cg_vrHolsterMarkers.integer == 1 && near <= 0.0f && !live ) {
 			continue;
@@ -885,56 +957,126 @@ static qboolean CG_VRH_Can( int h, int holding, int i ) {
 }
 
 // Whether your hand (its controller's grip at pos) reaches holster i, and how
-// near it is: what hangs at a hip within 15 cm; over a shoulder, within 22
-// cm, the hand not in front of the shoulder nor below it.
-static qboolean CG_VRH_Reaches( const vrClientState_t *vr, int i, const vec3_t pos, float *dist ) {
+// near it is. An empty hand, to take out what's there (take): what hangs at a
+// hip within 16 cm, anywhere up or down along it (your real hip needn't be
+// just where your character's is); over a shoulder, within 28 cm, the hand not
+// much in front of the shoulder nor below it. A hand holding something, to put
+// it in or swap: nearer - 15 cm of where a hip's is taken, 22 over a shoulder
+// and hardly in front of it or below (a hand resting at your side, a squeeze
+// for Use, doesn't put your gun away). As cg_vrHolsterReach scales them all.
+static qboolean CG_VRH_Reaches( const vrClientState_t *vr, int i, const vec3_t pos, qboolean take, float *dist ) {
 	const vrhHang_t *g = &vrh.hang[i];
 	const qboolean shoulder = (qboolean)( i == VR_HOLSTER_SHOULDER_R || i == VR_HOLSTER_SHOULDER_L );
+	const float scale = CG_VRH_ReachScale();
 	vec3_t rel;
 
 	if ( !g->valid ) {
 		return qfalse;
 	}
 	VectorSubtract( pos, g->grab, rel );
+	if ( !shoulder && take ) {
+		const float span = scale * VRH_HIP_SPAN;
+		VectorMA( rel, -Com_Clamp( -span, span, DotProduct( rel, g->up ) ), g->up, rel );
+	}
 	*dist = VectorLength( rel );
-	if ( *dist > vr->worldScale * ( shoulder ? VRH_REACH_SHOULDER : VRH_REACH_HIP ) ) {
+	if ( *dist > CG_VRH_Reach( vr, i, take ) ) {
 		return qfalse;
 	}
 	if ( shoulder ) {
 		VectorSubtract( pos, g->anchor, rel );
-		if ( DotProduct( rel, g->fwd ) > 1.0f || DotProduct( rel, g->up ) < -2.0f ) {
+		if ( DotProduct( rel, g->fwd ) > scale * ( take ? VRH_SHOULDER_FRONT : VRH_PUT_FRONT ) ||
+			DotProduct( rel, g->up ) < -scale * ( take ? VRH_SHOULDER_BELOW : VRH_PUT_BELOW ) ) {
 			return qfalse;
 		}
 	}
 	return qtrue;
 }
 
+// Hold the grip (cg_vrGripHold): a saber stays in your hand while you hold
+// its grip, and goes back to its holster when you let go.
+static qboolean CG_VRH_GripHold( void ) {
+	return (qboolean)( cg_vrGripHold.integer != 0 );
+}
+
+// The saber hand h holds (0, 1; -1: none) - not a thrown one (it comes back
+// to that hand, caught as the game has it).
+static int CG_VRH_HandSaber( int h ) {
+	if ( CG_VR_SaberHand( 0 ) == h && !cg.predictedPlayerState.saberInFlight ) {
+		return 0;
+	}
+	return ( CG_VR_SaberHand( 1 ) == h ) ? 1 : -1;
+}
+
+// Holding the grip: where saber s, let go of by hand h now, goes if not back
+// where it's kept - the holster the hand's at (the nearest, as near as to put
+// something in), if that's empty (-1: none; at a full one, where it's kept).
+// Only unlit, as when it's put away with a squeeze: a lit one let go of goes
+// back where it's kept, not moved by a swing past an empty holster.
+static int CG_VRH_DropNear( const vrClientState_t *vr, int h, int s ) {
+	float best = 1e9f, d;
+	vec3_t pos;
+	int i, nearest = -1;
+
+	if ( CG_VRH_Lit( s ) || cg.time - vrh.hangTime < 0 || cg.time - vrh.hangTime > 100 || !CG_VR_HandGrip( h, pos, NULL ) ) {
+		return -1;	// (lit; or your body not drawn a while: where they hang isn't known)
+	}
+	for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {
+		if ( CG_VRH_Reaches( vr, i, pos, qfalse, &d ) && d < best ) {
+			best = d;
+			nearest = i;
+		}
+	}
+	return ( nearest >= 0 && vrh.layout[nearest] == VR_HOLSTER_EMPTY ) ? nearest : -1;
+}
+
 // Where each hand is at a holster a squeeze would do something at - the
 // grabs the engine is to take its grip as there (a hand your other hand's
 // hilt has first: cg_vrbody.c). A tick in the hand as it gets there (firmer
-// for something to take).
+// for something to take). An empty hand gone from it a moment ago
+// (VRH_GRACE_MS: pulled away, or its tracking lost, as the grip's squeezed),
+// still at it. Holding the grip, a hand with a saber in it is at none: its
+// grip holds the saber - but at an empty holster it would go in, let go of
+// there, the light tick.
 static void CG_VRH_FindZones( const vrClientState_t *vr ) {
 	const int claimed = CG_VR_TwoHandZones();
 	int h, i;
 
 	vrh.zones = 0;
 	for ( h = 0; h < 2; h++ ) {
-		const int was = vrh.at[h], holding = CG_VRH_InHand( h );
+		const int was = vrh.at[h], wasNear = vrh.dropNear[h], holding = CG_VRH_InHand( h ), s = CG_VRH_HandSaber( h );
+		const qboolean take = (qboolean)( holding == VR_HOLSTER_EMPTY );
 		float best = 1e9f, d;
 		vec3_t pos;
 
-		vrh.at[h] = -1;
-		if ( ( claimed & ( 1 << h ) ) || cg.time - vrh.hangTime < 0 || cg.time - vrh.hangTime > 100 ||
-			!CG_VR_HandGrip( h, pos, NULL ) ) {
+		vrh.at[h] = vrh.dropNear[h] = -1;
+		if ( ( claimed & ( 1 << h ) ) || cg.time - vrh.hangTime < 0 || cg.time - vrh.hangTime > 100 ) {
+			vrh.graceAt[h] = -1;	// (or your body not drawn a while: where they hang isn't known)
 			continue;
 		}
-		for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {
-			if ( CG_VRH_Reaches( vr, i, pos, &d ) && d < best && CG_VRH_Can( h, holding, i ) ) {
-				best = d;
-				vrh.at[h] = i;
+		if ( CG_VRH_GripHold() && s >= 0 ) {
+			vrh.graceAt[h] = -1;
+			vrh.dropNear[h] = ( vrh.held[h] && vrh.slackTime[h] ) ? vrh.slackNear[h] : CG_VRH_DropNear( vr, h, s );	// (its grip opened: where it was then)
+			if ( vrh.dropNear[h] >= 0 && vrh.dropNear[h] != wasNear ) {
+				CG_VR_Feel( h, 0.18f, 18, 0.0f, 0 );
+			}
+			continue;
+		}
+		if ( CG_VR_HandGrip( h, pos, NULL ) ) {
+			for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {
+				if ( CG_VRH_Reaches( vr, i, pos, take, &d ) && d < best && CG_VRH_Can( h, holding, i ) ) {
+					best = d;
+					vrh.at[h] = i;
+				}
 			}
 		}
-		if ( vrh.at[h] < 0 ) {
+		if ( vrh.at[h] >= 0 ) {
+			vrh.graceAt[h] = vrh.at[h];
+			vrh.graceTime[h] = cg.time;
+		} else if ( take && vrh.graceAt[h] >= 0 && cg.time - vrh.graceTime[h] >= 0 && cg.time - vrh.graceTime[h] < VRH_GRACE_MS &&
+			CG_VRH_Can( h, holding, vrh.graceAt[h] ) ) {
+			vrh.at[h] = vrh.graceAt[h];	// (just gone from it)
+		} else {
+			vrh.graceAt[h] = -1;
 			continue;
 		}
 		vrh.zones |= 1 << h;
@@ -1004,6 +1146,227 @@ static void CG_VRH_Squeeze( const vrClientState_t *vr, int h, int i ) {
 		vrh.swapTime = cg.time ? cg.time : 1;
 	}
 	CG_VR_Feel( h, 0.6f, 30, 0.2f, 60 );	// (a bump: out, or in)
+}
+
+/*
+--------------------------------------------------------------------------------
+Hold the grip (cg_vrGripHold)
+--------------------------------------------------------------------------------
+*/
+
+// Saber s, let go of, back where it goes: the empty holster the hand was at
+// as it let go (CG_VRH_DropNear), or where it's kept (CG_VRH_HomeSabers:
+// kept nowhere, its own hip or the first empty one). The first: what of the
+// second, if it's still in hand, is for CG_VRH_FirstGone.
+static void CG_VRH_Drop( int s ) {
+	const int i = vrh.dropAt[s];
+
+	if ( i >= 0 ) {
+		CG_VRH_Hang( i, VR_HOLSTER_SABER + s );	// (unlit, at once: still empty)
+	}
+	CG_VR_PutSaber( s );
+	vrh.dropTime[s] = 0;
+	if ( s == 0 ) {
+		vrh.firstGone = qtrue;
+	}
+	CG_VR_Log( "holsters: let go of your %s saber - back in %s\n", s ? "second" : "first",
+		( i >= 0 && vrh.layout[i] == VR_HOLSTER_SABER + s ) ? va( "holster %i", i ) : "its holster" );
+}
+
+// The first of two let go of (CG_VRH_Drop), the second still in hand: once
+// its hand isn't letting go of it too (both let go of at once, a moment
+// apart: nothing more), the server's to make it the first - a siege class's
+// (they don't change over) back in its holster too.
+static void CG_VRH_FirstGone( void ) {
+	const int h1 = CG_VR_SaberHand( 1 );
+
+	if ( !vrh.firstGone ) {
+		return;
+	}
+	if ( CG_VR_SaberHand( 0 ) >= 0 || h1 < 0 ) {
+		vrh.firstGone = qfalse;	// (taken again; or the second gone too)
+		return;
+	}
+	if ( vrh.held[h1] && vrh.slackTime[h1] ) {
+		return;	// (its grip let go a moment: letting go of it too?)
+	}
+	vrh.firstGone = qfalse;
+	if ( !CG_VRH_CanSwap() ) {
+		CG_VR_PutSaber( 1 );
+	} else if ( !vrh.swapTime ) {
+		trap->ext.VR_GenericCmd( GENCMD_VR_SABERSWAP );
+		vrh.swapTime = cg.time ? cg.time : 1;
+	}
+}
+
+// Asks the game to switch your sabers off (its own switch: their sound, for
+// everyone - a generic command, not on the command that says your hands are
+// empty, or the rule that keeps them unlit would have them out first, without
+// a sound), for one let go of lit: once at a time (a second, the first not
+// through yet, would light them again), and only when the game would take it
+// (Cmd_ToggleSaber_f) - not mid-attack, nor with a Force power's hand out,
+// nor within VRH_REPEAT_MS of the last time (the same command again so soon,
+// the server doesn't take); never in a saber lock or a duel's countdown.
+// Turned down (the server's done it, and it's still lit), it's asked again.
+static void CG_VRH_AskOff( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+
+	if ( vrh.offTime || ps->weaponTime > 0 || ps->forceHandExtend != HANDEXTEND_NONE || ps->saberLockTime >= cg.time ||
+		ps->duelTime >= cg.time || ( vrh.offAskTime && cg.time - vrh.offAskTime >= 0 && cg.time - vrh.offAskTime < VRH_REPEAT_MS ) ) {
+		return;
+	}
+	trap->ext.VR_GenericCmd( GENCMD_SABERSWITCH );
+	vrh.offTime = vrh.offAskTime = cg.time ? cg.time : 1;
+}
+
+// Hand h let go of saber s: back where it goes - the empty holster the hand
+// was at as its grip opened (unlit); else where it's kept (CG_VRH_Drop). Lit, the game's own switch
+// puts it out first (CG_VRH_AskOff), and it waits in the hand till that's
+// gone through (CG_VRH_FinishDrops). The second of two, the first still in
+// your hand: that one's still lit, so the second goes out on its own (as the
+// rules have it - one of two in hand lights alone), its sound yours alone.
+// Both let go of at once: one switch puts both out.
+static void CG_VRH_LetGo( int h, int s ) {
+	const qboolean lit = CG_VRH_Lit( s );
+	const int other = CG_VR_SaberHand( s ^ 1 );
+	const qboolean otherStays = (qboolean)( other >= 0 && !vrh.dropTime[s ^ 1] );
+
+	vrh.dropAt[s] = vrh.slackNear[h];
+	CG_VR_Feel( h, 0.3f, 20, 0.0f, 0 );	// (a soft bump: let go)
+	if ( lit && !( s == 1 && otherStays ) ) {
+		vrh.dropTime[s] = cg.time ? cg.time : 1;
+		CG_VRH_AskOff();
+		return;
+	}
+	if ( lit && cgs.clientinfo[cg.clientNum].saber[s].soundOff ) {
+		trap->S_StartSound( NULL, cg.clientNum, CHAN_AUTO, cgs.clientinfo[cg.clientNum].saber[s].soundOff );
+	}
+	CG_VRH_Drop( s );
+}
+
+// Sabers let go of lit: once the game has them out (or they've gone some
+// other way - the stick, say), back where they go; meanwhile its switch asked
+// for as it'll take it (CG_VRH_AskOff). The game won't now - a saber lock, a
+// duel's countdown - or not in VRH_OFF_MS: it stays in your hand as it is,
+// till squeezed and let go again.
+static void CG_VRH_FinishDrops( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	int s;
+
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		if ( !vrh.dropTime[s] ) {
+			continue;
+		}
+		if ( !CG_VRH_Lit( s ) ) {
+			CG_VRH_Drop( s );
+			continue;
+		}
+		if ( ps->saberLockTime >= cg.time || ps->duelTime >= cg.time || cg.time - vrh.dropTime[s] < 0 ||
+			cg.time - vrh.dropTime[s] >= VRH_OFF_MS ) {
+			vrh.dropTime[s] = 0;
+			CG_VR_Log( "holsters: your %s saber can't be switched off now - it stays in your hand\n", s ? "second" : "first" );
+			continue;
+		}
+		CG_VRH_AskOff();
+	}
+}
+
+// Whether saber s has nowhere to go back to: no holster it's kept in, none
+// empty (a gun swapped into its holster, the rest full).
+static qboolean CG_VRH_Homeless( int s ) {
+	int i;
+
+	for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {
+		if ( vrh.layout[i] == VR_HOLSTER_SABER + s || vrh.layout[i] == VR_HOLSTER_EMPTY ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// Each frame, holding the grip: which hands' grips hold a saber (a squeeze
+// there is a grab, not Use or the Force), and a hand that's let go of one -
+// VRH_LETGO_MS on end, a moment's slack isn't - lets it go; held with both
+// hands, the first one's to the other.
+static void CG_VRH_GripFrame( const vrClientState_t *vr ) {
+	int h, s;
+
+	vrh.holdZones = 0;
+	if ( !CG_VRH_GripHold() || !vr || cg.time - vrh.gripTime < 0 || cg.time - vrh.gripTime > VRH_GAP_MS ) {
+		// (off; or your hands not worked out a while - a menu up, the headset
+		// off: let go meanwhile, what's in your hands is there till squeezed
+		// and let go)
+		vrh.held[0] = vrh.held[1] = qfalse;
+		vrh.dropTime[0] = vrh.dropTime[1] = 0;
+	}
+	vrh.gripTime = cg.time;
+	if ( vrh.offTime && ( cg.time - vrh.offTime < 0 || cg.time - vrh.offTime >= VRH_OFF_MS ||
+		( cg.snap && cg.snap->ps.commandTime - vrh.offTime >= VRH_SEEN_MS ) ) ) {
+		vrh.offTime = 0;	// (the server's done the switch asked for - through, or turned down: asked again if it's still to go)
+	}
+	if ( !CG_VRH_GripHold() || !vr ) {
+		CG_VRH_FirstGone();
+		return;
+	}
+	CG_VRH_FinishDrops();
+	for ( h = 0; h < 2; h++ ) {
+		s = CG_VRH_HandSaber( h );
+		if ( s < 0 ) {
+			// none in it (thrown, it's caught as the game has it: then in hand
+			// till squeezed and let go) - or on your first saber's hilt with
+			// both hands: held as the first hand passes it over
+			vrh.held[h] = (qboolean)( vr->grabbing[h] && CG_VR_BothHandsHold() );
+			vrh.slackTime[h] = 0;
+			continue;
+		}
+		vrh.holdZones |= 1 << h;
+		if ( vr->grabbing[h] ) {
+			vrh.held[h] = qtrue;
+			vrh.slackTime[h] = 0;
+			vrh.dropTime[s] = 0;	// (taken hold of again while it went out: it stays, out)
+			CG_VR_PassSaberOver( qfalse );	// (...or as it went over to the other hand: it stays in this one)
+			continue;
+		}
+		if ( !vrh.held[h] ) {
+			continue;	// (never held by its grip - the stick brought it: in hand till squeezed and let go; or let go of, going out)
+		}
+		if ( !vrh.slackTime[h] ) {
+			vrh.slackTime[h] = cg.time ? cg.time : 1;
+			vrh.slackNear[h] = CG_VRH_DropNear( vr, h, s );	// (where it goes, let go of: where the hand is as the grip opens)
+		}
+		if ( cg.time - vrh.slackTime[h] >= 0 && cg.time - vrh.slackTime[h] < VRH_LETGO_MS ) {
+			continue;	// (a moment's slack)
+		}
+		if ( CG_VR_BothHandsHold() ) {
+			CG_VR_PassSaberOver( qtrue );	// (the other hand on the first's hilt too: it goes on holding it, once settled)
+			continue;
+		}
+		if ( s == 1 ) {
+			const int h0 = CG_VR_SaberHand( 0 );
+			if ( h0 >= 0 && vrh.held[h0] && vrh.slackTime[h0] ) {
+				continue;	// (the first's hand letting go a moment too: as that goes, so does this)
+			}
+			if ( cg.predictedPlayerState.saberInFlight && CG_VRH_Lit( 1 ) ) {
+				continue;	// (the first thrown: this one lit isn't put away till it's back)
+			}
+		}
+		vrh.held[h] = qfalse;
+		vrh.slackTime[h] = 0;
+		if ( CG_VRH_Homeless( s ) ) {
+			CG_VR_Feel( h, 0.6f, 50, 0.0f, 0 );	// (nowhere to put it: it stays, a firm buzz)
+			CG_VR_Log( "holsters: let go of your %s saber, every holster full - it stays in your hand\n", s ? "second" : "first" );
+			continue;
+		}
+		CG_VRH_LetGo( h, s );
+	}
+	CG_VRH_FirstGone();
+}
+
+// Whether your grips hold your sabers now (cg_vrGripHold, holsters in play):
+// held with both hands, letting go with the first passes it to the other
+// (cg_vrbody.c) - a squeeze doesn't.
+qboolean CG_VRH_GripHolds( void ) {
+	return (qboolean)( vrh.on && CG_VRH_On() && CG_VRH_GripHold() );
 }
 
 /*
@@ -1190,9 +1553,11 @@ void CG_VRH_HandsFrame( const vrClientState_t *vr ) {
 	CG_VRH_ReadLayout();
 	CG_VRH_Swapped();
 	if ( !vrh.on ) {
-		vrh.zones = 0;
-		vrh.at[0] = vrh.at[1] = -1;
+		vrh.zones = vrh.holdZones = 0;
+		vrh.at[0] = vrh.at[1] = vrh.graceAt[0] = vrh.graceAt[1] = vrh.dropNear[0] = vrh.dropNear[1] = -1;
 		vrh.later[0] = vrh.later[1] = 0;
+		vrh.held[0] = vrh.held[1] = qfalse;	// (a menu up, say: after it, what's in your hands is there till squeezed and let go)
+		vrh.dropTime[0] = vrh.dropTime[1] = 0;
 		vrh.drawTime = vrh.wantTime = 0;
 		vrh.weapon = WP_NONE;
 		CG_VRH_SendLayout( qfalse );
@@ -1205,10 +1570,12 @@ void CG_VRH_HandsFrame( const vrClientState_t *vr ) {
 	for ( h = 0; h < 2; h++ ) {
 		const qboolean grabbing = (qboolean)( vr && vr->grabbing[h] );
 		if ( vrh.later[h] && !vrh.swapTime ) {
-			// a squeeze while your sabers changed over (both taken at once, say): now they have
-			const int i = vrh.later[h] - 1;
+			// a squeeze while your sabers changed over (both taken at once, say):
+			// now they have - holding the grip, a saber's taken out only if its
+			// grip's still held
+			const int i = vrh.later[h] - 1, item = CG_VRH_In( i );
 			vrh.later[h] = 0;
-			if ( alive && vr ) {
+			if ( alive && vr && !( CG_VRH_GripHold() && !grabbing && item != VR_HOLSTER_EMPTY && item < VR_HOLSTER_WEAPON ) ) {
 				CG_VRH_Squeeze( vr, h, i );
 			}
 		}
@@ -1224,10 +1591,13 @@ void CG_VRH_HandsFrame( const vrClientState_t *vr ) {
 		vrh.grabWas[h] = grabbing;
 	}
 	if ( alive && vr ) {
+		CG_VRH_GripFrame( vr );
 		CG_VRH_FindZones( vr );
 	} else {
-		vrh.zones = 0;
-		vrh.at[0] = vrh.at[1] = -1;
+		vrh.zones = vrh.holdZones = 0;
+		vrh.at[0] = vrh.at[1] = vrh.graceAt[0] = vrh.graceAt[1] = vrh.dropNear[0] = vrh.dropNear[1] = -1;
+		vrh.held[0] = vrh.held[1] = qfalse;
+		vrh.dropTime[0] = vrh.dropTime[1] = 0;
 	}
 	CG_VRH_QuickDraw();
 	CG_VRH_SendLayout( qfalse );
@@ -1239,16 +1609,18 @@ static qboolean CG_VRH_Live( void ) {
 	return (qboolean)( vrh.on && CG_VRH_On() );
 }
 
-// The hands whose squeeze the engine is to take as a grab (a holster's).
+// The hands whose squeeze the engine is to take as a grab: a holster's; and
+// holding the grip, a hand with a saber in it (its squeeze holds it).
 int CG_VRH_Zones( void ) {
-	return CG_VRH_Live() ? vrh.zones : 0;
+	return CG_VRH_Live() ? ( vrh.zones | vrh.holdZones ) : 0;
 }
 
 // The hand whose trigger attacks (ext.VR_SetWeaponHand): with holsters, -1
 // while your hands are empty (a saber chosen, none in hand), what you took
-// out or put away is on its way (the game still switching), or your sabers
-// are changing over; 2: two sabers in your hands, either trigger lights or
-// puts out both. -2: not for holsters to say.
+// out or put away is on its way (the game still switching), your sabers are
+// changing over, or one let go of lit is going out (no throwing it meanwhile);
+// 2: two sabers in your hands, either trigger lights or puts out both. -2:
+// not for holsters to say.
 int CG_VRH_WeaponHand( void ) {
 	const int want = CG_VRH_Want(), h0 = CG_VR_SaberHand( 0 ), h1 = CG_VR_SaberHand( 1 );
 
@@ -1261,7 +1633,7 @@ int CG_VRH_WeaponHand( void ) {
 	if ( want != WP_SABER ) {
 		return CG_VR_GunHand();	// (a gun, fists)
 	}
-	if ( vrh.swapTime || h0 < 0 ) {
+	if ( vrh.swapTime || h0 < 0 || vrh.dropTime[0] || vrh.dropTime[1] ) {
 		return -1;
 	}
 	return ( h1 >= 0 && h1 != h0 ) ? 2 : h0;
@@ -1296,6 +1668,12 @@ int CG_VRH_CmdButtons( void ) {
 // each frame; cg_view.c: each frame of the loading screen; cg_main.c: as the
 // game's loaded, for the first command).
 void CG_VRH_SayButtons( void ) {
+	if ( !CG_VR() ) {
+		// (out of VR this frame - a menu up, the headset off: let go meanwhile,
+		// what's in your hands is there after it till squeezed and let go)
+		vrh.held[0] = vrh.held[1] = qfalse;
+		vrh.dropTime[0] = vrh.dropTime[1] = 0;
+	}
 	if ( CG_VR_Engine() && trap->ext.VR_SetCmdButtons ) {
 		trap->ext.VR_SetCmdButtons( CG_VRH_CmdButtons() );
 	}
@@ -1319,7 +1697,8 @@ void CG_VRH_EndFrame( const vrClientState_t *vr ) {
 
 void CG_VRH_Init( void ) {
 	memset( &vrh, 0, sizeof( vrh ) );
-	vrh.at[0] = vrh.at[1] = -1;
+	vrh.at[0] = vrh.at[1] = vrh.graceAt[0] = vrh.graceAt[1] = vrh.dropNear[0] = vrh.dropNear[1] = -1;
+	vrh.dropAt[0] = vrh.dropAt[1] = -1;
 	vrh.weapon = WP_NONE;
 	trap->Cvar_Register( &vrh.vrh, "vrh", "", CVAR_USERINFO | CVAR_TEMP );
 	vrh.ringShader = trap->R_RegisterShader( "gfx/vr/holster_ring" );

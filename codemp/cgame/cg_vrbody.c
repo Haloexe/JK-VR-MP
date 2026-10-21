@@ -2497,10 +2497,12 @@ static void CG_VRB_PassSaber( centity_t *cent, const vrClientState_t *vr, int fr
 		vrb.blade[to] = vrb.blade[from];
 		VectorAdd( pos, rel, vrb.blade[to].pivot );	// (resting on another blade: found again from the new fist)
 	}
-	vrb.hold[1].hand = from;
-	vrb.hold[1].sign = 1.0f;
-	vrb.hold[1].t = 0.0f;
-	vrb.hold[1].passTime = 0;
+	if ( !vrb.holdHolsters ) {
+		vrb.hold[1].hand = from;	// (a second saber's in the other hand; with holsters it's where it was - in its holster)
+		vrb.hold[1].sign = 1.0f;
+		vrb.hold[1].t = 0.0f;
+		vrb.hold[1].passTime = 0;
+	}
 	vrb.grabBlocked[from] = qtrue;	// (its grip, if still squeezed, takes hold again only once that's let go)
 	vrb.twoHand = vrb.twoHandArms = vrb.twoHandPass = qfalse;
 	vrb.twoHandBlend = 0.0f;
@@ -2707,8 +2709,10 @@ static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 		// hand's grip lets go with that hand, and the other goes on holding it
 		// - once it's settled onto the hilt (squeezed as it takes hold, it
 		// waits the moment that takes: the hand goes over holding the hilt as
-		// it's drawn, nothing jumps).
-		if ( squeezed[main] && !vrb.grabBlocked[main] ) {
+		// it's drawn, nothing jumps). Holding the grip (cg_vrholster.c), the
+		// first hand's squeeze holds it, and letting go passes it
+		// (CG_VR_PassSaberOver).
+		if ( squeezed[main] && !vrb.grabBlocked[main] && !CG_VRH_GripHolds() ) {
 			vrb.twoHandPass = qtrue;
 		}
 		if ( vrb.twoHandPass && vrb.twoHandBlend >= 1.0f ) {
@@ -5039,6 +5043,24 @@ void CG_VR_BlockGrab( int h ) {
 	}
 }
 
+// Whether you hold your first saber with both hands - as last worked out, a
+// moment ago at most.
+qboolean CG_VR_BothHandsHold( void ) {
+	return (qboolean)( vrbSelf.init && vrbSelf.twoHand && cg.time - vrbSelf.twoHandTime >= 0 && cg.time - vrbSelf.twoHandTime <= 100 );
+}
+
+// Holding the grip (cg_vrholster.c), the first hand let go of your saber
+// held with both: the other goes on holding it, once it's settled onto the
+// hilt (CG_VRB_TwoHand). Not (pass: no): the first hand's taken hold again
+// meanwhile - it stays in that one.
+void CG_VR_PassSaberOver( qboolean pass ) {
+	if ( !pass ) {
+		vrbSelf.twoHandPass = qfalse;
+	} else if ( CG_VR_BothHandsHold() ) {
+		vrbSelf.twoHandPass = qtrue;
+	}
+}
+
 // Whether another VR player's avatar has a hand on their saber s.
 qboolean CG_VR_OtherHoldsSaber( int clientNum, int s ) {
 	const vrbState_t *st;
@@ -5189,7 +5211,8 @@ void CG_VR_BodyEndFrame( void ) {
 
 	// where a squeezed grip takes hold of something instead of pressing its key
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
-		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() );
+		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() |
+			( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
 	CG_VRH_SayButtons();
