@@ -23,7 +23,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen; point at the
-    menus with a controller and pull the trigger to click
+    menus with a controller and pull the trigger to click (the other
+    trigger right-clicks)
   * The desktop window mirrors the left eye
   * Multiplayer: other players see you as you really move, and you see
     other VR players as they do - arms, hands, head and saber (in games
@@ -96,9 +97,13 @@ the Force on the right grip, use on the left. A trigger or grip goes on
 doing what it did when you pressed it until you let go.
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
-where it points.
-  Trigger              click (either hand; the hand that pulls its
-                       trigger becomes the pointer)
+where it points. Your main hand points (the right; the left, left-handed);
+lower it - aim it away from the screen - and the other hand points instead,
+until you raise it again.
+  Trigger              click (the pointing hand's)
+  Other trigger        right-click where you point: take a point off a
+                       Force power, step a setting back (on a button it
+                       clicks, as a right click does)
   Trigger held         drag sliders and scroll bars
   Either stick up/down scroll the list under the cursor, or step through
                        the setting under it (hold to keep going)
@@ -413,7 +418,8 @@ server running this build: your real blade is the weapon.
     arrow keys and move it with left and right. Each slider shows its
     value. A setting with named choices (Hilts Hang, Holster Markers)
     steps on as you click it (or push the stick up, or press right or
-    Enter) and back with the stick down (or left).
+    Enter) and back as you right-click it (the other trigger), push the
+    stick down, or press left.
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.

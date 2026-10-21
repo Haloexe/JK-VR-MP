@@ -428,8 +428,11 @@ typedef struct vrState_s {
 	// menu pointer: a controller points at the menu screen like a mouse
 	qboolean				pointerMode;	// the menu screen is up and takes the pointer
 	qboolean				pointerHit;		// the pointing controller is on the screen
-	qboolean				pointerLeft;	// the left hand points (the last to pull its trigger)
+	qboolean				pointerLeft;	// the left hand points (VR_PointingHand)
 	int						pointerLastHand;
+	qboolean				aimed[2];		// each hand aimed at the menu screen at the last poll...
+	int						aimSince[2];	// ...since (ms)...
+	int						aimLast[2];		// ...last (ms)
 	float					pointerX, pointerY;		// on the screen, in menu units (640x480)
 	qboolean				pointerFresh;	// polled this frame, not yet applied
 	qboolean				pointerForce;	// move the cursor even if the controller is still
@@ -1116,11 +1119,11 @@ static void VR_Pulse( int hand, float seconds, float amplitude ) {
 	xrApplyHapticFeedback( vr.session, &hai, (const XrHapticBaseHeader *)&vib );
 }
 
-// A controller trigger is holding the menu's mouse button down (a click, or
-// dragging a slider or scroll bar).
+// A controller trigger is holding a mouse button down on the menu screen (a
+// click, a right click, or dragging a slider or scroll bar).
 static qboolean VR_Clicking( void ) {
 	for ( int k = 0; k < VR_NUM_BUTTONS; k++ ) {
-		if ( vr.keySent[k] == A_MOUSE1 ) {
+		if ( vr.keySent[k] == A_MOUSE1 || vr.keySent[k] == A_MOUSE2 ) {
 			return qtrue;
 		}
 	}
@@ -1138,8 +1141,13 @@ static int VR_ButtonKeyCode( int key ) {
 		return VR_FIRST_KEY + key;
 	}
 	if ( key == VR_KEY_TRIGGER_R || key == VR_KEY_TRIGGER_L ) {
-		// click where the controller points (pointing past the screen clicks nothing)
-		return vr.pointerHit ? A_MOUSE1 : 0;
+		// where the controller points (pointing past the screen, nothing):
+		// the pointing hand's trigger clicks, the other's right-clicks - a
+		// point off a Force power, a choice stepped back (a button: clicked)
+		if ( !vr.pointerHit ) {
+			return 0;
+		}
+		return ( vr.keyHand[key] == vr.pointerLastHand ) ? A_MOUSE1 : A_MOUSE2;
 	}
 	if ( VR_Clicking() ) {
 		return 0;	// any other key would end the drag under the held trigger
@@ -1206,14 +1214,17 @@ static void VR_SetKey( int key, qboolean down ) {
 
 	if ( ( key == VR_KEY_TRIGGER_R || key == VR_KEY_TRIGGER_L ) && vr.pointerMode && vr.pointerHit &&
 		!VR_Clicking() && VRK_Press( vr.pointerX, vr.pointerY ) ) {
-		vr.keySent[key] = 0;	// typed on the keyboard: no click for what's under it
-		VR_Pulse( vr.pointerLastHand, 0.02f, 0.5f );
+		vr.keySent[key] = 0;	// typed on the keyboard (either trigger): no click for what's under it
+		VR_Pulse( vr.keyHand[key], 0.02f, 0.5f );
 		return;
 	}
 	int code = VR_ButtonKeyCode( key );
+	if ( ( code == A_MOUSE1 || code == A_MOUSE2 ) && VR_Clicking() ) {
+		code = 0;	// the other trigger's holding its click (dragging a slider): nothing till let go
+	}
 	for ( int k = 0; k < VR_NUM_BUTTONS && code; k++ ) {
 		if ( k != key && vr.keySent[k] == code ) {
-			code = 0;	// another held button already sent it (both triggers clicking)
+			code = 0;	// another held button already sent it
 		}
 	}
 	vr.keySent[key] = code;
@@ -1221,9 +1232,9 @@ static void VR_SetKey( int key, qboolean down ) {
 		return;
 	}
 	VR_QueueKey( code, qtrue );
-	if ( code == A_MOUSE1 ) {
+	if ( code == A_MOUSE1 || code == A_MOUSE2 ) {
 		vr.pointerForce = qtrue;	// click exactly where it points, even if the mouse moved
-		VR_Pulse( vr.pointerLastHand, 0.02f, 0.5f );
+		VR_Pulse( vr.keyHand[key], 0.02f, 0.5f );	// (in the hand that clicked)
 	}
 }
 
@@ -1330,16 +1341,19 @@ static void VR_ReleaseAllKeys( void ) {
 
 Menu pointer
 
-While the menu screen is up, the controller that last pulled its trigger
-points at it like a mouse: the trigger clicks, B goes back, either stick
-scrolls. The UI module only knows relative mouse moves, so the engine keeps
-a copy of its cursor (VR_UICursorMoved) and moves it by the difference.
+While the menu screen is up, a controller points at it like a mouse - your
+main hand, or the other while the main one's aimed away (VR_PointingHand):
+its trigger clicks, the other trigger right-clicks, B goes back, either
+stick scrolls. The UI module only knows relative mouse moves, so the engine
+keeps a copy of its cursor (VR_UICursorMoved) and moves it by the
+difference.
 
 ================================================================================
 */
 
 static qboolean VR_UseScreenLayer( void );
 static int VR_ControlKey( int control, int h );
+static int VR_GunHand( void );
 
 // The UI module's cursor moves only by relative mouse moves, clamped to the
 // 640x480 menu like UI_MouseEvent does. Every move goes through
@@ -1429,10 +1443,46 @@ static qboolean VR_TriggerUp( int h ) {
 	return (qboolean)( !vr.ctlDown[VR_CTL_TRIGGER][h] && ( key < 0 || !vr.keyBlocked[key] ) );
 }
 
+#define VR_POINTER_HANDOVER_MS	250	// a hand aimed at the menu screen (or away) this long: the pointer goes over
+
+// Which hand points at the menu screen this poll, from whether each is aimed
+// at it (aimed[h]): your main hand (the right; the left, left-handed) - or
+// the other, while the main hand's aimed away (a moment: running off the
+// screen's edge doesn't hand it over) and the other's aimed at it, until the
+// main hand's aimed at it again (a moment - at once, the other aimed away).
+// Its trigger clicks, the other's right-clicks. Never handed over while a
+// trigger holds its click (a slider being dragged).
+static int VR_PointingHand( const qboolean aimed[2], int now ) {
+	const int main = VR_GunHand(), off = ( main == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	int hand = vr.pointerLeft ? VR_HAND_LEFT : VR_HAND_RIGHT;
+
+	for ( int h = 0; h < 2; h++ ) {
+		if ( aimed[h] && !vr.aimed[h] ) {
+			vr.aimSince[h] = now;
+		}
+		if ( aimed[h] ) {
+			vr.aimLast[h] = now;
+		}
+		vr.aimed[h] = aimed[h];
+	}
+	if ( !VR_Clicking() ) {
+		if ( hand == main ) {
+			if ( aimed[off] && !aimed[main] && now - vr.aimLast[main] >= VR_POINTER_HANDOVER_MS ) {
+				hand = off;
+			}
+		} else if ( aimed[main] && ( !aimed[off] || now - vr.aimSince[main] >= VR_POINTER_HANDOVER_MS ) ) {
+			hand = main;
+		}
+	}
+	vr.pointerLeft = (qboolean)( hand == VR_HAND_LEFT );
+	return hand;
+}
+
 static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
 	const qboolean wasOnScreen = (qboolean)( vr.pointerMode && vr.pointerHit );
 	if ( wanted && !vr.pointerMode ) {
 		vr.scrollLatched = qtrue;	// a stick already pushed (walking) doesn't scroll
+		vr.pointerLeft = (qboolean)( VR_GunHand() == VR_HAND_LEFT );	// (your main hand points first)
 	}
 	vr.pointerMode = wanted;
 	vr.pointerHit = qfalse;
@@ -1441,6 +1491,7 @@ static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
 	if ( !vr.pointerMode ) {
 		for ( int h = 0; h < 2; h++ ) {
 			vr.pullArmed[h] = vr.pulling[h] = qfalse;
+			vr.aimed[h] = qfalse;
 		}
 		return;
 	}
@@ -1466,31 +1517,19 @@ static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
 	}
 	vr.pressing = (qboolean)( pull[VR_HAND_LEFT] || pull[VR_HAND_RIGHT] );
 
-	// Pulling a trigger hands the pointer to that hand, unless the other
-	// hand is busy clicking (dragging a slider). Both at once: no change.
-	const int keyL = VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_LEFT ), keyR = VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_RIGHT );
-	if ( pull[VR_HAND_LEFT] && !pull[VR_HAND_RIGHT] && ( keyR < 0 || vr.keySent[keyR] != A_MOUSE1 ) ) {
-		vr.pointerLeft = qtrue;
-	} else if ( pull[VR_HAND_RIGHT] && !pull[VR_HAND_LEFT] && ( keyL < 0 || vr.keySent[keyL] != A_MOUSE1 ) ) {
-		vr.pointerLeft = qfalse;
+	// The pointing hand (VR_PointingHand). Aimed away - or its tracking lost
+	// a moment - the cursor holds where it is, and a trigger clicks nothing.
+	float ax[2], ay[2];
+	qboolean aimed[2];
+	for ( int h = 0; h < 2; h++ ) {
+		aimed[h] = (qboolean)( vr.handValid[h] && VR_PointerHit( h, &ax[h], &ay[h] ) );
 	}
-
-	// The pointing hand; a short tracking dropout just holds the cursor
-	// rather than jumping to wherever the other hand happens to point.
-	int hand = vr.pointerLeft ? VR_HAND_LEFT : VR_HAND_RIGHT;
-	if ( !vr.handValid[hand] ) {
-		const int other = ( hand == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
-		if ( now - vr.handTrackTime[hand] < 500 || !vr.handValid[other] ) {
-			return;
-		}
-		hand = other;
-	}
-	const qboolean hold = (qboolean)( vr.pulling[hand] && now - vr.pullStart[hand] < 300 );
-
-	float x, y;
-	if ( !VR_PointerHit( hand, &x, &y ) ) {
+	const int hand = VR_PointingHand( aimed, now );
+	if ( !aimed[hand] ) {
 		return;
 	}
+	const qboolean hold = (qboolean)( vr.pulling[hand] && now - vr.pullStart[hand] < 300 );
+	const float x = ax[hand], y = ay[hand];
 	vr.pointerHit = qtrue;
 	if ( !wasOnScreen || hand != vr.pointerLastHand ) {
 		vr.pointerX = x;	// (re)starts pointing: jump there
