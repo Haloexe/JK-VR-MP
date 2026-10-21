@@ -16,6 +16,9 @@ Setup) hides them again. The page is otherwise left as it is.
   Finger Tracking your character's fingers follow yours       cg_vrFingers Yes/No
   Grip Press      how far a grip's pressed for Use and the     vr_gripPress 60%-95%
                   Force (a lighter squeeze only curls fingers)
+  Body Bends      standing still, your character bends as you  cg_vrBodyBend Yes/No
+                  do, feet planted - other VR players' as they
+                  do (No: upright, as it was)
   Saber Inertia   how far a blade's weight holds it back      cg_vrSaberInertia 0-3
   Saber Weight    how strongly its weight is felt as it swings cg_vrSaberWeight 0-2
   Vibration       how strongly the controllers vibrate        cg_vrHaptics 0-2
@@ -74,6 +77,7 @@ static const struct {
 	{ "vr_leftHanded",		"0",	CVAR_ARCHIVE },
 	{ "cg_vrFingers",		"1",	CVAR_ARCHIVE },
 	{ "vr_gripPress",		"0.85",	CVAR_ARCHIVE },
+	{ "cg_vrBodyBend",		"1",	CVAR_ARCHIVE },
 	{ "cg_vrSaberInertia",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrSaberWeight",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrHaptics",		"1",	CVAR_ARCHIVE },

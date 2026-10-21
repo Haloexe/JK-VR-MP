@@ -385,6 +385,33 @@ typedef struct vrbState_s {
 	qboolean	fingersEased[2];
 	int			fingerTime;			// cg.time they were eased to
 	int			fingerSensed[2];	// (the log: what each controller senses of them, as last said, + 1; 0: not yet)
+
+	// the body bends (cg_vrBodyBend, CG_VRB_Bend): how far (0: upright, as
+	// the game's animation has it; 1: standing still, bent the way you are),
+	// eased - standing in the upright stance on the ground (CG_VR_BodyAnim)
+	float		bend;
+	int			bendTime;			// cg.time it was eased to
+	qboolean	standing;			// the legs stand in the upright stance (as of standTime)
+	int			standTime;
+	vec3_t		bendEyes;			// where the body's eyes go this frame (world): yours, your headset with the neck
+	int			bendEyesTime;		// just behind (CG_VR_BodyPose); another player's, where their game put them (cg.time)
+	float		chestTwist;			// the chest turned off the hips (degrees, + to the left), eased
+	int			chestTime;
+	float		footDelta[2];		// how much higher than the floor the ground under each foot is (units, eased)
+	int			footTime;
+	void		*bendG2;			// the hips, spine, neck, head and legs are moved on this instance
+	mdxaBone_t	bendMoves[12];		// ...so, this frame (VRB_NUM_BEND_BONES: the other eye's the same)
+	int			bendMovesTime;		// (cg.time)
+	int			bendOkTime;			// the body last bent (cg.time): it has the bones for it, the engine the transforms
+	float		bendA, bendB;		// the trunk's lean then (forward, to the left: radians; the next frame's starts from it)
+	float		lookIn;				// how far the bend has the head, the game the rest (0..1, eased: CG_VRB_LookIn)
+	int			lookInTime;
+	// (the log, the tests) what the last bend did
+	float		bendLean, bendSide;	// the trunk leaned forward, to the left (degrees)
+	float		bendTwist;			// the chest turned (degrees, + to the left)
+	float		bendDrop;			// the hips went down (units)
+	vec3_t		bendNeck;			// where the trunk sent the neck (world; the body moved whole on top: CG_VRB_Bend)
+	int			bendLogTime;
 } vrbState_t;
 
 // The body being posed: yours, or - while CG_VRB_OtherArms and the rest pose
@@ -662,6 +689,7 @@ static float CG_VRB_CutScale( void ) {
 }
 
 static void CG_VRB_ResetHolds( int main );
+static void CG_VRB_ResetBody( void *g2 );
 
 static void CG_VRB_Init( void ) {
 	if ( !vrb.init ) {
@@ -1392,18 +1420,19 @@ static float CG_VRB_FitJoint( const vec3_t pivot, const vec3_t child, const vec3
 	return sign * DEG2RAD( Q_min( deg, limit ) );
 }
 
-// Rotation by a radians about the unit axis u.
+// Rotation by a radians about the unit axis u (Rodrigues).
 static void VRB_AxisAngle( const vec3_t u, float a, vrbMat_t R ) {
-	static const vec3_t basis[3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
-	vec3_t col;
-	int r, c;
+	const float c = cosf( a ), s = sinf( a ), t = 1.0f - c;
 
-	for ( c = 0; c < 3; c++ ) {
-		VRB_Rotate( basis[c], u, a, col );
-		for ( r = 0; r < 3; r++ ) {
-			R[r][c] = col[r];
-		}
-	}
+	R[0][0] = c + t * u[0] * u[0];
+	R[1][1] = c + t * u[1] * u[1];
+	R[2][2] = c + t * u[2] * u[2];
+	R[0][1] = t * u[0] * u[1] - s * u[2];
+	R[1][0] = t * u[0] * u[1] + s * u[2];
+	R[0][2] = t * u[0] * u[2] + s * u[1];
+	R[2][0] = t * u[0] * u[2] - s * u[1];
+	R[1][2] = t * u[1] * u[2] - s * u[0];
+	R[2][1] = t * u[1] * u[2] + s * u[0];
 }
 
 // A turn R (in the world) in the frame ax, as it turns ax's own axes...
@@ -2110,11 +2139,83 @@ static qboolean CG_VRB_StandingAnim( const clientInfo_t *ci, int anim ) {
 	}
 }
 
+// Whether a VR body's legs stand in the upright stance this frame: standing
+// still, it bends (CG_VRB_BendWeight).
+static void CG_VRB_NoteStanding( centity_t *cent, qboolean standing ) {
+	const int n = cent->currentState.number;
+	vrbState_t *st;
+
+	if ( n < 0 || n >= MAX_CLIENTS ) {
+		return;
+	}
+	st = ( n == cg.clientNum ) ? &vrbSelf : &vrbOthers[n];
+	st->standing = standing;
+	st->standTime = cg.time;
+}
+
+/*
+Body Bends (cg_vrBodyBend): standing still, a VR body stands the way you do,
+bending from its feet (CG_VRB_Bend). It eases in once the legs stand in the
+upright stance on the ground, and out as you move off - running, jumping,
+flipping, crouching with the game's crouch, a pose: the game's animation,
+as before.
+*/
+#define VRB_BEND_IN			0.25f	// seconds the bend takes to ease in...
+#define VRB_BEND_OUT		0.12f	// ...and out
+#define VRB_STAND_MS		250		// (the legs said they stood this lately: CG_VR_BodyAnim)
+#define VRB_CHEST_TURN		30.0f	// the chest turns this far off the hips at most (degrees: CG_VRB_ChestTwist)
+#define VRB_NECK_YAW		70.0f	// the head turns off the chest this far at most: to a side,
+#define VRB_NECK_DOWN		60.0f	// down,
+#define VRB_NECK_UP			45.0f	// up,
+#define VRB_NECK_ROLL		35.0f	// and tilted (degrees: VRB_HeadTurn)
+
+// How far you look aside before the chest turns (degrees): as far as the
+// neck turns easily (cg_vrBodyTwist), and no further than it turns at all.
+static float CG_VRB_NeckEasy( void ) {
+	return Com_Clamp( 0.0f, VRB_NECK_YAW, cg_vrBodyTwist.value );
+}
+
+// How far the body being posed bends this frame (0..1, eased; again in the
+// same frame - the other eye - no time has passed, nothing changes): its
+// legs standing (as CG_VR_BodyAnim said last frame - this is worked out
+// before this frame's animation is set) on the ground, and it bending
+// lately (a model with the bones for it, an engine with the transforms:
+// CG_VRB_Bend). Body Bends turned off, it's upright at once (as
+// CG_VRB_BendBody draws it).
+static float CG_VRB_BendWeight( qboolean onGround ) {
+	const qboolean standing = (qboolean)( vrb.standing && cg.time - vrb.standTime >= 0 && cg.time - vrb.standTime < VRB_STAND_MS );
+	const qboolean bends = (qboolean)( vrb.bendOkTime && cg.time - vrb.bendOkTime >= 0 && cg.time - vrb.bendOkTime < VRB_STAND_MS );
+	const float want = ( cg_vrBodyBend.integer && standing && onGround && bends ) ? 1.0f : 0.0f;
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.bendTime ) * 0.001f );
+
+	if ( !cg_vrBodyBend.integer || cg.time - vrb.bendTime < 0 || cg.time - vrb.bendTime > 500 ) {
+		vrb.bend = 0.0f;	// (off: upright at once; starting over: it eases in)
+	}
+	if ( want > vrb.bend ) {
+		vrb.bend = Q_min( want, vrb.bend + dt / VRB_BEND_IN );
+	} else {
+		vrb.bend = Q_max( want, vrb.bend - dt / VRB_BEND_OUT );
+	}
+	vrb.bendTime = cg.time;
+	return VRB_SmoothStep( 0.0f, 1.0f, vrb.bend );
+}
+
+// ...as worked out for this frame (0 if it wasn't: the body isn't drawn bent)
+static float CG_VRB_BendNow( void ) {
+	return ( vrb.bendTime == cg.time ) ? VRB_SmoothStep( 0.0f, 1.0f, vrb.bend ) : 0.0f;
+}
+
+// ...and as it was lately (before this frame's is worked out)
+static float CG_VRB_BendLately( void ) {
+	return ( cg.time - vrb.bendTime >= 0 && cg.time - vrb.bendTime <= 500 ) ? VRB_SmoothStep( 0.0f, 1.0f, vrb.bend ) : 0.0f;
+}
+
 // The body's animation, before it is drawn: a VR body stays upright through
 // flips and rolls, as you do in your headset; and standing still it stands up
 // straight, as you do (its eyes then where yours are, so your hands sit on it
-// where they are on you - the arms are on the controllers anyway). Whatever
-// else the game plays - running, crouching, pain, Force gestures - stays.
+// where they are on you - the arms are on the controllers anyway), bending
+// from there the way you do (CG_VRB_Bend). Whatever else the game plays -
+// running, crouching, pain, Force gestures - stays.
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
 	const animation_t *anims = bgAllAnims[cent->localAnimIndex].anims;
@@ -2135,6 +2236,7 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	} else {
 		return;
 	}
+	CG_VRB_NoteStanding( cent, qfalse );
 	if ( !anims ) {
 		return;
 	}
@@ -2160,6 +2262,7 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	}
 	if ( CG_VRB_StandingAnim( ci, *legsAnim ) ) {
 		*legsAnim = anim;
+		CG_VRB_NoteStanding( cent, qtrue );
 	}
 	if ( arms && CG_VRB_StandingAnim( ci, *torsoAnim ) ) {
 		*torsoAnim = anim;
@@ -2224,7 +2327,11 @@ static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 	// (sat, knelt or lying, the body stays as it is while you look about,
 	// unless you turn right round: bg_vrpose.c)
 	posed = (qboolean)( BG_VRPosePhase( &cg.predictedPlayerState, CG_VRB_Anims(), NULL, NULL ) != VRPHASE_NONE );
-	maxTwist = posed ? 120.0f : Com_Clamp( 0.0f, 90.0f, cg_vrBodyTwist.value );
+	// (bent, the neck turns first, then the chest, the hips last - past what
+	// the neck turns easily and the chest's turn together: CG_VRB_ChestTwist;
+	// as of last frame - this frame's isn't worked out yet)
+	maxTwist = Com_Clamp( 0.0f, 90.0f, cg_vrBodyTwist.value );
+	maxTwist = posed ? 120.0f : maxTwist + ( CG_VRB_NeckEasy() + VRB_CHEST_TURN - maxTwist ) * CG_VRB_BendLately();
 	diff = AngleSubtract( headYaw, vrb.yawT );
 	if ( diff > maxTwist ) {
 		vrb.yawT = headYaw - maxTwist;
@@ -2243,6 +2350,8 @@ static float CG_VRB_BodyYaw( const vrClientState_t *vr ) {
 	return vrb.worldYaw;
 }
 
+// (The game turns the body from its skeleton as animated - its "Motion" bone,
+// under the pelvis: it does so before the body bends again, CG_VRB_Bend.)
 qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles ) {
 	const vrClientState_t *vr;
 
@@ -2251,6 +2360,9 @@ qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles ) {
 		if ( !CG_VRB_OtherUsable( cent ) ) {
 			return qfalse;
 		}
+		vrbCur = &vrbOthers[cent->currentState.number];
+		CG_VRB_ResetBody( cent->ghoul2 );
+		vrbCur = &vrbSelf;
 		VectorSet( angles, 0.0f, vrbOthers[cent->currentState.number].avatar.bodyYaw, 0.0f );
 		return qtrue;
 	}
@@ -2258,6 +2370,7 @@ qboolean CG_VR_BodyAngles( centity_t *cent, vec3_t angles ) {
 	if ( !CG_VR_BodyActive( cent ) || !( vr = CG_VR() ) ) {
 		return qfalse;
 	}
+	CG_VRB_ResetBody( cent->ghoul2 );
 	// level torso (pitch 0): aiming up or down moves the arms, not the spine
 	VectorSet( angles, 0.0f, CG_VRB_BodyYaw( vr ), 0.0f );
 	return qtrue;
@@ -4817,6 +4930,772 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 /*
 =============================================================================
 
+the body bends (cg_vrBodyBend)
+
+Standing still, your body stands the way you do: its feet stay where they
+are, its hips over them, and it leans, bows, twists and crouches from there
+to put its head where yours is - the trunk leaning from the hips up (half
+of a bow at the hips themselves, the rest along the back), the knees
+bending to lower the hips when you crouch for real (as low as the view
+follows you down), each foot on the ground under it. Looking aside turns the
+neck first, then the chest (looking further than cg_vrBodyTwist), and the
+hips last (CG_VRB_BodyYaw); the chest also turns with the arms as they swing
+a weapon. Running, jumping, a flip, a pose: the game's animation, the bend
+eased out, and back in when you stand again (CG_VRB_BendWeight). Without
+Body Bends the body stays upright and is moved whole under your head
+(CG_VR_BodyPose), as before.
+
+It's done with engine bone transforms on top of the animated pose (the
+game's own bone angles stay as they are): every bone of the hips, back,
+neck, head and legs is given its rigid move in the world, from where the
+animation has it to where it goes, with its parent's move taken back out -
+the engine puts a bone's transform on top of its parent's. Another VR
+player's body bends the same way from their avatar: its eyes go where their
+game put their body's eyes (vrAvatar_t.head), its head looks where they
+look. Hits are still judged on the server's upright body.
+
+=============================================================================
+*/
+
+#define VRB_CHEST_EASE		0.1f	// seconds the chest takes to follow
+#define VRB_ARMS_TURN		0.5f	// it turns this much of the way round to the hands holding a weapon, once they're out
+#define VRB_ARMS_NEAR		9.0f	// from it (none of it while they're this near it, hanging at the sides, all of it this
+#define VRB_ARMS_OUT		15.0f	// far out, reaching or swinging: units)...
+#define VRB_ARMS_SIDE		90.0f	// ...as far round as its side, none of it once they're this far round behind it
+#define VRB_ARMS_BEHIND		135.0f	// (degrees round from straight ahead)
+#define VRB_LOOK_EASE		0.2f	// seconds the bend takes to take the head over from the game, or to hand it back
+#define VRB_LEAN_FWD		60.0f	// the trunk leans this far forward at most (degrees)...
+#define VRB_LEAN_BACK		25.0f	// ...back...
+#define VRB_LEAN_SIDE		30.0f	// ...and to a side
+#define VRB_HIPS_BACK		0.2f	// the hips go back this much of the way the neck goes forward (and the other way round)...
+#define VRB_SIT_BACK		0.3f	// ...and this much of the way they go down
+#define VRB_DROP_MAX		16.0f	// the knees lower the hips this far at most (units)
+#define VRB_STEP_UP			6.0f	// a foot stands on ground up to this much higher than the floor the body stands on...
+#define VRB_STEP_DOWN		4.0f	// ...or this much lower...
+#define VRB_FOOT_EASE		0.08f	// ...getting there in this long (seconds)
+
+// The bones that bend, and each one's parent among them (-1: none)
+enum {
+	VRB_B_PELVIS, VRB_B_LOWER_BACK, VRB_B_UPPER_BACK, VRB_B_CHEST, VRB_B_NECK, VRB_B_HEAD,
+	VRB_B_LTHIGH, VRB_B_LSHIN, VRB_B_LFOOT, VRB_B_RTHIGH, VRB_B_RSHIN, VRB_B_RFOOT,
+	VRB_NUM_BEND_BONES
+};
+static const char *const vrbBendBones[VRB_NUM_BEND_BONES] = {
+	"pelvis", "lower_lumbar", "upper_lumbar", "thoracic", "cervical", "cranium",
+	"lfemurYZ", "ltibia", "ltalus", "rfemurYZ", "rtibia", "rtalus"
+};
+static const int vrbBendParent[VRB_NUM_BEND_BONES] = { -1, 0, 1, 2, 3, 4, 0, 6, 7, 0, 9, 10 };
+typedef char vrbBendMovesFit[( sizeof( ( (vrbState_t *)0 )->bendMoves ) == VRB_NUM_BEND_BONES * sizeof( mdxaBone_t ) ) ? 1 : -1];
+static const int vrbThigh[2] = { VRB_B_LTHIGH, VRB_B_RTHIGH };	// VR_HAND_LEFT, VR_HAND_RIGHT (the shin and foot follow)
+
+// How much of the trunk's lean forward, its lean to a side and its twist
+// each of its bones has taken by its top (pelvis, lower back, upper back,
+// chest): a bow goes half at the hips, the rest along the back; a lean to a
+// side along the back, a twist mostly high in it.
+static const float vrbLeanShare[4] = { 0.5f, 0.7f, 0.85f, 1.0f };
+static const float vrbSideShare[4] = { 0.0f, 0.4f, 0.75f, 1.0f };
+static const float vrbTwistShare[4] = { 0.0f, 0.15f, 0.5f, 1.0f };
+
+// the body as animated this frame, before it bends (world)
+typedef struct {
+	vec3_t	at[VRB_NUM_BEND_BONES];	// each bone's joint
+	vec3_t	eyes;					// between the eyes
+	vec3_t	hips;					// between the hip joints: the pelvis tilts about the line through them...
+	vec3_t	hipLine;				// ...toward the left
+	vec3_t	face[3];				// the way the body faces: forward, left, up (its chest and head, as the game turns them)
+	float	thigh[2], shin[2];		// each leg's bones (VR_HAND_LEFT, VR_HAND_RIGHT)
+} vrbBendRest_t;
+
+extern qboolean BG_InKnockDown( int anim );
+
+// The hips, back, neck, head and legs as the animation has them...
+static void CG_VRB_ResetBody( void *g2 ) {
+	static const mdxaBone_t identity = { { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 } } };
+	int k;
+
+	if ( vrb.bendG2 != g2 || !g2 || !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbBendBones[k], &identity );
+	}
+}
+
+// ...and for good
+static void CG_VRB_ClearBody( void *g2 ) {
+	int k;
+
+	if ( vrb.bendG2 != g2 || !g2 || !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbBendBones[k], NULL );
+	}
+	vrb.bendG2 = NULL;
+}
+
+// How far CG_Player lifted a player drawn bigger or smaller than they are
+// (iModelScale: so the model's feet stay on the floor) - where they stand,
+// their eye point and their avatar's offsets are from where they are
+// without it.
+static float CG_VRB_ScaleLift( const centity_t *cent ) {
+	if ( cent->currentState.iModelScale && cent->currentState.NPC_class != CLASS_VEHICLE && cent->modelScale[2] &&
+		cent->modelScale[2] != 1.0f ) {
+		return 24.0f * ( cent->modelScale[2] - 1.0f );
+	}
+	return 0.0f;
+}
+
+// Between the body's eyes (or its skull, a model without eyes).
+static qboolean CG_VRB_Eyes( centity_t *cent, vec3_t out ) {
+	vrbBone_t le, re;
+
+	if ( CG_VRB_Bone( cent, "leye", 1, &le ) && CG_VRB_Bone( cent, "reye", 1, &re ) ) {
+		VectorAdd( le.origin, re.origin, out );
+		VectorScale( out, 0.5f, out );
+		return qtrue;
+	}
+	if ( CG_VRB_Bone( cent, "cranium", 1, &le ) ) {
+		VectorCopy( le.origin, out );
+		return qtrue;
+	}
+	return qfalse;
+}
+
+// Whether the body's head turns the way theirs does here (not with the
+// game's head turn, CG_VR_BodyLook): Body Bends on, the body up - not
+// knocked down or getting up, in a pose or down (roleplay).
+static qboolean CG_VRB_OwnLook( centity_t *cent ) {
+	return (qboolean)( cg_vrBodyBend.integer && !BG_InKnockDown( cent->currentState.legsAnim ) &&
+		!BG_InKnockDown( cent->currentState.torsoAnim ) && !BG_VRPoseAnim( cent->currentState.legsAnim ) &&
+		!CG_RP_DownBody( cent ) );
+}
+
+// The body as animated, measured (qfalse: a model without these bones).
+static qboolean CG_VRB_BendRest( centity_t *cent, float bodyYaw, vrbBendRest_t *r ) {
+	vrbBone_t b;
+	int k, s;
+
+	for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+		if ( !CG_VRB_Bone( cent, vrbBendBones[k], 1, &b ) ) {
+			return qfalse;
+		}
+		VectorCopy( b.origin, r->at[k] );
+	}
+	if ( !CG_VRB_Eyes( cent, r->eyes ) ) {
+		return qfalse;
+	}
+	VectorAdd( r->at[VRB_B_LTHIGH], r->at[VRB_B_RTHIGH], r->hips );
+	VectorScale( r->hips, 0.5f, r->hips );
+	VectorSet( r->face[0], cosf( DEG2RAD( bodyYaw ) ), sinf( DEG2RAD( bodyYaw ) ), 0.0f );
+	VectorSet( r->face[1], -r->face[0][1], r->face[0][0], 0.0f );
+	VectorSet( r->face[2], 0.0f, 0.0f, 1.0f );
+	VectorSubtract( r->at[VRB_B_LTHIGH], r->at[VRB_B_RTHIGH], r->hipLine );
+	VectorNormalize( r->hipLine );
+	for ( s = 0; s < 2; s++ ) {
+		r->thigh[s] = Distance( r->at[vrbThigh[s]], r->at[vrbThigh[s] + 1] );
+		r->shin[s] = Distance( r->at[vrbThigh[s] + 1], r->at[vrbThigh[s] + 2] );
+		if ( r->thigh[s] < 1.0f || r->shin[s] < 1.0f ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+/*
+The trunk bent: the pelvis turned forward by its share of a (the lean
+forward, radians) about the line through the hip joints, and moved by
+delta; each bone of the back turned by its share of a, of b (the lean to
+the left) and of tau (the twist, to the left about the upright). Where each
+joint at their tops goes (the lower back's, the upper back's, the chest's,
+the neck's), and how each bone is turned (the pelvis, lower back, upper
+back, chest).
+*/
+static void VRB_Trunk( const vrbBendRest_t *r, float a, float b, float tau, const vec3_t delta,
+	vec3_t joint[4], vrbMat_t turn[4] ) {
+	static const vec3_t up = { 0.0f, 0.0f, 1.0f };
+	vec3_t from, to, seg;
+	int k;
+
+	VectorCopy( r->hips, from );
+	VectorAdd( r->hips, delta, to );
+	for ( k = 0; k < 4; k++ ) {
+		vrbMat_t lean, twist;
+		vec3_t w;
+		float angle;
+		VectorScale( k ? r->face[1] : r->hipLine, vrbLeanShare[k] * a, w );	// (about the left - the pelvis, its hip joints': the top goes forward)
+		VectorMA( w, -vrbSideShare[k] * b, r->face[0], w );		// (about the back: the top goes left)
+		angle = VectorNormalize( w );
+		if ( angle > 1e-6f ) {
+			VRB_AxisAngle( w, angle, lean );
+		} else {
+			VRB_Identity( lean );
+		}
+		VRB_AxisAngle( up, vrbTwistShare[k] * tau, twist );
+		VRB_Mul( lean, twist, turn[k] );
+		VectorSubtract( r->at[VRB_B_LOWER_BACK + k], from, seg );
+		VRB_Apply( turn[k], seg, seg );
+		VectorAdd( to, seg, joint[k] );
+		VectorCopy( r->at[VRB_B_LOWER_BACK + k], from );
+		VectorCopy( joint[k], to );
+	}
+}
+
+static void VRB_TrunkNeck( const vrbBendRest_t *r, float a, float b, float tau, const vec3_t delta, vec3_t neck ) {
+	vec3_t joint[4];
+	vrbMat_t turn[4];
+
+	VRB_Trunk( r, a, b, tau, delta, joint, turn );
+	VectorCopy( joint[3], neck );
+}
+
+// A lean kept within how far the trunk goes: forward or back, to a side, and
+// in between (an ellipse).
+static void VRB_LeanLimit( float *a, float *b ) {
+	const float fa = *a / DEG2RAD( ( *a > 0.0f ) ? VRB_LEAN_FWD : VRB_LEAN_BACK );
+	const float fb = *b / DEG2RAD( VRB_LEAN_SIDE );
+	const float e = sqrtf( fa * fa + fb * fb );
+
+	if ( e > 1.0f ) {
+		*a /= e;
+		*b /= e;
+	}
+}
+
+// The lean (from a, b) that puts the neck over neckTo, seen from above, the
+// hips moved by delta: Newton's method (two steps get it within a hundredth
+// of a unit, even from upright), within the trunk's reach.
+static void VRB_LeanTo( const vrbBendRest_t *r, const vec3_t neckTo, float tau, const vec3_t delta, float *a, float *b ) {
+	const float h = 0.01f;
+	int it;
+
+	for ( it = 0; it < 4; it++ ) {
+		vec3_t n0, na, nb, e;
+		float j00, j01, j10, j11, det, ef, el;
+		VRB_TrunkNeck( r, *a, *b, tau, delta, n0 );
+		VectorSubtract( neckTo, n0, e );
+		ef = DotProduct( e, r->face[0] );
+		el = DotProduct( e, r->face[1] );
+		if ( ef * ef + el * el < 1e-4f ) {
+			break;
+		}
+		VRB_TrunkNeck( r, *a + h, *b, tau, delta, na );
+		VRB_TrunkNeck( r, *a, *b + h, tau, delta, nb );
+		VectorSubtract( na, n0, na );
+		VectorSubtract( nb, n0, nb );
+		j00 = DotProduct( na, r->face[0] ) / h;
+		j01 = DotProduct( nb, r->face[0] ) / h;
+		j10 = DotProduct( na, r->face[1] ) / h;
+		j11 = DotProduct( nb, r->face[1] ) / h;
+		det = j00 * j11 - j01 * j10;
+		if ( fabsf( det ) < 1e-3f ) {
+			break;
+		}
+		*a += ( ef * j11 - el * j01 ) / det;
+		*b += ( el * j00 - ef * j10 ) / det;
+		VRB_LeanLimit( a, b );
+	}
+}
+
+// How far the hips must come down for each leg to reach its foot at feet[]
+// (the hips moved across by delta: only its level part counts).
+static float VRB_FeetDrop( const vrbBendRest_t *r, const vec3_t delta, vec3_t feet[2] ) {
+	float need = 0.0f;
+	int s;
+
+	for ( s = 0; s < 2; s++ ) {
+		const float reach = 0.999f * ( r->thigh[s] + r->shin[s] );
+		const vec3_t *hip = &r->at[vrbThigh[s]];
+		const float x = feet[s][0] - ( (*hip)[0] + delta[0] ), y = feet[s][1] - ( (*hip)[1] + delta[1] );
+		if ( x * x + y * y < reach * reach ) {
+			need = Q_max( need, (*hip)[2] - feet[s][2] - sqrtf( reach * reach - x * x - y * y ) );
+		}
+	}
+	return need;
+}
+
+/*
+Where the trunk goes for the neck to be at neckTo: the hips back as the
+neck goes forward (and the other way round), down - the knees bending - as
+far as the neck goes down past what leaning takes it, or a foot needs to
+reach its ground (and back a little as they go down); and the lean from
+there (a, b, from what they are).
+*/
+static void VRB_SolveTrunk( const vrbBendRest_t *r, const vec3_t neckTo, float tau, vec3_t feet[2],
+	float *a, float *b, vec3_t delta ) {
+	vec3_t reach, neck;
+	float d = 0.0f;
+	int pass;
+
+	VectorSubtract( neckTo, r->at[VRB_B_NECK], reach );
+	reach[2] = 0.0f;
+	for ( pass = 0; ; pass++ ) {
+		VectorScale( reach, -VRB_HIPS_BACK, delta );
+		VectorMA( delta, -VRB_SIT_BACK * d, r->face[0], delta );
+		delta[2] = -d;
+		VRB_LeanTo( r, neckTo, tau, delta, a, b );
+		if ( pass == 2 ) {
+			break;	// (three passes settle it within a hundredth of a unit)
+		}
+		VRB_TrunkNeck( r, *a, *b, tau, delta, neck );
+		d = Com_Clamp( 0.0f, VRB_DROP_MAX, Q_max( d + neck[2] - neckTo[2], VRB_FeetDrop( r, delta, feet ) ) );
+	}
+}
+
+/*
+How the head turns to look along look (as animated it faces the way the
+body does) - share of the way there from the chest's turn (chest) - no
+further off the chest than a neck turns it: the look from the chest taken
+as a turn about the chest's upright (the head turning on the neck), then a
+nod and a tilt to a side, each kept within its reach. Only own of that: the
+game turns the rest of the way, as animated (CG_VR_BodyLook; look NULL, all
+of it). The head's turn, and - halfway to it from the chest's - the neck's.
+*/
+static void VRB_HeadTurn( const vrbBendRest_t *r, vec3_t look[3], vrbMat_t chest, float share, float own, vrbMat_t head, vrbMat_t neck ) {
+	vec3_t face[3], c[3], to[3], axis, x, y;
+	vrbMat_t rel, twist, swing, part;
+	float yaw, nod, tilt, angle, e;
+	int i;
+
+	if ( !look || own <= 0.0f ) {
+		VRB_Identity( head );
+		VRB_TurnPart( chest, 0.5f, neck );
+		return;
+	}
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( r->face[i], face[i] );
+	}
+	VRB_RotateFrame( chest, face, c );
+	VRB_FrameMap( c, look, rel );				// (the look's turn from the chest's)
+	yaw = VRB_TwistAngle( rel, c[2] );
+	VRB_AxisAngle( c[2], yaw, twist );
+	VRB_MulT( rel, twist, swing );				// (the rest of it: about a line square to the upright)
+	VectorSet( axis, swing[2][1] - swing[1][2], swing[0][2] - swing[2][0], swing[1][0] - swing[0][1] );
+	angle = atan2f( 0.5f * VectorNormalize( axis ), 0.5f * ( swing[0][0] + swing[1][1] + swing[2][2] - 1.0f ) );
+	VRB_Apply( twist, c[0], x );
+	VRB_Apply( twist, c[1], y );
+	nod = angle * DotProduct( axis, y );		// (about the head's left: down)
+	tilt = angle * DotProduct( axis, x );		// (about its forward)
+	yaw = Com_Clamp( -DEG2RAD( VRB_NECK_YAW ), DEG2RAD( VRB_NECK_YAW ), yaw );
+	e = sqrtf( Square( nod / DEG2RAD( ( nod > 0.0f ) ? VRB_NECK_DOWN : VRB_NECK_UP ) ) + Square( tilt / DEG2RAD( VRB_NECK_ROLL ) ) );
+	if ( e > 1.0f ) {
+		nod /= e;
+		tilt /= e;
+	}
+	VRB_AxisAngle( c[2], yaw, twist );
+	VRB_Apply( twist, c[0], x );
+	VRB_Apply( twist, c[1], y );
+	VectorScale( y, nod, axis );
+	VectorMA( axis, tilt, x, axis );
+	angle = VectorNormalize( axis );
+	if ( angle > 1e-6f ) {
+		VRB_AxisAngle( axis, angle, swing );
+		VRB_Mul( swing, twist, rel );
+	} else {
+		memcpy( rel, twist, sizeof( vrbMat_t ) );
+	}
+	VRB_RotateFrame( rel, c, to );
+	VRB_FrameMap( face, to, head );
+	if ( share < 1.0f ) {
+		VRB_MulT( head, chest, part );	// (share of the head's turn from the chest's...
+		VRB_TurnPart( part, share, part );
+		VRB_Mul( part, chest, head );
+	}
+	if ( own < 1.0f ) {
+		VRB_TurnPart( head, own, head );	// (...own of it)
+	}
+	VRB_MulT( head, chest, part );		// (the neck: halfway to it from the chest's)
+	VRB_TurnPart( part, 0.5f, part );
+	VRB_Mul( part, chest, neck );
+}
+
+// Where the eyes are from the neck's joint, the neck and head turned so.
+static void VRB_EyesFromNeck( const vrbBendRest_t *r, vrbMat_t head, vrbMat_t neck, vec3_t out ) {
+	vec3_t a, b;
+
+	VectorSubtract( r->at[VRB_B_HEAD], r->at[VRB_B_NECK], a );
+	VectorSubtract( r->eyes, r->at[VRB_B_HEAD], b );
+	VRB_Apply( neck, a, a );
+	VRB_Apply( head, b, b );
+	VectorAdd( a, b, out );
+}
+
+// Where the hands holding a weapon are (their middle, world): the chest
+// turns toward them. qfalse: none.
+static qboolean CG_VRB_WeaponHands( const vrClientState_t *vr, vec3_t out ) {
+	vec3_t o, ax[3];
+	int h, n = 0;
+
+	VectorClear( out );
+	for ( h = 0; h < 2; h++ ) {
+		int grip;
+		if ( vrbRemote ) {
+			grip = vrbRemote->hand[h].grip;
+		} else if ( vr && vr->handValid[h] && vrb.sentTime[h] && cg.time - vrb.sentTime[h] >= 0 &&
+			cg.time - vrb.sentTime[h] < VRB_STAND_MS ) {
+			grip = vrb.sent[h].grip;	// (what it held last frame)
+		} else {
+			continue;
+		}
+		if ( grip != VR_GRIP_SABER && grip != VR_GRIP_HILT && grip != VR_GRIP_GUN ) {
+			continue;
+		}
+		CG_VRB_Controller( vr, h, o, ax );
+		VectorAdd( out, o, out );
+		n++;
+	}
+	if ( !n ) {
+		return qfalse;
+	}
+	VectorScale( out, 1.0f / n, out );
+	return qtrue;
+}
+
+/*
+How far the chest turns off the hips this frame (degrees, to the left;
+eased - again in the same frame, no time has passed, nothing changes), bent
+w: looking further to a side than the neck turns easily (CG_VRB_NeckEasy),
+the rest of the way, up to VRB_CHEST_TURN; and toward the hands holding a
+weapon - part of their way round from straight ahead of it, once they're
+out from the body (as a swing takes them, or a reach; not hanging at its
+sides), as far round as its side (less and less of it as they go on round
+behind it).
+*/
+static float CG_VRB_ChestTwist( const vrClientState_t *vr, vec3_t look[3], const vrbBendRest_t *r, float bodyYaw, float w ) {
+	float want = 0.0f;
+
+	if ( look && w > 0.0f ) {
+		const float off = AngleSubtract( VR_AxisYaw( look ), bodyYaw );
+		const float past = Com_Clamp( 0.0f, VRB_CHEST_TURN, fabsf( off ) - CG_VRB_NeckEasy() );
+		vec3_t hands;
+		want = vrb.lookIn * ( ( off < 0.0f ) ? -past : past );
+		if ( CG_VRB_WeaponHands( vr, hands ) ) {
+			vec3_t rel;
+			float x, y, aside;
+			VectorSubtract( hands, r->at[VRB_B_CHEST], rel );
+			x = DotProduct( rel, r->face[0] );
+			y = DotProduct( rel, r->face[1] );
+			aside = RAD2DEG( atan2f( y, x ) );	// (how far round from straight ahead)
+			want += VRB_ARMS_TURN * aside * VRB_SmoothStep( VRB_ARMS_NEAR, VRB_ARMS_OUT, sqrtf( x * x + y * y ) ) *
+				( 1.0f - VRB_SmoothStep( VRB_ARMS_SIDE, VRB_ARMS_BEHIND, fabsf( aside ) ) );
+		}
+		want = w * Com_Clamp( -VRB_CHEST_TURN, VRB_CHEST_TURN, want );
+	}
+	if ( cg.time - vrb.chestTime < 0 || cg.time - vrb.chestTime > 500 || Q_isnan( vrb.chestTwist ) ) {
+		vrb.chestTwist = want;	// (starting over)
+	} else {
+		vrb.chestTwist += ( want - vrb.chestTwist ) * ( 1.0f - expf( -( cg.time - vrb.chestTime ) * 0.001f / VRB_CHEST_EASE ) );
+	}
+	vrb.chestTime = cg.time;
+	return vrb.chestTwist;
+}
+
+// How much higher than the floor the body stands on (floorZ) the ground
+// under a foot is (0: there's none near).
+static float CG_VRB_GroundUnder( centity_t *cent, const vec3_t foot, float floorZ ) {
+	static const vec3_t mins = { -2.0f, -2.0f, 0.0f }, maxs = { 2.0f, 2.0f, 1.0f };
+	trace_t tr;
+	vec3_t start, end;
+
+	VectorSet( start, foot[0], foot[1], floorZ + VRB_STEP_UP );
+	VectorSet( end, foot[0], foot[1], floorZ - VRB_STEP_DOWN );
+	CG_Trace( &tr, start, mins, maxs, end, cent->currentState.number, MASK_PLAYERSOLID );
+	if ( tr.startsolid || tr.allsolid || tr.fraction >= 1.0f || tr.plane.normal[2] < 0.7f ) {
+		return 0.0f;
+	}
+	return tr.endpos[2] - floorZ;
+}
+
+// The ground under each foot (vrb.footDelta, eased - again in the same
+// frame, nothing changes), the body moved up or down by shiftZ
+// (CG_VR_BodyPose) - and lifted by its scale (CG_VRB_ScaleLift): the floor
+// is where the player stands.
+static void CG_VRB_FeetGround( centity_t *cent, const vrbBendRest_t *r, float shiftZ ) {
+	const float floorZ = cent->lerpOrigin[2] - CG_VRB_ScaleLift( cent ) - shiftZ + DEFAULT_MINS_2;
+	const qboolean fresh = (qboolean)( cg.time - vrb.footTime >= 0 && cg.time - vrb.footTime <= 500 );
+	int s;
+
+	for ( s = 0; s < 2; s++ ) {
+		const float want = CG_VRB_GroundUnder( cent, r->at[vrbThigh[s] + 2], floorZ );
+		if ( fresh && !Q_isnan( vrb.footDelta[s] ) ) {
+			vrb.footDelta[s] += ( want - vrb.footDelta[s] ) * ( 1.0f - expf( -( cg.time - vrb.footTime ) * 0.001f / VRB_FOOT_EASE ) );
+		} else {
+			vrb.footDelta[s] = want;	// (starting over)
+		}
+	}
+	vrb.footTime = cg.time;
+}
+
+// Two bones from a hip at hip to a foot at foot (within reach), as long as
+// they are: where the knee goes, bending the way pole points.
+static void VRB_Knee( const vec3_t hip, const vec3_t foot, float thigh, float shin, const vec3_t pole, vec3_t knee ) {
+	vec3_t d, p;
+	float len, c;
+
+	VectorSubtract( foot, hip, d );
+	len = VectorNormalize( d );
+	c = ( len > 1e-3f ) ? Com_Clamp( -1.0f, 1.0f, ( thigh * thigh + len * len - shin * shin ) / ( 2.0f * thigh * len ) ) : 1.0f;
+	VectorMA( pole, -DotProduct( pole, d ), d, p );
+	if ( VectorNormalize( p ) < 1e-4f ) {
+		PerpendicularVector( p, d );
+	}
+	VectorScale( d, thigh * c, knee );
+	VectorMA( knee, thigh * sqrtf( 1.0f - c * c ), p, knee );
+	VectorAdd( knee, hip, knee );
+}
+
+// The inverse of a rigid model space transform.
+static void VRB_Invert( const mdxaBone_t *a, mdxaBone_t *out ) {
+	mdxaBone_t t;
+	int r, c;
+
+	for ( r = 0; r < 3; r++ ) {
+		for ( c = 0; c < 3; c++ ) {
+			t.matrix[r][c] = a->matrix[c][r];
+		}
+	}
+	for ( r = 0; r < 3; r++ ) {
+		t.matrix[r][3] = -( t.matrix[r][0] * a->matrix[0][3] + t.matrix[r][1] * a->matrix[1][3] + t.matrix[r][2] * a->matrix[2][3] );
+	}
+	*out = t;
+}
+
+/*
+=================
+CG_VRB_Bend
+
+Bends the body being posed (vrb; vrbRemote: another player's) w of the way
+(0: upright, as animated): its eyes to eyesTo (where they're to go: NULL,
+not bent), its head looking along look (NULL: as animated - the game turns
+it, CG_VR_BodyLook), the body facing bodyYaw (as the game turned its chest
+and head: CG_VR_BodyAngles).
+Another player's head turns all the way, bent or not (it looks where
+theirs does); yours comes in with the bend (it isn't drawn: it only puts
+your eyes where they go). The trunk bends to take w of what the head's turn
+does to where the eyes are, the body moved whole the rest.
+=================
+*/
+static void CG_VRB_Bend( centity_t *cent, const vrClientState_t *vr, const vec3_t eyesTo, vec3_t look[3], float bodyYaw, float w ) {
+	vrbBendRest_t r;
+	vrbMat_t turn[4], head, neck, R[VRB_NUM_BEND_BONES];
+	vec3_t joint[4], delta, feet[2], eRest, eTurned, neckTo, to[VRB_NUM_BEND_BONES], from[VRB_NUM_BEND_BONES];
+	mdxaBone_t G[VRB_NUM_BEND_BONES];
+	const float shiftZ = ( vrb.shiftedEnt == cent ) ? vrb.shift[2] : 0.0f;
+	const qboolean lately = (qboolean)( cg.time - vrb.bendMovesTime > 0 && cg.time - vrb.bendMovesTime <= 500 &&
+		!Q_isnan( vrb.bendA ) && !Q_isnan( vrb.bendB ) );
+	float a = lately ? vrb.bendA : 0.0f, b = lately ? vrb.bendB : 0.0f, tau, share;
+	int k, s, pass;
+
+	if ( vrb.bendMovesTime == cg.time ) {
+		// (the other eye: as the first one bent it - the same frame - on the
+		// model as it is now)
+		for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+			trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbBendBones[k], &vrb.bendMoves[k] );
+		}
+		vrb.bendG2 = cent->ghoul2;
+		return;
+	}
+	CG_VRB_ResetBody( cent->ghoul2 );
+	if ( !CG_VRB_BendRest( cent, bodyYaw, &r ) ) {
+		return;
+	}
+	if ( !eyesTo ) {
+		w = 0.0f;
+	}
+	share = vrbRemote ? 1.0f : w;
+	tau = DEG2RAD( CG_VRB_ChestTwist( vr, look, &r, bodyYaw, w ) );
+	VectorClear( delta );
+	VectorSubtract( r.eyes, r.at[VRB_B_NECK], eRest );
+
+	// each foot where it stands, on the ground under it - not where the body
+	// is moved up or down to (its eyes with the view, as it eases over a step)
+	if ( w > 0.0f ) {
+		CG_VRB_FeetGround( cent, &r, shiftZ );
+	}
+	for ( s = 0; s < 2; s++ ) {
+		VectorCopy( r.at[vrbThigh[s] + 2], feet[s] );
+		feet[s][2] += w * ( vrb.footDelta[s] - shiftZ );
+	}
+
+	// the trunk: twisted, then leaned and lowered to put the neck where the
+	// eyes, with the head turned as it looks, need it - twice, the head's
+	// turn kept within the neck's reach of the chest as it ends up (w of
+	// what the head's turn does to the eyes, so nothing jumps as it eases in)
+	VRB_Trunk( &r, 0.0f, 0.0f, tau, delta, joint, turn );
+	for ( pass = 0; w > 0.0f && pass < 2; pass++ ) {
+		VRB_HeadTurn( &r, look, turn[3], share, vrb.lookIn, head, neck );
+		VRB_EyesFromNeck( &r, head, neck, eTurned );
+		VectorSubtract( eTurned, eRest, neckTo );
+		VectorMA( eRest, w, neckTo, neckTo );
+		VectorSubtract( eyesTo, neckTo, neckTo );
+		VRB_SolveTrunk( &r, neckTo, tau, feet, &a, &b, delta );
+		VRB_Trunk( &r, a, b, tau, delta, joint, turn );
+		VectorCopy( neckTo, vrb.bendNeck );
+	}
+	if ( w <= 0.0f ) {
+		a = b = 0.0f;	// (not leaned)
+	}
+	VRB_HeadTurn( &r, look, turn[3], share, vrb.lookIn, head, neck );
+
+	// ...and the body moved whole, its feet with it, the rest of the way
+	// across (not bent, all of it): its eyes over where they go, the head
+	// turned. Not up or down - its feet stay on the floor, and a nod takes
+	// the eyes down, as the game's own head turn does.
+	if ( eyesTo ) {
+		vec3_t move;
+		VRB_EyesFromNeck( &r, head, neck, eTurned );
+		VectorSubtract( eRest, eTurned, move );
+		VectorScale( move, 1.0f - w, move );
+		move[2] = 0.0f;
+		VectorAdd( delta, move, delta );
+		for ( s = 0; s < 2; s++ ) {
+			VectorAdd( feet[s], move, feet[s] );
+		}
+		VRB_Trunk( &r, a, b, tau, delta, joint, turn );
+	}
+
+	// every bone's move: the pelvis about the hips, each bone of the back,
+	// the neck and the head about its joint, to where its joint goes
+	memcpy( R[VRB_B_PELVIS], turn[0], sizeof( vrbMat_t ) );
+	VectorCopy( r.hips, from[VRB_B_PELVIS] );
+	VectorAdd( r.hips, delta, to[VRB_B_PELVIS] );
+	for ( k = 1; k < 4; k++ ) {
+		memcpy( R[k], turn[k], sizeof( vrbMat_t ) );
+		VectorCopy( r.at[k], from[k] );
+		VectorCopy( joint[k - 1], to[k] );
+	}
+	memcpy( R[VRB_B_NECK], neck, sizeof( vrbMat_t ) );
+	VectorCopy( r.at[VRB_B_NECK], from[VRB_B_NECK] );
+	VectorCopy( joint[3], to[VRB_B_NECK] );
+	memcpy( R[VRB_B_HEAD], head, sizeof( vrbMat_t ) );
+	VectorCopy( r.at[VRB_B_HEAD], from[VRB_B_HEAD] );
+	VectorSubtract( r.at[VRB_B_HEAD], r.at[VRB_B_NECK], to[VRB_B_HEAD] );
+	VRB_Apply( neck, to[VRB_B_HEAD], to[VRB_B_HEAD] );
+	VectorAdd( joint[3], to[VRB_B_HEAD], to[VRB_B_HEAD] );
+
+	// the legs: from the hips where they went to the feet, the knees bending
+	// the way they point as animated (each foot as it was, only moved) - or,
+	// not bent, along with the pelvis
+	for ( s = 0; s < 2; s++ ) {
+		const int t = vrbThigh[s];
+		const float reach = 0.999f * ( r.thigh[s] + r.shin[s] );
+		vec3_t hip, foot, knee, pole, d, u;
+		vrbMat_t arc;
+		float len;
+		if ( w <= 0.0f ) {
+			for ( k = 0; k < 3; k++ ) {
+				memcpy( R[t + k], R[VRB_B_PELVIS], sizeof( vrbMat_t ) );
+				VectorCopy( from[VRB_B_PELVIS], from[t + k] );
+				VectorCopy( to[VRB_B_PELVIS], to[t + k] );
+			}
+			continue;
+		}
+		VectorSubtract( r.at[t], r.hips, hip );
+		VRB_Apply( turn[0], hip, hip );
+		VectorAdd( hip, to[VRB_B_PELVIS], hip );
+		VectorSubtract( feet[s], hip, d );
+		len = VectorLength( d );
+		if ( len > reach ) {
+			VectorMA( hip, reach / len, d, foot );	// (out of reach: as near as it gets)
+		} else {
+			VectorCopy( feet[s], foot );
+		}
+		VectorSubtract( r.at[t + 2], r.at[t], u );
+		VectorNormalize( u );
+		VectorSubtract( r.at[t + 1], r.at[t], pole );
+		VectorMA( pole, -DotProduct( pole, u ), u, pole );
+		if ( VectorLength( pole ) < 0.2f ) {
+			CrossProduct( r.hipLine, r.face[2], pole );	// (a leg dead straight as animated: forward, the way its hip joints face)
+		}
+		VRB_Knee( hip, foot, r.thigh[s], r.shin[s], pole, knee );
+		// the thigh swung from where it pointed to the knee, the shin with it
+		// and then to the foot, the foot not turned at all
+		VectorSubtract( r.at[t + 1], r.at[t], d );
+		VectorSubtract( knee, hip, u );
+		VectorNormalize( d );
+		VectorNormalize( u );
+		VRB_Arc( d, u, R[t] );
+		VectorSubtract( r.at[t + 2], r.at[t + 1], d );
+		VRB_Apply( R[t], d, d );
+		VectorSubtract( foot, knee, u );
+		VectorNormalize( d );
+		VectorNormalize( u );
+		VRB_Arc( d, u, arc );
+		VRB_Mul( arc, R[t], R[t + 1] );
+		VRB_Identity( R[t + 2] );
+		for ( k = 0; k < 3; k++ ) {
+			VectorCopy( r.at[t + k], from[t + k] );
+		}
+		VectorCopy( hip, to[t] );
+		VectorCopy( knee, to[t + 1] );
+		VectorCopy( foot, to[t + 2] );
+	}
+
+	// on the bones: each one's move with its parent's taken back out
+	for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+		CG_VRB_ModelMove( cent, R[k], from[k], to[k], &G[k] );
+	}
+	for ( k = 0; k < VRB_NUM_BEND_BONES; k++ ) {
+		mdxaBone_t inv;
+		if ( vrbBendParent[k] >= 0 ) {
+			VRB_Invert( &G[vrbBendParent[k]], &inv );
+			VRB_Compose( &G[k], &inv, &vrb.bendMoves[k] );
+		} else {
+			vrb.bendMoves[k] = G[k];
+		}
+		trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbBendBones[k], &vrb.bendMoves[k] );
+	}
+	vrb.bendG2 = cent->ghoul2;
+	vrb.bendMovesTime = vrb.bendOkTime = cg.time;
+	vrb.bendA = a;
+	vrb.bendB = b;
+
+	// (the log, the tests)
+	vrb.bendLean = RAD2DEG( a );
+	vrb.bendSide = RAD2DEG( b );
+	vrb.bendTwist = RAD2DEG( tau );
+	vrb.bendDrop = -delta[2];
+	if ( !vrbRemote && cg_vrLog.integer && cg.time - vrb.bendLogTime >= 2000 ) {
+		vec3_t eyes;
+		vrb.bendLogTime = cg.time;
+		CG_VRB_Eyes( cent, eyes );
+		CG_VRB_Log( "bend: %.2f, leaned %+.0f forward %+.0f left, chest turned %+.0f, hips down %.1f back %.1f, "
+			"eyes %.1f from where they go, feet %+.1f %+.1f\n", w, vrb.bendLean, vrb.bendSide, vrb.bendTwist,
+			vrb.bendDrop, -DotProduct( delta, r.face[0] ), eyesTo ? Distance( eyes, eyesTo ) : 0.0f,
+			vrb.footDelta[VR_HAND_LEFT], vrb.footDelta[VR_HAND_RIGHT] );
+	}
+}
+
+// The body being posed bends (before its arms are solved: they reach from
+// where it puts the shoulders) - yours, from your headset; another VR
+// player's (vrbRemote: their avatar, in the world), from theirs.
+static void CG_VRB_BendBody( centity_t *cent, const vrClientState_t *vr ) {
+	vec3_t look[3], head;
+	float bodyYaw, w;
+	qboolean haveLook;
+
+	if ( !cent->ghoul2 || !trap->ext.VR_G2SetBoneTransform ) {
+		return;
+	}
+	if ( !cg_vrBodyBend.integer ) {
+		CG_VRB_ClearBody( cent->ghoul2 );	// (upright, as before)
+		return;
+	}
+	if ( vrbRemote ) {
+		AnglesToAxis( vrbRemote->headAngles, look );
+		haveLook = qtrue;
+		bodyYaw = vrbRemote->bodyYaw;
+	} else {
+		haveLook = CG_VR_HeadPose( head, look );
+		bodyYaw = CG_VRB_BodyYaw( vr );
+	}
+	w = CG_VRB_BendNow();
+	CG_VRB_Bend( cent, vr, ( vrb.bendEyesTime == cg.time ) ? vrb.bendEyes : NULL, haveLook ? look : NULL, bodyYaw, w );
+}
+
+/*
+=============================================================================
+
 other players' VR bodies
 
 Another player in VR is drawn from the avatar their game sends with every
@@ -4935,43 +5814,116 @@ static qboolean CG_VRB_OtherUsable( centity_t *cent ) {
 	return st->avatarValid;
 }
 
-// Where another VR player's head looks: where theirs does (the game would
-// turn it toward their aim). qfalse: the game's own look.
-qboolean CG_VR_BodyLook( centity_t *cent, vec3_t lookAngles ) {
-	if ( cent->currentState.number == cg.clientNum || !CG_VRB_OtherUsable( cent ) ) {
-		return qfalse;
+// How far the bend has a VR body's head this frame (0..1; eased - again in
+// the same frame, no time passes, nothing changes): it turns it itself, the
+// neck first (CG_VRB_OwnLook, CG_VRB_Bend); the game the rest of the way
+// (CG_VR_BodyLook), as it's knocked down, say, or gets up. Body Bends
+// turned off, none of it at once.
+static float CG_VRB_LookIn( centity_t *cent, vrbState_t *st ) {
+	const float want = CG_VRB_OwnLook( cent ) ? 1.0f : 0.0f;
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - st->lookInTime ) * 0.001f );
+
+	if ( !cg_vrBodyBend.integer || cg.time - st->lookInTime < 0 || cg.time - st->lookInTime > 500 ) {
+		st->lookIn = want;	// (starting over)
+	} else if ( want > st->lookIn ) {
+		st->lookIn = Q_min( want, st->lookIn + dt / VRB_LOOK_EASE );
+	} else {
+		st->lookIn = Q_max( want, st->lookIn - dt / VRB_LOOK_EASE );
 	}
-	VectorCopy( vrbOthers[cent->currentState.number].avatar.headAngles, lookAngles );
+	st->lookInTime = cg.time;
+	return st->lookIn;
+}
+
+// Where the game turns a VR body's head (CG_G2PlayerAngles, from the way the
+// body faces): another VR player's, where theirs looks - the game would turn
+// it toward their aim, or whoever is near. With Body Bends the body turns its
+// head itself (the neck first: CG_VRB_Bend) - yours too - so the game turns
+// it only the rest of the way, as the bend takes it over or hands it back
+// (CG_VRB_LookIn), and at once. qfalse: the game's own look.
+qboolean CG_VR_BodyLook( centity_t *cent, vec3_t lookAngles ) {
+	const int n = cent->currentState.number;
+	vec3_t ahead;
+	float own;
+	int i;
+
+	if ( n == cg.clientNum ) {
+		const vrClientState_t *vr = CG_VR();
+		if ( !vr || !CG_VR_BodyActive( cent ) ) {
+			return qfalse;
+		}
+		own = CG_VRB_LookIn( cent, &vrbSelf );
+		if ( own <= 0.0f ) {
+			return qfalse;
+		}
+		VectorSet( ahead, 0.0f, CG_VRB_BodyYaw( vr ), 0.0f );	// (CG_VR_BodyAngles)
+	} else if ( !CG_VRB_OtherUsable( cent ) ) {
+		return qfalse;
+	} else {
+		own = CG_VRB_LookIn( cent, &vrbOthers[n] );
+		VectorCopy( vrbOthers[n].avatar.headAngles, lookAngles );
+		if ( own <= 0.0f ) {
+			return qtrue;
+		}
+		VectorSet( ahead, 0.0f, vrbOthers[n].avatar.bodyYaw, 0.0f );
+	}
+	for ( i = 0; i < 3; i++ ) {
+		lookAngles[i] = LerpAngle( lookAngles[i], ahead[i], own );
+	}
+	VectorClear( cgs.clientinfo[n].lastHeadAngles );	// (not easing there from where it had it)
 	return qtrue;
 }
 
-// Another VR player's body stood under their head, as their game stands it
-// (undone in CG_VR_BodyEndFrame).
+// Another VR player's body stood under their head (undone in
+// CG_VR_BodyEndFrame): its eyes go where their game put their body's eyes
+// (vrAvatar_t.head) - moved whole as far as their game moved it, and bent the
+// rest of the way (CG_VRB_Bend); not bent here (no Body Bends, or not
+// standing still), moved whole all the way across, and up and down as far as
+// their game moved it (its feet on the floor as theirs are: the animation
+// here runs a little ahead of theirs or behind) - and down to their eyes,
+// crouched with their body bent.
 static void CG_VRB_OtherPose( centity_t *cent, refEntity_t *legs ) {
 	const int n = cent->currentState.number;
+	vec3_t eyes, full;
 
 	if ( !CG_VRB_OtherUsable( cent ) ) {
 		return;
 	}
 	vrbCur = &vrbOthers[n];
 	CG_VRB_Init();
-	CG_VRB_ResetArms( cent->ghoul2 );	// (the animated pose, without last frame's arm overrides)
+	CG_VRB_ResetArms( cent->ghoul2 );	// (the animated pose, without last frame's arm overrides - nor its bend: CG_VR_BodyAngles)
 	vrb.armsG2 = cent->ghoul2;
 	vrbRemote = &vrb.avatar;
 	CG_VRB_HideHolstered( cent, cgs.clientinfo[n].vrHasHolsters );	// (their sabers in their holsters: cg_vrholster.c)
 	vrbRemote = NULL;
-	VectorAdd( cent->lerpOrigin, vrb.avatar.shift, cent->lerpOrigin );
+	VectorCopy( vrb.avatar.shift, vrb.shift );
+	VectorAdd( cent->lerpOrigin, vrb.avatar.head, vrb.bendEyes );
+	vrb.bendEyes[2] -= CG_VRB_ScaleLift( cent );
+	// (an older build's demo: no head - moved as their game moved it, not bent)
+	vrb.bendEyesTime = VectorCompare( vrb.avatar.head, vec3_origin ) ? 0 : cg.time;
+	if ( vrb.bendEyesTime && CG_VRB_Eyes( cent, eyes ) ) {
+		const float w = CG_VRB_BendWeight( cent->currentState.groundEntityNum != ENTITYNUM_NONE );
+		const float len = sqrtf( ( vrb.bendEyes[0] - eyes[0] ) * ( vrb.bendEyes[0] - eyes[0] ) +
+			( vrb.bendEyes[1] - eyes[1] ) * ( vrb.bendEyes[1] - eyes[1] ) );
+		VectorSubtract( vrb.bendEyes, eyes, full );
+		if ( len > 48.0f ) {
+			full[0] *= 48.0f / len;	// (as far as theirs ever goes: VRS_TakeAvatar)
+			full[1] *= 48.0f / len;
+		}
+		full[2] = vrb.avatar.shift[2] + Com_Clamp( -VRB_DROP_MAX, 0.0f, full[2] - vrb.avatar.shift[2] );
+		VectorSubtract( vrb.avatar.shift, full, vrb.shift );
+		VectorMA( full, w, vrb.shift, vrb.shift );
+	}
+	VectorAdd( cent->lerpOrigin, vrb.shift, cent->lerpOrigin );
 	VectorCopy( cent->lerpOrigin, legs->origin );
 	VectorCopy( cent->lerpOrigin, legs->oldorigin );
 	VectorCopy( cent->lerpOrigin, legs->lightingOrigin );
 	vrb.shiftedEnt = cent;
-	VectorCopy( vrb.avatar.shift, vrb.shift );
 	vrbCur = &vrbSelf;
 }
 
 // The avatar of the body being posed, its hands in the world: from where
 // the player is drawn now - after the game's own smoothing moved them, and
-// without the body's shift (CG_VRB_OtherPose).
+// without the body's shift (CG_VRB_OtherPose) or a scaled model's lift.
 static void CG_VRB_AvatarInWorld( centity_t *cent, vrAvatar_t *world ) {
 	vec3_t base;
 	int h;
@@ -4981,6 +5933,7 @@ static void CG_VRB_AvatarInWorld( centity_t *cent, vrAvatar_t *world ) {
 	if ( vrb.shiftedEnt == cent ) {
 		VectorSubtract( base, vrb.shift, base );
 	}
+	base[2] -= CG_VRB_ScaleLift( cent );
 	for ( h = 0; h < 2; h++ ) {
 		if ( world->hand[h].grip != VR_GRIP_NONE ) {
 			VectorAdd( world->hand[h].origin, base, world->hand[h].origin );
@@ -5064,6 +6017,9 @@ static void CG_VRB_OtherArms( centity_t *cent ) {
 	vrbCur = &vrbOthers[n];
 	CG_VRB_Init();
 	CG_VRB_AvatarInWorld( cent, &world );
+	vrbRemote = &world;
+	CG_VRB_BendBody( cent, NULL );	// (first: the arms reach from where it puts the shoulders)
+	vrbRemote = NULL;
 	CG_VRB_PoseOther( cent, &world );
 	vrbCur = &vrbSelf;
 }
@@ -5108,7 +6064,7 @@ static void CG_VRB_PoseEyes( const centity_t *cent, const vec3_t eyes ) {
 
 	if ( BG_VRPosePhase( &cg.predictedPlayerState, CG_VRB_Anims(), NULL, NULL ) == VRPHASE_HELD ) {
 		vrb.poseEyeTarget = Com_Clamp( -VRB_POSE_EYE_MAX, VRB_POSE_EYE_MAX,
-			eyes[2] - ( cent->lerpOrigin[2] + cg.predictedPlayerState.viewheight ) );
+			eyes[2] - ( cent->lerpOrigin[2] - CG_VRB_ScaleLift( cent ) + cg.predictedPlayerState.viewheight ) );
 	} else {
 		vrb.poseEyeTarget = 0.0f;
 	}
@@ -5138,10 +6094,9 @@ frame's animation is set (CG_VR_BodyArms).
 */
 void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 	const vrClientState_t *vr = CG_VR();
-	vrbBone_t le, re;
 	vec3_t eyes, head, headAxis[3], fwd, shift;
 	float yaw, len, duck;
-	qboolean haveEyes = qfalse;
+	qboolean haveEyes;
 
 	if ( cent->currentState.number != cg.clientNum ) {
 		CG_VRB_OtherPose( cent, legs );
@@ -5176,7 +6131,8 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		}
 	}
 
-	// the animated pose, without last frame's arm overrides
+	// the animated pose, without last frame's arm overrides (nor its bend:
+	// CG_VR_BodyAngles, as the game turned the body)
 	CG_VRB_ResetArms( cent->ghoul2 );
 	vrb.armsG2 = cent->ghoul2;
 
@@ -5184,15 +6140,10 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 	// behind yours (so the neck stays out of view); up and down, the body
 	// rides along with the camera's own smoothing (stairs, landings) and
 	// sinks when you crouch for real. Its height otherwise stays the
-	// model's own, feet on the ground.
-	if ( CG_VRB_Bone( cent, "leye", 1, &le ) && CG_VRB_Bone( cent, "reye", 1, &re ) ) {
-		VectorAdd( le.origin, re.origin, eyes );
-		VectorScale( eyes, 0.5f, eyes );
-		haveEyes = qtrue;
-	} else if ( CG_VRB_Bone( cent, "cranium", 1, &le ) ) {
-		VectorCopy( le.origin, eyes );
-		haveEyes = qtrue;
-	}
+	// model's own, feet on the ground. Standing still with Body Bends, its
+	// feet stay put instead - where they'd be with your head at the view's
+	// own place - and it bends to put its eyes there (CG_VRB_Bend).
+	haveEyes = CG_VRB_Eyes( cent, eyes );
 	// (leaning in eases toward what the arms asked for last frame)
 	if ( vrb.leanTime != cg.time ) {
 		const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.leanTime ) * 0.001f );
@@ -5203,13 +6154,17 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		vrb.leanTime = cg.time;
 	}
 	if ( haveEyes && CG_VR_HeadPose( head, headAxis ) ) {
+		const float w = CG_VRB_BendWeight( cg.predictedPlayerState.groundEntityNum != ENTITYNUM_NONE );
+		vec3_t full, stand;
+		float ride;
+
 		VectorSet( fwd, cosf( DEG2RAD( yaw ) ), sinf( DEG2RAD( yaw ) ), 0.0f );
 		VectorMA( head, vrb.lean - cg_vrBodyBack.value, fwd, head );
-		VectorSubtract( head, eyes, shift );
-		shift[2] = 0.0f;
-		len = VectorLength( shift );
+		VectorSubtract( head, eyes, full );
+		full[2] = 0.0f;
+		len = VectorLength( full );
 		if ( len > 48.0f ) {
-			VectorScale( shift, 48.0f / len, shift );	// never wander off
+			VectorScale( full, 48.0f / len, full );	// never wander off
 		}
 
 		duck = 0.0f;	// the camera's duck smoothing: the crouch animation does that
@@ -5219,9 +6174,24 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		// in a pose the camera goes to the body's eyes (CG_VR_PoseEyeAdjust):
 		// the body stays put, on the floor
 		CG_VRB_PoseEyes( cent, eyes );
-		shift[2] = cg.refdef.vieworg[2] + duck - vrb.poseEye - ( cent->lerpOrigin[2] + cg.predictedPlayerState.viewheight );
-		shift[2] += Q_min( 0.0f, head[2] - cg.refdef.vieworg[2] );
-		shift[2] = Com_Clamp( -48.0f, 48.0f, shift[2] );
+		ride = cg.refdef.vieworg[2] + duck - vrb.poseEye - ( cent->lerpOrigin[2] - CG_VRB_ScaleLift( cent ) + cg.predictedPlayerState.viewheight );
+		full[2] = Com_Clamp( -48.0f, 48.0f, ride + Q_min( 0.0f, head[2] - cg.refdef.vieworg[2] ) );
+
+		// (bent: the feet where they'd be with your head at the view's place,
+		// riding along with it all the same; the eyes still go where they
+		// go - everyone else's game puts them there too, CG_VRB_FillAvatar)
+		VectorMA( cg.refdef.vieworg, -cg_vrBodyBack.value, fwd, stand );
+		VectorSubtract( stand, eyes, stand );
+		stand[2] = 0.0f;
+		len = VectorLength( stand );
+		if ( len > 48.0f ) {
+			VectorScale( stand, 48.0f / len, stand );
+		}
+		stand[2] = Com_Clamp( -48.0f, 48.0f, ride );
+		VectorAdd( eyes, full, vrb.bendEyes );
+		vrb.bendEyesTime = cg.time;
+		VectorSubtract( stand, full, shift );
+		VectorMA( full, w, shift, shift );
 
 		// Move the entity itself for the rest of the frame, so effects bolted
 		// to the body (force powers from your hand, the saber) come from the
@@ -5249,6 +6219,7 @@ void CG_VR_BodyArms( centity_t *cent ) {
 	if ( !vr || !cent->ghoul2 ) {
 		return;
 	}
+	CG_VRB_BendBody( cent, vr );	// (first: the arms reach from where it puts the shoulders)
 	if ( cg_vrBodyArms.integer ) {
 		CG_VRB_Arms( cent, vr, CG_VRB_BodyYaw( vr ) );
 		CG_VRB_LogHands( cent );
@@ -5660,9 +6631,16 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, NULL, head, NULL, world );
 	VR_AxisToAngles( world, a->headAngles );
 	VectorCopy( shift, a->shift );
-	// where your head is (the headset, as the eyes are drawn round it)
-	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->headOrigin, NULL, a->head, NULL );
-	VectorSubtract( a->head, cg.refdef.vieworg, a->head );
+	// where your body's eyes go (your headset, the neck just behind it:
+	// CG_VR_BodyPose) - theirs bends your body to put them there too
+	if ( vrb.bendEyesTime == cg.time ) {
+		VectorSubtract( vrb.bendEyes, cg.refdef.vieworg, a->head );
+	} else {
+		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->headOrigin, NULL, a->head, NULL );
+		a->head[0] -= cg_vrBodyBack.value * cosf( DEG2RAD( vrb.worldYaw ) );	// (just behind your headset)
+		a->head[1] -= cg_vrBodyBack.value * sinf( DEG2RAD( vrb.worldYaw ) );
+		VectorSubtract( a->head, cg.refdef.vieworg, a->head );
+	}
 	for ( h = 0; h < 2; h++ ) {
 		if ( vrb.sentTime[h] == cg.time && vrb.armTime[h] == cg.time ) {
 			a->hand[h] = vrb.sent[h];
@@ -7034,6 +8012,7 @@ static void CG_VRB_Restore( centity_t *cent ) {
 		vrb.poleValid[0] = vrb.poleValid[1] = qfalse;
 	}
 	CG_VRB_ClearExtra( cent->ghoul2 );
+	CG_VRB_ClearBody( cent->ghoul2 );
 	if ( vrb.wristG2 == cent->ghoul2 ) {
 		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_LEFT, NULL );
 		CG_VRB_SetHandBones( cent->ghoul2, VR_HAND_RIGHT, NULL );

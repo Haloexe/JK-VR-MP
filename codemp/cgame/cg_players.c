@@ -4321,7 +4321,8 @@ static void CG_G2PlayerAngles( centity_t *cent, matrix3_t legs, vec3_t legsAngle
 			VectorCopy(cent->poseYawSet ? cent->lerpAngles : bodyAngles, lookAngles);	// (OpenJK VR: posed, the head looks where they do)
 		}
 		lookAngles[PITCH] = 0;
-		// OpenJK VR: another VR player's head looks where theirs does (nods and tilts too)
+		// OpenJK VR: another VR player's head looks where theirs does (nods and
+		// tilts too); with Body Bends, a VR body turns its head itself
 		CG_VR_BodyLook( cent, lookAngles );
 
 		if (cent->currentState.otherEntityNum2)

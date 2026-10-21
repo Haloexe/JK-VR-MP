@@ -71,7 +71,8 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_LATCH		2000	// ms a player still counts as fighting in VR without poses (lag)
 #define VR_SABER_FRESH		200		// ms the newest blade pose is used for
 #define VR_SABER_REACH		64.0f	// a hilt or hand can't be further than this from the camera
-#define VR_SABER_HEAD_REACH	24.0f	// ...nor the head (the headset; the view follows it 8.5 at most, vr_positionalMax)
+#define VR_SABER_HEAD_REACH	24.0f	// ...nor the head (where the body's eyes go: the headset, the neck just behind it; the
+										// view follows the headset 8.5 at most, vr_positionalMax)
 #define VR_SABER_VIEW_XY	16.0f	// the camera's smoothing can't take it further than this sideways...
 #define VR_SABER_VIEW_Z		48.0f	// ...or up and down from the eye
 #define VR_GAZE_FRESH		500		// ms: where a VR player's headset was last seen to look stands for this long (G_VRHeadGaze)

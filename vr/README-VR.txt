@@ -150,10 +150,32 @@ third person, fingers around the grip. When you reach further than your
 character's arm, the body leans in a little so the hand still gets there.
 Standing still, your character stands up straight, as you do (the game's
 saber stances crouch, which put your hands up at its chest), so its head
-is where yours is and your hands sit on its body where they are on yours;
-running, crouching, getting hurt and the Force still play the game's own
-animations. Everyone running this build sees you that way, and in games
-hosted with it blades hit that body.
+is where yours is and your hands sit on its body where they are on yours
+- and it bends as you do (BODY BENDS, below); running, crouching, getting
+hurt and the Force still play the game's own animations. Everyone running
+this build sees you that way, and in games hosted with it blades hit that
+body.
+
+BODY BENDS: standing still, your character stands the way you do (Setup >
+VR: Body Bends). Its feet stay where they are and it bends from them to put
+its head where yours is: lean or bow and it leans and bows - half of a bow
+at the hips, the rest along its back - lean to a side and it does; reach
+past arm's length and it leans in from the waist. Crouch for real and its
+knees bend, its hips going back over its feet, as low as the view follows
+you down (about 25 cm, vr_positionalMax): to the game you're still
+standing, so to duck under something press B, which crouches you as ever.
+Each foot stands on the ground under it, on a step or a slope. Look to a
+side and its neck turns first, its chest next (once you look more than 45
+degrees away), its hips last; swing a saber out and its chest turns with
+your arms, up to 30 degrees off its hips. It never takes a step: turning
+round, its feet pivot. Running, jumping, a flip, a pose: the game's own
+animation, the bend easing out, and back in as you stand still again.
+With it on you see other VR players bend the same way, their heads turned
+the way they look; they see yours bend if they have it on too (each player's
+own Body Bends decides how they see everyone). Blades still meet the upright
+body the server has, as before, not the bent one you see. Turned off, your
+character - and other VR players', as you see them - stays upright and
+moves whole under the head, as it did before.
 
 Your arms move like real ones. Each elbow goes where holding your hand
 the way you hold it is easiest: it hangs when it can, a raised arm goes
@@ -519,8 +541,9 @@ server running this build: your real blade is the weapon.
         (0 off, 1 normal, up to 2).
   * Setup has a VR page (the VR button under Video, Sound and the rest,
     in the main menu and in game) with Left-Handed (above), Finger
-    Tracking and Grip Press (YOUR FINGERS, above), Saber Inertia, Saber
-    Weight, Vibration and the holsters' settings (HOLSTERS, above):
+    Tracking and Grip Press (YOUR FINGERS, above), Body Bends (BODY BENDS,
+    above), Saber Inertia, Saber Weight, Vibration and the holsters'
+    settings (HOLSTERS, above):
     point at Left-Handed and click it, or pick it with the arrow keys (or
     Tab) and set it with left (No) or right (Yes), or change it with Enter;
     point at a slider and click or drag it, or push the stick up or down
@@ -921,7 +944,12 @@ SETTINGS (console cvars, saved automatically)
                          smaller = closer to you, but you may see the neck
                          when looking straight down
   cg_vrBodyTwist 45      how far you can turn your head before the torso
-                         follows (degrees)
+                         follows (degrees; with Body Bends, the chest -
+                         up to 70, the furthest the neck turns - the hips
+                         another 30 after it)
+  cg_vrBodyBend 1        0 = your body (and other VR players', as you see
+                         them) stays upright, moved whole under the head
+                         (Setup, VR: Body Bends)
   cg_vrHandX/Y/Z 0       nudge an empty hand or the saber hilt on the
                          controller (forward/inward/up units); a gun's
                          grip follows cg_vrGunX/Y/Z
@@ -1009,6 +1037,11 @@ KNOWN LIMITATIONS
   * Fingers: the game's skeleton moves three fingers a hand - the thumb,
     the index finger, and the other three together - and each follows
     only what your controller can feel (see YOUR FINGERS).
+  * Body Bends: the body bends only standing still (moving, the game's
+    animation has it), takes no steps (its feet pivot as it turns round),
+    can't stand taller than the model stands or crouch lower than the
+    view follows you, and blades meet the server's upright body, not the
+    bent one (see BODY BENDS).
   * Holsters: on a model with a cape or a jetpack, what hangs on your back
     (and a hilt at the hip) can sink into it, and long hair or lekku can
     cover a shoulder's; a hilt can touch the leg in some of the game's

@@ -81,8 +81,11 @@ first saber is in the left hand; a saber passed from one hand to the other).
 twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		5		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed;
-										// 5: avatar head, avatar hands' fingers
+#define VR_POSE_PROTOCOL		6		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed;
+										// 5: avatar head, avatar hands' fingers; 6: the avatar's head where its body's eyes go, its
+										// shift - bent - where its feet stand (the same bits as 5)
+#define VR_POSE_HEAD_BACK		4.0f	// (5: the avatar's head was the headset itself - the body's eyes went this far behind it,
+										// the way it faced: cg_vrBodyBack as it was)
 #define VR_POSE_MAX_SABERS		2		// the first saber, the second (each in either hand)
 #define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
 #define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
@@ -108,10 +111,11 @@ it to the engine (gameImport_t.ext.VR_SetAvatar), which sends it after each
 snapshot to the other players that run this build (svc_vrAvatars, only to
 clients that sent clc_moveVR). Their games pose that player's body with it,
 the hands offset from where they draw the player
-(cgameImport_t.ext.VR_GetAvatar). Directions are world axes. The head goes
-as the hands do (an offset from the camera, then from the player's origin);
-nothing draws it yet - it's there for the body that bends to put its head
-where the headset is.
+(cgameImport_t.ext.VR_GetAvatar). Directions are world axes. The head -
+where the player's game puts their body's eyes: their headset, with the
+neck just behind it - goes as the hands do (an offset from the camera, then
+from the player's origin); standing still, their body bends to put its eyes
+there (Body Bends: cg_vrbody.c), or is moved whole under it.
 --------------------------------------------------------------------------------
 */
 enum {
@@ -151,8 +155,10 @@ typedef struct vrAvatar_s {
 	qboolean		valid;
 	float			bodyYaw;		// where the body faces (world yaw)
 	vec3_t			headAngles;		// where the head looks (pitch, yaw, roll)
-	vec3_t			shift;			// how far the body is drawn from the entity origin (stood under the head)
-	vec3_t			head;			// where the head is (the headset, between the eyes): an offset like the hands'
+	vec3_t			shift;			// how far the body is drawn from the entity origin (stood under the head; bent, where its
+									// feet stand)
+	vec3_t			head;			// where the body's eyes go (the headset, the neck just behind it): an offset like the hands'
+									// (all 0: none - an older build's demo)
 	vrAvatarHand_t	hand[2];		// VR_HAND_LEFT, VR_HAND_RIGHT
 } vrAvatar_t;
 

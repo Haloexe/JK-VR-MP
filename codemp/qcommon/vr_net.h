@@ -6,7 +6,7 @@ Written by the client right after each usercmd it sends, only to servers
 that put "sv_vrx" in their systeminfo, and then in clc_moveVR /
 clc_moveNoDeltaVR messages, so the server always knows whether to read it.
 
-Format (VR_POSE_PROTOCOL 5):
+Format (VR_POSE_PROTOCOL 6):
 	1 bit		valid: a lit saber in the VR hands
 	1 bit		avatar valid
 	(nothing else follows if both are 0)
@@ -30,7 +30,8 @@ origin; with a usercmd they are offsets from the camera):
 	16 bits		body yaw
 	48 bits		head pitch, yaw, roll
 	48 bits		shift x, y, z
-	48 bits		head x, y, z (where the head is; 3 and 4, in older demos: not there)
+	48 bits		head x, y, z (where the body's eyes go; 5, in older demos: the headset
+				itself; 3 and 4: not there)
 	per hand (left, right):
 				3 bits grip (VR_GRIP_*; nothing more for NONE)
 				origin x, y, z
@@ -184,7 +185,7 @@ static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 
 // (protocol: the format it was written in - a demo recorded with an older
 // build has its own: 3 had no saber, reversed or hilt; 3 and 4, no head or
-// fingers)
+// fingers; 5's head was the headset itself)
 static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protocol ) {
 	Com_Memset( a, 0, sizeof( *a ) );
 	a->valid = qtrue;
@@ -199,6 +200,11 @@ static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protoco
 		a->head[0] = VR_ReadPoseCoord( msg );
 		a->head[1] = VR_ReadPoseCoord( msg );
 		a->head[2] = VR_ReadPoseCoord( msg );
+		if ( protocol == 5 ) {
+			// (the headset itself: the body's eyes go just behind it, the way it faces)
+			a->head[0] -= VR_POSE_HEAD_BACK * cosf( DEG2RAD( a->bodyYaw ) );
+			a->head[1] -= VR_POSE_HEAD_BACK * sinf( DEG2RAD( a->bodyYaw ) );
+		}
 	}
 	for ( int h = 0; h < 2; h++ ) {
 		vrAvatarHand_t *hand = &a->hand[h];

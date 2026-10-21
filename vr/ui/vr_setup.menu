@@ -90,6 +90,28 @@
 
 		itemDef
 		{
+			name			vr_bodybends
+			group			vrsetup
+			type			ITEM_TYPE_YESNO
+			text			"Body Bends"
+			cvar			"cg_vrBodyBend"
+			rect			260 184 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Standing still, your character leans, bows, turns and crouches as you do, feet planted - other VR players' as they do"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vr_saberinertia
 			group			vrsetup
 			type			ITEM_TYPE_SLIDER
