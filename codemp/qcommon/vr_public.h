@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-11"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-12"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -38,6 +38,9 @@ General Public License version 2, like the rest of OpenJK.
 												//     ext.VR_GenericCmd, vrClientState_t.trigger
 												//     (holsters); VR_GRAB_HOLDS (either way round
 												//     with -11 builds: not set or not read, as before)
+												// -12: vrClientState_t.fingers (what the controllers
+												//     sense of your fingers), vrAvatarHand_t.fingers,
+												//     vrAvatar_t.head (VR_POSE_PROTOCOL 5)
 
 // ext.VR_SetGrabZones( hands | VR_GRAB_HOLDS ): the grips hold what they've
 // taken hold of (holsters, Saber Grip: Hold) - a grab is let go of only once
@@ -78,7 +81,8 @@ first saber is in the left hand; a saber passed from one hand to the other).
 twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		4		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed
+#define VR_POSE_PROTOCOL		5		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed;
+										// 5: avatar head, avatar hands' fingers
 #define VR_POSE_MAX_SABERS		2		// the first saber, the second (each in either hand)
 #define VR_POSE_MAX_BLADES		2		// per saber (staffs have 2)
 #define VR_POSE_MAX_OFFSET		1000.0f	// units (16-bit fixed point, 1/32 unit)
@@ -92,7 +96,8 @@ typedef struct vrBladePose_s {
 /*
 --------------------------------------------------------------------------------
 The VR avatar: what everyone else sees of a VR player - which way their body
-faces, where they look, and their hands, holding what.
+faces, where their head is and where they look, and their hands, holding
+what, their fingers as theirs are.
 
 The player's game sends it with every usercmd (vrUserPose_t.avatar, offsets
 from the camera like the saber pose; valid whenever their VR body is drawn,
@@ -103,7 +108,10 @@ it to the engine (gameImport_t.ext.VR_SetAvatar), which sends it after each
 snapshot to the other players that run this build (svc_vrAvatars, only to
 clients that sent clc_moveVR). Their games pose that player's body with it,
 the hands offset from where they draw the player
-(cgameImport_t.ext.VR_GetAvatar). Directions are world axes.
+(cgameImport_t.ext.VR_GetAvatar). Directions are world axes. The head goes
+as the hands do (an offset from the camera, then from the player's origin);
+nothing draws it yet - it's there for the body that bends to put its head
+where the headset is.
 --------------------------------------------------------------------------------
 */
 enum {
@@ -113,6 +121,15 @@ enum {
 	VR_GRIP_SABER,		// holding its own saber: dir runs along the blade
 	VR_GRIP_HILT,		// on the other hand's hilt: dir runs along it through the fist
 	VR_NUM_GRIPS
+};
+
+// A hand's fingers, as the humanoid skeleton moves them: the thumb, the index
+// finger, and the other three together - each 0..1 (qcommon/vr_fingers.h)
+enum {
+	VR_FINGER_THUMB,	// 0: up, lifted off the controller .. 1: down, on a button, the stick or the thumb rest
+	VR_FINGER_INDEX,	// 0: straight .. 0.5: resting on the trigger, half curled .. 1: curled into a fist
+	VR_FINGER_OTHERS,	// the middle, ring and little fingers: 0 open .. 1 closed (the grip squeezed)
+	VR_NUM_FINGERS
 };
 
 typedef struct vrAvatarHand_s {
@@ -126,6 +143,8 @@ typedef struct vrAvatarHand_s {
 	float		hilt;			// SABER: where along the hilt the fist is - from where the saber's own tag holds it, toward
 								// its (first) blade (units; -VR_POSE_MAX_HILT..VR_POSE_MAX_HILT)
 	qboolean	reversed;		// SABER: held the other way round - the blade out of the little finger's side of the fist
+	qboolean	fingersValid;	// FREE, GUN: the fingers follow the player's (VR_NUM_FINGERS, 0..1; a gun: only the index's
+	float		fingers[VR_NUM_FINGERS];	// drawn) - else the animation has them
 } vrAvatarHand_t;
 
 typedef struct vrAvatar_s {
@@ -133,6 +152,7 @@ typedef struct vrAvatar_s {
 	float			bodyYaw;		// where the body faces (world yaw)
 	vec3_t			headAngles;		// where the head looks (pitch, yaw, roll)
 	vec3_t			shift;			// how far the body is drawn from the entity origin (stood under the head)
+	vec3_t			head;			// where the head is (the headset, between the eyes): an offset like the hands'
 	vrAvatarHand_t	hand[2];		// VR_HAND_LEFT, VR_HAND_RIGHT
 } vrAvatar_t;
 
@@ -170,6 +190,24 @@ enum {
 	VR_HAND_LEFT = 0,
 	VR_HAND_RIGHT = 1
 };
+
+// What a controller senses of the fingers holding it (vrClientState_t.fingers;
+// turned into how far each finger is closed by qcommon/vr_fingers.h): sensed,
+// the sensors it has (bound to its inputs: the runtime says); touched, those on
+// (or near) now.
+#define VR_SENSE_TRIGGER_TOUCH	1		// the index finger on the trigger
+#define VR_SENSE_TRIGGER_NEAR	2		// ...near it (Touch Plus, Touch Pro; Touch with its proximity extension)
+#define VR_SENSE_INDEX_CURL		4		// ...how far it's curled toward it (indexCurl: Touch Plus, Touch Pro)
+#define VR_SENSE_THUMB_TOUCH	8		// the thumb on a button, the stick, the thumb rest or the trackpad
+#define VR_SENSE_THUMB_NEAR		16		// ...near them (Touch Plus, Touch Pro; Touch with its proximity extension)
+
+typedef struct vrFingerSense_s {
+	int			sensed;			// VR_SENSE_*: the controller has these sensors
+	int			touched;		// VR_SENSE_TRIGGER_TOUCH, _TRIGGER_NEAR, _THUMB_TOUCH, _THUMB_NEAR: on, or near, now
+	float		trigger;		// how far the trigger's pulled (0..1)
+	float		squeeze;		// how far the grip's squeezed (0..1; a grip that only clicks: 0 or 1)
+	float		indexCurl;		// VR_SENSE_INDEX_CURL: 0 the index finger straight .. 1 curled onto the trigger
+} vrFingerSense_t;
 
 typedef struct vrClientState_s {
 	// headset running and tracked
@@ -213,6 +251,10 @@ typedef struct vrClientState_s {
 	// each hand's trigger is held (past its press point; whatever it
 	// presses - or nothing, VR_SetWeaponHand( -1 ))
 	qboolean	trigger[2];
+
+	// what each controller senses of your fingers (above): the cgame's
+	// hands follow them (cg_vrFingers)
+	vrFingerSense_t	fingers[2];
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

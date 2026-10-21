@@ -13,6 +13,9 @@ Setup) hides them again. The page is otherwise left as it is.
 
   Left-Handed     guns and the saber in the left hand, the     vr_leftHanded Yes/No
                   Force on the right grip, Use on the left
+  Finger Tracking your character's fingers follow yours       cg_vrFingers Yes/No
+  Grip Press      how far a grip's pressed for Use and the     vr_gripPress 60%-95%
+                  Force (a lighter squeeze only curls fingers)
   Saber Inertia   how far a blade's weight holds it back      cg_vrSaberInertia 0-3
   Saber Weight    how strongly its weight is felt as it swings cg_vrSaberWeight 0-2
   Vibration       how strongly the controllers vibrate        cg_vrHaptics 0-2
@@ -58,6 +61,7 @@ extern void		Menu_UpdatePosition( menuDef_t *menu );
 #define VRS_MAX_ROWS		24
 #define VRS_MAX_NAMES		32						// what the page's buttons show and hide
 #define VRS_ROW_MIN			14.0f					// rows can't be closer together than this
+#define VRS_ROW_GAP			2.0f					// rows made shorter to fit are this far apart (a pointer between them is on neither)
 
 static const char *vrsPages[] = { "setup_menu", "ingame_setup" };
 
@@ -68,6 +72,8 @@ static const struct {
 	uint32_t	flags;
 } vrsCvars[] = {
 	{ "vr_leftHanded",		"0",	CVAR_ARCHIVE },
+	{ "cg_vrFingers",		"1",	CVAR_ARCHIVE },
+	{ "vr_gripPress",		"0.85",	CVAR_ARCHIVE },
 	{ "cg_vrSaberInertia",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrSaberWeight",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrHaptics",		"1",	CVAR_ARCHIVE },
@@ -355,7 +361,7 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 
 	// the settings: where the Sound settings start, as far apart as they
 	// are (closer, if they wouldn't all fit above the bottom of the page's
-	// background), and as tall
+	// background), and as tall (shorter, if they still wouldn't)
 	if ( !UI_VRS_Parse() ) {
 		return;
 	}
@@ -393,6 +399,12 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 	}
 	if ( top + ( numRows - 1 ) * pitch + rowH > bottom ) {
 		pitch = ( numRows > 1 ) ? ( bottom - top - rowH ) / ( numRows - 1 ) : pitch;
+		if ( pitch < rowH && numRows > 1 ) {
+			// closer together than the Sound rows are tall: shorter than them
+			// (their text as it is) - as short as VRS_ROW_MIN - a little apart
+			rowH = Q_max( VRS_ROW_MIN, pitch - VRS_ROW_GAP );
+			pitch = ( bottom - top - rowH ) / ( numRows - 1 );
+		}
 	}
 	if ( pitch < rowH || menu->itemCount + 2 + 2 * numRows > MAX_MENUITEMS ) {
 		Com_Printf( S_COLOR_YELLOW "%s: no room for the VR settings (they still work from the console)\n", pageName );
@@ -421,7 +433,7 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 		a->window.rectClient.x = ref->window.rectClient.x;
 		a->window.rectClient.w = ref->window.rectClient.w;
 		a->window.rectClient.y = top + k * pitch;
-		a->window.rectClient.h = ref->window.rectClient.h;
+		a->window.rectClient.h = Q_min( ref->window.rectClient.h, rowH );
 		bars[k] = NULL;
 		if ( refBar ) {
 			rectDef_t br = refBar->window.rectClient;

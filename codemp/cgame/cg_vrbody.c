@@ -55,6 +55,7 @@ General Public License version 2, like the rest of OpenJK.
 #include "cg_local.h"
 #include "ghoul2/G2.h"
 #include "game/bg_vrsaber.h"
+#include "qcommon/vr_fingers.h"
 
 #define VRB_TURN_OFF		0x00000100	// G2SURFACEFLAG_NODESCENDANTS: surface and its children off
 #define VRB_HEAD_BIT		( 1 << ( G2_MODELPART_HEAD - 10 ) )
@@ -206,7 +207,7 @@ typedef struct vrbState_s {
 	qboolean	wristOk[2];
 	qboolean	handBoneTurn[2][VRB_MAX_HAND_BONES];
 	qboolean	fingerUnderJ1[2][3];	// a finger's second joint hangs off its first (VRB_FINGERS)
-	void		*curlG2;				// fingers curled round a hilt on this instance (CG_VRB_CurlFingers)
+	void		*curlG2;				// fingers curled round a hilt (posed, CG_VRB_PoseFingers) on this instance (CG_VRB_CurlFingers)
 	float		curlLog[2][3];			// (the log: how far each finger closed, degrees...
 	float		curlOff[2];				// ...and how far the hand was from the hilt's axis; -1: not holding one)
 	qboolean	tagMoves[2];			// the held-item tag hangs on the tag bone: a saber can be moved in the hand (CG_VRB_PlaceSaber)
@@ -377,6 +378,13 @@ typedef struct vrbState_s {
 	// avatar everyone else sees (CG_VRB_SolveArm, CG_VR_BodyEndFrame)
 	vrAvatarHand_t	sent[2];
 	int			sentTime[2];
+
+	// your fingers (cg_vrFingers, CG_VRB_EaseFingers): how far each is
+	// closed (VR_FINGER_*), eased toward what your controllers sense
+	float		fingers[2][VR_NUM_FINGERS];
+	qboolean	fingersEased[2];
+	int			fingerTime;			// cg.time they were eased to
+	int			fingerSensed[2];	// (the log: what each controller senses of them, as last said, + 1; 0: not yet)
 } vrbState_t;
 
 // The body being posed: yours, or - while CG_VRB_OtherArms and the rest pose
@@ -1732,6 +1740,290 @@ static void CG_VRB_ClearCurl( void *g2 ) {
 		trap->ext.VR_G2SetBoneTransform( g2, 0, vrbHandBones[h][1], NULL );	// (the tag bone, CG_VRB_PlaceSaber)
 	}
 	vrb.curlG2 = NULL;
+}
+
+/*
+=================
+CG_VRB_PoseFingers
+
+An empty hand's fingers - and a gun hand's index finger - follow yours
+(cg_vrFingers; qcommon/vr_fingers.h: how far each is closed, from what your
+controller senses), eased so a light touch doesn't flicker; another VR
+player's, as their avatar says. Each finger goes where it says in the hand's
+own frame (VRB_HandFrame), whatever the body's animation has it do: the
+index finger and the other three bend toward the palm at both joints, from
+straight to as far as the dual-saber stance's fist has them; the thumb
+swings from up (an open hand, a thumbs up) down onto the side of the index
+finger - over the fingers of a fist. A gun hand's thumb and other three
+hold the gun as the animation has them; its index finger lies along the
+guard until it touches the trigger, then curls onto it.
+=================
+*/
+
+#define VRB_FINGER_EASE		0.025f	// seconds: a finger eases toward yours (a light touch doesn't flicker)
+#define VRB_FINGER_FRESH	100		// ms: your fingers eased this lately are yours as drawn
+#define VRB_GUN_GUARD		0.05f	// a gun hand's index finger along the guard...
+#define VRB_GUN_TRIGGER		0.45f	// ...on the trigger...
+#define VRB_GUN_PULLED		0.6f	// ...pulling it all the way
+#define VRB_THUMB_OVER		0.35f	// the index finger and the other three closed past this: the thumb goes over them...
+#define VRB_THUMB_OVER_ALL	0.85f	// ...and this far, it's right over them (a fist)
+
+// the index finger and the other three closed into a fist: degrees at the
+// first joint and the second (VRB_FINGERS: the thumb's aren't used)
+static const float vrbCurlMax[VRB_FINGERS][2] = { { 0.0f, 0.0f }, { 85.0f, 112.0f }, { 90.0f, 120.0f } };
+
+// The thumb's bones (its first, and the rest of it) in the hand's frame:
+// along the hand, toward the thumb, out of the back of the hand - up; down
+// beside the index finger; down over the fingers of a fist.
+static const vec3_t vrbThumbUp[2] = { { 0.60f, 0.72f, -0.35f }, { 0.55f, 0.82f, -0.15f } };
+static const vec3_t vrbThumbBeside[2] = { { 0.731f, 0.303f, -0.612f }, { 0.906f, -0.044f, -0.42f } };
+static const vec3_t vrbThumbOver[2] = { { 0.687f, -0.124f, -0.716f }, { 0.814f, -0.552f, -0.177f } };
+
+// a direction given in the hand's frame (along it, toward the thumb, out of its back), in the world
+static void VRB_HandDir( vec3_t ax[3], const vec3_t back, const vec3_t d, vec3_t out ) {
+	VectorScale( ax[0], d[0], out );
+	VectorMA( out, d[1], ax[1], out );
+	VectorMA( out, d[2], back, out );
+	VectorNormalize( out );
+}
+
+// how far b is turned from a about the unit axis n (both as they lie square to it; radians)
+static float VRB_AngleAbout( const vec3_t a, const vec3_t b, const vec3_t n ) {
+	vec3_t pa, pb, c;
+
+	VectorMA( a, -DotProduct( a, n ), n, pa );
+	VectorMA( b, -DotProduct( b, n ), n, pb );
+	CrossProduct( pa, pb, c );
+	return atan2f( DotProduct( c, n ), DotProduct( pa, pb ) );
+}
+
+// A finger's bones (VRB_FINGERS) as they are: its first joint, its second, and
+// where its tip is - the second joint's own axis that runs the way the first
+// joint's runs along the finger, as CG_VRB_CurlFingers has it.
+static qboolean CG_VRB_FingerBones( centity_t *cent, int h, int f, vec3_t o1, vec3_t o2, vec3_t tip ) {
+	const int j1 = vrbFingerJ1[f];
+	vrbBone_t b1, b2;
+	vec3_t seg;
+	float len, best = 0.0f;
+	int k, along = 0;
+
+	if ( !CG_VRB_Bone( cent, vrbHandBones[h][j1], 1, &b1 ) || !CG_VRB_Bone( cent, vrbHandBones[h][j1 + 1], 1, &b2 ) ) {
+		return qfalse;
+	}
+	VectorSubtract( b2.origin, b1.origin, seg );
+	len = VectorNormalize( seg );
+	if ( len < 0.2f ) {
+		return qfalse;
+	}
+	for ( k = 0; k < 3; k++ ) {
+		const float d = DotProduct( b1.axis[k], seg );
+		if ( fabsf( d ) > fabsf( best ) ) {
+			best = d;
+			along = k;
+		}
+	}
+	VectorCopy( b1.origin, o1 );
+	VectorCopy( b2.origin, o2 );
+	VectorMA( b2.origin, ( best < 0.0f ? -0.9f : 0.9f ) * len, b2.axis[along], tip );
+	return qtrue;
+}
+
+// (after the arm and wrist are posed; H: the wrist turn already on the bones
+// that turn with the hand, in model space; curl: how far each finger is
+// closed, VR_FINGER_*; gunHand: only the index finger)
+static void CG_VRB_PoseFingers( centity_t *cent, int h, const mdxaBone_t *H, const float curl[VR_NUM_FINGERS], qboolean gunHand ) {
+	const float mirror = ( h == VR_HAND_RIGHT ) ? 1.0f : -1.0f;
+	vrbBone_t hand;
+	vec3_t o1[VRB_FINGERS], o2[VRB_FINGERS], tip[VRB_FINGERS], ax[3], back, n;
+	float c[VRB_FINGERS], length;
+	int f;
+
+	if ( !trap->ext.VR_G2SetBoneTransform || !CG_VRB_Bone( cent, vrbArmBones[h][VRB_HAND], 1, &hand ) ) {
+		return;
+	}
+	// every finger first, then the turns (setting one rebuilds the skeleton
+	// for the next query, and the fingers don't move each other)
+	for ( f = 0; f < VRB_FINGERS; f++ ) {
+		if ( !CG_VRB_FingerBones( cent, h, f, o1[f], o2[f], tip[f] ) ) {
+			return;
+		}
+		c[f] = ( curl[f] > 0.0f ) ? Q_min( 1.0f, curl[f] ) : 0.0f;	// (VRB_FINGERS: thumb, index, the rest - as VR_FINGER_*)
+	}
+	if ( !VRB_HandFrame( hand.origin, o1[0], o1[1], o1[2], ax, &length ) ) {
+		return;
+	}
+	VectorScale( ax[2], mirror, back );		// out of the back of either hand
+	VectorScale( ax[1], mirror, n );		// the index finger and the rest bend toward the palm about this
+
+	for ( f = 0; f < VRB_FINGERS; f++ ) {
+		const int j1 = vrbFingerJ1[f], j2 = j1 + 1;
+		vrbMat_t R1, R2;
+		mdxaBone_t C1, C2, m;
+		vec3_t s1, s2, p2, rel;
+
+		if ( gunHand && f != VR_FINGER_INDEX ) {
+			continue;
+		}
+		VectorSubtract( o2[f], o1[f], s1 );
+		VectorSubtract( tip[f], o2[f], s2 );
+		VectorNormalize( s1 );
+		VectorNormalize( s2 );
+		if ( f == VR_FINGER_THUMB ) {
+			// up, or down beside the index finger - over the fingers, as far
+			// as they're closed into a fist
+			const float over = Com_Clamp( 0.0f, 1.0f, ( Q_min( c[VR_FINGER_INDEX], c[VR_FINGER_OTHERS] ) - VRB_THUMB_OVER ) /
+				( VRB_THUMB_OVER_ALL - VRB_THUMB_OVER ) );
+			vec3_t want[2], up, beside, onTop, down;
+			int i;
+			for ( i = 0; i < 2; i++ ) {
+				VRB_HandDir( ax, back, vrbThumbUp[i], up );
+				VRB_HandDir( ax, back, vrbThumbBeside[i], beside );
+				VRB_HandDir( ax, back, vrbThumbOver[i], onTop );
+				VRB_Slerp( beside, onTop, over, down );
+				VRB_Slerp( up, down, c[f], want[i] );
+			}
+			VRB_Arc( s1, want[0], R1 );
+			VRB_Apply( R1, s2, rel );
+			VRB_Arc( rel, want[1], R2 );
+		} else {
+			// both joints bent toward the palm as far as it's closed
+			const float t1 = DEG2RAD( c[f] * vrbCurlMax[f][0] ), t2 = DEG2RAD( c[f] * vrbCurlMax[f][1] );
+			VRB_AxisAngle( n, t1 - VRB_AngleAbout( ax[0], s1, n ), R1 );
+			VRB_Apply( R1, s1, s1 );
+			VRB_Apply( R1, s2, s2 );
+			VRB_AxisAngle( n, t2 - VRB_AngleAbout( s1, s2, n ), R2 );
+		}
+		VectorSubtract( o2[f], o1[f], rel );
+		VRB_Apply( R1, rel, rel );
+		VectorAdd( o1[f], rel, p2 );
+		CG_VRB_ModelTurn( cent, R1, o1[f], &C1 );
+		CG_VRB_ModelTurn( cent, R2, p2, &C2 );
+
+		// on top of what each bone already has (the wrist turn) - the
+		// second joint gets the first one's turn from it if it hangs off it
+		if ( vrb.handBoneTurn[h][j1] ) {
+			VRB_Compose( &C1, H, &m );
+		} else {
+			m = C1;
+		}
+		trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbHandBones[h][j1], &m );
+		if ( !vrb.fingerUnderJ1[h][f] ) {
+			VRB_Compose( &C2, &C1, &C2 );
+			if ( vrb.handBoneTurn[h][j2] ) {
+				VRB_Compose( &C2, H, &C2 );
+			}
+		}
+		trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbHandBones[h][j2], &C2 );
+		vrb.curlG2 = cent->ghoul2;
+	}
+}
+
+static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip );
+
+// (the log) what a controller senses of your fingers
+static const char *CG_VRB_SensedText( int sensed ) {
+	static char text[160];
+
+	if ( !sensed ) {
+		return "nothing of them (the trigger and the grip only)";
+	}
+	Com_sprintf( text, sizeof( text ), "%s%s%s%s%s",
+		( sensed & VR_SENSE_TRIGGER_TOUCH ) ? "the trigger touched, " : "",
+		( sensed & VR_SENSE_TRIGGER_NEAR ) ? "the finger near it, " : "",
+		( sensed & VR_SENSE_INDEX_CURL ) ? "the finger's curl, " : "",
+		( sensed & VR_SENSE_THUMB_TOUCH ) ? "the thumb on the controller, " : "",
+		( sensed & VR_SENSE_THUMB_NEAR ) ? "the thumb near it, " : "" );
+	text[strlen( text ) - 2] = 0;	// (", ")
+	return text;
+}
+
+/*
+Your fingers this frame: how far each is closed (VR_FINGER_*), eased toward
+what your controllers sense (qcommon/vr_fingers.h) - a gun hand's index
+finger along the guard until it touches the trigger, then curled onto it,
+closing a little as it's pulled. Once a frame, before the arms are posed.
+*/
+static void CG_VRB_EaseFingers( centity_t *cent, const vrClientState_t *vr ) {
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.fingerTime ) * 0.001f );
+	const qboolean afresh = ( !vrb.fingerTime || cg.time - vrb.fingerTime > 500 || cg.time < vrb.fingerTime ) ? qtrue : qfalse;
+	const float k = 1.0f - expf( -dt / VRB_FINGER_EASE );
+	int h, f;
+
+	if ( vrb.fingerTime == cg.time ) {
+		return;		// (the second eye)
+	}
+	for ( h = 0; h < 2; h++ ) {
+		const vrFingerSense_t *s = &vr->fingers[h];
+		vrbGrip_t grip;
+		float want[VR_NUM_FINGERS];
+
+		VR_FingerCurls( s, want );
+		CG_VRB_Grip( cent, h, &grip );
+		if ( grip.kind == VRB_GRIP_GUN ) {
+			want[VR_FINGER_INDEX] = VR_FingerOnTrigger( s ) ?
+				VRB_GUN_TRIGGER + ( VRB_GUN_PULLED - VRB_GUN_TRIGGER ) * VR_FingerClamp( s->trigger ) : VRB_GUN_GUARD;
+		}
+		for ( f = 0; f < VR_NUM_FINGERS; f++ ) {
+			if ( afresh || !vrb.fingersEased[h] ) {
+				vrb.fingers[h][f] = want[f];
+			} else {
+				vrb.fingers[h][f] += k * ( want[f] - vrb.fingers[h][f] );
+			}
+		}
+		vrb.fingersEased[h] = qtrue;
+
+		// (the log: what this controller senses of your fingers, as it changes)
+		if ( vrb.fingerSensed[h] != s->sensed + 1 ) {
+			vrb.fingerSensed[h] = s->sensed + 1;
+			CG_VRB_Log( "fingers: the %s controller senses %s\n", h == VR_HAND_RIGHT ? "right" : "left",
+				CG_VRB_SensedText( s->sensed ) );
+		}
+	}
+	vrb.fingerTime = cg.time;
+}
+
+// How far hand h's fingers are closed (VR_FINGER_*) on the body being posed:
+// yours as eased this frame (cg_vrFingers on), another player's as their
+// avatar says. qfalse: the animation has them.
+static qboolean CG_VRB_HandFingers( int h, float out[VR_NUM_FINGERS] ) {
+	int f;
+
+	if ( vrbRemote ) {
+		if ( !vrbRemote->hand[h].fingersValid ) {
+			return qfalse;
+		}
+		for ( f = 0; f < VR_NUM_FINGERS; f++ ) {
+			out[f] = VR_FingerClamp( vrbRemote->hand[h].fingers[f] );
+		}
+		return qtrue;
+	}
+	if ( !cg_vrFingers.integer || !vrb.fingersEased[h] || cg.time - vrb.fingerTime > VRB_FINGER_FRESH ||
+		cg.time < vrb.fingerTime ) {
+		return qfalse;
+	}
+	for ( f = 0; f < VR_NUM_FINGERS; f++ ) {
+		out[f] = vrb.fingers[h][f];
+	}
+	return qtrue;
+}
+
+// The hand the game's own weapon - anything but a saber: a gun, an explosive
+// - hangs on (CG_VRB_BoltHands): your gun hand; another player's, the hand
+// their avatar holds a gun in.
+static int CG_VRB_GunBoltHand( void ) {
+	if ( vrbRemote ) {
+		return ( vrbRemote->hand[VR_HAND_LEFT].grip == VR_GRIP_GUN && vrbRemote->hand[VR_HAND_RIGHT].grip != VR_GRIP_GUN ) ?
+			VR_HAND_LEFT : VR_HAND_RIGHT;
+	}
+	return CG_VR_GunHand();
+}
+
+// Whether that weapon hangs on hand h, held as the game holds it - not a gun
+// in the hand as drawn (VRB_GRIP_GUN), but one aimed with the head, or a
+// scope's: its fingers stay round it as the animation has them.
+static qboolean CG_VRB_WeaponOnHand( centity_t *cent, int h ) {
+	return (qboolean)( cent->currentState.weapon != WP_SABER && cent->ghoul2 &&
+		trap->G2API_HasGhoul2ModelOnIndex( &cent->ghoul2, 1 ) && h == CG_VRB_GunBoltHand() );
 }
 
 /*
@@ -4088,10 +4380,19 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 			}
 		}
 
-		// fingers closed round whatever hilt the hand holds
-		if ( grip->kind == VRB_GRIP_HILT ) {
+		// fingers closed round whatever hilt the hand holds - an empty hand's,
+		// and a gun hand's index finger, as yours are (CG_VRB_PoseFingers)
+		if ( grip->kind == VRB_GRIP_HILT && vrb.twoHand ) {
 			// (only while it holds it, closing as it settles on)
-			CG_VRB_CurlFingers( cent, h, &H, grip->origin, grip->dir, vrb.twoHand ? grip->blend : 0.0f );
+			CG_VRB_CurlFingers( cent, h, &H, grip->origin, grip->dir, grip->blend );
+		} else if ( grip->kind == VRB_GRIP_GUN || grip->kind == VRB_GRIP_HILT ||
+			( grip->kind == VRB_GRIP_FREE && !CG_VRB_WeaponOnHand( cent, h ) ) ) {
+			// (a hand coming off a hilt too: it's empty; not one the game's
+			// weapon hangs on, its fingers round it)
+			float curl[VR_NUM_FINGERS];
+			if ( CG_VRB_HandFingers( h, curl ) ) {
+				CG_VRB_PoseFingers( cent, h, &H, curl, grip->kind == VRB_GRIP_GUN );
+			}
 		} else if ( grip->kind == VRB_GRIP_SABER && inFist && CG_VRB_PlaceSaber( cent, h, &H, grip, gA, commit, holdO, holdDir ) ) {
 			// the saber moved into the fist, the fingers round it there
 			CG_VRB_CurlFingers( cent, h, &H, holdO, holdDir, 1.0f );
@@ -4153,6 +4454,10 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 		default:
 			sent->grip = VR_GRIP_FREE;
 			break;
+		}
+		// your fingers as this hand shows them (an empty hand's; a gun's index finger)
+		if ( ( sent->grip == VR_GRIP_FREE && !CG_VRB_WeaponOnHand( cent, h ) ) || sent->grip == VR_GRIP_GUN ) {
+			sent->fingersValid = CG_VRB_HandFingers( h, sent->fingers );
 		}
 		vrb.sentTime[h] = cg.time;
 	}
@@ -4332,12 +4637,8 @@ static void CG_VRB_BoltHands( centity_t *cent ) {
 				( ( ci->saber[s].saberFlags & SFL_BOLT_TO_WRIST ) ? 3 : 0 ) );
 		}
 	} else if ( trap->G2API_HasGhoul2ModelOnIndex( &cent->ghoul2, 1 ) ) {
-		if ( vrbRemote ) {
-			h = ( vrbRemote->hand[VR_HAND_LEFT].grip == VR_GRIP_GUN && vrbRemote->hand[VR_HAND_RIGHT].grip != VR_GRIP_GUN ) ?
-				VR_HAND_LEFT : VR_HAND_RIGHT;
-		} else {
-			h = CG_VR_GunHand();	// (your body's own copy, hidden: the gun you see is at your controller)
-		}
+		// (yours: your body's own copy, hidden - the gun you see is at your controller)
+		h = CG_VRB_GunBoltHand();
 		trap->G2API_SetBoltInfo( cent->ghoul2, 1, ( h == VR_HAND_RIGHT ) ? 0 : 1 );
 	}
 	vrb.boltG2 = cent->ghoul2;
@@ -4425,6 +4726,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 		// (another player's: their avatar says, CG_VRB_OtherArms)
 		CG_VRB_TwoHand( cent, vr );
 		CG_VRB_BladeInertia( cent, vr );
+		CG_VRB_EaseFingers( cent, vr );
 	}
 	CG_VRB_HandPoses( cent );
 
@@ -4537,6 +4839,7 @@ static void CG_VRB_BlendAvatar( const vrAvatar_t *a, const vrAvatar_t *b, float 
 	for ( i = 0; i < 3; i++ ) {
 		out->headAngles[i] = LerpAngle( a->headAngles[i], b->headAngles[i], f );
 		out->shift[i] = a->shift[i] + f * ( b->shift[i] - a->shift[i] );
+		out->head[i] = a->head[i] + f * ( b->head[i] - a->head[i] );
 	}
 	for ( h = 0; h < 2; h++ ) {
 		const vrAvatarHand_t *ha = &a->hand[h], *hb = &b->hand[h];
@@ -4555,6 +4858,11 @@ static void CG_VRB_BlendAvatar( const vrAvatar_t *a, const vrAvatar_t *b, float 
 			VRB_Slerp( ha->dir, hb->dir, f, ho->dir );
 		}
 		ho->blend = ha->blend + f * ( hb->blend - ha->blend );
+		if ( ha->fingersValid && hb->fingersValid ) {
+			for ( i = 0; i < VR_NUM_FINGERS; i++ ) {
+				ho->fingers[i] = ha->fingers[i] + f * ( hb->fingers[i] - ha->fingers[i] );
+			}
+		}
 	}
 }
 
@@ -5352,6 +5660,9 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, NULL, head, NULL, world );
 	VR_AxisToAngles( world, a->headAngles );
 	VectorCopy( shift, a->shift );
+	// where your head is (the headset, as the eyes are drawn round it)
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->headOrigin, NULL, a->head, NULL );
+	VectorSubtract( a->head, cg.refdef.vieworg, a->head );
 	for ( h = 0; h < 2; h++ ) {
 		if ( vrb.sentTime[h] == cg.time && vrb.armTime[h] == cg.time ) {
 			a->hand[h] = vrb.sent[h];

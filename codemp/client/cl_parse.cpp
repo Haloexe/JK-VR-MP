@@ -836,8 +836,8 @@ static void CL_ParseVRAvatars( msg_t *msg ) {
 		// a demo recorded with an older build: its avatars as that wrote them
 		const char *systemInfo = cl.gameState.stringData + cl.gameState.stringOffsets[ CS_SYSTEMINFO ];
 		protocol = atoi( Info_ValueForKey( systemInfo, "sv_vrx" ) );
-		if ( protocol != 3 && protocol != VR_POSE_PROTOCOL ) {
-			Com_Error( ERR_DROP, "This demo's VR players were recorded with another OpenJK VR build (protocol %d, this one reads %d)",
+		if ( protocol < 3 || protocol > VR_POSE_PROTOCOL ) {
+			Com_Error( ERR_DROP, "This demo's VR players were recorded with another OpenJK VR build (protocol %d, this one reads 3 to %d)",
 				protocol, VR_POSE_PROTOCOL );
 		}
 	}

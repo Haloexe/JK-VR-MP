@@ -45,6 +45,51 @@
 
 		itemDef
 		{
+			name			vr_fingers
+			group			vrsetup
+			type			ITEM_TYPE_YESNO
+			text			"Finger Tracking"
+			cvar			"cg_vrFingers"
+			rect			260 174 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your character's fingers follow yours: point, thumbs up, an open hand, a fist - everyone on this build sees them"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_grippress
+			group			vrsetup
+			type			ITEM_TYPE_MULTI
+			text			"Grip Press"
+			cvar			"vr_gripPress"
+			cvarFloatList	{ "60%" 0.6 "70%" 0.7 "80%" 0.8 "85%" 0.85 "90%" 0.9 "95%" 0.95 }
+			rect			260 181 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far a grip must be pressed for Use and the Force - a lighter squeeze only curls your fingers"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vr_saberinertia
 			group			vrsetup
 			type			ITEM_TYPE_SLIDER

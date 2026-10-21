@@ -6,7 +6,7 @@ Written by the client right after each usercmd it sends, only to servers
 that put "sv_vrx" in their systeminfo, and then in clc_moveVR /
 clc_moveNoDeltaVR messages, so the server always knows whether to read it.
 
-Format (VR_POSE_PROTOCOL 4):
+Format (VR_POSE_PROTOCOL 5):
 	1 bit		valid: a lit saber in the VR hands
 	1 bit		avatar valid
 	(nothing else follows if both are 0)
@@ -30,6 +30,7 @@ origin; with a usercmd they are offsets from the camera):
 	16 bits		body yaw
 	48 bits		head pitch, yaw, roll
 	48 bits		shift x, y, z
+	48 bits		head x, y, z (where the head is; 3 and 4, in older demos: not there)
 	per hand (left, right):
 				3 bits grip (VR_GRIP_*; nothing more for NONE)
 				origin x, y, z
@@ -40,6 +41,9 @@ origin; with a usercmd they are offsets from the camera):
 				       8 bits hilt (signed, 1/2 units: -127..127)
 				(3, in older demos: no saber, reversed or hilt bits)
 				HILT: 8 bits blend (0..255)
+				FREE, GUN: 1 bit fingers follow the player's
+				           [4 bits each: thumb, index, the other three (0..15)]
+				(3 and 4, in older demos: no fingers bit)
 
 All fields are written as plain 16-bit values and sign-extended by hand on
 reading, so whatever arrives decodes to the documented ranges.
@@ -74,8 +78,8 @@ static inline float VR_ReadPoseCoord( msg_t *msg ) {
 }
 
 static inline void VR_WritePoseAngle( msg_t *msg, float a ) {
-	if ( a != a ) {
-		a = 0.0f;	// NaN
+	if ( !( a > -1.0e6f && a < 1.0e6f ) ) {
+		a = 0.0f;	// NaN, infinite, or so far round that it overflows an int (ANGLE2SHORT)
 	}
 	MSG_WriteBits( msg, ANGLE2SHORT( a ) & 0xffff, 16 );
 }
@@ -109,6 +113,20 @@ static inline int VR_HiltQuantize( float f ) {
 	return (int)floorf( f * 2.0f + 0.5f );
 }
 
+// how far a finger is closed (vrAvatarHand_t.fingers): 4 bits, 0..15
+#define VR_FINGER_BITS		4
+#define VR_FINGER_STEPS		( ( 1 << VR_FINGER_BITS ) - 1 )
+
+static inline int VR_FingerQuantize( float f ) {
+	if ( !( f > 0.0f ) ) {
+		return 0;	// (and NaN)
+	}
+	if ( f >= 1.0f ) {
+		return VR_FINGER_STEPS;
+	}
+	return (int)floorf( f * VR_FINGER_STEPS + 0.5f );
+}
+
 static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 	VR_WritePoseAngle( msg, a->bodyYaw );
 	VR_WritePoseAngle( msg, a->headAngles[PITCH] );
@@ -117,6 +135,9 @@ static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 	VR_WritePoseCoord( msg, a->shift[0] );
 	VR_WritePoseCoord( msg, a->shift[1] );
 	VR_WritePoseCoord( msg, a->shift[2] );
+	VR_WritePoseCoord( msg, a->head[0] );
+	VR_WritePoseCoord( msg, a->head[1] );
+	VR_WritePoseCoord( msg, a->head[2] );
 	for ( int h = 0; h < 2; h++ ) {
 		const vrAvatarHand_t *hand = &a->hand[h];
 		const int grip = ( hand->grip > VR_GRIP_NONE && hand->grip < VR_NUM_GRIPS ) ? hand->grip : VR_GRIP_NONE;
@@ -150,11 +171,20 @@ static inline void VR_WriteAvatar( msg_t *msg, const vrAvatar_t *a ) {
 			}
 			MSG_WriteBits( msg, (int)( Com_Clamp( 0.0f, 1.0f, b ) * 255.0f + 0.5f ), 8 );
 		}
+		if ( grip == VR_GRIP_FREE || grip == VR_GRIP_GUN ) {
+			MSG_WriteBits( msg, hand->fingersValid ? 1 : 0, 1 );
+			if ( hand->fingersValid ) {
+				for ( int f = 0; f < VR_NUM_FINGERS; f++ ) {
+					MSG_WriteBits( msg, VR_FingerQuantize( hand->fingers[f] ), VR_FINGER_BITS );
+				}
+			}
+		}
 	}
 }
 
 // (protocol: the format it was written in - a demo recorded with an older
-// build has its own: 3 had no saber, reversed or hilt)
+// build has its own: 3 had no saber, reversed or hilt; 3 and 4, no head or
+// fingers)
 static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protocol ) {
 	Com_Memset( a, 0, sizeof( *a ) );
 	a->valid = qtrue;
@@ -165,6 +195,11 @@ static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protoco
 	a->shift[0] = VR_ReadPoseCoord( msg );
 	a->shift[1] = VR_ReadPoseCoord( msg );
 	a->shift[2] = VR_ReadPoseCoord( msg );
+	if ( protocol >= 5 ) {
+		a->head[0] = VR_ReadPoseCoord( msg );
+		a->head[1] = VR_ReadPoseCoord( msg );
+		a->head[2] = VR_ReadPoseCoord( msg );
+	}
 	for ( int h = 0; h < 2; h++ ) {
 		vrAvatarHand_t *hand = &a->hand[h];
 		vec3_t angles;
@@ -197,6 +232,12 @@ static inline void VR_ReadAvatarProtocol( msg_t *msg, vrAvatar_t *a, int protoco
 		}
 		if ( hand->grip == VR_GRIP_HILT ) {
 			hand->blend = MSG_ReadBits( msg, 8 ) * ( 1.0f / 255.0f );
+		}
+		if ( ( hand->grip == VR_GRIP_FREE || hand->grip == VR_GRIP_GUN ) && protocol >= 5 && MSG_ReadBits( msg, 1 ) ) {
+			hand->fingersValid = qtrue;
+			for ( int f = 0; f < VR_NUM_FINGERS; f++ ) {
+				hand->fingers[f] = ( MSG_ReadBits( msg, VR_FINGER_BITS ) & VR_FINGER_STEPS ) * ( 1.0f / VR_FINGER_STEPS );
+			}
 		}
 	}
 }

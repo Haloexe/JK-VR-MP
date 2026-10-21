@@ -110,7 +110,9 @@ OpenXR entry points
 	X( xrGetActionStateBoolean ) \
 	X( xrGetActionStateFloat ) \
 	X( xrGetActionStateVector2f ) \
-	X( xrApplyHapticFeedback )
+	X( xrApplyHapticFeedback ) \
+	X( xrGetCurrentInteractionProfile ) \
+	X( xrPathToString )
 
 static HMODULE						xrLoaderLib;
 static PFN_xrGetInstanceProcAddr	xrGetInstanceProcAddr;
@@ -188,6 +190,7 @@ static cvar_t *vr_moveDirection;
 static cvar_t *vr_deadzone;
 static cvar_t *vr_gunPitch;
 static cvar_t *vr_leftHanded;
+static cvar_t *vr_gripPress;
 
 /*
 ================================================================================
@@ -340,6 +343,9 @@ typedef struct vrState_s {
 	char					systemName[XR_MAX_SYSTEM_NAME_SIZE];
 	XrViewConfigurationView	viewConfig[2];
 	qboolean				instanceLost;	// runtime quit/restarted: recreate on next vid_restart
+	qboolean				extTouchPlus;	// XR_META_touch_controller_plus enabled (Quest 3: the index finger's curl...)
+	qboolean				extTouchPro;	// XR_FB_touch_controller_pro enabled (...Touch Pro the same...)
+	qboolean				extProximity;	// XR_FB_touch_controller_proximity enabled (...Touch: the thumb and finger near)
 
 	// render targets (exist as long as the renderer runs at eye resolution)
 	qboolean				targetsReady;
@@ -396,6 +402,10 @@ typedef struct vrState_s {
 	XrAction				actTrigger, actSqueeze, actStickClick;
 	XrAction				actA, actB, actX, actY, actMenu;
 	XrAction				actHaptic;
+	XrAction				actTriggerTouch, actThumbTouch;			// your fingers (vrFingerSense_t): the touch sensors...
+	XrAction				actTriggerNear, actThumbNear, actTriggerCurl;	// ...and, where offered, near and curled
+	vrFingerSense_t			fingers[2];		// what each controller senses of your fingers, as of the last poll
+	char					profile[2][XR_MAX_PATH_LENGTH];	// each hand's controllers (their interaction profile), as last said
 	XrSpace					gripSpace[2], aimSpace[2];
 	XrPosef					gripPose[2], aimPose[2];
 	qboolean				handValid[2];
@@ -419,6 +429,7 @@ typedef struct vrState_s {
 	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
 	int						numGenCmds;		// command that has none, in turn
 	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
+	qboolean				gripFresh[2];	// the hand's grip let go since it was squeezed: squeezed now, it may grab
 	qboolean				grabHolds;		// ...and grabs hold what they've taken (VR_GRAB_HOLDS): let go of only well open
 	int						wheelState;		// Y: VR_WHEEL_* (tapped, or held for the pose wheel)
 	int						wheelPressTime;	// ...pressed then (ms)
@@ -593,7 +604,25 @@ static qboolean VR_CreateInstance( void ) {
 		return qfalse;
 	}
 
-	const char *extensions[] = { XR_KHR_OPENGL_ENABLE_EXTENSION_NAME };
+	// what the controllers sense of your fingers, beyond the core touch
+	// sensors: Touch Plus (Quest 3) and Touch Pro read the index finger's curl
+	// and sense the thumb and finger near; Touch, with the proximity extension,
+	// senses them near - each where the runtime offers it
+	const char *extensions[4];
+	uint32_t numExtensions = 0;
+	extensions[numExtensions++] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
+	vr.extTouchPlus = VR_HasExtension( XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME );
+	vr.extTouchPro = VR_HasExtension( XR_FB_TOUCH_CONTROLLER_PRO_EXTENSION_NAME );
+	vr.extProximity = VR_HasExtension( XR_FB_TOUCH_CONTROLLER_PROXIMITY_EXTENSION_NAME );
+	if ( vr.extTouchPlus ) {
+		extensions[numExtensions++] = XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME;
+	}
+	if ( vr.extTouchPro ) {
+		extensions[numExtensions++] = XR_FB_TOUCH_CONTROLLER_PRO_EXTENSION_NAME;
+	}
+	if ( vr.extProximity ) {
+		extensions[numExtensions++] = XR_FB_TOUCH_CONTROLLER_PROXIMITY_EXTENSION_NAME;
+	}
 
 	XrInstanceCreateInfo ici;
 	memset( &ici, 0, sizeof( ici ) );
@@ -607,10 +636,18 @@ static qboolean VR_CreateInstance( void ) {
 #else
 	ici.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
 #endif
-	ici.enabledExtensionCount = ARRAY_LEN( extensions );
+	ici.enabledExtensionCount = numExtensions;
 	ici.enabledExtensionNames = extensions;
 
 	XrResult res = xrCreateInstance( &ici, &vr.instance );
+	if ( XR_FAILED( res ) && numExtensions > 1 ) {
+		// (a runtime that lists an extension it then won't enable: without them)
+		Com_Printf( S_COLOR_YELLOW "VR: xrCreateInstance with the controller extensions failed (%d); trying without\n", (int)res );
+		vr.extTouchPlus = vr.extTouchPro = vr.extProximity = qfalse;
+		ici.enabledExtensionCount = 1;
+		vr.instance = XR_NULL_HANDLE;
+		res = xrCreateInstance( &ici, &vr.instance );
+	}
 	if ( XR_FAILED( res ) ) {
 		Com_Printf( S_COLOR_YELLOW "VR: xrCreateInstance failed (%d). Running in desktop mode.\n", (int)res );
 		vr.instance = XR_NULL_HANDLE;
@@ -629,6 +666,10 @@ static qboolean VR_CreateInstance( void ) {
 		Q_strncpyz( vr.runtimeName, ip.runtimeName, sizeof( vr.runtimeName ) );
 		Com_Printf( "VR: OpenXR runtime: %s %u.%u.%u\n", ip.runtimeName,
 			XR_VERSION_MAJOR( ip.runtimeVersion ), XR_VERSION_MINOR( ip.runtimeVersion ), XR_VERSION_PATCH( ip.runtimeVersion ) );
+	}
+	if ( vr.extTouchPlus || vr.extTouchPro || vr.extProximity ) {
+		Com_Printf( "VR: finger sensing beyond touch: %s%s%s\n", vr.extTouchPlus ? "Touch Plus " : "",
+			vr.extTouchPro ? "Touch Pro " : "", vr.extProximity ? "Touch proximity" : "" );
 	}
 
 	XrSystemGetInfo sgi;
@@ -902,25 +943,49 @@ typedef struct vrBinding_s {
 #define VR_BOTH_HANDS(act, sub) { &act, "/user/hand/left/input/" sub }, { &act, "/user/hand/right/input/" sub }
 #define VR_BOTH_HAPTICS(act) { &act, "/user/hand/left/output/haptic" }, { &act, "/user/hand/right/output/haptic" }
 
-static void VR_SuggestBindings( const char *profile, const vrBinding_t *bindings, int count ) {
-	XrActionSuggestedBinding sb[32];
+// One profile's bindings: the controls, and what senses your fingers. A
+// runtime that rejects them (an input it doesn't know - one set for a
+// profile is all or nothing) gets the controls alone.
+#define VR_MAX_BINDINGS		64
+static void VR_SuggestBindings( const char *profile, const vrBinding_t *bindings, int count,
+	const vrBinding_t *fingers, int numFingers ) {
+	XrActionSuggestedBinding sb[VR_MAX_BINDINGS];
+	XrResult res = XR_SUCCESS;
 	int n = 0;
-	for ( int i = 0; i < count && n < (int)ARRAY_LEN( sb ); i++ ) {
-		if ( *bindings[i].action == XR_NULL_HANDLE ) {
+
+	for ( int i = 0; i < count + numFingers && n < VR_MAX_BINDINGS; i++ ) {
+		const vrBinding_t *b = ( i < count ) ? &bindings[i] : &fingers[i - count];
+		if ( *b->action == XR_NULL_HANDLE ) {
 			continue;
 		}
-		sb[n].action = *bindings[i].action;
-		sb[n].binding = VR_Path( bindings[i].path );
+		sb[n].action = *b->action;
+		sb[n].binding = VR_Path( b->path );
 		n++;
 	}
 
-	XrInteractionProfileSuggestedBinding ipsb;
-	memset( &ipsb, 0, sizeof( ipsb ) );
-	ipsb.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING;
-	ipsb.interactionProfile = VR_Path( profile );
-	ipsb.countSuggestedBindings = n;
-	ipsb.suggestedBindings = sb;
-	XrResult res = xrSuggestInteractionProfileBindings( vr.instance, &ipsb );
+	for ( int pass = 0; pass < 2; pass++ ) {
+		XrInteractionProfileSuggestedBinding ipsb;
+		memset( &ipsb, 0, sizeof( ipsb ) );
+		ipsb.type = XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING;
+		ipsb.interactionProfile = VR_Path( profile );
+		ipsb.countSuggestedBindings = n;
+		ipsb.suggestedBindings = sb;
+		res = xrSuggestInteractionProfileBindings( vr.instance, &ipsb );
+		if ( XR_SUCCEEDED( res ) || !numFingers || pass ) {
+			break;
+		}
+		Com_Printf( S_COLOR_YELLOW "VR: finger sensing for %s rejected (%s): the controls without it\n", profile,
+			VR_ResultString( res ) );
+		// (the controls come first: drop what senses your fingers)
+		n = 0;
+		for ( int i = 0; i < count && n < VR_MAX_BINDINGS; i++ ) {
+			if ( *bindings[i].action != XR_NULL_HANDLE ) {
+				sb[n].action = *bindings[i].action;
+				sb[n].binding = VR_Path( bindings[i].path );
+				n++;
+			}
+		}
+	}
 	if ( XR_FAILED( res ) ) {
 		Com_Printf( S_COLOR_YELLOW "VR: controller bindings for %s rejected: %s\n", profile, VR_ResultString( res ) );
 	}
@@ -958,8 +1023,15 @@ static void VR_CreateInput( void ) {
 	vr.actY				= VR_CreateAction( "button_y",		"Y",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
 	vr.actMenu			= VR_CreateAction( "menu",			"Menu",				XR_ACTION_TYPE_BOOLEAN_INPUT,	qfalse );
 	vr.actHaptic		= VR_CreateAction( "haptic",		"Vibration",		XR_ACTION_TYPE_VIBRATION_OUTPUT, qtrue );
+	// what the controllers sense of your fingers (vrFingerSense_t)
+	vr.actTriggerTouch	= VR_CreateAction( "trigger_touch",	"Finger on the trigger",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
+	vr.actThumbTouch	= VR_CreateAction( "thumb_touch",	"Thumb on the controller",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
+	vr.actTriggerNear	= VR_CreateAction( "trigger_near",	"Finger near the trigger",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
+	vr.actThumbNear		= VR_CreateAction( "thumb_near",	"Thumb near the buttons",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
+	vr.actTriggerCurl	= VR_CreateAction( "trigger_curl",	"Finger curled to the trigger", XR_ACTION_TYPE_FLOAT_INPUT,	qtrue );
 
-	// Meta Quest (1/2/3/Pro) Touch and Touch Plus controllers
+	// Meta Quest (1/2/3/Pro) Touch and Touch Plus controllers (and, below,
+	// the profiles that sense more of your fingers: the same controls)
 	const vrBinding_t touch[] = {
 		VR_BOTH_HAPTICS( vr.actHaptic ),
 		VR_BOTH_HANDS( vr.actGripPose, "grip/pose" ),
@@ -975,7 +1047,58 @@ static void VR_CreateInput( void ) {
 		{ &vr.actY, "/user/hand/left/input/y/click" },
 		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
 	};
-	VR_SuggestBindings( "/interaction_profiles/oculus/touch_controller", touch, ARRAY_LEN( touch ) );
+	// your fingers: the trigger touched; the thumb on a button, the stick or
+	// the thumb rest; (XR_FB_touch_controller_proximity, last) both near
+	const vrBinding_t touchFingers[] = {
+		VR_BOTH_HANDS( vr.actTriggerTouch, "trigger/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbstick/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbrest/touch" ),
+		{ &vr.actThumbTouch, "/user/hand/left/input/x/touch" },
+		{ &vr.actThumbTouch, "/user/hand/left/input/y/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/a/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/b/touch" },
+		VR_BOTH_HANDS( vr.actTriggerNear, "trigger/proximity_fb" ),
+		VR_BOTH_HANDS( vr.actThumbNear, "thumb_fb/proximity_fb" ),
+	};
+	VR_SuggestBindings( "/interaction_profiles/oculus/touch_controller", touch, ARRAY_LEN( touch ),
+		touchFingers, ARRAY_LEN( touchFingers ) - ( vr.extProximity ? 0 : 4 ) );
+
+	// Meta Quest 3 Touch Plus (XR_META_touch_controller_plus): the index
+	// finger's curl as well, and both near
+	const vrBinding_t touchPlusFingers[] = {
+		VR_BOTH_HANDS( vr.actTriggerTouch, "trigger/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbstick/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbrest/touch" ),
+		{ &vr.actThumbTouch, "/user/hand/left/input/x/touch" },
+		{ &vr.actThumbTouch, "/user/hand/left/input/y/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/a/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/b/touch" },
+		VR_BOTH_HANDS( vr.actTriggerNear, "trigger/proximity_meta" ),
+		VR_BOTH_HANDS( vr.actThumbNear, "thumb_meta/proximity_meta" ),
+		VR_BOTH_HANDS( vr.actTriggerCurl, "trigger/curl_meta" ),
+	};
+	if ( vr.extTouchPlus ) {
+		VR_SuggestBindings( "/interaction_profiles/meta/touch_controller_plus", touch, ARRAY_LEN( touch ),
+			touchPlusFingers, ARRAY_LEN( touchPlusFingers ) );
+	}
+
+	// Meta Quest Touch Pro (XR_FB_touch_controller_pro): the same
+	const vrBinding_t touchProFingers[] = {
+		VR_BOTH_HANDS( vr.actTriggerTouch, "trigger/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbstick/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbrest/touch" ),
+		{ &vr.actThumbTouch, "/user/hand/left/input/x/touch" },
+		{ &vr.actThumbTouch, "/user/hand/left/input/y/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/a/touch" },
+		{ &vr.actThumbTouch, "/user/hand/right/input/b/touch" },
+		VR_BOTH_HANDS( vr.actTriggerNear, "trigger/proximity_fb" ),
+		VR_BOTH_HANDS( vr.actThumbNear, "thumb_fb/proximity_fb" ),
+		VR_BOTH_HANDS( vr.actTriggerCurl, "trigger/curl_fb" ),
+	};
+	if ( vr.extTouchPro ) {
+		VR_SuggestBindings( "/interaction_profiles/facebook/touch_controller_pro", touch, ARRAY_LEN( touch ),
+			touchProFingers, ARRAY_LEN( touchProFingers ) );
+	}
 
 	// Valve Index
 	const vrBinding_t index[] = {
@@ -993,7 +1116,15 @@ static void VR_CreateInput( void ) {
 		{ &vr.actY, "/user/hand/left/input/b/click" },
 		{ &vr.actMenu, "/user/hand/left/input/trackpad/force" },
 	};
-	VR_SuggestBindings( "/interaction_profiles/valve/index_controller", index, ARRAY_LEN( index ) );
+	const vrBinding_t indexFingers[] = {
+		VR_BOTH_HANDS( vr.actTriggerTouch, "trigger/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "thumbstick/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "trackpad/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "a/touch" ),
+		VR_BOTH_HANDS( vr.actThumbTouch, "b/touch" ),
+	};
+	VR_SuggestBindings( "/interaction_profiles/valve/index_controller", index, ARRAY_LEN( index ),
+		indexFingers, ARRAY_LEN( indexFingers ) );
 
 	// HTC Vive wands
 	const vrBinding_t vive[] = {
@@ -1008,7 +1139,11 @@ static void VR_CreateInput( void ) {
 		{ &vr.actA, "/user/hand/right/input/menu/click" },
 		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
 	};
-	VR_SuggestBindings( "/interaction_profiles/htc/vive_controller", vive, ARRAY_LEN( vive ) );
+	const vrBinding_t viveFingers[] = {
+		VR_BOTH_HANDS( vr.actThumbTouch, "trackpad/touch" ),
+	};
+	VR_SuggestBindings( "/interaction_profiles/htc/vive_controller", vive, ARRAY_LEN( vive ),
+		viveFingers, ARRAY_LEN( viveFingers ) );
 
 	// Windows Mixed Reality
 	const vrBinding_t wmr[] = {
@@ -1025,7 +1160,9 @@ static void VR_CreateInput( void ) {
 		{ &vr.actX, "/user/hand/left/input/trackpad/click" },
 		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
 	};
-	VR_SuggestBindings( "/interaction_profiles/microsoft/motion_controller", wmr, ARRAY_LEN( wmr ) );
+	// (its trackpad is the only thing that feels the thumb, which mostly
+	// rests on the stick: it can't tell where your fingers are)
+	VR_SuggestBindings( "/interaction_profiles/microsoft/motion_controller", wmr, ARRAY_LEN( wmr ), NULL, 0 );
 
 	// Fallback for anything else
 	const vrBinding_t simple[] = {
@@ -1035,7 +1172,7 @@ static void VR_CreateInput( void ) {
 		VR_BOTH_HANDS( vr.actTrigger, "select/click" ),
 		{ &vr.actMenu, "/user/hand/left/input/menu/click" },
 	};
-	VR_SuggestBindings( "/interaction_profiles/khr/simple_controller", simple, ARRAY_LEN( simple ) );
+	VR_SuggestBindings( "/interaction_profiles/khr/simple_controller", simple, ARRAY_LEN( simple ), NULL, 0 );
 
 	vr.inputReady = qtrue;
 }
@@ -1049,6 +1186,8 @@ static void VR_DestroyInput( void ) {
 	vr.actTrigger = vr.actSqueeze = vr.actStickClick = XR_NULL_HANDLE;
 	vr.actA = vr.actB = vr.actX = vr.actY = vr.actMenu = XR_NULL_HANDLE;
 	vr.actHaptic = XR_NULL_HANDLE;
+	vr.actTriggerTouch = vr.actThumbTouch = vr.actTriggerNear = vr.actThumbNear = vr.actTriggerCurl = XR_NULL_HANDLE;
+	memset( vr.fingers, 0, sizeof( vr.fingers ) );
 	vr.inputReady = qfalse;
 }
 
@@ -1097,7 +1236,9 @@ static void VR_DestroyInputSpaces( void ) {
 			vr.aimSpace[h] = XR_NULL_HANDLE;
 		}
 		vr.handValid[h] = qfalse;
+		vr.profile[h][0] = 0;
 	}
+	memset( vr.fingers, 0, sizeof( vr.fingers ) );
 	vr.inputAttached = qfalse;
 }
 
@@ -1169,6 +1310,13 @@ static int VR_GripHand( int key ) {
 	return ( vr.keyHand[key] == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
 }
 
+// Whether hand h's grip takes hold of something if squeezed now: the cgame
+// said so lately (VR_SetGrabZones), in a game, out of the menu.
+static qboolean VR_GrabZone( int h ) {
+	return (qboolean)( !vr.pointerMode && cls.state == CA_ACTIVE && ( vr.grabZones & ( 1 << h ) ) &&
+		cls.realtime - vr.grabZoneTime >= 0 && cls.realtime - vr.grabZoneTime < 200 );
+}
+
 static void VR_SetKey( int key, qboolean down ) {
 	const int gripHand = VR_GripHand( key );
 
@@ -1192,8 +1340,7 @@ static void VR_SetKey( int key, qboolean down ) {
 			vr.grabbing[gripHand] = qfalse;
 			return;
 		}
-		if ( down && !vr.pointerMode && cls.state == CA_ACTIVE && ( vr.grabZones & ( 1 << gripHand ) ) &&
-			cls.realtime - vr.grabZoneTime >= 0 && cls.realtime - vr.grabZoneTime < 200 ) {
+		if ( down && VR_GrabZone( gripHand ) ) {
 			vr.grabbing[gripHand] = qtrue;
 			vr.keySent[key] = 0;
 			return;
@@ -1438,8 +1585,12 @@ static qboolean VR_PointerHit( int hand, float *x, float *y ) {
 	return qtrue;
 }
 
-// A trigger that crosses this clicks (VR_HandControl).
-#define VR_TRIGGER_PRESS	0.6f
+// A trigger that crosses this clicks (VR_HandControl) - and a grip takes hold
+// of something there; for Use and the Force it's pressed further
+// (vr_gripPress, up to VR_GRIP_PRESS_MAX).
+#define VR_TRIGGER_PRESS		0.6f
+#define VR_GRIP_PRESS_DEFAULT	0.85f
+#define VR_GRIP_PRESS_MAX		0.95f
 // A grip held as a grab that holds (a saber held by its grip: the cgame's,
 // VR_GRAB_HOLDS) is let go of only under this - others under 0.4: a hand
 // holding a saber needn't keep squeezing hard.
@@ -1719,6 +1870,81 @@ static qboolean VR_GetBool( XrAction action, XrPath sub ) {
 	return st.currentState ? qtrue : qfalse;
 }
 
+// Whether a sensor's bound on hand h's controller (isActive: the current
+// interaction profile has an input for it), and its state.
+static qboolean VR_GetSensor( XrAction action, XrPath sub, qboolean *active ) {
+	*active = qfalse;
+	if ( action == XR_NULL_HANDLE ) {
+		return qfalse;
+	}
+	XrActionStateGetInfo gi;
+	memset( &gi, 0, sizeof( gi ) );
+	gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
+	gi.action = action;
+	gi.subactionPath = sub;
+	XrActionStateBoolean st;
+	memset( &st, 0, sizeof( st ) );
+	st.type = XR_TYPE_ACTION_STATE_BOOLEAN;
+	if ( XR_FAILED( xrGetActionStateBoolean( vr.session, &gi, &st ) ) || !st.isActive ) {
+		return qfalse;
+	}
+	*active = qtrue;
+	return st.currentState ? qtrue : qfalse;
+}
+
+static float VR_GetSensorFloat( XrAction action, XrPath sub, qboolean *active ) {
+	*active = qfalse;
+	if ( action == XR_NULL_HANDLE ) {
+		return 0.0f;
+	}
+	XrActionStateGetInfo gi;
+	memset( &gi, 0, sizeof( gi ) );
+	gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
+	gi.action = action;
+	gi.subactionPath = sub;
+	XrActionStateFloat st;
+	memset( &st, 0, sizeof( st ) );
+	st.type = XR_TYPE_ACTION_STATE_FLOAT;
+	if ( XR_FAILED( xrGetActionStateFloat( vr.session, &gi, &st ) ) || !st.isActive ) {
+		return 0.0f;
+	}
+	*active = qtrue;
+	return st.currentState;
+}
+
+// What hand h's controller senses of its fingers (vrFingerSense_t): the
+// trigger and the grip as read, and each sensor it has - on, or not.
+static void VR_ReadFingers( int h, float trigger, float squeeze ) {
+	static const struct {
+		XrAction	*action;
+		int			bit;
+	} sensors[] = {
+		{ &vr.actTriggerTouch, VR_SENSE_TRIGGER_TOUCH },
+		{ &vr.actTriggerNear, VR_SENSE_TRIGGER_NEAR },
+		{ &vr.actThumbTouch, VR_SENSE_THUMB_TOUCH },
+		{ &vr.actThumbNear, VR_SENSE_THUMB_NEAR },
+	};
+	vrFingerSense_t *fs = &vr.fingers[h];
+	qboolean active;
+
+	memset( fs, 0, sizeof( *fs ) );
+	fs->trigger = Com_Clamp( 0.0f, 1.0f, trigger );
+	fs->squeeze = Com_Clamp( 0.0f, 1.0f, squeeze );
+	for ( size_t i = 0; i < ARRAY_LEN( sensors ); i++ ) {
+		if ( VR_GetSensor( *sensors[i].action, vr.handPath[h], &active ) ) {
+			fs->touched |= sensors[i].bit;
+		}
+		if ( active ) {
+			fs->sensed |= sensors[i].bit;
+		}
+	}
+	fs->indexCurl = Com_Clamp( 0.0f, 1.0f, VR_GetSensorFloat( vr.actTriggerCurl, vr.handPath[h], &active ) );
+	if ( active ) {
+		fs->sensed |= VR_SENSE_INDEX_CURL;
+	}
+	fs->touched &= fs->sensed;
+}
+
 static void VR_GetVec2( XrAction action, float *x, float *y ) {
 	*x = *y = 0.0f;
 	if ( action == XR_NULL_HANDLE ) {
@@ -1800,15 +2026,45 @@ static int VR_ControlKey( int control, int h ) {
 	return vr.ctlKey[control][h] ? vr.ctlKey[control][h] - 1 : VR_RoleKey( control, h );
 }
 
-// Hand h's trigger or grip, read as value (0..1): pressed past VR_TRIGGER_PRESS,
-// let go under 0.4 (a grip held as a grab that holds, under VR_GRAB_LET_GO).
-// Pressed, it presses the key for what it does then (the other one if the
-// other hand's is pressing that already); let go, that key goes up.
+// How far a grip must be pressed for Use and the Force (vr_gripPress): a
+// lighter squeeze only curls your fingers (a point, a thumbs up, a fist).
+static float VR_GripPress( void ) {
+	const float p = vr_gripPress ? vr_gripPress->value : VR_GRIP_PRESS_DEFAULT;
+
+	if ( !( p >= VR_TRIGGER_PRESS ) ) {
+		return VR_TRIGGER_PRESS;	// (and NaN)
+	}
+	return ( p < VR_GRIP_PRESS_MAX ) ? p : VR_GRIP_PRESS_MAX;
+}
+
+// Hand h's trigger or grip, read as value (0..1): pressed past VR_TRIGGER_PRESS
+// - a grip past vr_gripPress, unless it's squeezed afresh where it can take
+// hold of something (VR_GrabZone: it grabs, VR_SetKey) - let go under 0.4 (a
+// grip held as a grab that holds, under VR_GRAB_LET_GO). Pressed, it presses
+// the key for what it does then (the other one if the other hand's is
+// pressing that already); let go, that key goes up.
 static void VR_HandControl( int control, int h, float value ) {
 	const qboolean was = vr.ctlDown[control][h];
 	const float letGo = ( control == VR_CTL_GRIP && vr.grabbing[h] && vr.grabHolds ) ? VR_GRAB_LET_GO : 0.4f;
-	const qboolean down = (qboolean)( value > VR_TRIGGER_PRESS || ( was && value > letGo ) );
+	float pressAt = VR_TRIGGER_PRESS;
 	int key;
+
+	if ( control == VR_CTL_GRIP ) {
+		if ( value <= 0.4f ) {
+			vr.gripFresh[h] = qtrue;	// (let go: the next squeeze is a fresh one)
+		}
+		if ( !was ) {
+			if ( !vr.gripFresh[h] || !VR_GrabZone( h ) ) {
+				pressAt = VR_GripPress();
+			}
+			if ( value > VR_TRIGGER_PRESS && value <= pressAt ) {
+				// squeezed past where a grab takes it, nothing there to take
+				// hold of: not a grab, moved onto something now (only pressed on)
+				vr.gripFresh[h] = qfalse;
+			}
+		}
+	}
+	const qboolean down = (qboolean)( value > pressAt || ( was && value > letGo ) );
 
 	if ( down && !was ) {
 		const int other = h ^ 1;
@@ -1858,9 +2114,12 @@ static void VR_PollInput( void ) {
 	si.countActiveActionSets = 1;
 	si.activeActionSets = &active;
 	if ( xrSyncActions( vr.session, &si ) != XR_SUCCESS ) {
-		// not focused (system menu open, headset off): drop all input
+		// not focused (system menu open, headset off): drop all input (a
+		// grip held as it comes back is squeezed afresh)
 		VR_ReleaseAllKeys();
 		vr.handValid[0] = vr.handValid[1] = qfalse;
+		vr.gripFresh[0] = vr.gripFresh[1] = qtrue;
+		memset( vr.fingers, 0, sizeof( vr.fingers ) );
 		return;
 	}
 
@@ -1888,9 +2147,15 @@ static void VR_PollInput( void ) {
 	VR_GetVec2( vr.actMove, &vr.moveX, &vr.moveY );
 	VR_GetVec2( vr.actTurn, &vr.turnX, &vr.turnY );
 
-	float trigger[2];
+	float trigger[2], squeeze[2];
 	trigger[VR_HAND_LEFT] = VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_LEFT] );
 	trigger[VR_HAND_RIGHT] = VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_RIGHT] );
+	squeeze[VR_HAND_LEFT] = VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_LEFT] );
+	squeeze[VR_HAND_RIGHT] = VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_RIGHT] );
+
+	// your fingers, as the controllers sense them (the cgame's hands follow them)
+	VR_ReadFingers( VR_HAND_LEFT, trigger[VR_HAND_LEFT], squeeze[VR_HAND_LEFT] );
+	VR_ReadFingers( VR_HAND_RIGHT, trigger[VR_HAND_RIGHT], squeeze[VR_HAND_RIGHT] );
 
 	// The menu screen takes the pointer: buttons click where the controller
 	// points, and only a poll at the top of the frame puts the cursor there
@@ -1917,8 +2182,8 @@ static void VR_PollInput( void ) {
 	// triggers and grips by what each hand does (VR_HandControl)
 	VR_HandControl( VR_CTL_TRIGGER, VR_HAND_RIGHT, trigger[VR_HAND_RIGHT] );
 	VR_HandControl( VR_CTL_TRIGGER, VR_HAND_LEFT, trigger[VR_HAND_LEFT] );
-	VR_HandControl( VR_CTL_GRIP, VR_HAND_RIGHT, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_RIGHT] ) );
-	VR_HandControl( VR_CTL_GRIP, VR_HAND_LEFT, VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_LEFT] ) );
+	VR_HandControl( VR_CTL_GRIP, VR_HAND_RIGHT, squeeze[VR_HAND_RIGHT] );
+	VR_HandControl( VR_CTL_GRIP, VR_HAND_LEFT, squeeze[VR_HAND_LEFT] );
 	VR_SetKey( VR_KEY_A, VR_GetBool( vr.actA, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_B, VR_GetBool( vr.actB, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_X, VR_GetBool( vr.actX, XR_NULL_PATH ) );
@@ -2056,6 +2321,32 @@ static void VR_HandleSessionState( XrSessionState state ) {
 	}
 }
 
+// The controllers each hand has now (their interaction profile: what the
+// runtime binds them as - which decides what they sense of your fingers),
+// said in the console as they change.
+static void VR_NoteControllers( void ) {
+	if ( vr.session == XR_NULL_HANDLE || !vr.inputAttached ) {
+		return;
+	}
+	for ( int h = 0; h < 2; h++ ) {
+		XrInteractionProfileState ps;
+		char name[XR_MAX_PATH_LENGTH];
+		uint32_t len = 0;
+		memset( &ps, 0, sizeof( ps ) );
+		ps.type = XR_TYPE_INTERACTION_PROFILE_STATE;
+		name[0] = 0;
+		if ( XR_SUCCEEDED( xrGetCurrentInteractionProfile( vr.session, vr.handPath[h], &ps ) ) &&
+			ps.interactionProfile != XR_NULL_PATH &&
+			XR_FAILED( xrPathToString( vr.instance, ps.interactionProfile, sizeof( name ), &len, name ) ) ) {
+			name[0] = 0;
+		}
+		if ( strcmp( name, vr.profile[h] ) ) {
+			Q_strncpyz( vr.profile[h], name, sizeof( vr.profile[h] ) );
+			Com_Printf( "VR: %s hand: %s\n", h == VR_HAND_RIGHT ? "right" : "left", name[0] ? name : "no controller" );
+		}
+	}
+}
+
 static void VR_PollEvents( void ) {
 	if ( vr.instance == XR_NULL_HANDLE || vr.instanceLost ) {
 		return;
@@ -2079,6 +2370,9 @@ static void VR_PollEvents( void ) {
 		}
 		case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
 			vr.recenterPending = qtrue;
+			break;
+		case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
+			VR_NoteControllers();
 			break;
 		case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
 			Com_Printf( S_COLOR_YELLOW "VR: OpenXR runtime is shutting down; showing the desktop view. Use vid_restart to reconnect.\n" );
@@ -2572,6 +2866,8 @@ static void VR_UpdateTracking( void ) {
 	vrClient.stick[VR_HAND_LEFT][1] = vr.moveY;
 	vrClient.stick[VR_HAND_RIGHT][0] = vr.turnX;
 	vrClient.stick[VR_HAND_RIGHT][1] = vr.turnY;
+	vrClient.fingers[VR_HAND_LEFT] = vr.fingers[VR_HAND_LEFT];
+	vrClient.fingers[VR_HAND_RIGHT] = vr.fingers[VR_HAND_RIGHT];
 	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
@@ -3161,6 +3457,28 @@ static void VR_Status_f( void ) {
 				vrRender.hudX[e], vrRender.hudY[e], vrRender.hudW[e], vrRender.hudH[e] );
 		}
 	}
+	for ( int h = 0; h < 2; h++ ) {
+		static const struct {
+			int			bit;
+			const char	*text;
+		} senses[] = {
+			{ VR_SENSE_TRIGGER_TOUCH, "the trigger touched" },
+			{ VR_SENSE_TRIGGER_NEAR, "the finger near it" },
+			{ VR_SENSE_INDEX_CURL, "the finger's curl" },
+			{ VR_SENSE_THUMB_TOUCH, "the thumb on the controller" },
+			{ VR_SENSE_THUMB_NEAR, "the thumb near it" },
+		};
+		const vrFingerSense_t *fs = &vr.fingers[h];
+		char list[160] = "";
+		for ( size_t i = 0; i < ARRAY_LEN( senses ); i++ ) {
+			if ( fs->sensed & senses[i].bit ) {
+				Q_strcat( list, sizeof( list ), list[0] ? ", " : "" );
+				Q_strcat( list, sizeof( list ), senses[i].text );
+			}
+		}
+		Com_Printf( "VR: %s hand: %s; senses %s (trigger %.2f, grip %.2f)\n", h == VR_HAND_RIGHT ? "right" : "left",
+			vr.profile[h][0] ? vr.profile[h] : "no controller", list[0] ? list : "nothing of your fingers", fs->trigger, fs->squeeze );
+	}
 }
 
 void VR_Init( void ) {
@@ -3189,6 +3507,7 @@ void VR_Init( void ) {
 	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );
 	vr_gunPitch			= Cvar_Get( "vr_gunPitch",			"0",	CVAR_ARCHIVE, "Tilt guns in your hand (degrees, + = barrel up); also tilts the aim" );
 	vr_leftHanded		= Cvar_Get( "vr_leftHanded",		"0",	CVAR_ARCHIVE, "Left-handed: guns and the saber in your left hand, the Force on the right grip and Use on the left" );
+	vr_gripPress		= Cvar_Get( "vr_gripPress",			"0.85",	CVAR_ARCHIVE, "How far a grip must be pressed for Use and the Force (0.6 to 0.95): a lighter squeeze only curls your fingers" );
 	vr.pointerLeft = vr_leftHanded->integer ? qtrue : qfalse;	// (the menu's pointer: the hand you use)
 
 	// tells a VR-aware cgame that trap->ext.VR_GetClientState exists

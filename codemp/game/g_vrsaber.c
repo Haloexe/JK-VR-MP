@@ -71,6 +71,7 @@ void G_Knockdown( gentity_t *victim );
 #define VR_SABER_LATCH		2000	// ms a player still counts as fighting in VR without poses (lag)
 #define VR_SABER_FRESH		200		// ms the newest blade pose is used for
 #define VR_SABER_REACH		64.0f	// a hilt or hand can't be further than this from the camera
+#define VR_SABER_HEAD_REACH	24.0f	// ...nor the head (the headset; the view follows it 8.5 at most, vr_positionalMax)
 #define VR_SABER_VIEW_XY	16.0f	// the camera's smoothing can't take it further than this sideways...
 #define VR_SABER_VIEW_Z		48.0f	// ...or up and down from the eye
 #define VR_GAZE_FRESH		500		// ms: where a VR player's headset was last seen to look stands for this long (G_VRHeadGaze)
@@ -799,9 +800,21 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	}
 	a.shift[2] = Com_Clamp( -48.0f, 48.0f, a.shift[2] );
 
+	// the head: near the camera, then from where the player is, as the hands
+	{
+		vec3_t ofs;
+		VectorCopy( a.head, ofs );
+		if ( ofs[0] != ofs[0] || ofs[1] != ofs[1] || ofs[2] != ofs[2] ) {
+			VectorClear( ofs );	// (NaN)
+		}
+		VRS_ClampReachTo( eye, cam, ofs, VR_SABER_HEAD_REACH, a.head );
+		VectorSubtract( a.head, cl->ps.origin, a.head );
+	}
+
 	for ( h = 0; h < 2; h++ ) {
 		vrAvatarHand_t *hand = &a.hand[h];
 		vec3_t ofs;
+		int f;
 		if ( hand->grip <= VR_GRIP_NONE || hand->grip >= VR_NUM_GRIPS ||
 			( !G_VRSaberOn() && ( hand->grip == VR_GRIP_SABER || hand->grip == VR_GRIP_HILT ) ) ) {
 			// (with the game's own saber combat the animation swings it, as
@@ -831,6 +844,11 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 		} else {
 			hand->hilt = 0.0f;
 			hand->reversed = qfalse;
+		}
+		// its fingers (an empty hand, a gun's): 0..1
+		hand->fingersValid = ( ( hand->grip == VR_GRIP_FREE || hand->grip == VR_GRIP_GUN ) && hand->fingersValid ) ? qtrue : qfalse;
+		for ( f = 0; f < VR_NUM_FINGERS; f++ ) {
+			hand->fingers[f] = ( hand->fingersValid && hand->fingers[f] > 0.0f ) ? Q_min( 1.0f, hand->fingers[f] ) : 0.0f;
 		}
 		VectorSubtract( hand->origin, cl->ps.origin, hand->origin );
 	}

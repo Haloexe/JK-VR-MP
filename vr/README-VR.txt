@@ -13,6 +13,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     and its arms and hands follow your controllers, gripping what they
     hold (works with any player model on the standard skeleton, custom
     models included)
+  * Your fingers: your character's hands follow your fingers on the
+    controllers - point, thumbs up, a fist, an open hand - and everyone
+    running this build sees them (see YOUR FINGERS)
   * First-person lightsaber: the hilt in your hand, the blade where your
     controller points - in either hand, held anywhere along the hilt, the
     usual way or reversed, passed from hand to hand
@@ -83,14 +86,21 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        holds your weapon: your saber in your left hand, the
                        left one
   Left trigger         alternate attack (the other trigger)
-  Right grip           use (doors, switches, pick-ups) - at a holster, take
-                       out or put away (see HOLSTERS); holding your saber
-                       (Saber Grip: Hold), it holds it - no use meanwhile;
-                       let go and it's back in its holster
-  Left grip            use the selected Force power (or, at your saber's
-                       hilt, take hold of it with both hands; at a
-                       holster, take out or put away; holding a saber
-                       (Saber Grip: Hold), it holds it - no Force meanwhile)
+  Right grip           use (doors, switches, pick-ups), squeezed most of
+                       the way (Setup > VR: Grip Press, 85%) - a lighter
+                       squeeze only closes your character's fingers; at a
+                       holster, take out or put away (see HOLSTERS);
+                       holding your saber (Saber Grip: Hold), it holds it
+                       - no use meanwhile; let go and it's back in its
+                       holster
+  Left grip            use the selected Force power, squeezed as far as
+                       Use (or, at your saber's hilt, take hold of it with
+                       both hands; at a holster, take out or put away;
+                       holding a saber (Saber Grip: Hold), it holds it - no
+                       Force meanwhile)
+                       Taking hold of something - a hilt, a holster - takes
+                       only the usual squeeze (past 60%), squeezed afresh
+                       where your hand can take hold
   A / B                jump / crouch
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
@@ -155,6 +165,36 @@ up or down twists the forearm along its length, so the elbow never wrings
 like a towel. Your shoulders lift as you raise a hand overhead and come
 forward as you reach out or across. Other players running this build see
 your arms the same way.
+
+YOUR FINGERS: your character's fingers follow yours (Setup > VR: Finger
+Tracking). An empty hand, and a gun hand's trigger finger, do what your
+fingers do on the controller:
+  the thumb        on a button, the stick or the thumb rest: down; lifted:
+                   up (Quest 3 Touch Plus: half way near them)
+  the index finger on the trigger: resting on it, closing as you pull it;
+                   off it: straight (Touch Plus also feels how far it's
+                   curled, and when it's near)
+  the other three  the grip: a light squeeze closes them; loose, they rest
+                   round the controller - open once your thumb and index
+                   finger are lifted too
+So: a fist (a light squeeze, finger on the trigger, thumb down), point
+(finger off the trigger), thumbs up (finger on, thumb lifted), a finger gun
+(finger and thumb lifted), an open hand (let go, lift both). They do nothing
+else: Use and the Force take a grip squeezed most of the way (Setup > VR:
+Grip Press, 85%; 60% is how it was before). A gun hand holds the gun as
+ever, its index finger along the guard until it touches the trigger, then
+on it; a saber hand stays closed round its hilt.
+What your controllers feel depends on them and on the OpenXR runtime:
+  Quest 3 (Touch Plus), with the Meta Quest Link app (Link or Air Link)
+  as the runtime: all of the above
+  Quest 3 through SteamVR, Quest 2 and Rift Touch, Valve Index: the
+  finger on the trigger, the thumb on the controller
+  Vive wands: the thumb on the trackpad
+  Windows Mixed Reality: nothing (the fingers rest round the grip)
+vr_status says what each controller feels.
+Everyone running this build sees your fingers, in games hosted with it.
+The stock characters' fingers all move; a custom model whose hands have no
+finger bones, or whose fingers don't follow them, keeps its hands as made.
 
 LIGHTSABER: with the saber out you stay in first person. The hilt is
 locked in your right fist - your left, left-handed (a second saber in the
@@ -478,15 +518,16 @@ server running this build: your real blade is the weapon.
         as strongly as the first. cg_vrHaptics sets how strong it all is
         (0 off, 1 normal, up to 2).
   * Setup has a VR page (the VR button under Video, Sound and the rest,
-    in the main menu and in game) with Left-Handed (above), Saber Inertia,
-    Saber Weight, Vibration and the holsters' settings (HOLSTERS, above):
+    in the main menu and in game) with Left-Handed (above), Finger
+    Tracking and Grip Press (YOUR FINGERS, above), Saber Inertia, Saber
+    Weight, Vibration and the holsters' settings (HOLSTERS, above):
     point at Left-Handed and click it, or pick it with the arrow keys (or
     Tab) and set it with left (No) or right (Yes), or change it with Enter;
     point at a slider and click or drag it, or push the stick up or down
     (the mouse wheel) to move it a tenth at a time, or pick it with the
     arrow keys and move it with left and right. Each slider shows its
-    value. A setting with named choices (Saber Grip, Hilts Hang, Holster
-    Markers) steps on as you click it (or push the stick up, or press right or
+    value. A setting with named choices (Grip Press, Saber Grip, Hilts
+    Hang, Holster Markers) steps on as you click it (or push the stick up, or press right or
     Enter) and back as you right-click it (the other trigger), push the
     stick down, or press left.
   * Cutting someone ends your spawn protection, like attacking always has.
@@ -893,6 +934,11 @@ SETTINGS (console cvars, saved automatically)
   cg_vrSaberSolid 1      0 = blades pass through each other (the game
                          still stops them where they met)
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
+  cg_vrFingers 1         0 = your character's fingers as the animation
+                         has them (Setup, VR: Finger Tracking)
+  vr_gripPress 0.85      how far a grip must be squeezed for Use and the
+                         Force (0.6 to 0.95; Setup, VR: Grip Press) - a
+                         lighter squeeze only closes your fingers
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
@@ -960,6 +1006,9 @@ KNOWN LIMITATIONS
     with the first two.
   * Guns are held in your gun hand only (the right; the left,
     left-handed); only sabers can be held with both hands.
+  * Fingers: the game's skeleton moves three fingers a hand - the thumb,
+    the index finger, and the other three together - and each follows
+    only what your controller can feel (see YOUR FINGERS).
   * Holsters: on a model with a cape or a jetpack, what hangs on your back
     (and a hilt at the hip) can sink into it, and long hair or lekku can
     cover a shoulder's; a hilt can touch the leg in some of the game's
@@ -1008,7 +1057,9 @@ no client. Source files:
   codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK; the
                                blade's weight and solid blades; the blade
                                poses sent to the server, haptics
-  codemp/qcommon/vr_net.h      blade poses on the wire
+  codemp/qcommon/vr_net.h      blade poses on the wire, and the avatar
+                               (VR_POSE_PROTOCOL 5: its head and fingers)
+  codemp/qcommon/vr_fingers.h  your fingers from what the controllers feel
   codemp/game/g_vrsaber.c      physical saber combat on the server
   codemp/game/bg_vrsaber.h     how heavy a blade feels, and the share of
                                its cut speeds that makes up for it
