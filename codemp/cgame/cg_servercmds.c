@@ -143,6 +143,8 @@ void CG_ParseServerinfo( void ) {
 
 	cgs.showDuelHealths = atoi( Info_ValueForKey( info, "g_showDuelHealths" ) );
 
+	cgs.vrHolsters = ( atoi( Info_ValueForKey( info, "vrHolsters" ) ) > 0 ) ? qtrue : qfalse;	// OpenJK VR: holsters (cg_vrholster.c)
+
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	trap->Cvar_Set("g_gametype", va("%i", cgs.gametype));
 	cgs.needpass = atoi( Info_ValueForKey( info, "g_needpass" ) );

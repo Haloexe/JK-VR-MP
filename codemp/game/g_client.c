@@ -2139,6 +2139,8 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	if ( !atoi( s ) )	client->pers.predictItemPickup = qfalse;
 	else				client->pers.predictItemPickup = qtrue;
 
+	G_VRHolsterUserinfo( ent, userinfo );	// OpenJK VR: what's in a VR player's holsters ("vrh": g_vrholster.c)
+
 	// set name
 	Q_strncpyz( oldname, client->pers.netname, sizeof( oldname ) );
 	s = Info_ValueForKey( userinfo, "name" );
@@ -2355,6 +2357,8 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		Q_strcat( buf, sizeof( buf ), va( "siegeclass\\%s\\", className ) );
 		Q_strcat( buf, sizeof( buf ), va( "sdt\\%i\\", client->sess.siegeDesiredTeam ) );
 	}
+
+	G_VRHolsterInfo( ent, buf, sizeof( buf ) );	// OpenJK VR: holsters, and everyone's hilts (g_vrholster.c)
 
 	trap->GetConfigstring( CS_PLAYERS+clientNum, oldClientinfo, sizeof( oldClientinfo ) );
 	trap->SetConfigstring( CS_PLAYERS+clientNum, buf );
@@ -3750,6 +3754,8 @@ void ClientSpawn(gentity_t *ent) {
 	client->ps.pm_flags |= PMF_RESPAWNED;
 
 	trap->GetUsercmd( client - level.clients, &ent->client->pers.cmd );
+	G_VRHolsterCmd( ent, &ent->client->pers.cmd );
+	G_VRHolsterSpawn( ent );	// OpenJK VR: a VR player's saber hangs in its holster, unlit; whether they have one goes out (g_vrholster.c)
 	SetClientViewAngle( ent, spawn_angles );
 	// don't allow full run speed for a bit
 	client->ps.pm_flags |= PMF_TIME_KNOCKBACK;

@@ -3400,14 +3400,24 @@ qboolean Item_Multi_HandleKey(itemDef_t *item, int key)
 	multiDef_t *multiPtr = item->typeData.multi;
 	if (multiPtr)
 	{
-		if (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS)
+		// OpenJK VR: as a Yes/No (Item_YesNo_HandleKey): shown and usable, the
+		// keys having taken the focus to it - or the mouse (the VR pointer) on
+		// it - Enter steps it on, and the arrows step it either way: left back,
+		// right on
+		const qboolean keyed = (qboolean)( ( item->window.flags & ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) ) == ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) &&
+			item->cvar && ( item == g_keyFocusItem || Rect_ContainsPoint( &item->window.rect, DC->cursorx, DC->cursory ) ) &&
+			!( ( item->cvarFlags & ( CVAR_ENABLE | CVAR_DISABLE ) ) && !Item_EnableShowViaCvar( item, CVAR_ENABLE ) ) &&
+			!( ( item->cvarFlags & ( CVAR_SHOW | CVAR_HIDE ) ) && !Item_EnableShowViaCvar( item, CVAR_SHOW ) ) &&
+			( key == A_ENTER || key == A_KP_ENTER || key == A_CURSOR_LEFT || key == A_KP_4 || key == A_CURSOR_RIGHT || key == A_KP_6 ) );
+
+		if (keyed || (Rect_ContainsPoint(&item->window.rect, DC->cursorx, DC->cursory) && item->window.flags & WINDOW_HASFOCUS))
 		{
-			if (key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3 || key == A_MWHEELDOWN || key == A_MWHEELUP)
+			if (keyed || key == A_MOUSE1 || key == A_ENTER || key == A_MOUSE2 || key == A_MOUSE3 || key == A_MWHEELDOWN || key == A_MWHEELUP)
 			{
 				int current = Item_Multi_FindCvarByValue(item);
 				int max = Item_Multi_CountSettings(item);
 
-				if (key == A_MOUSE2 || key == A_CURSOR_LEFT || key == A_MWHEELDOWN)	// Xbox uses CURSOR_LEFT
+				if (key == A_MOUSE2 || key == A_CURSOR_LEFT || key == A_KP_4 || key == A_MWHEELDOWN)	// Xbox uses CURSOR_LEFT
 			//	if (key == A_MOUSE2 || key == A_CURSOR_LEFT)	// Xbox uses CURSOR_LEFT
 				{
 					current--;

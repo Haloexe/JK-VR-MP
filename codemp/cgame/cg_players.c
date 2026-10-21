@@ -1819,6 +1819,12 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized ) {
 		k++;
 	}
 
+	// OpenJK VR: holsters (cg_vrholster.c) - what hangs in a VR player's, whether
+	// anyone has a saber or two, how often theirs changed over
+	newInfo.vrHasHolsters = BG_VRHolsterParse( Info_ValueForKey( configstring, "vh" ), newInfo.vrHolsters );
+	newInfo.vrHasSabers = atoi( Info_ValueForKey( configstring, "hs" ) );
+	newInfo.vrSaberSwaps = atoi( Info_ValueForKey( configstring, "vs" ) );
+
 	//duel team
 	v = Info_ValueForKey( configstring, "dt" );
 
@@ -9057,12 +9063,13 @@ void CG_Player( centity_t *cent ) {
 					&& !cent->saberWasInFlight)
 				{ //switching to the saber
 					//trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, trap->S_RegisterSound( "sound/weapons/saber/saberon.wav" ));
-					if (ci->saber[0].soundOn)
+					// (OpenJK VR: only the blades lit - a VR player's saber comes out of its holster unlit: cg_vrholster.c)
+					if (ci->saber[0].soundOn && cent->currentState.saberHolstered < 2)
 					{
 						trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, ci->saber[0].soundOn);
 					}
 
-					if (ci->saber[1].soundOn)
+					if (ci->saber[1].soundOn && !cent->currentState.saberHolstered)
 					{
 						trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, ci->saber[1].soundOn);
 					}
@@ -9496,6 +9503,9 @@ void CG_Player( centity_t *cent ) {
 		trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_lhand, &lHandMatrix, cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale);
 		gotLHandMatrix = qtrue;
 	}
+
+	// OpenJK VR: what hangs on them - holsters, and everyone's hilts on their belt (cg_vrholster.c)
+	CG_VRH_AddHolstered( cent, legs.axis, legs.renderfx );
 
 	// add the talk baloon or disconnect icon
 	CG_PlayerSprites( cent );

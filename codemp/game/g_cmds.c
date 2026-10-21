@@ -2743,26 +2743,33 @@ void Cmd_ToggleSaber_f(gentity_t *ent)
 	{
 		if (ent->client->ps.saberHolstered == 2)
 		{
-			ent->client->ps.saberHolstered = 0;
+			const int lit = G_VRHolsterLit( ent );	// OpenJK VR: one of two in hand lights alone, none in hand none (g_vrholster.c)
+
+			if ( lit == 2 )
+			{
+				return;
+			}
+			ent->client->ps.saberHolstered = lit;
 
 			if (ent->client->saber[0].soundOn)
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[0].soundOn);
 			}
-			if (ent->client->saber[1].soundOn)
+			if (ent->client->saber[1].soundOn && !ent->client->ps.saberHolstered)
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[1].soundOn);
 			}
 		}
 		else
 		{
+			const qboolean secondLit = ( !ent->client->ps.saberHolstered || G_VRHolsterLit( ent ) == 0 ) ? qtrue : qfalse;	// (OpenJK VR: one of two in hand: only it was)
 			ent->client->ps.saberHolstered = 2;
 			if (ent->client->saber[0].soundOff)
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[0].soundOff);
 			}
 			if (ent->client->saber[1].soundOff &&
-				ent->client->saber[1].model[0])
+				ent->client->saber[1].model[0] && secondLit)
 			{
 				G_Sound(ent, CHAN_AUTO, ent->client->saber[1].soundOff);
 			}
@@ -2813,6 +2820,10 @@ void Cmd_SaberAttackCycle_f(gentity_t *ent)
 
 	if (ent->client->saber[0].model[0] && ent->client->saber[1].model[0])
 	{ //no cycling for akimbo
+		if ( G_VRHolsterCycle( ent ) )
+		{//OpenJK VR: one of the two in hand - its style, as one saber's (g_vrholster.c)
+			return;
+		}
 		if ( WP_SaberCanTurnOffSomeBlades( &ent->client->saber[1] ) )
 		{//can turn second saber off
 			if ( ent->client->ps.saberHolstered == 1 )

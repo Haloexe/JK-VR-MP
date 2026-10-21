@@ -2555,6 +2555,7 @@ Ghoul2 Insert End
 
 	CG_InitConsoleCommands();
 	CG_RP_Init();	// OpenJK VR: roleplay (before the serverinfo's read)
+	CG_VRH_Init();	// OpenJK VR: holsters (cg_vrholster.c)
 
 	cg.renderingThirdPerson = cg_thirdPerson.integer;
 
@@ -2643,6 +2644,8 @@ Ghoul2 Insert End
 
 	BG_FixSaberMoveData();
 	BG_FixWeaponAttackAnim();
+
+	CG_VRH_SayButtons();	// OpenJK VR: holsters' rules from your first command (cg_vrholster.c)
 }
 
 //makes sure returned string is in localized format
@@ -2707,6 +2710,7 @@ void CG_Shutdown( void )
 {
 	CG_VR_Shutdown();	// OpenJK VR: its log
 	CG_RP_Shutdown();	// OpenJK VR: roleplay (the menus' cvars say there's none now)
+	CG_VRH_Shutdown();	// OpenJK VR: holsters' models (cg_vrholster.c)
 
 	BG_ClearAnimsets(); //free all dynamic allocations made through the engine
 

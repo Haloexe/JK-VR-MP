@@ -7031,6 +7031,20 @@ static void PM_Weapon( void )
 		pm->cmd.weapon = WP_SABER; //don't allow switching out mid-attack
 	}
 
+	if (pm->ps->weapon == WP_SABER && !pm->ps->saberInFlight)
+	{//OpenJK VR (holsters): a saber that's not in their hands isn't lit - none, their hands empty (nor swung, nor
+	 //thrown: nothing in hand); the second of two, one in hand (whatever lit it: a duel's start, a taunt)
+		if (pm->cmd.buttons & BUTTON_VR_EMPTYHANDS)
+		{
+			pm->ps->saberHolstered = 2;
+			pm->cmd.buttons &= ~(BUTTON_ATTACK|BUTTON_ALT_ATTACK);
+		}
+		else if ((pm->cmd.buttons & BUTTON_VR_ONESABER) && !pm->ps->saberHolstered)
+		{
+			pm->ps->saberHolstered = 1;
+		}
+	}
+
 	if (pm->ps->weapon == WP_SABER)
 	{
 		//rww - we still need the item stuff, so we won't return immediately
@@ -7039,7 +7053,9 @@ static void PM_Weapon( void )
 	}
 	else if (pm->ps->weapon != WP_EMPLACED_GUN)
 	{
-		pm->ps->saberHolstered = 0;
+		// OpenJK VR (holsters): the saber's hilt hangs in its holster while
+		// another weapon's out - taken out, it's unlit (stock: lit)
+		pm->ps->saberHolstered = ( pm->cmd.buttons & BUTTON_VR_HOLSTERS ) ? 2 : 0;
 	}
 
 	if (PM_CanSetWeaponAnims())
@@ -10397,7 +10413,7 @@ void PmoveSingle (pmove_t *pmove) {
 				pm->cmd.rightmove = 0;
 				pm->cmd.upmove = 0;
 				pm->cmd.forwardmove = 0;
-				pm->cmd.buttons = 0;
+				pm->cmd.buttons &= BUTTONS_VR;	// OpenJK VR: (the holsters' rules stay)
 			}
 		}
 	}
@@ -10409,7 +10425,7 @@ void PmoveSingle (pmove_t *pmove) {
         pm->cmd.rightmove = 0;
 		pm->cmd.upmove = 0;
 		pm->cmd.forwardmove = 0;
-		pm->cmd.buttons = 0;
+		pm->cmd.buttons &= BUTTONS_VR;	// OpenJK VR: (the holsters' rules stay)
 	}
 	else if (pm->ps->legsAnim == BOTH_FORCELAND1 ||
 		pm->ps->legsAnim == BOTH_FORCELANDBACK1 ||
@@ -10560,7 +10576,7 @@ void PmoveSingle (pmove_t *pmove) {
 	if ( pmove->cmd.buttons & BUTTON_TALK ) {
 		// keep the talk button set tho for when the cmd.serverTime > 66 msec
 		// and the same cmd is used multiple times in Pmove
-		pmove->cmd.buttons = BUTTON_TALK;
+		pmove->cmd.buttons = BUTTON_TALK | ( pmove->cmd.buttons & BUTTONS_VR );	// OpenJK VR: (the holsters' rules stay)
 		pmove->cmd.forwardmove = 0;
 		pmove->cmd.rightmove = 0;
 		pmove->cmd.upmove = 0;
@@ -11220,7 +11236,7 @@ void Pmove (pmove_t *pmove) {
 		pmove->cmd.forwardmove = 0;
 		pmove->cmd.rightmove = 0;
 		pmove->cmd.upmove = 0;
-		pmove->cmd.buttons = 0;
+		pmove->cmd.buttons &= BUTTONS_VR;	// OpenJK VR: (the holsters' rules stay)
 	}
 
 	pmove->ps->pmove_framecount = (pmove->ps->pmove_framecount+1) & ((1<<PS_PMOVEFRAMECOUNTBITS)-1);

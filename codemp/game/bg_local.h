@@ -100,6 +100,7 @@ saberMoveName_t PM_SaberJumpAttackMove( void );
 void PM_ClipVelocity( vec3_t in, vec3_t normal, vec3_t out, float overbounce );
 void PM_AddTouchEnt( int entityNum );
 void PM_AddEvent( int newEvent );
+void PM_AddEventWithParm( int newEvent, int parm );
 
 qboolean	PM_SlideMove( qboolean gravity );
 void		PM_StepSlideMove( qboolean gravity );

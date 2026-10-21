@@ -9,6 +9,8 @@
 //
 //	showValue:	the slider shows its value after it; the arrow keys move it a tenth at a time
 //	YESNO:		Yes or No after it; clicking it, Enter or the arrow keys change it
+//	MULTI:		its choice after it; clicking it, Enter or the arrow keys go to the next
+//	BUTTON:		does what it says when clicked
 //
 //----------------------------------------------------------------------------------------------
 {
@@ -107,6 +109,118 @@
 			action
 			{
 				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_holsters
+			group			vrsetup
+			type			ITEM_TYPE_YESNO
+			text			"Holsters"
+			cvar			"cg_vrHolsters"
+			rect			260 272 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your weapons hang on your body - squeeze a grip at a hip or over a shoulder to take one out, put one in, or swap (servers that have them)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_hiltshang
+			group			vrsetup
+			type			ITEM_TYPE_MULTI
+			text			"Hilts Hang"
+			cvar			"cg_vrHiltsDown"
+			cvarFloatList	{ "Emitter Up" 0 "Emitter Down" 1 }
+			rect			260 300 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Which way your hilts hang in their holsters - taken out, they're held as you take them"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_holstermarkers
+			group			vrsetup
+			type			ITEM_TYPE_MULTI
+			text			"Holster Markers"
+			cvar			"cg_vrHolsterMarkers"
+			cvarFloatList	{ "Off" 0 "Near a Hand" 1 "Always" 2 }
+			rect			260 328 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"A faint ring at each holster: never, when a hand is near it, or always"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_quickdraw
+			group			vrsetup
+			type			ITEM_TYPE_YESNO
+			text			"Quick Draw"
+			cvar			"cg_vrQuickDraw"
+			rect			260 356 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Hold the trigger as you take a saber out of its holster and it lights as it comes out"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vr_resetholsters
+			group			vrsetup
+			type			ITEM_TYPE_BUTTON
+			text			"Reset Holsters"
+			rect			260 384 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your saber back on your right hip, a second on your left, your shoulders empty"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				setcvar		cg_vrHolsterLayout "1,2,0,0" ;
 			}
 		}
 	}

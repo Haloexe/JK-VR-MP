@@ -411,9 +411,13 @@ typedef struct vrState_s {
 	int						keyHand[VR_NUM_BUTTONS];	// a grip key: the hand whose grip presses it now
 	qboolean				ctlDown[VR_NUM_CONTROLS][2];	// a hand's trigger, grip: held (VR_HandControl)...
 	int						ctlKey[VR_NUM_CONTROLS][2];		// ...pressing this key + 1, chosen as it was pressed (0: none)
-	int						weaponHand;		// the hand the cgame says holds your weapon...
+	int						weaponHand;		// the hand the cgame says holds your weapon (-1: hands empty; 2: both)...
 	int						weaponHandTime;	// ...as of this cls.realtime...
 	qboolean				weaponHandSaid;	// ...(it has said)
+	int						cmdButtons;		// buttons the cgame sets on every command (BUTTON_VR_*)...
+	int						cmdButtonsTime;	// ...as of this cls.realtime
+	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
+	int						numGenCmds;		// command that has none, in turn
 	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
 	int						wheelState;		// Y: VR_WHEEL_* (tapped, or held for the pose wheel)
 	int						wheelPressTime;	// ...pressed then (ms)
@@ -1420,7 +1424,9 @@ static qboolean VR_PointerHit( int hand, float *x, float *y ) {
 // Whether hand h's trigger is up - its own: the other hand may be holding
 // down the key this one would press (held since before the menu came up).
 static qboolean VR_TriggerUp( int h ) {
-	return (qboolean)( !vr.ctlDown[VR_CTL_TRIGGER][h] && !vr.keyBlocked[VR_ControlKey( VR_CTL_TRIGGER, h )] );
+	const int key = VR_ControlKey( VR_CTL_TRIGGER, h );	// (-1: none - your hands empty, out of the menu)
+
+	return (qboolean)( !vr.ctlDown[VR_CTL_TRIGGER][h] && ( key < 0 || !vr.keyBlocked[key] ) );
 }
 
 static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
@@ -1462,9 +1468,10 @@ static void VR_UpdateMenuPointer( const float trigger[2], qboolean wanted ) {
 
 	// Pulling a trigger hands the pointer to that hand, unless the other
 	// hand is busy clicking (dragging a slider). Both at once: no change.
-	if ( pull[VR_HAND_LEFT] && !pull[VR_HAND_RIGHT] && vr.keySent[VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_RIGHT )] != A_MOUSE1 ) {
+	const int keyL = VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_LEFT ), keyR = VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_RIGHT );
+	if ( pull[VR_HAND_LEFT] && !pull[VR_HAND_RIGHT] && ( keyR < 0 || vr.keySent[keyR] != A_MOUSE1 ) ) {
 		vr.pointerLeft = qtrue;
-	} else if ( pull[VR_HAND_RIGHT] && !pull[VR_HAND_LEFT] && vr.keySent[VR_ControlKey( VR_CTL_TRIGGER, VR_HAND_LEFT )] != A_MOUSE1 ) {
+	} else if ( pull[VR_HAND_RIGHT] && !pull[VR_HAND_LEFT] && ( keyL < 0 || vr.keySent[keyL] != A_MOUSE1 ) ) {
 		vr.pointerLeft = qfalse;
 	}
 
@@ -1696,6 +1703,9 @@ it aims them). The saber goes in either - the cgame says which hand holds
 your weapon every frame (ext.VR_SetWeaponHand); without word from it lately,
 the gun hand. That hand's trigger attacks (lights and puts out a saber, as
 the game's attack button does in your hands), the other one alt-attacks.
+With your hands empty (holsters: every weapon on your body) neither trigger
+presses anything; with a saber in each, either one attacks (lights or puts
+out both).
 The grips are Use and the Force: the right and the left, or the left and the
 right when left-handed. A trigger or grip goes on pressing the key it
 pressed until it's let go, whatever changes meanwhile.
@@ -1704,6 +1714,7 @@ static int VR_GunHand( void ) {
 	return ( vr_leftHanded && vr_leftHanded->integer ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
 }
 
+// (-1: your hands are empty; 2: either hand - a saber in each)
 static int VR_WeaponHand( void ) {
 	if ( vr.weaponHandSaid && cls.realtime - vr.weaponHandTime >= 0 && cls.realtime - vr.weaponHandTime < 500 ) {
 		return vr.weaponHand;
@@ -1712,19 +1723,22 @@ static int VR_WeaponHand( void ) {
 }
 
 void VR_SetWeaponHand( int hand ) {
-	vr.weaponHand = ( hand == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	vr.weaponHand = ( hand == -1 || hand == 2 ) ? hand : ( hand == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
 	vr.weaponHandTime = cls.realtime;
 	vr.weaponHandSaid = qtrue;
 }
 
 // The key hand h's trigger or grip presses if pressed now (in the menu each
-// trigger is its own: either clicks).
+// trigger is its own: either clicks); -1: none (a trigger, your hands empty).
 static int VR_RoleKey( int control, int h ) {
 	if ( control == VR_CTL_TRIGGER ) {
 		if ( vr.pointerMode ) {
 			return ( h == VR_HAND_LEFT ) ? VR_KEY_TRIGGER_L : VR_KEY_TRIGGER_R;
 		}
-		return ( h == VR_WeaponHand() ) ? VR_KEY_TRIGGER_R : VR_KEY_TRIGGER_L;
+		if ( VR_WeaponHand() < 0 ) {
+			return -1;
+		}
+		return ( h == VR_WeaponHand() || VR_WeaponHand() == 2 ) ? VR_KEY_TRIGGER_R : VR_KEY_TRIGGER_L;
 	}
 	return ( ( h == VR_HAND_LEFT ) == ( VR_GunHand() == VR_HAND_LEFT ) ) ? VR_KEY_GRIP_R : VR_KEY_GRIP_L;
 }
@@ -1747,6 +1761,16 @@ static void VR_HandControl( int control, int h, float value ) {
 	if ( down && !was ) {
 		const int other = h ^ 1;
 		key = VR_RoleKey( control, h );
+		if ( key < 0 ) {
+			// (presses nothing: nothing till it's let go, whatever changes meanwhile)
+			vr.ctlDown[control][h] = down;
+			return;
+		}
+		if ( vr.ctlKey[control][other] == key + 1 && control == VR_CTL_TRIGGER && VR_WeaponHand() == 2 && !vr.pointerMode ) {
+			// (a saber in each hand, the other's trigger attacking already: this one does nothing till let go)
+			vr.ctlDown[control][h] = down;
+			return;
+		}
 		if ( vr.ctlKey[control][other] == key + 1 ) {
 			// (the other hand's still pressing it: this one the other key)
 			key = ( control == VR_CTL_TRIGGER ) ? ( key == VR_KEY_TRIGGER_R ? VR_KEY_TRIGGER_L : VR_KEY_TRIGGER_R ) :
@@ -2288,11 +2312,14 @@ static qboolean VR_WantHandAim( void ) {
 }
 
 // A hand that isn't tracked this frame is gone for the game - but the hand
-// holding your gun or your saber, briefly lost, keeps its last pose for a
-// moment (the aim doesn't jump back to the head, the blade doesn't drop into
-// the animation).
+// holding your gun or your saber (a saber in each: either), briefly lost,
+// keeps its last pose for a moment (the aim doesn't jump back to the head,
+// the blade doesn't drop into the animation).
 static qboolean VR_HandGone( int h ) {
-	return ( ( h != VR_GunHand() && h != VR_WeaponHand() ) || Sys_Milliseconds() - vr.handTrackTime[h] > 500 ) ? qtrue : qfalse;
+	const int weaponHand = VR_WeaponHand();
+
+	return ( ( h != VR_GunHand() && h != weaponHand && weaponHand != 2 ) || Sys_Milliseconds() - vr.handTrackTime[h] > 500 ) ?
+		qtrue : qfalse;
 }
 
 // The gun hand's aim, guns being aimed with it: its aim pose tilted by
@@ -2487,6 +2514,8 @@ static void VR_UpdateTracking( void ) {
 	vrClient.handAim = vr.aimFromHand;
 	vrClient.grabbing[VR_HAND_LEFT] = vr.grabbing[VR_HAND_LEFT];
 	vrClient.grabbing[VR_HAND_RIGHT] = vr.grabbing[VR_HAND_RIGHT];
+	vrClient.trigger[VR_HAND_LEFT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_LEFT];
+	vrClient.trigger[VR_HAND_RIGHT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_RIGHT];
 	vrClient.stick[VR_HAND_LEFT][0] = vr.moveX;
 	vrClient.stick[VR_HAND_LEFT][1] = vr.moveY;
 	vrClient.stick[VR_HAND_RIGHT][0] = vr.turnX;
@@ -2683,8 +2712,16 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 		vrAttackSwallowed = qfalse;
 	}
 	Com_Memset( out, 0, sizeof( *out ) );
+	// the cgame's buttons on every command (holsters) - your body drawn or
+	// not: dead, they're what you respawn with; in from loading, what you're
+	// first spawned with
+	if ( VR_IsRunning() && cls.state >= CA_PRIMED && cls.realtime - vr.cmdButtonsTime >= 0 &&
+		cls.realtime - vr.cmdButtonsTime < 500 ) {
+		cmd->buttons |= vr.cmdButtons;
+	}
 	if ( !VR_IsRunning() || cls.state != CA_ACTIVE ) {
 		vrSaberSwitchQueued = qfalse;
+		vr.numGenCmds = 0;
 		return;
 	}
 	if ( vrAttackSwallowed ) {
@@ -2695,6 +2732,12 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 	if ( vrSaberSwitchQueued && !cmd->generic_cmd ) {
 		cmd->generic_cmd = GENCMD_SABERSWITCH;
 		vrSaberSwitchQueued = qfalse;
+	}
+	// the cgame's own generic commands, one to a command
+	if ( vr.numGenCmds && !cmd->generic_cmd ) {
+		cmd->generic_cmd = (byte)vr.genCmds[0];
+		vr.numGenCmds--;
+		memmove( vr.genCmds, vr.genCmds + 1, vr.numGenCmds * sizeof( vr.genCmds[0] ) );
 	}
 	if ( !vrUserPose.valid && !vrUserPose.avatar.valid ) {
 		return;	// no VR body drawn (and so no lit saber in your VR hands)
@@ -2746,6 +2789,18 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {
 void VR_SetGrabZones( int handMask ) {
 	vr.grabZones = handMask & ( ( 1 << VR_HAND_LEFT ) | ( 1 << VR_HAND_RIGHT ) );
 	vr.grabZoneTime = cls.realtime;
+}
+
+void VR_SetCmdButtons( int buttons ) {
+	vr.cmdButtons = buttons & BUTTONS_VR;
+	vr.cmdButtonsTime = cls.realtime;
+}
+
+void VR_GenericCmd( int genCmd ) {
+	if ( genCmd <= 0 || genCmd > 255 || vr.numGenCmds >= (int)ARRAY_LEN( vr.genCmds ) || cls.state != CA_ACTIVE ) {
+		return;	// (a full queue: the cgame asks again if it still wants it)
+	}
+	vr.genCmds[vr.numGenCmds++] = genCmd;
 }
 
 /*
@@ -3124,6 +3179,8 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) { Com_Memset( out, 0, s
 void VR_Haptic( int hand, float seconds, float amplitude ) {}
 void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
+void VR_SetCmdButtons( int buttons ) {}
+void VR_GenericCmd( int genCmd ) {}
 void VR_DrawOverlay( void ) {}
 
 #endif // _WIN32

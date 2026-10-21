@@ -63,6 +63,10 @@ static void CVU_VRSaber(void) {
 	G_VRSaberPublish();	// OpenJK VR: the serverinfo "vrSaber" follows it
 }
 
+static void CVU_VRHolsters(void) {
+	G_VRHolsterPublish();	// OpenJK VR: the serverinfo "vrHolsters" follows it (g_vrholster.c)
+}
+
 static void CVU_PrivateDuel(void) {
 	G_PrivateDuelPublish();	// OpenJK VR: the serverinfo "vrDuel" follows it
 }

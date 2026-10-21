@@ -29,6 +29,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "qcommon/q_shared.h"
 #include "bg_public.h"
 #include "bg_vehicles.h"
+#include "bg_vrholster.h"
 #include "g_public.h"
 
 typedef struct gentity_s gentity_t;
@@ -500,6 +501,16 @@ typedef struct clientPersistant_s {
 	int			connectTime;
 
 	char		saber1[MAX_QPATH], saber2[MAX_QPATH];
+
+	// OpenJK VR: holsters (g_vrholster.c)
+	qboolean	vrHasHolsters;		// their game says what's in their holsters (userinfo "vrh")...
+	int			vrHolsters[VR_NUM_HOLSTERS];	// ...this (bg_vrholster.h)...
+	int			vrShown[VR_NUM_HOLSTERS];		// ...what everyone was last told of it, as they have it (CS_PLAYERS "vh")
+	int			vrHasSabers;		// whether they have a saber, or two, as everyone was last told ("hs")
+	int			vrSaberSwaps;		// how often their two sabers changed over (GENCMD_VR_SABERSWAP: "vs")...
+	int			vrSwapTime, vrSwapCount;	// ...this second (from level.time then), this often
+	int			vrGenCmdTime;		// the command (its serverTime) a holsters' generic command was last done for
+	int			vrOneStyle;			// the single style of one of two sabers in hand, lit (0: fast)
 
 	int			vote, teamvote; // 0 = none, 1 = yes, 2 = no
 
@@ -1087,6 +1098,7 @@ void		G_RPOwnRename( int clientNum, char *userinfo, char *netname, int size );
 qboolean	G_RPName( int clientNum, char *netname, int size );
 void		G_RPLookSeen( int clientNum, const char *userinfo );
 qboolean	G_RPLookValue( int clientNum, const char *key, char *value, int size );
+void		G_RPSwapSaberColors( int clientNum );
 void		G_RPLookRGB( int clientNum, int *rgba );
 qboolean	G_RPChat( gentity_t *ent, gentity_t *target, int mode, const char *text );
 qboolean	G_RPConsoleCommand( void );
@@ -1458,6 +1470,23 @@ void G_RunClient			( gentity_t *ent );
 // g_team.c
 //
 qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
+
+// g_vrholster.c (OpenJK VR: holsters - a VR player's weapons hang on their body)
+void		G_VRHolsterInit( void );
+void		G_VRHolsterPublish( void );
+void		G_VRHolsterFrame( void );
+void		G_VRHolsterCmd( gentity_t *ent, usercmd_t *ucmd );
+qboolean	G_VRHolsters( const gentity_t *ent );
+void		G_VRHolsterSpawn( gentity_t *ent );
+int			G_VRHolsterOneStyle( gentity_t *ent );
+qboolean	G_VRHolsterCycle( gentity_t *ent );
+int			G_VRHolsterLit( gentity_t *ent );
+qboolean	G_VRHolsterLight( gentity_t *ent );
+void		G_VRHolsterSaberOn( gentity_t *ent );
+void		G_VRHolsterSaberSwap( gentity_t *ent );
+qboolean	G_VRHolsterOnce( gentity_t *ent, const usercmd_t *ucmd );
+void		G_VRHolsterUserinfo( gentity_t *ent, const char *userinfo );
+void		G_VRHolsterInfo( gentity_t *ent, char *buf, int size );
 
 // g_vrsaber.c (OpenJK VR: physical lightsaber for players holding it in VR)
 void		G_VRSaberInit( void );

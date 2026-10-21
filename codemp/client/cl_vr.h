@@ -80,8 +80,15 @@ void		VR_Haptic( int hand, float seconds, float amplitude );
 void		VR_SetGrabZones( int handMask );
 
 // The hand holding your weapon (VR_HAND_*): its trigger attacks, the other
-// alt-attacks (cgameImport_t.ext.VR_SetWeaponHand, every frame).
+// alt-attacks (cgameImport_t.ext.VR_SetWeaponHand, every frame); -1: your
+// hands are empty, the triggers press nothing; 2: a saber in each hand,
+// either trigger attacks.
 void		VR_SetWeaponHand( int hand );
+// Buttons the cgame sets on every command (BUTTON_VR_*: holsters; said every
+// frame - unsaid lately, none).
+void		VR_SetCmdButtons( int buttons );
+// A generic command for the next command that has none.
+void		VR_GenericCmd( int genCmd );
 
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.

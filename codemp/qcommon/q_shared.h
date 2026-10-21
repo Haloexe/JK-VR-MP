@@ -1373,6 +1373,17 @@ typedef struct siegePers_s
 
 #define BUTTON_FORCE_DRAIN		2048
 
+// OpenJK VR (holsters): set on every command by a VR player whose weapons hang
+// in holsters, on a server of this build that offers them ("vrHolsters 1" in
+// its serverinfo) - so the server's game and their own prediction of it go
+// by the same rules, command by command (usercmd buttons carry 16 bits)
+#define BUTTON_VR_HOLSTERS		4096	// the saber comes out of its holster unlit (bg_pmove.c PM_Weapon)
+#define BUTTON_VR_ONESABER		8192	// one of their two sabers is in hand: lit, the first one is, alone
+										// (saberHolstered 1), in any single style
+#define BUTTON_VR_EMPTYHANDS	16384	// their hands are empty, the saber chosen hangs in its holster: unlit
+#define BUTTONS_VR				( BUTTON_VR_HOLSTERS | BUTTON_VR_ONESABER | BUTTON_VR_EMPTYHANDS )	// (rules, not things
+										// done: kept wherever a command's input is taken away)
+
 // Here's an interesting bit.  The bots in TA used buttons to do additional gestures.
 // I ripped them out because I didn't want too many buttons given the fact that I was already adding some for JK2.
 // We can always add some back in if we want though.
@@ -1421,7 +1432,10 @@ typedef enum
 	GENCMD_BOW,
 	GENCMD_MEDITATE,
 	GENCMD_FLOURISH,
-	GENCMD_GLOAT
+	GENCMD_GLOAT,
+	// OpenJK VR (holsters, g_vrholster.c)
+	GENCMD_VR_SABERSWAP,	// the second saber becomes the first: the one of two taken out first is in hand
+	GENCMD_VR_SABERON		// light the sabers in hand (a quick draw)
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame

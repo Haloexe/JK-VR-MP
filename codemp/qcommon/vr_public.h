@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-10"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-11"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -32,6 +32,11 @@ General Public License version 2, like the rest of OpenJK.
 												//     vrAvatarHand_t.saber, hilt, reversed (a saber
 												//     in either hand, anywhere along its hilt, either
 												//     way round)
+												// -11: VR_SetWeaponHand( -1 ) (hands empty: the
+												//     triggers press nothing; 2: either attacks),
+												//     ext.VR_SetCmdButtons,
+												//     ext.VR_GenericCmd, vrClientState_t.trigger
+												//     (holsters)
 
 // ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
 // drawn is stretched across the window again, as always (any other x is a
@@ -198,6 +203,10 @@ typedef struct vrClientState_s {
 	// when it's let go): meanwhile the right stick picks in it, and doesn't
 	// turn or switch weapons
 	qboolean	poseWheel;
+
+	// each hand's trigger is held (past its press point; whatever it
+	// presses - or nothing, VR_SetWeaponHand( -1 ))
+	qboolean	trigger[2];
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

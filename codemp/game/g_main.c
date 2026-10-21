@@ -297,6 +297,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// OpenJK VR: physical lightsaber
 	G_VRSaberInit();
+	G_VRHolsterInit();		// OpenJK VR: holsters (g_vrholster.c)
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 	G_VRPoseInit();			// OpenJK VR: poses (g_vrpose.c)
 	G_RPInit();				// OpenJK VR: roleplay mode (g_vrrp.c)
@@ -3387,6 +3388,7 @@ void G_RunFrame( int levelTime ) {
 	G_RPDownFrame();
 	G_RPFrame();
 	G_RPCompFrame();
+	G_VRHolsterFrame();	// OpenJK VR: whether everyone has a saber, as they're told (g_vrholster.c)
 
 	// perform final fixups on the players
 	ent = &g_entities[0];

@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "qcommon/q_shared.h"
 #include "rd-common/tr_types.h"
 #include "game/bg_public.h"
+#include "game/bg_vrholster.h"
 #include "cg_public.h"
 
 // The entire cgame module is unloaded and reloaded on each level change,
@@ -312,6 +313,13 @@ typedef struct clientInfo_s {
 	float		facial_aux;			// time before next aux. If a minus value, we are in aux mode
 
 	int			superSmoothTime; //do crazy amount of smoothing
+
+	// OpenJK VR: holsters (cg_vrholster.c) - what hangs in a VR player's ("vh"),
+	// whether anyone has a saber or two ("hs"), how often theirs changed over ("vs")
+	qboolean	vrHasHolsters;
+	int			vrHolsters[VR_NUM_HOLSTERS];
+	int			vrHasSabers;
+	int			vrSaberSwaps;
 
 } clientInfo_t;
 
@@ -1633,6 +1641,8 @@ typedef struct cgs_s {
 	int					numMiscStaticModels;
 	cg_staticmodel_t	miscStaticModels[MAX_STATIC_MODELS];
 
+	qboolean			vrHolsters;		// OpenJK VR: the server has holsters ("vrHolsters 1": cg_vrholster.c)
+
 } cgs_t;
 
 typedef struct siegeExtended_s
@@ -1918,6 +1928,26 @@ float CG_VR_PoseEyeAdjust( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
 qboolean CG_VRB_GazeShared( void );
+qboolean CG_VR_HandGrip( int hand, vec3_t origin, vec3_t axis[3] );
+void CG_VR_TakeSaber( int saberNum, int hand, float hilt, float sign );
+void CG_VR_PutSaber( int saberNum );
+void CG_VR_SwapSaberHolds( void );
+int CG_VR_TwoHandZones( void );
+void CG_VR_BlockGrab( int hand );
+qboolean CG_VR_OtherHoldsSaber( int clientNum, int saberNum );
+void QDECL CG_VR_Log( const char *fmt, ... );
+// cg_vrholster.c (OpenJK VR: holsters - your weapons hang on your body)
+void		CG_VRH_Init( void );
+void		CG_VRH_Shutdown( void );
+qboolean	CG_VRH_On( void );
+void		CG_VRH_HandsFrame( const vrClientState_t *vr );
+int			CG_VRH_Zones( void );
+int			CG_VRH_WeaponHand( void );
+int			CG_VRH_CmdButtons( void );
+void		CG_VRH_SayButtons( void );
+int			CG_VRH_HeldWeapon( int weapon );
+void		CG_VRH_EndFrame( const vrClientState_t *vr );
+void		CG_VRH_AddHolstered( centity_t *cent, vec3_t body[3], int renderfx );
 // cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
 void CG_VR_DuelFrame( void );
 void CG_VR_DuelCentrePrint( const char *text );

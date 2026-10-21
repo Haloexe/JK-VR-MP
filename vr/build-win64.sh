@@ -47,6 +47,9 @@ cp "$ROOT/vr/ui/vr_voice.menu" "$OUT/base/ui/"
 cp "$ROOT/vr/ui/vr_setup.menu" "$OUT/base/ui/"
 cp "$ROOT/vr/ui/vr_rp.menu" "$OUT/base/ui/"
 cp "$ROOT/vr/ui/vr_comp.menu" "$OUT/base/ui/"
+# what the VR game draws with: the holsters' markers (cg_vrholster.c)
+mkdir -p "$OUT/base/shaders"
+cp "$ROOT/vr/shaders/openjkvr.shader" "$OUT/base/shaders/"
 cp "$ROOT/lib/SDL2/bin/x64/SDL2.dll" "$ROOT/lib/openxr/bin/x64/libopenxr_loader.dll" "$OUT/"
 cp "$ROOT/vr/Launch OpenJK VR.bat" "$ROOT/vr/Launch OpenJK Desktop.bat" "$ROOT/vr/README-VR.txt" "$OUT/"
 # the dedicated server: its launcher, settings and notes

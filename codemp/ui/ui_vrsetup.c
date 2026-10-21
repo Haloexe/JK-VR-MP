@@ -16,12 +16,21 @@ Setup) hides them again. The page is otherwise left as it is.
   Saber Inertia   how far a blade's weight holds it back      cg_vrSaberInertia 0-3
   Saber Weight    how strongly its weight is felt as it swings cg_vrSaberWeight 0-2
   Vibration       how strongly the controllers vibrate        cg_vrHaptics 0-2
+  Holsters        your weapons hang on your body              cg_vrHolsters Yes/No
+  Hilts Hang      emitter up, or down                         cg_vrHiltsDown 0/1
+  Holster Markers a faint ring at each: off, near a hand,     cg_vrHolsterMarkers 0-2
+                  always
+  Quick Draw      the trigger held as a saber's taken out     cg_vrQuickDraw Yes/No
+                  lights it
+  Reset Holsters  (a button) the saber on the right hip, a    cg_vrHolsterLayout 1,2,0,0
+                  second on the left, the shoulders empty
 
 The sliders show their value after them, and go in tenths; with the
 keyboard, the arrow keys move the one picked (ui_shared.c: showValue), and
-change Left-Handed (as Enter does: Item_YesNo_HandleKey). They're the
-game's own settings (the engine's, the cgame's), registered here too so
-that set from the main menu, before a game, they're kept.
+change the Yes/No and the choices (as Enter does: Item_YesNo_HandleKey,
+Item_Multi_HandleKey). They're the game's own settings (the engine's, the
+cgame's), registered here too so that set from the main menu, before a
+game, they're kept.
 
 A page with no room for the button or the settings (one a menu mod has
 changed) is left as it is, and says so in the console; the settings still
@@ -59,6 +68,11 @@ static const struct {
 	{ "cg_vrSaberInertia",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrSaberWeight",	"1",	CVAR_ARCHIVE_ND },
 	{ "cg_vrHaptics",		"1",	CVAR_ARCHIVE },
+	{ "cg_vrHolsters",		"1",	CVAR_ARCHIVE },
+	{ "cg_vrHiltsDown",		"0",	CVAR_ARCHIVE },
+	{ "cg_vrHolsterMarkers",	"1",	CVAR_ARCHIVE },
+	{ "cg_vrQuickDraw",		"1",	CVAR_ARCHIVE },
+	{ "cg_vrHolsterLayout",	"1,2,0,0",	CVAR_ARCHIVE },
 };
 
 /*
@@ -431,7 +445,7 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 	button->window.rectClient = r;
 	button->type = ITEM_TYPE_BUTTON;
 	button->text = String_Alloc( "VR" );
-	button->descText = String_Alloc( "Settings for playing in VR: the hand you use, your saber's weight, and the controllers' vibration" );
+	button->descText = String_Alloc( "Settings for playing in VR: the hand you use, your saber's weight, the controllers' vibration, your holsters" );
 	button->iMenuFont = last->iMenuFont;
 	button->textscale = last->textscale;
 	button->textStyle = last->textStyle;

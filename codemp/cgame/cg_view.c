@@ -2507,6 +2507,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	// if we are only updating the screen as a loading
 	// pacifier, don't even try to read snapshots
 	if ( cg.infoScreenText[0] != 0 ) {
+		CG_VRH_SayButtons();	// OpenJK VR: holsters' rules from your first command (cg_vrholster.c)
 		CG_DrawInformation();
 		return;
 	}
@@ -2557,6 +2558,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 			return;
 		}
 #endif
+		CG_VRH_SayButtons();	// OpenJK VR: holsters' rules from your first command (cg_vrholster.c)
 		CG_DrawInformation();
 		return;
 	}
@@ -2627,7 +2629,8 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 		{ //force third person for e-web and emplaced use
 			cg.renderingThirdPerson = 1;
 		}
-		else if (cg.predictedPlayerState.weapon == WP_SABER && CG_VR() && cg_vrSaber.integer && cg_vrBody.integer &&
+		else if ((cg.predictedPlayerState.weapon == WP_SABER || (cg.predictedPlayerState.weapon == WP_MELEE && CG_VRH_On())) &&
+			CG_VR() && cg_vrSaber.integer && cg_vrBody.integer &&
 			!cg.demoPlayback && !(cg.snap->ps.pm_flags & PMF_FOLLOW) &&
 			!(cg.predictedPlayerState.eFlags2 & EF2_HELD_BY_MONSTER) && !cg.predictedPlayerState.heldByClient &&
 			cg_entities[cg.predictedPlayerState.clientNum].localAnimIndex <= 1 &&
@@ -2635,7 +2638,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 			cg.predictedPlayerState.forceHandExtend != HANDEXTEND_KNOCKDOWN && !cg.predictedPlayerState.fallingToDeath &&
 			!cg.predictedPlayerState.m_iVehicleNum && !PM_InKnockDown(&cg.predictedPlayerState) &&
 			cg.predictedPlayerState.saberLockTime < cg.time)
-		{ //OpenJK VR: the saber in your hand, in first person (unless cg_thirdPerson)
+		{ //OpenJK VR: the saber in your hand, in first person (unless cg_thirdPerson) - and your empty hands, holsters on (cg_vrholster.c)
 		}
 		else if (cg.predictedPlayerState.weapon == WP_SABER || cg.predictedPlayerState.weapon == WP_MELEE ||
 			BG_InGrappleMove(cg.predictedPlayerState.torsoAnim) || BG_InGrappleMove(cg.predictedPlayerState.legsAnim) ||

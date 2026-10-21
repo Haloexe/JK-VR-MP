@@ -2087,6 +2087,33 @@ void G_RPLookSeen( int clientNum, const char *userinfo ) {
 	}
 }
 
+// A VR player's two sabers changed over (g_vrholster.c: the second is the
+// first now, and their userinfo's names and colours with them): their
+// character's saber colours change over too, and what they wore when they
+// took it up - so it's still the character's colours they wear, each on the
+// saber it was on.
+void G_RPSwapSaberColors( int clientNum ) {
+	const int k1 = G_RP_LookIndex( "color1" ), k2 = G_RP_LookIndex( "color2" );
+	rpClient_t *c;
+	rpChar_t *ch;
+	char t[MAX_QPATH];
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || k1 < 0 || k2 < 0 ) {
+		return;
+	}
+	c = &rpc[clientNum];
+	Q_strncpyz( t, c->lookBase[k1], sizeof( t ) );
+	Q_strncpyz( c->lookBase[k1], c->lookBase[k2], sizeof( c->lookBase[k1] ) );
+	Q_strncpyz( c->lookBase[k2], t, sizeof( c->lookBase[k2] ) );
+	if ( !( ch = G_RP_Active( clientNum ) ) ) {
+		return;
+	}
+	Q_strncpyz( t, ch->look[k1], sizeof( t ) );
+	Q_strncpyz( ch->look[k1], ch->look[k2], sizeof( ch->look[k1] ) );
+	Q_strncpyz( ch->look[k2], t, sizeof( ch->look[k2] ) );
+	G_RP_SaveAccount( &c->acc );
+}
+
 // ClientUserinfoChanged: what the character wears instead (qtrue: changed).
 qboolean G_RPLookValue( int clientNum, const char *key, char *value, int size ) {
 	const rpChar_t *ch;

@@ -2909,8 +2909,15 @@ void PM_WeaponLightsaber(void)
 			{
 				if (!pm->ps->m_iVehicleNum)
 				{ //don't let em unholster the saber by attacking while on vehicle
-					pm->ps->saberHolstered = 0;
-					PM_AddEvent(EV_SABER_UNHOLSTER);
+					// OpenJK VR (holsters): one of two sabers in hand - it lights alone
+					// (the event's parm 1: only the first one's sound)
+					if ( pm->cmd.buttons & BUTTON_VR_ONESABER ) {
+						pm->ps->saberHolstered = 1;
+						PM_AddEventWithParm( EV_SABER_UNHOLSTER, 1 );
+					} else {
+						pm->ps->saberHolstered = 0;
+						PM_AddEvent(EV_SABER_UNHOLSTER);
+					}
 				}
 				else
 				{

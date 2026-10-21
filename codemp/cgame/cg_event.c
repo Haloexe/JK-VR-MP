@@ -2412,8 +2412,8 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 				{
 					trap->S_StartSound (NULL, es->number, CHAN_AUTO, ci->saber[0].soundOn );
 				}
-				if (ci->saber[1].soundOn)
-				{
+				if (ci->saber[1].soundOn && es->eventParm != 1)
+				{//OpenJK VR (holsters): parm 1 - only the first lit (one of two in hand)
 					trap->S_StartSound (NULL, es->number, CHAN_AUTO, ci->saber[1].soundOn );
 				}
 			}

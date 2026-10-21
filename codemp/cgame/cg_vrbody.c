@@ -172,6 +172,7 @@ typedef struct vrbState_s {
 	char		headSurf[MAX_QPATH];
 	void		*weaponG2;
 	void		*wristG2;
+	void		*holsteredG2[MAX_SABERS];	// that saber's copy on the body's hand hidden: it's in its holster (cg_vrholster.c)
 
 	// where the entity was moved this frame (undone in CG_VR_BodyEndFrame)
 	centity_t	*shiftedEnt;
@@ -267,6 +268,7 @@ typedef struct vrbState_s {
 	int			drawnHand[MAX_SABERS];
 	int			holdTime;			// cg.time they were last worked out for
 	int			holdKey;			// what they were set up for (handedness, the sabers): when that changes, afresh
+	qboolean	holdHolsters;		// ...and with holsters in play (cg_vrholster.c): when they come into play, afresh
 	qboolean	grabBlocked[2];		// that hand let go of the hilt it held (passed it, or was pulled off it): it
 									// doesn't take hold again until its grip is let go
 	struct {
@@ -1734,9 +1736,11 @@ static qboolean CG_VRB_BodyUsable( centity_t *cent ) {
 	if ( !cg_vrBody.integer || !CG_VR() || !cg.snap || cg.demoPlayback ) {
 		return qfalse;
 	}
-	if ( !CG_VR_HandAim() && !( saber && cg_vrSaber.integer ) ) {
+	if ( !CG_VR_HandAim() && !( saber && cg_vrSaber.integer ) &&
+		!( cent->currentState.weapon == WP_MELEE && cg_vrSaber.integer && CG_VRH_On() ) ) {
 		// no gun in the VR hand (duel modes, a demo, vr_handAim 0, the gun
-		// hand's controller lost) and no first-person saber: the stock view
+		// hand's controller lost) and no first-person saber - nor, with
+		// holsters, your own empty hands (fists: cg_vrholster.c): the stock view
 		return qfalse;
 	}
 	if ( cent->currentState.number != ps->clientNum || ( cg.snap->ps.pm_flags & PMF_FOLLOW ) ) {
@@ -2003,7 +2007,9 @@ hand you use - the right, or the left with vr_leftHanded on - a second one
 in the other, both the usual way round, where their own tags hold them;
 until one is passed from hand to hand (CG_VRB_TwoHand), which keeps how the
 hand that took it over held it. Put away (another weapon), dead, thrown, or
-with handedness or the sabers changed, they go back to that.
+with handedness or the sabers changed, they go back to that. With holsters
+(cg_vrholster.c), a saber's in a hand only once taken out of its holster
+(hand -1: on your body), and they say which.
 Another player's: what their avatar's hands hold.
 =================
 */
@@ -2027,7 +2033,7 @@ static int CG_VRB_SaberHand( int s ) {
 }
 
 // The saber in hand h (0, 1 - whether there is one or not); -1: none
-// (another player's).
+// (another player's; yours with holsters, both on your body).
 static int CG_VRB_HandSaber( int h ) {
 	if ( h < VR_HAND_LEFT || h > VR_HAND_RIGHT ) {
 		return -1;
@@ -2039,7 +2045,7 @@ static int CG_VRB_HandSaber( int h ) {
 		}
 		return ( CG_VRB_SaberHand( ah->saber ) == h ) ? ah->saber : -1;
 	}
-	return ( vrb.hold[0].hand == h ) ? 0 : 1;
+	return ( vrb.hold[0].hand == h ) ? 0 : ( vrb.hold[1].hand == h ) ? 1 : -1;	// (holsters: in neither)
 }
 
 // Both sabers back as the game first puts them: the first in the main hand.
@@ -2066,15 +2072,36 @@ static unsigned int VRB_Hash( const char *s ) {
 static void CG_VRB_Holds( centity_t *cent ) {
 	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
 	const int main = CG_VR_GunHand();
-	const int key = (int)( ( (unsigned int)main + 2u * ( VRB_Hash( ci->saber[0].model ) + 7u * VRB_Hash( ci->saber[1].model ) ) ) &
+	// (the sabers either way round: changed over, holsters' - cg_vrholster.c - they're still the ones in hand)
+	const int key = (int)( ( (unsigned int)main + 2u * ( VRB_Hash( ci->saber[0].model ) + VRB_Hash( ci->saber[1].model ) ) ) &
 		0x7fffffff );
 
 	if ( vrb.holdTime == cg.time ) {
 		return;	// (second eye)
 	}
 	vrb.holdTime = cg.time;
+	if ( CG_VRH_On() ) {
+		// holsters: in a hand once taken out, theirs to say - handedness or the
+		// sabers changed, or holsters just come into play, all back on your body
+		if ( key != vrb.holdKey || !vrb.holdHolsters ) {
+			vrb.holdKey = key;
+			vrb.holdHolsters = qtrue;
+			CG_VRB_ResetHolds( main );
+			vrb.hold[0].hand = vrb.hold[1].hand = -1;
+		}
+		CG_VRH_HandsFrame( CG_VR() );
+		if ( cent->currentState.saberInFlight ) {
+			vrb.hold[0].sign = 1.0f;	// (thrown: it comes back to that hand, held the usual way)
+			vrb.hold[0].t = 0.0f;
+			vrb.hold[0].passTime = 0;
+			vrb.hold[0].kept = vrb.hold[0].keptFace = vrb.hold[0].keptGrip = qfalse;
+		}
+		return;
+	}
+	vrb.holdHolsters = qfalse;
+	CG_VRH_HandsFrame( CG_VR() );	// (off: nothing said, nothing hangs)
 	if ( key != vrb.holdKey || cent->currentState.weapon != WP_SABER || ( cent->currentState.eFlags & EF_DEAD ) ||
-		cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 ) {
+		cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 || vrb.hold[0].hand < 0 || vrb.hold[1].hand < 0 ) {
 		if ( vrb.holdKey != -1 && ( vrb.hold[0].hand != main || vrb.hold[0].sign < 0.0f || vrb.hold[0].t != 0.0f ) ) {
 			CG_VRB_Log( "hands: the first saber back in the %s hand\n", main == VR_HAND_RIGHT ? "right" : "left" );
 		}
@@ -2488,7 +2515,8 @@ static void CG_VRB_PassSaber( centity_t *cent, const vrClientState_t *vr, int fr
 static void CG_VRB_TwoHand( centity_t *cent, const vrClientState_t *vr ) {
 	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
 	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.twoHandTime ) * 0.001f );
-	const int main = vrb.hold[0].hand, off = main ^ 1;
+	const int main = ( vrb.hold[0].hand == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT, off = main ^ 1;	// (holsters:
+																					// none in hand - the grip check below)
 	qboolean was = vrb.twoHand, squeezed[2], pulled = qfalse;
 	vrbGrip_t gripM, gripO;
 	vrbBone_t tag;
@@ -4074,6 +4102,32 @@ static void CG_VRB_BoltHands( centity_t *cent ) {
 	vrb.boltG2 = cent->ghoul2;
 }
 
+// Your sabers in their holsters (holsters: yours, cg_vrholster.c; or another
+// VR player's, their avatar's hands not on them) are drawn there: their
+// copies on the body's hands hidden (and shown again otherwise).
+static void CG_VRB_HideHolstered( centity_t *cent, qboolean holsters ) {
+	int s;
+
+	if ( !trap->ext.VR_G2SetModelHidden || !cent->ghoul2 ) {
+		return;
+	}
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		const qboolean hide = (qboolean)( holsters && cent->currentState.weapon == WP_SABER && CG_VRB_SaberHand( s ) < 0 &&
+			!( s == 0 && cent->currentState.saberInFlight ) && !( cent->currentState.eFlags & EF_DEAD ) &&
+			trap->G2API_HasGhoul2ModelOnIndex( &cent->ghoul2, s + 1 ) );	// (dead: as the game has it - nothing hangs on the dead)
+		if ( hide ) {
+			if ( trap->ext.VR_G2SetModelHidden( cent->ghoul2, s + 1, qtrue ) ) {
+				vrb.holsteredG2[s] = cent->ghoul2;
+			}
+		} else if ( vrb.holsteredG2[s] == cent->ghoul2 ) {
+			if ( cent->currentState.weapon == WP_SABER || cent->currentState.weapon == WP_NONE || s > 0 ) {	// (model 1 another weapon now: its own)
+				trap->ext.VR_G2SetModelHidden( cent->ghoul2, s + 1, qfalse );
+			}
+			vrb.holsteredG2[s] = NULL;
+		}
+	}
+}
+
 // The game has just put a saber back on a player's model where it hangs it
 // (caught: cg_players.c): on the hand holding it, if their arms hold it.
 void CG_VR_BodyRebolt( centity_t *cent ) {
@@ -4354,6 +4408,9 @@ static void CG_VRB_OtherPose( centity_t *cent, refEntity_t *legs ) {
 	CG_VRB_Init();
 	CG_VRB_ResetArms( cent->ghoul2 );	// (the animated pose, without last frame's arm overrides)
 	vrb.armsG2 = cent->ghoul2;
+	vrbRemote = &vrb.avatar;
+	CG_VRB_HideHolstered( cent, cgs.clientinfo[n].vrHasHolsters );	// (their sabers in their holsters: cg_vrholster.c)
+	vrbRemote = NULL;
 	VectorAdd( cent->lerpOrigin, vrb.avatar.shift, cent->lerpOrigin );
 	VectorCopy( cent->lerpOrigin, legs->origin );
 	VectorCopy( cent->lerpOrigin, legs->oldorigin );
@@ -4859,9 +4916,157 @@ int CG_VR_SaberHand( int saberNum ) {
 	return vrbSelf.hold[saberNum].hand;
 }
 
+/*
+--------------------------------------------------------------------------------
+Your hands, for your holsters (cg_vrholster.c)
+--------------------------------------------------------------------------------
+*/
+
+void QDECL CG_VR_Log( const char *fmt, ... ) {
+	char text[1024];
+	va_list ap;
+
+	va_start( ap, fmt );
+	Q_vsnprintf( text, sizeof( text ), fmt, ap );
+	va_end( ap );
+	CG_VRB_Log( "%s", text );
+}
+
+// Your controller h's grip in the world (where your hand's put on it).
+qboolean CG_VR_HandGrip( int h, vec3_t origin, vec3_t axis[3] ) {
+	const vrClientState_t *vr = CG_VR();
+	const vrAvatar_t *remote = vrbRemote;
+	vec3_t ax[3];
+
+	if ( !vr || h < VR_HAND_LEFT || h > VR_HAND_RIGHT || !vr->handValid[h] ) {
+		return qfalse;
+	}
+	vrbRemote = NULL;
+	CG_VRB_Controller( vr, h, origin, axis ? axis : ax );
+	vrbRemote = remote;
+	return qtrue;
+}
+
+// Your saber s into hand h (taken out of its holster): held hilt along it from
+// where its tag holds it, the usual way round (sign 1) or reversed (-1).
+void CG_VR_TakeSaber( int s, int h, float hilt, float sign ) {
+	vrbState_t *st = &vrbSelf;
+
+	if ( s < 0 || s >= MAX_SABERS || h < VR_HAND_LEFT || h > VR_HAND_RIGHT ) {
+		return;
+	}
+	memset( &st->hold[s], 0, sizeof( st->hold[s] ) );
+	st->hold[s].hand = h;
+	st->hold[s].sign = ( sign < 0.0f ) ? -1.0f : 1.0f;
+	st->hold[s].t = Com_Clamp( -VR_POSE_MAX_HILT, VR_POSE_MAX_HILT, hilt );
+	st->blade[h].valid = qfalse;	// (its weight starts afresh in that hand)
+	st->blade[h].lastTime = 0;
+	st->letGo[h].time = 0;
+}
+
+// Your saber s back in its holster: the hand that held it lets go, easing off
+// how it held it (as passing it on does).
+void CG_VR_PutSaber( int s ) {
+	vrbState_t *st = &vrbSelf;
+	const int h = ( s >= 0 && s < MAX_SABERS ) ? st->hold[s].hand : -1;
+	int i, k;
+
+	if ( h < VR_HAND_LEFT || h > VR_HAND_RIGHT ) {
+		return;
+	}
+	for ( i = 0; i < 3; i++ ) {
+		for ( k = 0; k < 3; k++ ) {
+			st->letGo[h].axis[i][k] = st->hold[s].keptGrip ? st->hold[s].keptGripAxis[i][k] : ( i == k ) ? 1.0f : 0.0f;
+		}
+	}
+	if ( cg.time - st->heldTurnTime[h] >= 0 && cg.time - st->heldTurnTime[h] < 100 ) {
+		memcpy( st->letGo[h].turn, st->heldTurn[h], sizeof( st->letGo[h].turn ) );
+	} else {
+		VRB_Identity( st->letGo[h].turn );
+	}
+	st->letGo[h].time = cg.time ? cg.time : 1;
+	memset( &st->hold[s], 0, sizeof( st->hold[s] ) );
+	st->hold[s].hand = -1;
+	st->hold[s].sign = 1.0f;
+	st->blade[h].valid = qfalse;
+	st->blade[h].lastTime = 0;
+	if ( st->twoHand ) {
+		st->twoHand = st->twoHandArms = st->twoHandPass = qfalse;
+		st->twoHandBlend = 0.0f;
+	}
+}
+
+// Your sabers changed over (the server's made the second the first): the
+// hands holding them, and how they were last drawn, change over with them.
+void CG_VR_SwapSaberHolds( void ) {
+	vrbState_t *st = &vrbSelf;
+	vec3_t v;
+	int t;
+
+	{
+		const size_t n = sizeof( st->hold[0] );
+		byte tmp[sizeof( st->hold[0] )];
+		memcpy( tmp, &st->hold[0], n );
+		memcpy( &st->hold[0], &st->hold[1], n );
+		memcpy( &st->hold[1], tmp, n );
+	}
+	VectorCopy( st->drawnBlade[0], v );
+	VectorCopy( st->drawnBlade[1], st->drawnBlade[0] );
+	VectorCopy( v, st->drawnBlade[1] );
+	VectorCopy( st->drawnFace[0], v );
+	VectorCopy( st->drawnFace[1], st->drawnFace[0] );
+	VectorCopy( v, st->drawnFace[1] );
+	t = st->drawnTime[0];
+	st->drawnTime[0] = st->drawnTime[1];
+	st->drawnTime[1] = t;
+	t = st->drawnHand[0];
+	st->drawnHand[0] = st->drawnHand[1];
+	st->drawnHand[1] = t;
+}
+
+// The hands whose squeeze takes hold of your other hand's hilt (or passes
+// it over) - as last offered, a moment ago at most (your body not drawn a
+// while: none): those come first.
+int CG_VR_TwoHandZones( void ) {
+	return ( vrbSelf.init && cg.time - vrbSelf.twoHandTime >= 0 && cg.time - vrbSelf.twoHandTime <= 100 ) ? vrbSelf.grabZones : 0;
+}
+
+// Hand h's squeeze was a holster's (cg_vrholster.c): it doesn't take hold of
+// your other hand's hilt too, until its grip is let go.
+void CG_VR_BlockGrab( int h ) {
+	if ( h >= VR_HAND_LEFT && h <= VR_HAND_RIGHT ) {
+		vrbSelf.grabBlocked[h] = qtrue;
+	}
+}
+
+// Whether another VR player's avatar has a hand on their saber s.
+qboolean CG_VR_OtherHoldsSaber( int clientNum, int s ) {
+	const vrbState_t *st;
+	int h;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return qfalse;
+	}
+	st = &vrbOthers[clientNum];
+	if ( !st->avatarValid ) {
+		return qfalse;
+	}
+	for ( h = 0; h < 2; h++ ) {
+		if ( st->avatar.hand[h].grip == VR_GRIP_SABER && st->avatar.hand[h].saber == s ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 // The hand holding your weapon, for its trigger: a saber's as your body holds
 // it lately; else the gun hand.
 static int CG_VRB_WeaponHand( void ) {
+	const int held = CG_VRH_WeaponHand();
+
+	if ( held != -2 ) {
+		return held;	// (holsters: -1 your hands empty, 2 a saber in each - cg_vrholster.c)
+	}
 	if ( cg.predictedPlayerState.weapon == WP_SABER && vrbSelf.init && vrbSelf.holdTime &&
 		cg.time - vrbSelf.holdTime >= 0 && cg.time - vrbSelf.holdTime < 500 ) {
 		return vrbSelf.hold[0].hand;
@@ -4919,6 +5124,7 @@ void CG_VR_BodyEndFrame( void ) {
 		vrbCur = &vrbSelf;
 		CG_VRB_Init();
 		CG_VRB_Holds( &cg_entities[cg.predictedPlayerState.clientNum] );
+		CG_VRB_HideHolstered( &cg_entities[cg.predictedPlayerState.clientNum], CG_VRH_On() );
 	}
 
 	VectorCopy( vrb.shift, shift );	// (where your body stood this frame: for the others)
@@ -4983,8 +5189,11 @@ void CG_VR_BodyEndFrame( void ) {
 
 	// where a squeezed grip takes hold of something instead of pressing its key
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
-		trap->ext.VR_SetGrabZones( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 );
+		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() );
 	}
+	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
+	CG_VRH_SayButtons();
+	CG_VRH_EndFrame( vr );
 	// the hand holding your weapon: its trigger attacks (lights and puts out
 	// a saber), the other one alt-attacks
 	if ( CG_VR_Engine() && trap->ext.VR_SetWeaponHand ) {
@@ -6137,7 +6346,11 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 			const int weight = CG_VRB_Weight( qtrue );
 			const float strength = CG_VRB_HitStrength( es->eventParm );
 			const int hand = CG_VRB_EventHand( es->weapon );
-			const qboolean felt = (qboolean)( vrbHands.blowEnt[hand] == es->otherEntityNum &&
+			qboolean felt;
+			if ( hand < 0 ) {
+				return;	// (in neither hand - back in its holster as the game's word on it came)
+			}
+			felt = (qboolean)( vrbHands.blowEnt[hand] == es->otherEntityNum &&
 				cg.time - vrbHands.blowTime[hand] >= 0 && cg.time - vrbHands.blowTime[hand] < VRB_CONFIRM_WINDOW );
 			if ( felt ) {
 				CG_VRB_FeelBlade( hand, 0.85f * strength, 20, 0.75f * strength, rumble[weight], 0.35f );
@@ -6266,5 +6479,8 @@ static void CG_VRB_Restore( centity_t *cent ) {
 			trap->ext.VR_G2SetModelHidden( cent->ghoul2, 1, qfalse );
 		}
 		vrb.weaponG2 = NULL;
+	}
+	if ( cent->currentState.number != cg.clientNum ) {
+		CG_VRB_HideHolstered( cent, qfalse );	// (yours stay so: your holsters are drawn whatever draws you)
 	}
 }

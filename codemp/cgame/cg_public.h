@@ -748,8 +748,16 @@ typedef struct cgameImport_s {
 		void			(*R_Anchor2D)							( float anchorX );
 		float			(*R_Aspect2D)							( void );
 		// OpenJK VR: the hand holding your weapon (VR_HAND_*) - its trigger
-		// attacks, the other alt-attacks (call every frame)
+		// attacks, the other alt-attacks (call every frame); -1: your hands
+		// are empty, the triggers press nothing; 2: a saber in each hand,
+		// either trigger attacks
 		void			(*VR_SetWeaponHand)						( int hand );
+		// OpenJK VR: buttons to set on every command sent from now on
+		// (BUTTON_VR_*: holsters; call every frame - unsaid lately, none)
+		void			(*VR_SetCmdButtons)						( int buttons );
+		// OpenJK VR: a generic command (GENCMD_*) to go with the next command
+		// that has none (one per command, in turn)
+		void			(*VR_GenericCmd)						( int genCmd );
 	} ext;
 } cgameImport_t;
 

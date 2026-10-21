@@ -1887,6 +1887,9 @@ void ClientThink_real( gentity_t *ent ) {
 		return;
 	}
 
+	// OpenJK VR: the holster bits of this command, as this server takes them (g_vrholster.c)
+	G_VRHolsterCmd( ent, &client->pers.cmd );
+
 	// This code was moved here from clientThink to fix a problem with g_synchronousClients
 	// being set to 1 when in vehicles.
 	if ( ent->s.number < MAX_CLIENTS && ent->client->ps.m_iVehicleNum )
@@ -1959,7 +1962,7 @@ void ClientThink_real( gentity_t *ent ) {
 			if ( client->ps.saberHolstered == 1 )
 			{//one saber should be off, adjust saberAnimLevel accordinly
 				client->ps.fd.saberAnimLevelBase = SS_DUAL;
-				client->ps.fd.saberAnimLevel = SS_FAST;
+				client->ps.fd.saberAnimLevel = G_VRHolsterOneStyle( ent );	// OpenJK VR: fast - or one of two in hand, any single style
 				client->ps.fd.saberDrawAnimLevel = client->ps.fd.saberAnimLevel;
 			}
 			else
@@ -2990,8 +2993,10 @@ void ClientThink_real( gentity_t *ent ) {
 	{
 		ent->client->lastGenCmd = pmove.cmd.generic_cmd;
 		if (pmove.cmd.generic_cmd != GENCMD_FORCE_THROW &&
-			pmove.cmd.generic_cmd != GENCMD_FORCE_PULL)
-		{ //these are the only two where you wouldn't care about a delay between
+			pmove.cmd.generic_cmd != GENCMD_FORCE_PULL &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERSWAP &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERON)
+		{ //these are the only two where you wouldn't care about a delay between (OpenJK VR: and a VR player's holsters' - each is meant)
 			ent->client->lastGenCmdTime = level.time + 300; //default 100ms debounce between issuing the same command.
 		}
 
@@ -3006,6 +3011,14 @@ void ClientThink_real( gentity_t *ent ) {
 			break;
 		case GENCMD_SABERSWITCH:
 			Cmd_ToggleSaber_f(ent);
+			break;
+		case GENCMD_VR_SABERSWAP:	// OpenJK VR: holsters (g_vrholster.c) - once a command
+			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
+				G_VRHolsterSaberSwap(ent);
+			break;
+		case GENCMD_VR_SABERON:
+			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
+				G_VRHolsterSaberOn(ent);
 			break;
 		case GENCMD_ENGAGE_DUEL:
 			if ( level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL )
@@ -3522,7 +3535,10 @@ void G_RunClient( gentity_t *ent ) {
 
 		// fill with seemingly valid data
 		ent->client->pers.cmd.serverTime = level.time;
-		ent->client->pers.cmd.buttons = 0;
+		ent->client->pers.cmd.buttons &= BUTTONS_VR;	// OpenJK VR: what's in their hands stays so...
+		if ( ent->client->pers.cmd.generic_cmd == GENCMD_VR_SABERSWAP || ent->client->pers.cmd.generic_cmd == GENCMD_VR_SABERON ) {
+			ent->client->pers.cmd.generic_cmd = 0;	// ...and their holsters' commands were done (g_vrholster.c)
+		}
 		ent->client->pers.cmd.forwardmove = ent->client->pers.cmd.rightmove = ent->client->pers.cmd.upmove = 0;
 
 		ClientThink_real( ent );

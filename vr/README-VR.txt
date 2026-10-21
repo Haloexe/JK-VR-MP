@@ -75,16 +75,18 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Left stick           move (in the direction you look)
   Left stick click     walk (hold)
   Right stick L/R      turn (snap 45 degrees; vr_turnMode 1 = smooth)
-  Right stick up/down  next / previous weapon
+  Right stick up/down  next / previous weapon (straight to your hand)
   Right stick click    change saber style
   Right trigger        attack (saber in your hand, where blades are real:
                        switch it on and off) - the trigger of the hand that
                        holds your weapon: your saber in your left hand, the
                        left one
   Left trigger         alternate attack (the other trigger)
-  Right grip           use (doors, switches, pick-ups)
+  Right grip           use (doors, switches, pick-ups) - at a holster, take
+                       out or put away (see HOLSTERS)
   Left grip            use the selected Force power (or, at your saber's
-                       hilt, take hold of it with both hands)
+                       hilt, take hold of it with both hands; at a
+                       holster, take out or put away)
   A / B                jump / crouch
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
@@ -202,6 +204,92 @@ and while you hold the grip the saber is in both hands:
     drives the swing (sliding your second hand along the hilt doesn't count
     as a swing). Hits and clashes buzz both hands.
 
+HOLSTERS: your weapons hang on your body, and you take them out and put
+them away with your hands - in VR, seeing your own body and the saber in
+your hands in first person (cg_vrBody and cg_vrSaber, on unless you've
+turned them off), in games you host and on servers running this build.
+There are four, each holding one weapon, any weapon:
+  right hip                 your saber (a staff too)
+  left hip                  a second saber
+  over your right shoulder  empty (what you put there hangs on your back)
+  over your left shoulder   empty
+They're on your character's own hips and shoulders, so they fit any size
+of model: a hilt hangs at your belt, emitter up (or down: Hilts Hang,
+below), a pistol along your thigh, a rifle across your back from the
+shoulder.
+  * Reach for one: a hand within about 15 cm of what hangs at a hip, or
+    reached over your shoulder for what's on your back (from behind the
+    shoulder, not in front of it), feels a light tick where a squeeze would
+    do something there - a firmer one if there's something to take.
+    Squeeze that hand's grip:
+      - an empty hand takes out what's there. A hilt is in your fist where
+        it closed on it, the way round you took it (the blade out of your
+        thumb's side of the fist, or the little finger's: reversed), unlit;
+        a gun goes to your gun hand (the right; the left, left-handed) -
+        only that hand takes guns out
+      - a hand holding something puts it in an empty holster, and the hand
+        is empty; a saber has to be switched off first, so it's never put
+        away lit (nor is a gun taken out while a saber in your hands is lit)
+      - a hand holding something at a full holster swaps them: what it held
+        goes in, what was there comes out
+    A bump in that hand as something comes out or goes in. A squeeze at
+    your other hand's hilt still takes hold of it with both hands, even
+    beside a holster; anywhere else the grips are use and the Force, as
+    ever.
+  * The quick draw: hold the trigger as you take a hilt out and it lights
+    as it comes out. Otherwise it comes out unlit, and its trigger lights
+    it.
+  * One weapon at a time, as the game has it: taking out a gun puts the
+    saber in your hand back in its holster, and taking out a saber puts
+    the gun back. The game takes a moment (about half a second) to bring a
+    gun up before its trigger fires.
+  * The stick still switches weapons: right stick up or down brings the
+    next weapon straight to your hand, and what you held goes back to its
+    holster (one with no holster is put away, as ever). A weapon you pick
+    up and switch to comes to your hand the same way.
+  * Your hands can be empty: put away what you hold. Your saber stays the
+    game's weapon, unlit on your belt, and the triggers do nothing until
+    you take something out; with no saber, your hands are the game's fists
+    (the trigger punches). Either way you stay in first person, your hands
+    free.
+  * Two sabers: take either hilt out first and it fights on its own, in
+    any single style your saber offense and that saber allow (the right
+    stick click picks the style, as with one saber) - the game makes it
+    your first saber, which takes it a moment (a squeeze at a holster
+    meanwhile, as when you draw both at once, is done when it has). Take
+    the other out too and you fight with two; put one back and you're down
+    to one. Either trigger lights or puts out both together. A siege
+    class's two sabers stay as the class has them: its first comes out
+    first and goes back last.
+  * A staff is one long hilt: any holster, held anywhere along it.
+  * What's where is kept: a weapon stays in the holster you put it in -
+    after dying, each weapon you get back hangs where it hung, and the next
+    time you play. You spawn with your hands empty and your saber on your
+    belt (a gun you spawn with is in your hand).
+  * Everyone running this build sees what hangs on you, where you put it.
+    And everyone's hilts hang on their belts while their saber isn't in
+    their hand - desktop players' and bots' too: the first on the right
+    hip, a second on the left. Nothing hangs on a cloaked player.
+  * Setup's VR page has:
+      Holsters          Yes (No: weapons switch as they always have, and
+                        only your hilt hangs on you - on your belt while
+                        it's not in your hand, as everyone's does)
+      Hilts Hang        Emitter Up or Emitter Down (taken out, a hilt is
+                        held the way you took it)
+      Holster Markers   a faint ring at each holster: Off, Near a Hand (as
+                        a hand comes near it), or Always - brighter where a
+                        squeeze would do something
+      Quick Draw        Yes (above) or No
+      Reset Holsters    your saber back on your right hip, a second on your
+                        left, the shoulders empty
+    In the console: cg_vrHolsters, cg_vrHiltsDown, cg_vrHolsterMarkers (0,
+    1 or 2), cg_vrQuickDraw, cg_vrHolsterLayout (what each holster holds -
+    right hip, left hip, right shoulder, left shoulder; "1,2,0,0"), and
+    cg_vrHolsterDraw 0 (nothing drawn hanging on anyone).
+Servers with holsters show "vrHolsters 1" in their server info; the server
+setting g_vrHolsters 0 turns them off. On normal servers, and without the
+headset, weapons switch as they always have.
+
 SABER COMBAT in games you host (Create Game, bots included) and on any
 server running this build: your real blade is the weapon.
   * Swing it. A hit's damage comes from how fast the blade moves where it
@@ -317,12 +405,15 @@ server running this build: your real blade is the weapon.
         (0 off, 1 normal, up to 2).
   * Setup has a VR page (the VR button under Video, Sound and the rest,
     in the main menu and in game) with Left-Handed (above), Saber Inertia,
-    Saber Weight and Vibration: point at Left-Handed and click it, or pick
-    it with the arrow keys (or Tab) and set it with left (No) or right
-    (Yes), or change it with Enter; point at a slider and click or drag
-    it, or push the stick up or down (the mouse wheel) to move it a tenth
-    at a time, or pick it with the arrow keys and move it with left and
-    right. Each slider shows its value.
+    Saber Weight, Vibration and the holsters' settings (HOLSTERS, above):
+    point at Left-Handed and click it, or pick it with the arrow keys (or
+    Tab) and set it with left (No) or right (Yes), or change it with Enter;
+    point at a slider and click or drag it, or push the stick up or down
+    (the mouse wheel) to move it a tenth at a time, or pick it with the
+    arrow keys and move it with left and right. Each slider shows its
+    value. A setting with named choices (Hilts Hang, Holster Markers)
+    steps on as you click it (or push the stick up, or press right or
+    Enter) and back with the stick down (or left).
   * Cutting someone ends your spawn protection, like attacking always has.
 On normal servers the saber works the old way (the trigger swings).
 Servers fighting this way show "vrSaber 1" in their server info.
@@ -792,8 +883,13 @@ KNOWN LIMITATIONS
     cut shows on your blade a moment after it happens (it comes back from
     the game's server); custom sabers with more than two blades only fight
     with the first two.
-  * Guns are held in the right hand only (for now); only sabers can be
-    held with both hands.
+  * Guns are held in your gun hand only (the right; the left,
+    left-handed); only sabers can be held with both hands.
+  * Holsters: on a model with a cape or a jetpack, what hangs on your back
+    (and a hilt at the hip) can sink into it, and long hair or lekku can
+    cover a shoulder's; a hilt can touch the leg in some of the game's
+    poses (a run, a crouch). Others with the normal game see your weapon
+    in hand as the game animates it, and nothing hanging on you.
   * Mirrors show your character without a head (it is hidden for your view).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
@@ -842,6 +938,11 @@ no client. Source files:
   codemp/game/bg_vrsaber.h     how heavy a blade feels, and the share of
                                its cut speeds that makes up for it
   codemp/ui/ui_vrsetup.c       the VR page of Setup (base\ui\vr_setup.menu)
+  codemp/cgame/cg_vrholster.c  holsters, the player's side: where they hang
+                               on the model, taking out, putting away,
+                               swapping, two sabers, everyone's hilts
+  codemp/game/g_vrholster.c    holsters, the server's side (shared rules:
+                               game/bg_vrholster.h, bg_pmove.c, bg_saber.c)
   codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,
                                receiving (clc_voice / svc_voice, only with
                                servers whose systeminfo has sv_voice)

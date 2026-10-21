@@ -1029,9 +1029,18 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		return;
 	}
 
-	// OpenJK VR: a first-person saber is in your body's hand (cg_vrbody.c)
-	if ( ps->weapon == WP_SABER && CG_VR() ) {
-		return;
+	// OpenJK VR: a first-person saber is in your body's hand (cg_vrbody.c). With
+	// holsters (cg_vrholster.c) what's in your hand is what you took out, at once
+	// (the game's switch still under way) - and empty hands, or fists, are your
+	// body's own: no gun in front of you
+	if ( CG_VR() && ( ps->weapon == WP_SABER || CG_VRH_On() ) ) {
+		const int held = CG_VRH_HeldWeapon( ps->weapon );
+		if ( ps->weapon == WP_SABER || held != ps->weapon || held == WP_MELEE ) {
+			if ( BG_VRHolsterWeapon( held ) ) {
+				CG_VR_AddHeldWeapon( &cg_entities[ps->clientNum], held );
+			}
+			return;
+		}
 	}
 
 	// allow the gun to be completely removed
@@ -1063,7 +1072,7 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 	weapon = &cg_weapons[ ps->weapon ];
 
 	// OpenJK VR: the complete world model in your right hand
-	CG_VR_AddHeldWeapon( cent, ps->weapon );
+	CG_VR_AddHeldWeapon( cent, CG_VRH_HeldWeapon( ps->weapon ) );	// (holsters: the one you took out, at once)
 
 	memset (&hand, 0, sizeof(hand));
 
@@ -2800,12 +2809,13 @@ void CG_CheckPlayerG2Weapons(playerState_t *ps, centity_t *cent)
 		else if (ps->weapon == WP_SABER && cent->weapon != ps->weapon && !cent->saberWasInFlight)
 		{ //switching to the saber
 			//trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, trap->S_RegisterSound( "sound/weapons/saber/saberon.wav" ));
-			if (cgs.clientinfo[ps->clientNum].saber[0].soundOn)
+			// (OpenJK VR: only the blades lit - a saber out of its holster comes out unlit, holsters: cg_vrholster.c)
+			if (cgs.clientinfo[ps->clientNum].saber[0].soundOn && ps->saberHolstered < 2)
 			{
 				trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, cgs.clientinfo[ps->clientNum].saber[0].soundOn);
 			}
 
-			if (cgs.clientinfo[ps->clientNum].saber[1].soundOn)
+			if (cgs.clientinfo[ps->clientNum].saber[1].soundOn && !ps->saberHolstered)
 			{
 				trap->S_StartSound(cent->lerpOrigin, cent->currentState.number, CHAN_AUTO, cgs.clientinfo[ps->clientNum].saber[1].soundOn);
 			}

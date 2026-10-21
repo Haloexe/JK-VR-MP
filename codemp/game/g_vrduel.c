@@ -278,12 +278,16 @@ static void G_DuelUnholster( gentity_t *ent ) {
 	if ( cl->ps.weapon != WP_SABER || !cl->ps.saberHolstered || !cl->ps.duelTime ) {
 		return;
 	}
-	cl->ps.saberHolstered = 0;
-	if ( cl->saber[0].soundOn ) {
-		G_Sound( ent, CHAN_AUTO, cl->saber[0].soundOn );
-	}
-	if ( cl->saber[1].soundOn ) {
-		G_Sound( ent, CHAN_AUTO, cl->saber[1].soundOn );
+	if ( G_VRHolsters( ent ) ) {
+		G_VRHolsterLight( ent );	// (holsters: the ones in hand - one of two alone; none, their hands empty: g_vrholster.c)
+	} else {
+		cl->ps.saberHolstered = 0;
+		if ( cl->saber[0].soundOn ) {
+			G_Sound( ent, CHAN_AUTO, cl->saber[0].soundOn );
+		}
+		if ( cl->saber[1].soundOn ) {
+			G_Sound( ent, CHAN_AUTO, cl->saber[1].soundOn );
+		}
 	}
 	G_AddEvent( ent, EV_PRIVATE_DUEL, 2 );
 	cl->ps.duelTime = 0;
