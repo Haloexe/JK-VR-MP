@@ -39,12 +39,14 @@ will take it (after an attack, a Force power's hand; again if turned down),
 the saber waiting in your hand meanwhile, the triggers doing nothing; in a
 saber lock or a duel's countdown, or not off in VRH_OFF_MS, it stays in your
 hand. Nowhere to go (a gun swapped into its holster, every other full): it
-stays in your hand, a firm buzz. Held with both hands, let go with the first
-and the other goes on holding it (CG_VR_PassSaberOver); let go of the second
-of two sabers and the first stays lit (as the first's grip slackens a moment
-too, once it's held again; the first thrown, once it's back); let go of the
-first, the second still in hand, and both go out and the second becomes the
-first (a siege class's: both go back). A saber that comes to your hand any
+stays in your hand, a firm buzz. Held with both hands (the hand you use
+leading: cg_vrbody.c, CG_VRB_TakeLead - not while your other hand's letting
+go of it), let go with the one that has it and the other goes on holding it
+(CG_VR_PassSaberOver); let go of the second of two sabers and the first
+stays lit (as the first's grip slackens a moment too, once it's held again;
+the first thrown, once it's back); let go of the first, the second still in
+hand, and both go out and the second becomes the first (a siege class's:
+both go back). A saber that comes to your hand any
 other way (the stick, caught after a throw with the grip let go, a menu
 closed) stays till you squeeze its grip and let go; a system menu over the
 game doesn't let go of anything. While a hand holds a saber its squeeze only
@@ -1367,6 +1369,13 @@ static void CG_VRH_GripFrame( const vrClientState_t *vr ) {
 // (cg_vrbody.c) - a squeeze doesn't.
 qboolean CG_VRH_GripHolds( void ) {
 	return (qboolean)( vrh.on && CG_VRH_On() && CG_VRH_GripHold() );
+}
+
+// Whether hand h's grip holds the saber it has now (squeezed since it came
+// to it) - not held this moment, it's letting go of it (cg_vrbody.c: your
+// other hand on it, the hand you use doesn't take the lead of it then).
+qboolean CG_VRH_GripHeld( int h ) {
+	return (qboolean)( CG_VRH_GripHolds() && h >= VR_HAND_LEFT && h <= VR_HAND_RIGHT && vrh.held[h] );
 }
 
 /*

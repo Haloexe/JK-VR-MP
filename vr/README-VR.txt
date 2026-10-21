@@ -172,6 +172,15 @@ anywhere from the pommel to just short of the emitter (the blade can't be
 taken hold of), above or below your first hand, anywhere along a staff -
 and squeeze its grip. That hand closes round the hilt with a short buzz,
 and while you hold the grip the saber is in both hands:
+  * The hand you use leads - the right, or the left if you play
+    left-handed (Setup > VR) - whichever hand took the saber first: its
+    wrist points the blade, your other hand helping as far as it agrees,
+    and its trigger is the saber's. If your other hand had it, the hand you
+    use takes it over the moment both are settled on the hilt (a few
+    frames), and nothing jumps as it does: the blade, the hilt and both
+    hands go on from just where they are, your other hand holding the hilt
+    where it held it - only the fist of the hand you use settles onto its
+    controller over a moment, the hilt with it.
   * The blade follows both wrists, and the further apart your hands are,
     the more it follows the line between them, so pushing with one hand
     and pulling with the other levers it round like a real two-handed hilt.
@@ -183,23 +192,31 @@ and while you hold the grip the saber is in both hands:
     holds breaks the hold. Taking hold and letting go settle smoothly over
     a few frames.
   * Passing it over: holding it with both hands, squeeze the grip of the
-    hand that held it first. That hand lets go, and the saber stays in the
-    other one - where it holds it on the hilt, and the way round it holds
-    it - even once you let go of its grip. Nothing turns as it changes
-    hands: the blade points where it pointed, the hilt doesn't roll over,
-    and the hand stays round it as it held it. From then on hand and saber
-    move together, as they lay as you passed it (until you put it away,
-    throw it or pass it on again; cg_vrSaberPitch doesn't tilt it). It's
-    then your weapon hand: its trigger lights the saber and puts it out.
-    (That squeeze isn't use or the Force.) With Saber Grip on Hold (as it
-    comes: see HOLSTERS) you're holding that grip all along, so let go of
-    it instead: the saber passes over, and the other hand keeps it while
-    you hold its grip.
+    hand that has it (the hand you use). That hand lets go, and the saber
+    stays in the other one - where it holds it on the hilt, and the way
+    round it holds it - even once you let go of its grip. Nothing turns as
+    it changes hands: the blade points where it pointed, the hilt doesn't
+    roll over, and the hand stays round it as it held it. From then on hand
+    and saber move together, as they lay as you passed it (until you put
+    it away, throw it or pass it on again; cg_vrSaberPitch doesn't tilt
+    it). It's then your weapon hand: its trigger lights the saber and puts
+    it out. (That squeeze isn't use or the Force.) With Saber Grip on Hold
+    (as it comes: see HOLSTERS) you're holding that grip all along, so let
+    go of it instead: the saber passes over, and the other hand keeps it
+    while you hold its grip.
+  * Your other hand's saber - on Toggle, or one that came to it without
+    its grip (see HOLSTERS) - is still that hand's while the hand you use
+    leads it, and that hand holds the hilt without its grip. Let go with
+    the hand you use (a moment's slack doesn't count) and the saber's back
+    in your other hand as it held it. Squeeze your other hand's grip: on
+    Toggle it lets go, the saber the hand you use's now; on Hold its grip
+    holds the hilt from then on.
   * The reverse grip: take hold with your second hand the other way round
-    (its thumb toward the pommel), then pass it over: the blade comes out
-    of the little finger's side of your fist, below it. To turn it back,
-    take hold with the other hand the usual way round and pass it back.
-    There's no flipping it in one hand.
+    (its thumb toward the pommel), then pass it over - or, with the hand
+    you use, just take hold so: it leads that way round - and the blade
+    comes out of the little finger's side of your fist, below it. To turn
+    it back, take hold with the other hand the usual way round and pass it
+    back. There's no flipping it in one hand.
   * Held at the pommel, the blade reaches a hand's width further; a staff
     held at both ends is held with both hands however far apart they are.
   * Both hands hold the hilt in the hole of the fist, the way a real hand
@@ -273,8 +290,9 @@ shoulder.
     holds a saber its grip only holds it: no use and no Force from that
     grip, so to use something with that hand let go of the saber first
     (it's back on your belt at once) - the other hand's grip is as ever.
-      - both hands on the hilt: let go with the first and the other goes
-        on holding it; let go with the other and it lets go of the hilt
+      - both hands on the hilt: the hand you use has it (taking it over
+        from your other hand once both are on it, unless that one's letting
+        go); let go with either and the other goes on holding it
       - two sabers: each hand's grip holds its own. Let go of the second
         and the first stays lit (with the first thrown, the second waits
         for it to come back); let go of the first and both switch off,

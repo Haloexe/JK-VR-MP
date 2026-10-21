@@ -1945,6 +1945,7 @@ qboolean	CG_VRH_On( void );
 void		CG_VRH_HandsFrame( const vrClientState_t *vr );
 int			CG_VRH_Zones( void );
 qboolean	CG_VRH_GripHolds( void );
+qboolean	CG_VRH_GripHeld( int hand );
 int			CG_VRH_WeaponHand( void );
 int			CG_VRH_CmdButtons( void );
 void		CG_VRH_SayButtons( void );
