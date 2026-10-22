@@ -25,6 +25,11 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   lags behind a fast swing. Hold a saber in either hand, anywhere along the
   hilt, the usual way or reversed; pass it from hand to hand or grip it with
   both. The controllers rumble with every hit.
+- **Saber colours:** any RGB colour for each of your sabers, and a black core
+  inside the coloured glow, picked on the RGB Colors page (Profile >
+  Lightsaber, or Setup > VR) with sliders or a hex code while a preview shows
+  the blade. Everyone on a server running this build sees them; elsewhere
+  others see the stock colour nearest yours.
 - **Holsters:** your weapons hang on your body, at your hips and over your
   shoulders, and you take them out and put them away with your hands. As it
   comes, a saber stays in your hand only while you hold the grip, and holding
@@ -62,6 +67,12 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   trigger to click (the other trigger right-clicks). Setup has a VR page for
   playing left-handed, finger tracking, Body Bends, how heavy sabers feel,
   controller rumble and the holsters.
+- **Comfort settings:** Setup > Controls has VR Movement and VR View. Turn in
+  snaps (15 to 90 degrees, 45 as it comes) or smoothly at your own speed,
+  move where you look or where your hand points, swap the sticks, set the
+  sticks' deadzone and recentre. Choose whether your view follows your head,
+  the world's scale, how far away and how big the HUD and the menu screen
+  are, how guns aim and tilt in your hand, and the headset's resolution.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.
