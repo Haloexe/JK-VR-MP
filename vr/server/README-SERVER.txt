@@ -10,6 +10,16 @@ desktop copy, "Launch OpenJK Desktop.bat") or with the normal game, which
 fights the normal way. Give your players the same OpenJK VR version as
 the server, and update both together.
 
+CAUTION: this is an early alpha whose code hasn't been reviewed by a
+person. It was written with an AI assistant (Claude) and tested as it
+was built, but nobody has checked its code by hand or audited it for
+security, and a server takes in whatever its players' games send it. Run
+it as an ordinary user - never root or Administrator - on a machine or
+VPS with nothing sensitive on it, let in only its game port (UDP 29070),
+keep the rcon password long and random, and back up its roleplay
+accounts (ROLEPLAY, below). It comes with no warranty of any kind (see
+LICENSE-OpenJK-GPLv2.txt).
+
 
 WINDOWS
 -------

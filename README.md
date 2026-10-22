@@ -3,6 +3,21 @@
 **Star Wars Jedi Knight: Jedi Academy multiplayer in a PC VR headset**, with a
 lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJK).
 
+> [!WARNING]
+> **An early alpha whose code hasn't been reviewed by a person.** OpenJK VR
+> was written with an AI assistant (Claude) and tested as it was built, but
+> nobody has checked its code by hand or audited it for security, and it
+> changes a game engine that talks to other computers over the internet.
+> Be careful with both the game and the server:
+>
+> - Join servers you trust, and host games only for people you trust.
+> - Use a roleplay password you don't use anywhere else.
+> - Run a server as an ordinary user (never root or Administrator), on a
+>   machine or VPS with nothing sensitive on it, with only its game port open
+>   and a long, random rcon password. Back up its roleplay accounts.
+>
+> It comes with no warranty of any kind (see the [licence](#licence)).
+
 - **Real lightsaber combat:** your blade cuts, blocks and clashes where you
   actually swing it, harder the faster you swing. Blades are solid: yours
   rests on another blade and slides along it instead of passing through. Saber

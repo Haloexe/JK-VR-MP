@@ -1,6 +1,15 @@
 OpenJK VR - Jedi Academy multiplayer in a VR headset
 =====================================================
 
+CAUTION: this is an early alpha whose code hasn't been reviewed by a
+person. It was written with an AI assistant (Claude) and tested as it
+was built, but nobody has checked its code by hand or audited it for
+security, and it changes a game that talks to other computers over the
+internet. Join servers you trust, host games only for people you trust,
+and use a roleplay password you don't use anywhere else. Running a
+server: see the caution in README-SERVER.txt. It comes with no warranty
+of any kind (see LICENSE-OpenJK-GPLv2.txt).
+
 An OpenJK-based multiplayer client that renders Jedi Academy in stereo 3D
 on a PC VR headset (OpenXR). Current state (milestone 2):
 
