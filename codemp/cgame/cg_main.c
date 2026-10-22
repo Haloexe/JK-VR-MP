@@ -640,6 +640,17 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.purpleSaberCoreShader		= trap->R_RegisterShader( "gfx/effects/sabers/purple_line" );
 	cgs.media.saberBlurShader			= trap->R_RegisterShader( "gfx/effects/sabers/saberBlur" );
 	cgs.media.swordTrailShader			= trap->R_RegisterShader( "gfx/effects/sabers/swordTrail" );
+	cgs.media.vrSaberGlowShader			= trap->R_RegisterShader( "gfx/vr/saber_glow" );	// OpenJK VR: blades of any colour (tr_vrsaber.cpp)
+	cgs.media.vrSaberCoreShader			= trap->R_RegisterShader( "gfx/vr/saber_core" );
+	{	// (and black cores', each turn's)
+		static const char *parts[4] = { "glow", "rim", "core", "depth" };
+		int n, k;
+		for ( n = 0; n < VR_SC_RANKS; n++ ) {
+			for ( k = 0; k < 4; k++ ) {
+				cgs.media.vrSaberBlackCore[n][k] = trap->R_RegisterShader( va( "gfx/vr/bc%i_%s", n, parts[k] ) );
+			}
+		}
+	}
 
 	cgs.media.forceCoronaShader			= trap->R_RegisterShaderNoMip( "gfx/hud/force_swirl" );
 

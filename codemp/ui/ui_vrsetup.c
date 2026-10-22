@@ -33,6 +33,8 @@ Setup) hides them again. The page is otherwise left as it is.
                   lights it
   Reset Holsters  (a button) the saber on the right hip, a    cg_vrHolsterLayout 1,2,0,0
                   second on the left, the shoulders empty
+  Saber Colors    (a button) the RGB Colors page: any colour  (ui_vrcolor.c)
+                  for each saber, a black core
 
 The sliders show their value after them, and go in tenths; with the
 keyboard, the arrow keys move the one picked (ui_shared.c: showValue), and
@@ -466,7 +468,7 @@ static void UI_VRS_AddTo( menuDef_t *menu ) {
 	button->window.rectClient = r;
 	button->type = ITEM_TYPE_BUTTON;
 	button->text = String_Alloc( "VR" );
-	button->descText = String_Alloc( "Settings for playing in VR: the hand you use, your saber's weight, the controllers' vibration, your holsters" );
+	button->descText = String_Alloc( "Settings for playing in VR: the hand you use, your saber's weight, the controllers' vibration, your holsters, your sabers' colors" );
 	button->iMenuFont = last->iMenuFont;
 	button->textscale = last->textscale;
 	button->textStyle = last->textStyle;

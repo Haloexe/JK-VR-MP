@@ -42,6 +42,10 @@ XCVAR_DEF( cg_selectedPlayerName,			"",						NULL,				CVAR_ARCHIVE|CVAR_INTERNAL
 XCVAR_DEF( g_botsFile,						"",						NULL,				CVAR_INIT|CVAR_ROM )
 XCVAR_DEF( g_spSkill,						"2",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( g_warmup,						"20",					NULL,				CVAR_ARCHIVE )
+XCVAR_DEF( saberCore1,						"0",					NULL,				CVAR_USERINFO|CVAR_ARCHIVE )	// OpenJK VR: a black core on each saber, and its colour of its own,
+XCVAR_DEF( saberCore2,						"0",					NULL,				CVAR_USERINFO|CVAR_ARCHIVE )	// "rrggbb" (ui_vrcolor.c, bg_vrcolor.h)
+XCVAR_DEF( saberRGB1,						"",						NULL,				CVAR_USERINFO|CVAR_ARCHIVE )
+XCVAR_DEF( saberRGB2,						"",						NULL,				CVAR_USERINFO|CVAR_ARCHIVE )
 XCVAR_DEF( se_language,						"english",				NULL,				CVAR_ARCHIVE|CVAR_NORESTART )
 XCVAR_DEF( ui_PrecacheModels,				"0",					NULL,				CVAR_ARCHIVE )
 XCVAR_DEF( ui_actualNetGametype,			"3",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
@@ -111,6 +115,13 @@ XCVAR_DEF( ui_saber2,						"none",					NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber2_color,					"yellow",				NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber_color,					"yellow",				NULL,				CVAR_ROM|CVAR_INTERNAL )
 XCVAR_DEF( ui_saber_type,					"single",				NULL,				CVAR_ROM|CVAR_INTERNAL )
+XCVAR_DEF( ui_sc_b,							"0",					NULL,				CVAR_INTERNAL )	// OpenJK VR: the Saber Colour page (ui_vrcolor.c): its sliders,
+XCVAR_DEF( ui_sc_core,						"0",					NULL,				CVAR_INTERNAL )	// its core, whether there's a second saber, its Hex field and
+XCVAR_DEF( ui_sc_dual,						"0",					NULL,				CVAR_INTERNAL )	// the saber it's colouring
+XCVAR_DEF( ui_sc_g,							"0",					NULL,				CVAR_INTERNAL )
+XCVAR_DEF( ui_sc_hex,						"",						NULL,				CVAR_INTERNAL )
+XCVAR_DEF( ui_sc_r,							"0",					NULL,				CVAR_INTERNAL )
+XCVAR_DEF( ui_sc_saber,						"1",					NULL,				CVAR_INTERNAL )
 XCVAR_DEF( ui_scoreAccuracy,				"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_scoreAssists,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )
 XCVAR_DEF( ui_scoreBase,					"0",					NULL,				CVAR_ARCHIVE|CVAR_INTERNAL )

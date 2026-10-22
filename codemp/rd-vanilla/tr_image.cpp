@@ -1394,6 +1394,9 @@ void R_CreateBuiltinImages( void ) {
 	R_CreateDlightImage();
 
 	R_CreateFogImage();
+
+	// OpenJK VR: the blades of any colour, and black cores (tr_vrsaber.cpp)
+	R_VR_CreateSaberImages();
 }
 
 

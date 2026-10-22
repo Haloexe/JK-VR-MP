@@ -206,6 +206,7 @@ typedef struct editFieldDef_s {
 	qboolean password;		// OpenJK VR: what's typed shows as *s ("password")
 	qboolean clipToBox;		// OpenJK VR: what's typed drawn no further than the field's box, the cursor kept in view ("clipToBox")
 	qboolean showValue;		// OpenJK VR: a slider shows its value after it, and the arrow keys (and the wheel) move it a tenth ("showValue")
+	float valueStep;		// OpenJK VR: ...or this much ("valueStep"; 1 or more: in whole numbers - dragged, shown and set)
 } editFieldDef_t;
 
 #define MAX_MULTI_CVARS 64//32

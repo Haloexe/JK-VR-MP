@@ -120,6 +120,7 @@ set(MPGameGameFiles
 	"${MPDir}/game/w_force.c"
 	"${MPDir}/game/w_saber.c"
 	"${MPDir}/game/g_vrholster.c"
+	"${MPDir}/game/g_vrcolor.c"
 	"${MPDir}/game/g_vrsaber.c"
 	"${MPDir}/game/g_vrduel.c"
 	"${MPDir}/game/g_vrpose.c"

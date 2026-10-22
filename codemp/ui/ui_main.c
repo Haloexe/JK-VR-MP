@@ -1475,6 +1475,8 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	UI_VRRP_AddMenus();
 	// OpenJK VR: the Companions menu, and its button on the Profile menu
 	UI_VRComp_AddMenus();
+	// OpenJK VR: the Saber Colour page, and its button on the Lightsaber pages
+	UI_VRColor_AddMenus();
 
 	trap->PC_RemoveAllGlobalDefines ( );
 }
@@ -5272,6 +5274,8 @@ static void UI_UpdateSaberCvars ( void )
 	colorI = TranslateSaberColor( UI_Cvar_VariableString ( "ui_saber2_color" ) );
 	trap->Cvar_Set ( "color2", va("%d",colorI) );
 	trap->Cvar_Set ( "g_saber2_color", UI_Cvar_VariableString ( "ui_saber2_color" ));
+
+	UI_VRColor_StockApplied();	// OpenJK VR: the sabers' colours of their own and cores, as they stand (ui_vrcolor.c)
 }
 
 // More hard coded goodness for the menus.
@@ -5441,6 +5445,8 @@ static void UI_GetSaberCvars ( void )
 
 	trap->Cvar_Set ( "ui_saber_color", UI_Cvar_VariableString ( "g_saber_color" ) );
 	trap->Cvar_Set ( "ui_saber2_color", UI_Cvar_VariableString ( "g_saber2_color" ) );
+
+	UI_VRColor_StockOpened();	// OpenJK VR: the sabers' colours of their own and cores, as set (ui_vrcolor.c)
 }
 
 extern qboolean ItemParse_model_g2anim_go( itemDef_t *item, const char *animName );
@@ -6446,6 +6452,9 @@ static void UI_RunMenuScript(char **args)
 		{
 		}
 		else if ( UI_VRComp_Script( name, args ) )	// OpenJK VR: the Companions menu
+		{
+		}
+		else if ( UI_VRColor_Script( name, args ) )	// OpenJK VR: the Saber Colour page
 		{
 		}
 		else if (Q_stricmp(name, "setMovesListDefault") == 0)
@@ -10168,6 +10177,7 @@ void UI_Refresh( int realtime )
 		UI_VRVideo_Frame();
 		UI_VRRP_Frame();	// (the Roleplay menu, as things stand)
 		UI_VRComp_Frame();	// (the Companions menu)
+		UI_VRColor_Frame();	// (the Saber Colour page)
 		// paint all the menus
 		Menu_PaintAll();
 		// refresh server browser list

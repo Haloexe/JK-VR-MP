@@ -76,9 +76,9 @@ SETTINGS
 --------
 base\server.cfg (Notepad on Windows) explains each one: the server's name,
 password, how many players, the game type (Free For All, Duel, Team FFA,
-Siege, Capture the Flag), limits, sabers only or guns too, the VR saber and
-voice chat settings, bots, and the maps it plays in turn. Change it, save,
-and restart the server.
+Siege, Capture the Flag), limits, sabers only or guns too, the VR saber,
+saber color and voice chat settings, bots, and the maps it plays in turn.
+Change it, save, and restart the server.
 
 An internet server is listed in the game's server browser (dedicated 2).
 A server only for your own network: in "Launch OpenJK VR Server.bat" set
@@ -211,6 +211,10 @@ GOOD TO KNOW
   players take them with the pose wheel, or the pose command.
 * The log games.log keeps every VR swing, cut and clash (g_vrSaberLog). It
   only grows: delete it now and then, or set g_vrSaberLog 0.
+* Saber colors: players on this build give their sabers any color and a
+  black core (Setup > VR > Saber Colors), and everyone on this build sees
+  them; players of the normal game see the nearest stock color. Team games
+  still go red and blue. g_vrSaberRGB 0: the stock colors for everyone.
 * A VR player's blade is judged as they saw the others (lag compensation,
   g_vrSaberUnlag, up to a quarter of a second back), so players further
   away still meet what they swing at; a server close to its players still

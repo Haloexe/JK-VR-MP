@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "rd-common/tr_types.h"
 #include "game/bg_public.h"
 #include "game/bg_vrholster.h"
+#include "game/bg_vrcolor.h"
 #include "cg_public.h"
 
 // The entire cgame module is unloaded and reloaded on each level change,
@@ -320,6 +321,10 @@ typedef struct clientInfo_s {
 	int			vrHolsters[VR_NUM_HOLSTERS];
 	int			vrHasSabers;
 	int			vrSaberSwaps;
+
+	// OpenJK VR: each saber's colour of its own and black core, as the server
+	// tells ("sc1", "sc2": bg_vrcolor.h)
+	vrBladeColor_t	vrBlade[2];
 
 } clientInfo_t;
 
@@ -1157,6 +1162,9 @@ typedef struct cgMedia_s {
 	qhandle_t	purpleSaberCoreShader;
 	qhandle_t	saberBlurShader;
 	qhandle_t	swordTrailShader;
+	qhandle_t	vrSaberGlowShader;		// OpenJK VR: a blade of any colour: its glow, its core;
+	qhandle_t	vrSaberCoreShader;		// a black core's in each turn (farthest first): its glow,
+	qhandle_t	vrSaberBlackCore[VR_SC_RANKS][4];	// edge, dark core, depth (the renderer's own: tr_vrsaber.cpp)
 
 	qhandle_t	yellowDroppedSaberShader;
 
@@ -1642,6 +1650,7 @@ typedef struct cgs_s {
 	cg_staticmodel_t	miscStaticModels[MAX_STATIC_MODELS];
 
 	qboolean			vrHolsters;		// OpenJK VR: the server has holsters ("vrHolsters 1": cg_vrholster.c)
+	int					vrSaberRGB;		// OpenJK VR: the server passes saber colours on ("vrSaberRGB 1"); 0: it doesn't; -1: it doesn't say (not this build: you see your own)
 
 } cgs_t;
 

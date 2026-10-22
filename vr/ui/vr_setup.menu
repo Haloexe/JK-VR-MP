@@ -336,5 +336,28 @@
 				setcvar		cg_vrHolsterLayout "1,2,0,0" ;
 			}
 		}
+
+		itemDef
+		{
+			name			vr_sabercolors
+			group			vrsetup
+			type			ITEM_TYPE_BUTTON
+			text			"Saber Colors"
+			rect			260 468 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Any color for your sabers, and a black core (the RGB Colors page)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript	getsabercvars ;
+				uiScript	vrSaberColor open 0 ;
+			}
+		}
 	}
 }

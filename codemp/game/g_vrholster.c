@@ -342,6 +342,8 @@ void G_VRHolsterSaberSwap( gentity_t *ent ) {
 	trap->GetUserinfo( n, userinfo, sizeof( userinfo ) );
 	G_VRSwapInfo( userinfo, "saber1", "saber2" );
 	G_VRSwapInfo( userinfo, "color1", "color2" );
+	G_VRSwapInfo( userinfo, "saberRGB1", "saberRGB2" );	// (their own colours and cores: g_vrcolor.c)
+	G_VRSwapInfo( userinfo, "saberCore1", "saberCore2" );
 	if ( BG_VRHolsterParse( Info_ValueForKey( userinfo, "vrh" ), codes ) ) {
 		// (the holsters each hangs in: their game's own say changes over too, once it hears)
 		for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {

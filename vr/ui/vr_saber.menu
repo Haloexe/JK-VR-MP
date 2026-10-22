@@ -1,0 +1,804 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: RGB COLORS
+//
+//	The Saber Colour page (vr_saber): any colour for each saber, and a black core. Opened from
+//	the RGB Colors button on the Lightsaber page - in game (ingame_saber) and in the main menu
+//	(saberMenu) - and from Setup's VR page. It colours one saber at a time (First Saber;
+//	Second Saber with two): the Red, Green and Blue sliders and the Hex field are its colour of
+//	its own, the six swatches a stock colour, Core a white one or a black one; the sabers along
+//	the foot of the page show it. Apply sets them. The game's menu code (ui_vrcolor.c) opens
+//	and closes it (uiScript vrSaberColor open, back), keeps the sliders and the Hex field
+//	together, and runs what the buttons ask; the sabers are the Lightsaber page's own previews
+//	("saber", "saber2"), drawn as the page has them.
+//
+//	It's in front of the page it opened from (popup: the pointer's its alone), which is as it
+//	was when it closes: in game it's in that one's place, in the main menu a box of its own
+//	over it (vrsc_fill shown).
+//
+//	vr_saber_ingame and vr_saber_main are never shown themselves: their items go on the
+//	Lightsaber pages, under the blade colours.
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name				"vr_saber"
+		visible				0
+		fullscreen			0
+		popup
+		rect				105 40 430 425
+		focusColor			1 1 1 1
+		style				1
+		border				1
+		descX				320
+		descY				440
+		descScale			1
+		descColor			1 .682 0 1
+		descAlignment		ITEM_ALIGN_CENTER
+
+		onOpen
+		{
+			hide			vrsc_highlights ;
+			uiScript		saber_hilt ;
+			uiScript		saber2_hilt
+		}
+
+		onClose
+		{
+			uiScript		vrSaberColor closed
+		}
+
+		onESC
+		{
+			play			"sound/interface/button1.wav" ;
+			uiScript		vrSaberColor back
+		}
+
+		// the box filled in, over a main menu page (shown then: ui_vrcolor.c)
+		itemDef
+		{
+			name			vrsc_fill
+			group			none
+			style			WINDOW_STYLE_FILLED
+			rect			0 0 430 425
+			backcolor		0 0 0 1
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		// the backdrop
+		itemDef
+		{
+			name			vrsc_back
+			group			none
+			style			WINDOW_STYLE_SHADER
+			rect			0 0 430 425
+			background		"gfx/menus/menu_box_ingame"
+			forecolor		1 1 1 1
+			visible			1
+			decoration
+		}
+
+		// the title
+		itemDef
+		{
+			name			vrsc_title
+			style			WINDOW_STYLE_SHADER
+			background		"gfx/menus/menu_blendbox"
+			text			"RGB COLORS"
+			rect			20 5 390 28
+			textalign		ITEM_ALIGN_CENTER
+			textalignx		195
+			textaligny		2
+			font			3
+			textscale		0.9
+			forecolor		1 1 1 1
+			visible			1
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------
+		// which saber
+		//------------------------------------------------------------------------------------
+		itemDef
+		{
+			name			vrsc_saber1glow
+			group			vrsc_highlights
+			style			WINDOW_STYLE_SHADER
+			rect			15 40 140 18
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_saber1
+			group			none
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"First Saber"
+			rect			15 40 140 18
+			font			4
+			textscale		1
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		0
+			forecolor		1 1 1 1
+			visible			1
+			descText		"Color your first saber (a staff's two blades are one saber)"
+			mouseEnter
+			{
+				show		vrsc_saber1glow
+			}
+			mouseExit
+			{
+				hide		vrsc_saber1glow
+			}
+			action
+			{
+				play		"sound/interface/choose_saber.wav" ;
+				uiScript	vrSaberColor saber 1
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_saber2glow
+			group			vrsc_highlights
+			style			WINDOW_STYLE_SHADER
+			rect			170 40 150 18
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_saber2
+			group			none
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"Second Saber"
+			rect			170 40 150 18
+			font			4
+			textscale		1
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		0
+			forecolor		0.65 0.65 1 1
+			visible			1
+			cvarTest		"ui_sc_dual"
+			showCvar
+			{
+				"1"
+			}
+			descText		"Color your second saber"
+			mouseEnter
+			{
+				show		vrsc_saber2glow
+			}
+			mouseExit
+			{
+				hide		vrsc_saber2glow
+			}
+			action
+			{
+				play		"sound/interface/choose_saber.wav" ;
+				uiScript	vrSaberColor saber 2
+			}
+		}
+
+		//------------------------------------------------------------------------------------
+		// its colour of its own: the sliders and the Hex field (kept together: ui_vrcolor.c)
+		//------------------------------------------------------------------------------------
+		itemDef
+		{
+			name			vrsc_colortitle
+			group			none
+			text			"BLADE COLOR"
+			style			WINDOW_STYLE_EMPTY
+			rect			15 66 160 24
+			font			2
+			textscale		.8
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		-4
+			forecolor		.549 .854 1 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_red
+			group			none
+			type			ITEM_TYPE_SLIDER
+			text			"Red"
+			cvarfloat		"ui_sc_r" 0 0 255
+			showValue
+			valueStep		5
+			rect			15 86 330 18
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		90
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			visible			1
+			descText		"How much red is in your blade's color (0 to 255)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_green
+			group			none
+			type			ITEM_TYPE_SLIDER
+			text			"Green"
+			cvarfloat		"ui_sc_g" 0 0 255
+			showValue
+			valueStep		5
+			rect			15 108 330 18
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		90
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			visible			1
+			descText		"How much green is in your blade's color (0 to 255)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_blue
+			group			none
+			type			ITEM_TYPE_SLIDER
+			text			"Blue"
+			cvarfloat		"ui_sc_b" 0 0 255
+			showValue
+			valueStep		5
+			rect			15 130 330 18
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		90
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			visible			1
+			descText		"How much blue is in your blade's color (0 to 255)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_hex
+			group			none
+			type			ITEM_TYPE_EDITFIELD
+			style			WINDOW_STYLE_FILLED
+			text			"Hex:"
+			cvar			"ui_sc_hex"
+			maxchars		7
+			clipToBox
+			rect			15 152 200 18
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		90
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			backcolor		0 0 0 .55
+			border			1
+			bordercolor		.35 .45 .8 .7
+			visible			1
+			descText		"Type a color's six hex digits, such as 00FFC0 (the sliders follow)"
+			mouseEnter
+			{
+				setitemcolor	vrsc_hex bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_hex bordercolor .35 .45 .8 .7
+			}
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_core
+			group			none
+			type			ITEM_TYPE_MULTI
+			text			"Core:"
+			cvar			"ui_sc_core"
+			cvarFloatList
+			{
+				"White"		0
+				"Black"		1
+			}
+			rect			15 174 200 18
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		90
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		.615 .615 .956 1
+			visible			1
+			descText		"Black: a dark core inside your blade's glow"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+		}
+
+		//------------------------------------------------------------------------------------
+		// the stock colours
+		//------------------------------------------------------------------------------------
+		itemDef
+		{
+			name			vrsc_stocktitle
+			group			none
+			text			"STOCK COLORS"
+			style			WINDOW_STYLE_EMPTY
+			rect			15 200 160 24
+			font			2
+			textscale		.8
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		-4
+			forecolor		.549 .854 1 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_blueicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			15 216 24 24
+			background		"gfx/menus/saber_icon_blue"
+			forecolor		.75 .75 .75 1
+			descText		"The stock blue"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_blueicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_blueicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_blueicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_blueicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 4
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_greenicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			40 216 24 24
+			background		"gfx/menus/saber_icon_green"
+			forecolor		.75 .75 .75 1
+			descText		"The stock green"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_greenicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_greenicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_greenicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_greenicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 3
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_orangeicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			65 216 24 24
+			background		"gfx/menus/saber_icon_orange"
+			forecolor		.75 .75 .75 1
+			descText		"The stock orange"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_orangeicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_orangeicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_orangeicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_orangeicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 1
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_purpleicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			90 216 24 24
+			background		"gfx/menus/saber_icon_purple"
+			forecolor		.75 .75 .75 1
+			descText		"The stock purple"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_purpleicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_purpleicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_purpleicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_purpleicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 5
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_yellowicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			115 216 24 24
+			background		"gfx/menus/saber_icon_yellow"
+			forecolor		.75 .75 .75 1
+			descText		"The stock yellow"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_yellowicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_yellowicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_yellowicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_yellowicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 2
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_redicon
+			style			WINDOW_STYLE_SHADER
+			type			ITEM_TYPE_BUTTON
+			rect			140 216 24 24
+			background		"gfx/menus/saber_icon_red"
+			forecolor		.75 .75 .75 1
+			descText		"The stock red"
+			border			1
+			bordersize		1
+			bordercolor		.33 .33 .5 1
+			visible			1
+			mouseEnter
+			{
+				setitemcolor	vrsc_redicon forecolor 1 1 1 1 ;
+				setitemcolor	vrsc_redicon bordercolor .66 .66 1 1
+			}
+			mouseExit
+			{
+				setitemcolor	vrsc_redicon forecolor .75 .75 .75 1 ;
+				setitemcolor	vrsc_redicon bordercolor .33 .33 .5 1
+			}
+			action
+			{
+				play		"sound/interface/choose_blade.wav" ;
+				uiScript	vrSaberColor pick 0
+			}
+		}
+
+		//------------------------------------------------------------------------------------
+		// the sabers, as they'll look (the Lightsaber page's own previews: ui_saber.c)
+		//------------------------------------------------------------------------------------
+		itemDef
+		{
+			name			saber
+			group			models
+			type			ITEM_TYPE_MODEL
+			rect			0 -20 430 430
+			asset_model		"models/weapons2/saber_reborn/saber_w.glm"
+			isSaber			1
+			model_angle		180
+			model_rotation	20
+			model_g2mins	0 0 0
+			model_g2maxs	20 20 20
+			model_fovx		75
+			model_fovy		75
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			saber2
+			group			models
+			type			ITEM_TYPE_MODEL
+			rect			0 40 430 430
+			asset_model		"models/weapons2/saber_reborn/saber_w.glm"
+			isSaber2		1
+			model_angle		180
+			model_rotation	20
+			model_g2mins	0 0 0
+			model_g2maxs	20 20 20
+			model_fovx		75
+			model_fovy		75
+			visible			1
+			cvarTest		"ui_sc_dual"
+			showCvar
+			{
+				"1"
+			}
+			decoration
+		}
+
+		//------------------------------------------------------------------------------------
+		// Back and Apply
+		//------------------------------------------------------------------------------------
+		itemDef
+		{
+			name			vrsc_backglow
+			group			vrsc_highlights
+			style			WINDOW_STYLE_SHADER
+			rect			30 360 110 32
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_backbutton
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"Back"
+			rect			30 360 110 32
+			font			2
+			textscale		1
+			textalign		ITEM_ALIGN_CENTER
+			textalignx		55
+			textaligny		2
+			forecolor		1 .682 0 1
+			visible			1
+			descText		"Back without changing your colors"
+			mouseEnter
+			{
+				show		vrsc_backglow
+			}
+			mouseExit
+			{
+				hide		vrsc_backglow
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript	vrSaberColor back
+			}
+		}
+
+		itemDef
+		{
+			name			vrsc_applyglow
+			group			vrsc_highlights
+			style			WINDOW_STYLE_SHADER
+			rect			160 360 110 32
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_applyborder
+			group			none
+			style			WINDOW_STYLE_EMPTY
+			rect			140 360 150 32
+			forecolor		1 1 1 1
+			border			1
+			bordercolor		1 .682 0 1
+			visible			1
+			decoration
+		}
+
+		itemDef
+		{
+			name			vrsc_apply
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"Apply"
+			rect			160 360 110 32
+			font			2
+			textscale		1
+			textalign		ITEM_ALIGN_CENTER
+			textalignx		55
+			textaligny		2
+			forecolor		1 .682 0 1
+			visible			1
+			descText		"Use these colors"
+			mouseEnter
+			{
+				show		vrsc_applyglow
+			}
+			mouseExit
+			{
+				hide		vrsc_applyglow
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript	vrSaberColor apply ;
+				uiScript	vrSaberColor back
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------
+	// RGB Colors on the in-game Lightsaber page (its items go on "ingame_saber", under the
+	// blade colours) - its glow one of that page's highlights, hidden as it opens
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_saber_ingame"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vr_saber_rgbglow
+			group			highlights
+			style			WINDOW_STYLE_SHADER
+			rect			120 266 150 16
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vr_saber_rgb
+			group			none
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"RGB Colors"
+			rect			120 266 150 16
+			font			4
+			textscale		1
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		0
+			forecolor		.65 .65 1 1
+			visible			1
+			descText		"Any color for your blade, and a black core"
+			mouseEnter
+			{
+				show		vr_saber_rgbglow
+			}
+			mouseExit
+			{
+				hide		vr_saber_rgbglow
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript	vrSaberColor open 1
+			}
+		}
+	}
+
+	//------------------------------------------------------------------------------------------
+	// RGB Colors on the main menu's Lightsaber page (its items go on "saberMenu", under the
+	// blade colours)
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_saber_main"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vr_saber_rgb2glow
+			group			highlights
+			style			WINDOW_STYLE_SHADER
+			rect			446 200 150 16
+			background		"gfx/menus/menu_buttonback"
+			forecolor		1 1 1 1
+			visible			0
+			decoration
+		}
+
+		itemDef
+		{
+			name			vr_saber_rgb2
+			group			none
+			type			ITEM_TYPE_BUTTON
+			style			WINDOW_STYLE_EMPTY
+			text			"RGB Colors"
+			rect			446 200 150 16
+			font			4
+			textscale		1
+			textalign		ITEM_ALIGN_LEFT
+			textalignx		0
+			textaligny		0
+			forecolor		.65 .65 1 1
+			visible			1
+			descText		"Any color for your blade, and a black core"
+			mouseEnter
+			{
+				show		vr_saber_rgb2glow
+			}
+			mouseExit
+			{
+				hide		vr_saber_rgb2glow
+			}
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript	vrSaberColor open 1
+			}
+		}
+	}
+}

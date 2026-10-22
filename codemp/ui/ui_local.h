@@ -28,6 +28,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "ui_public.h"
 #include "keycodes.h"
 #include "game/bg_public.h"
+#include "game/bg_vrcolor.h"
 #include "ui_shared.h"
 
 // ui_cvar.c
@@ -71,6 +72,14 @@ qboolean	UI_VRRP_FeederSelection( int feeder, int index );
 qboolean	UI_VRRP_Script( const char *name, char **args );
 void		UI_VRRP_Move( const char *from, const char *to, const char *first, qboolean free );
 void		UI_VRRP_Open( int page );
+
+// ui_vrcolor.c (OpenJK VR: the Saber Colour page - any colour, a black core)
+void		UI_VRColor_AddMenus( void );
+void		UI_VRColor_Frame( void );
+qboolean	UI_VRColor_Script( const char *name, char **args );
+void		UI_VRColor_StockOpened( void );
+void		UI_VRColor_StockApplied( void );
+void		UI_VRColor_Blade( int saber, vrBladeColor_t *out, int *stock );
 
 // ui_vrcomp.c: OpenJK VR - roleplay's Companions menu
 void		UI_VRComp_AddMenus( void );

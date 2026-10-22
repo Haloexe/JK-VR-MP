@@ -4052,10 +4052,15 @@ static void ScanAndLoadShaderFiles( void )
 			sum += summand;
 	}
 
-	// build single large buffer
-	s_shaderText = (char *)ri.Hunk_Alloc( sum + numShaderFiles*2, h_low );
+	// build single large buffer (OpenJK VR: the renderer's own shaders first -
+	// tr_vrsaber.cpp - so they stand over any file's of the same name, one an
+	// older build left behind)
+	const char *builtin = R_VR_BuiltinShaderText();
+	s_shaderText = (char *)ri.Hunk_Alloc( strlen( builtin ) + 2 + sum + numShaderFiles*2, h_low );
 	s_shaderText[ 0 ] = '\0';
-	textEnd = s_shaderText;
+	strcat( s_shaderText, builtin );
+	strcat( s_shaderText, "\n" );
+	textEnd = s_shaderText + strlen( s_shaderText );
 
 	// free in reverse order, so the temp files are all dumped
 	for ( i = numShaderFiles - 1; i >= 0 ; i-- )

@@ -144,6 +144,10 @@ void CG_ParseServerinfo( void ) {
 	cgs.showDuelHealths = atoi( Info_ValueForKey( info, "g_showDuelHealths" ) );
 
 	cgs.vrHolsters = ( atoi( Info_ValueForKey( info, "vrHolsters" ) ) > 0 ) ? qtrue : qfalse;	// OpenJK VR: holsters (cg_vrholster.c)
+	{	// OpenJK VR: saber colours (bg_vrcolor.h)
+		const char *v = Info_ValueForKey( info, "vrSaberRGB" );
+		cgs.vrSaberRGB = v[0] ? ( ( atoi( v ) > 0 ) ? 1 : 0 ) : -1;
+	}
 
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	trap->Cvar_Set("g_gametype", va("%i", cgs.gametype));

@@ -197,7 +197,7 @@ static struct {
 	char		sent[32];					// what went out with your info ("vrh")
 	int			sentTime;
 	vmCvar_t	vrh;						// the userinfo cvar
-	qhandle_t	ringShader;					// the markers' (base/shaders/openjkvr.shader)
+	qhandle_t	ringShader;					// the markers' (the renderer's own: tr_vrsaber.cpp)
 } vrh;
 
 static int CG_VRH_Want( void );
@@ -1425,6 +1425,14 @@ static void CG_VRH_Swapped( void ) {
 	trap->Cvar_VariableStringBuffer( "color2", b, sizeof( b ) );
 	trap->Cvar_Set( "color1", b );
 	trap->Cvar_Set( "color2", a );
+	trap->Cvar_VariableStringBuffer( "saberRGB1", a, sizeof( a ) );	// (their own colours and cores: bg_vrcolor.h)
+	trap->Cvar_VariableStringBuffer( "saberRGB2", b, sizeof( b ) );
+	trap->Cvar_Set( "saberRGB1", b );
+	trap->Cvar_Set( "saberRGB2", a );
+	trap->Cvar_VariableStringBuffer( "saberCore1", a, sizeof( a ) );
+	trap->Cvar_VariableStringBuffer( "saberCore2", b, sizeof( b ) );
+	trap->Cvar_Set( "saberCore1", b );
+	trap->Cvar_Set( "saberCore2", a );
 	for ( i = 0; i < VR_NUM_HOLSTERS; i++ ) {
 		if ( vrh.layout[i] == VR_HOLSTER_SABER ) {
 			vrh.layout[i] = VR_HOLSTER_SABER + 1;

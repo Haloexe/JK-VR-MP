@@ -1598,6 +1598,10 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized ) {
 
 	newInfo.icolor2 = atoi(v);
 
+	// OpenJK VR: each saber's colour of its own and black core (bg_vrcolor.h)
+	BG_VRSC_Parse( Info_ValueForKey( configstring, "sc1" ), &newInfo.vrBlade[0] );
+	BG_VRSC_Parse( Info_ValueForKey( configstring, "sc2" ), &newInfo.vrBlade[1] );
+
 	// bot skill
 	v = Info_ValueForKey( configstring, "skill" );
 	// players have -1 skill so you can determine the bots from the scoreboard code
@@ -1727,12 +1731,14 @@ void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized ) {
 				if (siegeClass->hasForcedSaberColor)
 				{
 					newInfo.icolor1 = siegeClass->forcedSaberColor;
+					newInfo.vrBlade[0].rgb = qfalse;	// OpenJK VR: the class's colour, not one of their own
 
 					CG_ColorFromInt( newInfo.icolor1, newInfo.color1 );
 				}
 				if (siegeClass->hasForcedSaber2Color)
 				{
 					newInfo.icolor2 = siegeClass->forcedSaber2Color;
+					newInfo.vrBlade[1].rgb = qfalse;
 
 					CG_ColorFromInt( newInfo.icolor2, newInfo.color2 );
 				}
@@ -5315,7 +5321,8 @@ static void CG_RGBForSaberColor( saber_colors_t color, vec3_t rgb )
 		case SABER_PURPLE:
 			VectorSet( rgb, 0.9f, 0.2f, 1.0f );
 			break;
-		default:
+		default:	// OpenJK VR: blue, as a colour the game doesn't know is drawn (was: left as it was, white - or nothing set)
+			VectorSet( rgb, 0.2f, 0.4f, 1.0f );
 			break;
 	}
 }
@@ -5406,7 +5413,28 @@ static void CG_DoSaberLight( saberInfo_t *saber )
 	}
 }
 
-void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, int rfx, qboolean doLight )
+
+// OpenJK VR: a saber's colour of its own and black core (bg_vrcolor.h), as
+// the server tells - or, on a server not of this build, yours from your own
+// settings (no one else sees them); an NPC's are the stock colour. In team
+// games the team's colour stands (teamColor), a black core still shown.
+static void CG_VRSC_BladeColor( const centity_t *cent, const clientInfo_t *client, int saberNum, qboolean teamColor,
+	vrBladeColor_t *out ) {
+	memset( out, 0, sizeof( *out ) );
+	if ( !client || cent->currentState.eType == ET_NPC ) {
+		return;
+	}
+	if ( cgs.vrSaberRGB > 0 ) {
+		*out = client->vrBlade[saberNum ? 1 : 0];
+	} else if ( cgs.vrSaberRGB < 0 && cent->currentState.number == cg.clientNum && !cg.demoPlayback && cgs.gametype != GT_SIEGE ) {
+		BG_VRSC_FromSettings( saberNum ? saberRGB2.string : saberRGB1.string, saberNum ? saberCore2.string : saberCore1.string, out );
+	}
+	if ( teamColor ) {
+		out->rgb = qfalse;
+	}
+}
+
+void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, const vrBladeColor_t *bc, int rfx, qboolean doLight )
 {
 	vec3_t		mid;
 	qhandle_t	blade = 0, glow = 0;
@@ -5414,6 +5442,14 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	float radiusmult;
 	float radiusRange;
 	float radiusStart;
+	// OpenJK VR: a colour of its own (bc->rgb) is drawn with white images tinted
+	// by it, never too dim (bg_vrcolor.h); a black core (bc->blackCore), dark,
+	// over a bright edge in the blade's colour, in its turn among the others
+	const qboolean rgb = (qboolean)( bc && bc->rgb ), black = (qboolean)( bc && bc->blackCore );
+	byte tint[3] = { 0xff, 0xff, 0xff };
+	vec3_t light = { 1.0f, 1.0f, 1.0f };
+	const qhandle_t *bcShaders = NULL;
+	vec3_t eye = { 0.0f, 0.0f, 0.0f };
 
 	if ( length < 0.5f )
 	{
@@ -5456,11 +5492,36 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 			break;
 	}
 
+	// OpenJK VR: the light the blade casts (and a black core's edge is) its colour
+	if ( rgb ) {
+		BG_VRSC_Floor( bc->color, tint );
+		VectorSet( light, tint[0] / 255.0f, tint[1] / 255.0f, tint[2] / 255.0f );
+		glow = cgs.media.vrSaberGlowShader;
+		blade = cgs.media.vrSaberCoreShader;
+	} else {
+		CG_RGBForSaberColor( color, light );
+	}
+	if ( black ) {
+		// OpenJK VR: drawn in its turn, farther ones first (by how far it is from
+		// the eye - in a headset, where your head really is, which the renderer
+		// draws from: bg_vrcolor.h); its glow and edge its colour - its light's,
+		// for a stock one
+		matrix3_t eyeAxis;
+		int k;
+		if ( !CG_VR_HeadPose( eye, eyeAxis ) ) {
+			VectorCopy( cg.refdef.vieworg, eye );
+		}
+		bcShaders = cgs.media.vrSaberBlackCore[BG_VRSC_Rank( Distance( mid, eye ) )];
+		glow = bcShaders[0];
+		blade = bcShaders[2];
+		for ( k = 0; k < 3; k++ ) {
+			tint[k] = rgb ? tint[k] : (byte)Com_Clampi( 0, 255, (int)( light[k] * 255.0f + 0.5f ) );
+		}
+	}
+
 	if (doLight)
 	{	// always add a light because sabers cast a nice glow before they slice you in half!!  or something...
-		vec3_t rgb={1,1,1};
-		CG_RGBForSaberColor( color, rgb );
-		trap->R_AddLightToScene( mid, (length*1.4f) + (Q_flrand(0.0f, 1.0f)*3.0f), rgb[0], rgb[1], rgb[2] );
+		trap->R_AddLightToScene( mid, (length*1.4f) + (Q_flrand(0.0f, 1.0f)*3.0f), light[0], light[1], light[2] );
 	}
 
 	memset( &saber, 0, sizeof( refEntity_t ));
@@ -5484,6 +5545,11 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	{ //draw the blade as a post-render so it doesn't get in the cap...
 		rfx |= RF_FORCEPOST;
 	}
+	if ( black )
+	{	// OpenJK VR: never a post-render - those are drawn last first, which would
+		// undo a black core's turn (and hide it behind its own depth)
+		rfx &= ~RF_FORCEPOST;
+	}
 
 	radiusRange = radius * 0.075f;
 	radiusStart = radius-radiusRange;
@@ -5495,8 +5561,14 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	VectorCopy( dir, saber.axis[0] );
 	saber.reType = RT_SABER_GLOW;
 	saber.customShader = glow;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	saber.shaderRGBA[0] = tint[0];	// OpenJK VR: (white but for a colour of its own, or a black core's)
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
 	saber.renderfx = rfx;
+	if ( black ) {
+		saber.radius *= VR_SC_GLOW_WIDER;
+	}
 
 	trap->R_AddRefEntityToScene( &saber );
 
@@ -5513,7 +5585,33 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
 
 	saber.shaderTexCoord[0] = saber.shaderTexCoord[1] = 1.0f;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	saber.shaderRGBA[0] = tint[0];
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
+
+	if ( black ) {
+		// OpenJK VR: a bright edge in the blade's colour, the dark core over it,
+		// then where the core is - a little nearer the eye, nothing drawn - so
+		// what's drawn after and behind it doesn't show through (tr_vrsaber.cpp)
+		refEntity_t rim = saber, depth;
+		vec3_t toEye;
+		float ahead;
+		rim.customShader = bcShaders[1];
+		rim.radius = saber.radius * VR_SC_RIM_WIDE;
+		trap->R_AddRefEntityToScene( &rim );
+		saber.radius *= VR_SC_CORE_WIDER;
+		trap->R_AddRefEntityToScene( &saber );
+		depth = saber;
+		depth.customShader = bcShaders[3];
+		VectorSubtract( eye, mid, toEye );
+		ahead = VectorNormalize( toEye ) * 0.25f;	// (Q_min would normalize it twice)
+		ahead = Q_min( VR_SC_DEPTH_AHEAD, ahead );
+		VectorMA( saber.origin, ahead, toEye, depth.origin );
+		VectorMA( saber.oldorigin, ahead, toEye, depth.oldorigin );
+		trap->R_AddRefEntityToScene( &depth );
+		return;
+	}
 
 	trap->R_AddRefEntityToScene( &saber );
 }
@@ -6095,6 +6193,8 @@ void CG_AddSaberBlade( centity_t *cent, centity_t *scent, refEntity_t *saber, in
 	effectTrailArgStruct_t fx;
 	int scolor = 0;
 	int	useModelIndex = 0;
+	qboolean teamColor = qfalse;	// OpenJK VR: the team's colour stands
+	vrBladeColor_t bladeColor;		// OpenJK VR: its colour of its own, black core (bg_vrcolor.h)
 
 	if (cent->currentState.eType == ET_NPC)
 	{
@@ -6202,12 +6302,15 @@ void CG_AddSaberBlade( centity_t *cent, centity_t *scent, refEntity_t *saber, in
 		if (client->team == TEAM_RED)
 		{
 			scolor = SABER_RED;
+			teamColor = qtrue;
 		}
 		else if (client->team == TEAM_BLUE)
 		{
 			scolor = SABER_BLUE;
+			teamColor = qtrue;
 		}
 	}
+	CG_VRSC_BladeColor( cent, client, saberNum, teamColor, &bladeColor );
 
 	if (!cg_saberContact.integer)
 	{ //if we don't have saber contact enabled, just add the blade and don't care what it's touching
@@ -6449,6 +6552,12 @@ CheckTrail:
 							VectorSet( rgb1, 0.0f, 64.0f, 255.0f );
 							break;
 					}
+					if ( bladeColor.rgb )
+					{	// OpenJK VR: a colour of its own (never too dim: bg_vrcolor.h)
+						byte tint[3];
+						BG_VRSC_Floor( bladeColor.color, tint );
+						VectorSet( rgb1, tint[0], tint[1], tint[2] );
+					}
 
 					//Here we will use the happy process of filling a struct in with arguments and passing it to a trap function
 					//so that we can take the struct and fill in an actual CTrail type using the data within it once we get it
@@ -6585,7 +6694,7 @@ JustDoIt:
 	//CG_DoSaber( org_, axis_[0], saberLen, client->saber[saberNum].blade[bladeNum].lengthMax, client->saber[saberNum].blade[bladeNum].radius,
 	//	scolor, renderfx, (qboolean)(saberNum==0&&bladeNum==0) );
 	CG_DoSaber( org_, axis_[0], saberLen, client->saber[saberNum].blade[bladeNum].lengthMax, client->saber[saberNum].blade[bladeNum].radius,
-		scolor, renderfx, (qboolean)(client->saber[saberNum].numBlades < 3 && !(client->saber[saberNum].saberFlags2&SFL2_NO_DLIGHT)) );
+		scolor, &bladeColor, renderfx, (qboolean)(client->saber[saberNum].numBlades < 3 && !(client->saber[saberNum].saberFlags2&SFL2_NO_DLIGHT)) );
 }
 
 int CG_IsMindTricked(int trickIndex1, int trickIndex2, int trickIndex3, int trickIndex4, int client)

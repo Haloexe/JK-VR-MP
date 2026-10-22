@@ -1471,6 +1471,11 @@ void G_RunClient			( gentity_t *ent );
 //
 qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
 
+// g_vrcolor.c (OpenJK VR: saber colours - any colour, a black core)
+void		G_VRColorInit( void );
+void		G_VRColorPublish( void );
+void		G_VRColorInfo( const gentity_t *ent, const char *userinfo, char *buf, int size );
+
 // g_vrholster.c (OpenJK VR: holsters - a VR player's weapons hang on their body)
 void		G_VRHolsterInit( void );
 void		G_VRHolsterPublish( void );

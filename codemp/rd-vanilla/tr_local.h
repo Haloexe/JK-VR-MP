@@ -1428,6 +1428,9 @@ void	R_FontList_f( void );
 void	R_InitFogTable( void );
 float	R_FogFactor( float s, float t );
 void	R_InitImages( void );
+// OpenJK VR: the renderer's own images and shaders for blades of any colour (tr_vrsaber.cpp)
+void		R_VR_CreateSaberImages( void );
+const char	*R_VR_BuiltinShaderText( void );
 void	R_DeleteTextures( void );
 float	R_SumOfUsedImages( qboolean bUseFormat );
 void	R_InitSkins( void );

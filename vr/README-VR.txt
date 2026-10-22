@@ -435,6 +435,38 @@ Servers with holsters show "vrHolsters 1" in their server info; the server
 setting g_vrHolsters 0 turns them off. On normal servers, and without the
 headset, weapons switch as they always have.
 
+SABER COLORS: any color for each of your sabers, and a black core - a dark
+core inside the colored glow. Profile > Lightsaber (in game or in the main
+menu) has an RGB Colors button under the blade colors, and Setup > VR has
+Saber Colors; both open the RGB Colors page:
+  First Saber / Second Saber  the saber you're coloring (Second Saber shows
+                       with two; a staff is one saber, both blades alike)
+  Red, Green, Blue     sliders, 0 to 255 (the arrow keys, or the stick
+                       pointing at one, move it 5 at a time)
+  Hex                  type a color's six hex digits, such as 00FFC0 (in
+                       the headset the VR keyboard comes up); the sliders
+                       follow once all six are there
+  Core                 White, or Black
+  Stock colors         the game's six colors (a color of its own gone)
+  Back / Apply         leave it as it was / use these colors
+The sabers along the page show how they'll look as you change them. On
+the Lightsaber page a blade color swatch still picks a stock color, and
+its Apply Changes keeps the colors you set here.
+  * Everyone on a server running this build sees your colors and core
+    ("vrSaberRGB 1" in its server info); the server setting g_vrSaberRGB 0
+    turns them off - everyone sees stock colors. On other servers you see
+    your own colors and everyone else sees the stock color nearest yours,
+    which is also what players of the normal game see.
+  * No blade glows dimmer than a quarter of full brightness, for anyone:
+    a very dark color is lifted so a blade can't all but vanish in a fight.
+  * In team games blades take their team's red or blue as ever (a black
+    core still shows), and Siege's classes keep their set colors. NPCs,
+    companions included, keep their stock colors.
+  * A roleplay character keeps its own colors and cores with its look:
+    switching characters switches them.
+  * In the console: saberRGB1, saberRGB2 (six hex digits; empty for the
+    stock color), saberCore1, saberCore2 (1 for a black core).
+
 SABER COMBAT in games you host (Create Game, bots included) and on any
 server running this build: your real blade is the weapon.
   * Swing it. A hit's damage comes from how fast the blade moves where it

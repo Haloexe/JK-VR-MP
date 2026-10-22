@@ -30,6 +30,7 @@ USER INTERFACE SABER LOADING & DISPLAY CODE
 
 #include "ui_local.h"
 #include "ui_shared.h"
+#include "game/bg_vrcolor.h"
 
 void WP_SaberLoadParms( void );
 qboolean WP_SaberParseParm( const char *saberName, const char *parmname, char *saberData );
@@ -52,6 +53,9 @@ static qhandle_t blueSaberGlowShader;
 static qhandle_t blueSaberCoreShader;
 static qhandle_t purpleSaberGlowShader;
 static qhandle_t purpleSaberCoreShader;
+static qhandle_t vrSaberGlowShader;			// OpenJK VR: a blade of any colour; a black core's glow,
+static qhandle_t vrSaberCoreShader;			// bright edge and dark core (the renderer's own:
+static qhandle_t vrSaberBlackCore[3];		// tr_vrsaber.cpp - the first turn's: a preview's alone)
 
 void UI_CacheSaberGlowGraphics( void )
 {//FIXME: these get fucked by vid_restarts
@@ -67,6 +71,11 @@ void UI_CacheSaberGlowGraphics( void )
 	blueSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/blue_line" );
 	purpleSaberGlowShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_glow" );
 	purpleSaberCoreShader		= trap->R_RegisterShaderNoMip( "gfx/effects/sabers/purple_line" );
+	vrSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/vr/saber_glow" );
+	vrSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/vr/saber_core" );
+	vrSaberBlackCore[0]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_glow" );
+	vrSaberBlackCore[1]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_rim" );
+	vrSaberBlackCore[2]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_core" );
 }
 
 qboolean UI_SaberModelForSaber( const char *saberName, char *saberModel )
@@ -241,7 +250,11 @@ void UI_SaberLoadParms( void )
 	WP_SaberLoadParms();
 }
 
-void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color )
+// OpenJK VR: drawn as the game draws it (cg_players.c, CG_DoSaber): a colour
+// of its own (bc->rgb) with white images tinted by it, never too dim; a
+// black core (bc->blackCore) dark over a bright edge in the blade's colour
+
+void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, const vrBladeColor_t *bc )
 {
 	vec3_t		mid, rgb={1,1,1};
 	qhandle_t	blade = 0, glow = 0;
@@ -249,6 +262,8 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	float radiusmult;
 	float radiusRange;
 	float radiusStart;
+	const qboolean own = (qboolean)( bc && bc->rgb ), black = (qboolean)( bc && bc->blackCore );
+	byte tint[3] = { 0xff, 0xff, 0xff };
 
 	if ( length < 0.5f )
 	{
@@ -294,6 +309,21 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 		default:
 			break;
 	}
+	if ( own ) {
+		BG_VRSC_Floor( bc->color, tint );
+		VectorSet( rgb, tint[0] / 255.0f, tint[1] / 255.0f, tint[2] / 255.0f );
+		glow = vrSaberGlowShader;
+		blade = vrSaberCoreShader;
+	}
+	if ( black ) {
+		// (its glow and edge its colour - its light's, for a stock one)
+		int k;
+		glow = vrSaberBlackCore[0];
+		blade = vrSaberBlackCore[2];
+		for ( k = 0; k < 3; k++ ) {
+			tint[k] = own ? tint[k] : (byte)Com_Clampi( 0, 255, (int)( rgb[k] * 255.0f + 0.5f ) );
+		}
+	}
 
 	memset( &saber, 0, sizeof( refEntity_t ));
 
@@ -322,8 +352,14 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	VectorCopy( dir, saber.axis[0] );
 	saber.reType = RT_SABER_GLOW;
 	saber.customShader = glow;
-	saber.shaderRGBA[0] = saber.shaderRGBA[1] = saber.shaderRGBA[2] = saber.shaderRGBA[3] = 0xff;
+	saber.shaderRGBA[0] = tint[0];	// OpenJK VR: (white but for a colour of its own, or a black core's)
+	saber.shaderRGBA[1] = tint[1];
+	saber.shaderRGBA[2] = tint[2];
+	saber.shaderRGBA[3] = 0xff;
 	//saber.renderfx = rfx;
+	if ( black ) {
+		saber.radius *= VR_SC_GLOW_WIDER;
+	}
 
 	trap->R_AddRefEntityToScene( &saber );
 
@@ -336,6 +372,15 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	saber.radius = (radiusStart + Q_flrand(-1.0f, 1.0f) * radiusRange)*radiusmult;
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
 
+	if ( black ) {
+		// OpenJK VR: its bright edge in the blade's colour, the dark core over it
+		refEntity_t rim = saber;
+		rim.customShader = vrSaberBlackCore[1];
+		rim.radius = saber.radius * VR_SC_RIM_WIDE;
+		trap->R_AddRefEntityToScene( &rim );
+		saber.radius *= VR_SC_CORE_WIDER;
+	}
+
 	trap->R_AddRefEntityToScene( &saber );
 }
 
@@ -343,6 +388,7 @@ void UI_SaberDrawBlade( itemDef_t *item, char *saberName, int saberModel, saberT
 {
 	char bladeColorString[MAX_QPATH];
 	saber_colors_t bladeColor;
+	vrBladeColor_t vrColor;		// OpenJK VR: its colour of its own, black core (bg_vrcolor.h)
 	float bladeLength,bladeRadius;
 	vec3_t	bladeOrigin={0};
 	matrix3_t	axis;
@@ -370,6 +416,12 @@ void UI_SaberDrawBlade( itemDef_t *item, char *saberName, int saberModel, saberT
 	}
 
 	bladeColor = TranslateSaberColor( bladeColorString );
+	// OpenJK VR: a colour of its own and black core, as the page shows them (ui_vrcolor.c)
+	{
+		int stock = bladeColor;
+		UI_VRColor_Blade( ( ( item->flags & ITF_ISSABER ) && saberModel < 2 ) ? 0 : 1, &vrColor, &stock );
+		bladeColor = (saber_colors_t)stock;
+	}
 
 	bladeLength = UI_SaberBladeLengthForSaber( saberName, bladeNum );
 	bladeRadius = UI_SaberBladeRadiusForSaber( saberName, bladeNum );
@@ -572,7 +624,7 @@ void UI_SaberDrawBlade( itemDef_t *item, char *saberName, int saberModel, saberT
 		return;
 	}
 
-	UI_DoSaber( bladeOrigin, axis[0], bladeLength, bladeLength, bladeRadius, bladeColor );
+	UI_DoSaber( bladeOrigin, axis[0], bladeLength, bladeLength, bladeRadius, bladeColor, &vrColor );
 }
 
 void UI_GetSaberForMenu( char *saber, int saberNum )

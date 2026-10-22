@@ -134,9 +134,12 @@ static int G_RP_ClientArg( const char *arg );
 
 static const char *rpFactions[RPF_NUM] = { "Heroes", "Villains", "Neutral" };	// (RPF_*: bg_public.h)
 
-// What a character wears, kept from what the player wears while playing it.
-static const char *rpLookKeys[] = { "model", "color1", "color2", "char_color_red", "char_color_green", "char_color_blue" };
+// What a character wears, kept from what the player wears while playing it
+// - its sabers' colours of their own and black cores too (g_vrcolor.c).
+static const char *rpLookKeys[] = { "model", "color1", "color2", "char_color_red", "char_color_green", "char_color_blue",
+	"saberRGB1", "saberRGB2", "saberCore1", "saberCore2" };
 #define RP_LOOK_KEYS	( (int)ARRAY_LEN( rpLookKeys ) )
+#define RP_LOOK_RGB		6	// (where the saber colours of their own start: their pairs, as color1 and color2)
 
 typedef struct {
 	char	name[RP_NAME_BUF];
@@ -505,6 +508,8 @@ static int G_RP_LookIndex( const char *key ) {
 	return -1;
 }
 
+static void G_RP_LookStore( int k, const char *raw, char *out, int size );
+
 // Reads an account's file into acc (qfalse: there's none, or it's broken).
 static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 	static char text[RP_FILE_MAX];
@@ -613,6 +618,14 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 				memset( &c->comps[m], 0, sizeof( c->comps[0] ) * ( c->numComps - m ) );
 			}
 			c->numComps = m;
+			// (saved before characters kept their sabers' colours of their own:
+			// the stock ones and white cores are theirs, not whatever their player
+			// has on)
+			for ( k = RP_LOOK_RGB; k < RP_LOOK_KEYS; k++ ) {
+				if ( !c->look[k][0] ) {
+					G_RP_LookStore( k, "", c->look[k], sizeof( c->look[k] ) );
+				}
+			}
 		}
 		for ( i = 0; i < acc->numChars; i++ ) {
 			if ( acc->chars[i].name[0] ) {
@@ -879,6 +892,19 @@ void G_RPSendComps( int clientNum ) {
 		const rpComp_t *cp = &ch->comps[k];
 		trap->SendServerCommand( clientNum, va( "rpcmp %i %i %i \"%s\" \"%s\" \"%s\" %i %i %i", k, cp->out ? 1 : 0, G_RPCompWait( clientNum, k ),
 			cp->name, cp->type, cp->look, cp->rgb[0], cp->rgb[1], cp->rgb[2] ) );
+	}
+}
+
+// A look's value as a character keeps it (cleaned): a saber's colour of its
+// own, or its core, said even when it's the stock one ("-", "0") - not
+// sending one is wearing the stock colour, which is the character's, not
+// "whatever its player has on".
+static void G_RP_LookStore( int k, const char *raw, char *out, int size ) {
+	G_RP_CleanText( raw, out, size );
+	if ( !out[0] && k >= RP_LOOK_RGB && k < RP_LOOK_RGB + 2 ) {
+		Q_strncpyz( out, "-", size );
+	} else if ( !out[0] && k >= RP_LOOK_RGB + 2 ) {
+		Q_strncpyz( out, "0", size );
 	}
 }
 
@@ -1451,7 +1477,7 @@ static void G_RP_NewChar( int clientNum, const char *rawName ) {
 	ch->faction = RPF_NEUTRAL;
 	G_RP_RememberLook( clientNum );	// it starts out looking as they do
 	for ( k = 0; k < RP_LOOK_KEYS; k++ ) {
-		G_RP_CleanText( c->lookBase[k], ch->look[k], sizeof( ch->look[k] ) );	// (as stored: what it's read back as, and nothing more)
+		G_RP_LookStore( k, c->lookBase[k], ch->look[k], sizeof( ch->look[k] ) );	// (as stored: what it's read back as, and nothing more)
 	}
 	G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " made", ch->name ) );
 	G_RP_Play( clientNum, c->acc.numChars - 1, (qboolean)( c->active >= 0 ) );
@@ -2078,7 +2104,7 @@ void G_RPLookSeen( int clientNum, const char *userinfo ) {
 		Q_strncpyz( now, Info_ValueForKey( userinfo, rpLookKeys[k] ), sizeof( now ) );	// (as kept: a longer one's cut alike)
 		if ( strcmp( now, c->lookBase[k] ) ) {
 			Q_strncpyz( c->lookBase[k], now, sizeof( c->lookBase[k] ) );
-			G_RP_CleanText( now, ch->look[k], sizeof( ch->look[k] ) );
+			G_RP_LookStore( k, now, ch->look[k], sizeof( ch->look[k] ) );
 			changed = qtrue;
 		}
 	}
@@ -2089,29 +2115,38 @@ void G_RPLookSeen( int clientNum, const char *userinfo ) {
 
 // A VR player's two sabers changed over (g_vrholster.c: the second is the
 // first now, and their userinfo's names and colours with them): their
-// character's saber colours change over too, and what they wore when they
-// took it up - so it's still the character's colours they wear, each on the
-// saber it was on.
+// character's saber colours change over too - the stock ones, their own and
+// their cores - and what they wore when they took it up, so it's still the
+// character's colours they wear, each on the saber it was on.
 void G_RPSwapSaberColors( int clientNum ) {
-	const int k1 = G_RP_LookIndex( "color1" ), k2 = G_RP_LookIndex( "color2" );
+	static const char *pairs[][2] = { { "color1", "color2" }, { "saberRGB1", "saberRGB2" }, { "saberCore1", "saberCore2" } };
 	rpClient_t *c;
 	rpChar_t *ch;
 	char t[MAX_QPATH];
+	int p;
 
-	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || k1 < 0 || k2 < 0 ) {
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
 		return;
 	}
 	c = &rpc[clientNum];
-	Q_strncpyz( t, c->lookBase[k1], sizeof( t ) );
-	Q_strncpyz( c->lookBase[k1], c->lookBase[k2], sizeof( c->lookBase[k1] ) );
-	Q_strncpyz( c->lookBase[k2], t, sizeof( c->lookBase[k2] ) );
-	if ( !( ch = G_RP_Active( clientNum ) ) ) {
-		return;
+	ch = G_RP_Active( clientNum );
+	for ( p = 0; p < (int)ARRAY_LEN( pairs ); p++ ) {
+		const int k1 = G_RP_LookIndex( pairs[p][0] ), k2 = G_RP_LookIndex( pairs[p][1] );
+		if ( k1 < 0 || k2 < 0 ) {
+			continue;
+		}
+		Q_strncpyz( t, c->lookBase[k1], sizeof( t ) );
+		Q_strncpyz( c->lookBase[k1], c->lookBase[k2], sizeof( c->lookBase[k1] ) );
+		Q_strncpyz( c->lookBase[k2], t, sizeof( c->lookBase[k2] ) );
+		if ( ch ) {
+			Q_strncpyz( t, ch->look[k1], sizeof( t ) );
+			Q_strncpyz( ch->look[k1], ch->look[k2], sizeof( ch->look[k1] ) );
+			Q_strncpyz( ch->look[k2], t, sizeof( ch->look[k2] ) );
+		}
 	}
-	Q_strncpyz( t, ch->look[k1], sizeof( t ) );
-	Q_strncpyz( ch->look[k1], ch->look[k2], sizeof( ch->look[k1] ) );
-	Q_strncpyz( ch->look[k2], t, sizeof( ch->look[k2] ) );
-	G_RP_SaveAccount( &c->acc );
+	if ( ch ) {
+		G_RP_SaveAccount( &c->acc );
+	}
 }
 
 // ClientUserinfoChanged: what the character wears instead (qtrue: changed).

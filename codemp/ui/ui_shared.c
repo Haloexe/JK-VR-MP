@@ -3900,8 +3900,15 @@ static void Scroll_ListBox_ThumbFunc(void *p) {
 }
 
 // OpenJK VR: a slider's value as it's set - one showing its value (showValue)
-// goes in tenths, as it's shown
+// goes in tenths, as it's shown (whole numbers with a valueStep of 1 or more)
+static qboolean Item_Slider_Whole( const editFieldDef_t *editDef ) {
+	return (qboolean)( editDef && editDef->valueStep >= 1.0f );
+}
+
 static const char *Item_Slider_Value( const editFieldDef_t *editDef, float value ) {
+	if ( editDef && editDef->showValue && Item_Slider_Whole( editDef ) ) {
+		return va( "%.0f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value + 0.5f ) ) );
+	}
 	if ( editDef && editDef->showValue ) {
 		return va( "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value * 10.0f + 0.5f ) * 0.1f ) );
 	}
@@ -4022,11 +4029,12 @@ qboolean Item_Slider_HandleKey(itemDef_t *item, int key, qboolean down) {
 	if ( ( item->window.flags & ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) ) == ( WINDOW_HASFOCUS | WINDOW_VISIBLE ) && item->cvar && item->typeData.edit &&
 		( (editFieldDef_t *)item->typeData.edit )->showValue ) {
 		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
+		const float by = ( editDef->valueStep > 0.0f ) ? editDef->valueStep : 0.1f;
 		float step = 0.0f;
 		if ( key == A_CURSOR_RIGHT || key == A_KP_6 || key == A_MWHEELUP ) {
-			step = 0.1f;
+			step = by;
 		} else if ( key == A_CURSOR_LEFT || key == A_KP_4 || key == A_MWHEELDOWN ) {
-			step = -0.1f;
+			step = -by;
 		}
 		if ( step != 0.0f ) {
 			value = Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) );
@@ -5244,7 +5252,8 @@ void Item_Slider_Paint(itemDef_t *item) {
 	if ( item->cvar && item->typeData.edit && ( (editFieldDef_t *)item->typeData.edit )->showValue ) {
 		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
 		DC->drawText( x + SLIDER_WIDTH + SLIDER_THUMB_WIDTH / 2 + 6, item->text ? item->textRect.y : y + item->textaligny, item->textscale, newColor,
-			va( "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) ) ), 0, 0, item->textStyle, item->iMenuFont );
+			va( Item_Slider_Whole( editDef ) ? "%.0f" : "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) ) ), 0, 0,
+			item->textStyle, item->iMenuFont );
 		DC->setColor( newColor );
 	}
 
@@ -8297,6 +8306,31 @@ qboolean ItemParse_showValue( itemDef_t *item, int handle ) {
 	return qtrue;
 }
 
+// OpenJK VR: valueStep <n> - how far the arrow keys and the mouse wheel (the
+// VR controller's stick, pointing at it) move a showValue slider; 1 or more,
+// it goes in whole numbers (Item_Slider_Value). After its type, as showValue.
+qboolean ItemParse_valueStep( itemDef_t *item, int handle ) {
+	editFieldDef_t *editPtr;
+	float step;
+
+	if ( item->type != ITEM_TYPE_SLIDER ) {
+		char filename[128];
+		int line = 0;
+		filename[0] = '\0';
+		trap->PC_SourceFileAndLine( handle, filename, &line );
+		Com_Printf( S_COLOR_YELLOW "WARNING: %s, line %d: valueStep on %s, not a slider (or before its type): passed over\n", filename, line,
+			item->window.name ? item->window.name : "an item" );
+		return PC_Float_Parse( handle, &step );
+	}
+	Item_ValidateTypeData( item );
+	editPtr = (editFieldDef_t *)item->typeData.edit;
+	if ( !editPtr || !PC_Float_Parse( handle, &step ) ) {
+		return qfalse;
+	}
+	editPtr->valueStep = ( step > 0.0f ) ? step : 0.0f;
+	return qtrue;
+}
+
 qboolean ItemParse_maxPaintChars( itemDef_t *item, int handle ) {
 	editFieldDef_t *editPtr;
 
@@ -8706,6 +8740,7 @@ keywordHash_t itemParseKeywords[] = {
 	{"rectcvar",		ItemParse_rectcvar,			NULL	},
 	{"showCvar",		ItemParse_showCvar,			NULL	},
 	{"showValue",		ItemParse_showValue,		NULL	},	// OpenJK VR
+	{"valueStep",		ItemParse_valueStep,		NULL	},	// OpenJK VR
 	{"special",			ItemParse_special,			NULL	},
 	{"style",			ItemParse_style,			NULL	},
 	{"text",			ItemParse_text,				NULL	},

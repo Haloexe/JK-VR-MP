@@ -2359,6 +2359,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	}
 
 	G_VRHolsterInfo( ent, buf, sizeof( buf ) );	// OpenJK VR: holsters, and everyone's hilts (g_vrholster.c)
+	G_VRColorInfo( ent, userinfo, buf, sizeof( buf ) );	// OpenJK VR: saber colours and black cores (g_vrcolor.c)
 
 	trap->GetConfigstring( CS_PLAYERS+clientNum, oldClientinfo, sizeof( oldClientinfo ) );
 	trap->SetConfigstring( CS_PLAYERS+clientNum, buf );
