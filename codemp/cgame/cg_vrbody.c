@@ -2269,7 +2269,30 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	}
 }
 
-extern qboolean BG_SabersOff( playerState_t *ps );
+// Whether your sabers are off: all of them. One of your two lit alone (the
+// first), or one blade of a staff, is lit - as the server lights blades for
+// VR hands (g_vrsaber.c, VRS_BladeOn), and as its game counts stock sabers
+// (BG_SabersOff: it fights those in a base style for two blades, the dual
+// one or the staff's; a staff whose .sab lets it fight in other styles, or a
+// siege class's two sabers kept to one stance, it counts off with one blade
+// lit, and there the trigger puts that blade out). Told by what you have,
+// not by the player state's base style, which the server doesn't send: the
+// prediction guesses that before each move it runs (cg_predict.c), so on
+// the frame a move lights one of your two - the trigger's attack lights it
+// - the guess is still the one from before (your style then: a single one,
+// unless both were last lit together), and the lit saber would count as
+// off. The trigger's attack would go out with your next command as well,
+// and the server, counting it lit, would swing it: the game's swing, the
+// moment you light it.
+static qboolean CG_VRB_SabersOff( const playerState_t *ps, const clientInfo_t *ci ) {
+	if ( ps->saberHolstered <= 0 ) {
+		return qfalse;
+	}
+	if ( ps->saberHolstered >= 2 ) {
+		return qtrue;
+	}
+	return (qboolean)!( ci->saber[1].model[0] || ci->saber[0].numBlades > 1 );
+}
 
 // A lit saber in your VR hands. Then the server fights with the blades you
 // hold and the trigger doesn't swing, also while a flip or roll animates
@@ -2286,7 +2309,7 @@ static qboolean CG_VRB_SaberHands( void ) {
 	if ( ps->clientNum < 0 || ps->clientNum >= MAX_CLIENTS || !CG_VRB_BodyUsable( &cg_entities[ps->clientNum] ) ) {
 		return qfalse;
 	}
-	if ( BG_SabersOff( ps ) ) {
+	if ( CG_VRB_SabersOff( ps, &cgs.clientinfo[ps->clientNum] ) ) {
 		return qfalse;	// the trigger lights it
 	}
 	if ( ps->saberInFlight && ( !cgs.clientinfo[ps->clientNum].saber[1].model[0] || !ps->saberEntityNum ||
