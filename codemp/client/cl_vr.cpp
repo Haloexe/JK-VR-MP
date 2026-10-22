@@ -187,6 +187,7 @@ static cvar_t *vr_turnMode;
 static cvar_t *vr_turnAngle;
 static cvar_t *vr_turnSpeed;
 static cvar_t *vr_moveDirection;
+static cvar_t *vr_swapSticks;
 static cvar_t *vr_deadzone;
 static cvar_t *vr_gunPitch;
 static cvar_t *vr_leftHanded;
@@ -390,6 +391,11 @@ typedef struct vrState_s {
 	// menu quad placement
 	qboolean				lastScreenLayer;
 	XrPosef					quadPose;
+	XrVector3f				quadOrigin;		// the head as the quad was placed, and the way it faced:
+	float					quadYaw;		// the quad's that far in front of it, that tall
+	float					quadDist, quadHeight;
+	float					quadWantDist, quadWantHeight;	// Menu Distance and Size changed while it's up:
+	int						quadWantTime;					// as they were, since when
 
 	qboolean				inUpdateScreen;
 
@@ -410,9 +416,12 @@ typedef struct vrState_s {
 	XrPosef					gripPose[2], aimPose[2];
 	qboolean				handValid[2];
 	int						handTrackTime[2];	// last time each hand was tracked (ms)
-	float					moveX, moveY;	// left stick
-	float					turnX, turnY;	// right stick
+	vec3_t					handAimAxis[2][3];	// each hand's aim, as it points (vrClient.aimAxis: the gun's tilted)
+	float					stick[2][2];	// each hand's stick, as it is
+	float					moveX, moveY;	// the stick that moves you (the left; vr_swapSticks, the right)
+	float					turnX, turnY;	// the one that turns you (the right, or the left)
 	qboolean				turnLatched;	// snap turn fired, waiting for the stick to recentre
+	qboolean				moveLatched;	// the moving stick picked in the pose wheel (Swap Sticks): waiting for it to recentre
 	qboolean				weapLatched;	// stick-up/down weapon switch fired
 	float					pendingTurn;	// degrees to add to the body yaw this frame
 	qboolean				keyDown[VR_NUM_BUTTONS];
@@ -1416,18 +1425,38 @@ static qboolean VR_YIsPlain( void ) {
 	return ( b && b[0] == '+' ) ? qtrue : qfalse;
 }
 
+// The hand whose stick moves you (the left; vr_swapSticks: the right - the
+// other's turns you and switches weapon). The sticks' clicks go with them:
+// "left stick click" is the moving stick's, whichever hand it's in.
+static int VR_MoveStickHand( void ) {
+	return ( vr_swapSticks && vr_swapSticks->integer ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+}
+
+static int VR_TurnStickHand( void ) {
+	return ( VR_MoveStickHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+}
+
 // The wheel shut - what it points at taken (the cgame's -posewheel), or not
 // (the menu came up over it, the headset came off) - or a press that hadn't
-// decided dropped. Y counts again once it's let go.
+// decided dropped. Y counts again once it's let go. The right stick, still
+// held as it shuts, waits to come back before it does what it does: turning
+// (and switching weapon) - or, Swap Sticks, moving you (a pose picked with
+// it walked you straight out of it).
 static void VR_DropWheel( qboolean take ) {
-	if ( vr.wheelState == VR_WHEEL_OPEN && cls.cgameStarted ) {
+	const qboolean wasOpen = (qboolean)( vr.wheelState == VR_WHEEL_OPEN );
+
+	if ( wasOpen && cls.cgameStarted ) {
 		Cbuf_AddText( take ? "-posewheel\n" : "-posewheel cancel\n" );
 	}
 	if ( vr.wheelState != VR_WHEEL_IDLE ) {
 		vr.keyBlocked[VR_KEY_Y] = qtrue;
 	}
 	vr.wheelState = VR_WHEEL_IDLE;
-	vr.turnLatched = vr.weapLatched = qtrue;	// (a stick still held as it shuts doesn't turn or switch)
+	if ( VR_TurnStickHand() == VR_HAND_RIGHT ) {
+		vr.turnLatched = vr.weapLatched = qtrue;
+	} else if ( wasOpen ) {
+		vr.moveLatched = qtrue;
+	}
 }
 
 static void VR_WheelButton( qboolean down ) {
@@ -1481,6 +1510,7 @@ static void VR_ReleaseAllKeys( void ) {
 	VR_DropWheel( qfalse );
 	VR_ReleaseKeys();
 	vr.moveX = vr.moveY = vr.turnX = vr.turnY = 0.0f;
+	memset( vr.stick, 0, sizeof( vr.stick ) );
 	// snap turns, weapon switches and menu scrolling wait for their stick to recentre
 	vr.turnLatched = vr.weapLatched = vr.scrollLatched = qtrue;
 	vr.pointerHit = qfalse;
@@ -1573,7 +1603,7 @@ static qboolean VR_PointerHit( int hand, float *x, float *y ) {
 		dir[1] * t - toQuad[1],
 		dir[2] * t - toQuad[2]
 	};
-	const float h = Com_Clamp( 0.2f, 20.0f, vr_menuHeight->value );	// as VR_EndFrame sizes it
+	const float h = vr.quadHeight > 0.0f ? vr.quadHeight : Com_Clamp( 0.2f, 20.0f, vr_menuHeight->value );	// as VR_EndFrame sizes it
 	const float u = DotProduct( rel, right ) / ( h * ( 4.0f / 3.0f ) ) + 0.5f;
 	const float v = 0.5f - DotProduct( rel, up ) / h;
 	const float margin = 0.04f;	// just past the edge still reaches the buttons along it
@@ -1743,8 +1773,22 @@ static void VR_ApplyMenuPointer( void ) {
 	}
 }
 
+// Each hand's stick (vr.stick: the cgame has them so, VR_HAND_RIGHT's picking
+// in the pose wheel), and the moving and turning sticks from them.
+static void VR_SetSticks( const float left[2], const float right[2] ) {
+	vr.stick[VR_HAND_LEFT][0] = left[0];
+	vr.stick[VR_HAND_LEFT][1] = left[1];
+	vr.stick[VR_HAND_RIGHT][0] = right[0];
+	vr.stick[VR_HAND_RIGHT][1] = right[1];
+	vr.moveX = vr.stick[VR_MoveStickHand()][0];
+	vr.moveY = vr.stick[VR_MoveStickHand()][1];
+	vr.turnX = vr.stick[VR_TurnStickHand()][0];
+	vr.turnY = vr.stick[VR_TurnStickHand()][1];
+}
+
 // A stick held up or down in the menu turns the mouse wheel: one step, a
-// pause, then repeating. (stickX/Y: whichever stick is pushed further.)
+// pause, then repeating. (stickX/Y: whichever stick is pushed further; hand:
+// the hand it's in, for the pulse.)
 static void VR_MenuScroll( float stickX, float stickY, int hand ) {
 	const float ax = fabsf( stickX ), ay = fabsf( stickY );
 	if ( vr.scrollLatched ) {
@@ -2143,9 +2187,17 @@ static void VR_PollInput( void ) {
 		}
 	}
 
-	// sticks
-	VR_GetVec2( vr.actMove, &vr.moveX, &vr.moveY );
-	VR_GetVec2( vr.actTurn, &vr.turnX, &vr.turnY );
+	// sticks (the move action's the left one, the turn action's the right:
+	// which moves you, and which turns you, as vr_swapSticks has it)
+	{
+		float left[2], right[2];
+		VR_GetVec2( vr.actMove, &left[0], &left[1] );
+		VR_GetVec2( vr.actTurn, &right[0], &right[1] );
+		VR_SetSticks( left, right );
+		if ( vr.moveLatched && fabsf( vr.moveX ) < 0.3f && fabsf( vr.moveY ) < 0.3f ) {
+			vr.moveLatched = qfalse;
+		}
+	}
 
 	float trigger[2], squeeze[2];
 	trigger[VR_HAND_LEFT] = VR_GetFloat( vr.actTrigger, vr.handPath[VR_HAND_LEFT] );
@@ -2172,7 +2224,7 @@ static void VR_PollInput( void ) {
 	if ( vr.pointerMode ) {
 		const qboolean right = (qboolean)( fabsf( vr.turnY ) >= fabsf( vr.moveY ) );
 		VR_MenuScroll( right ? vr.turnX : vr.moveX, right ? vr.turnY : vr.moveY,
-			right ? VR_HAND_RIGHT : VR_HAND_LEFT );
+			right ? VR_TurnStickHand() : VR_MoveStickHand() );
 		vr.weapLatched = qtrue;	// a stick still held as the menu closes doesn't switch weapons
 	} else {
 		vr.scrollDir = 0;
@@ -2188,12 +2240,12 @@ static void VR_PollInput( void ) {
 	VR_SetKey( VR_KEY_B, VR_GetBool( vr.actB, XR_NULL_PATH ) );
 	VR_SetKey( VR_KEY_X, VR_GetBool( vr.actX, XR_NULL_PATH ) );
 	VR_WheelButton( VR_GetBool( vr.actY, XR_NULL_PATH ) );	// (tapped, or held: the pose wheel)
-	VR_SetKey( VR_KEY_STICK_L, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_LEFT] ) );
-	VR_SetKey( VR_KEY_STICK_R, VR_GetBool( vr.actStickClick, vr.handPath[VR_HAND_RIGHT] ) );
+	VR_SetKey( VR_KEY_STICK_L, VR_GetBool( vr.actStickClick, vr.handPath[VR_MoveStickHand()] ) );	// (the moving stick's)
+	VR_SetKey( VR_KEY_STICK_R, VR_GetBool( vr.actStickClick, vr.handPath[VR_TurnStickHand()] ) );
 	VR_SetKey( VR_BUTTON_MENU, VR_GetBool( vr.actMenu, XR_NULL_PATH ) );	// Escape
 
-	// right stick: left/right turns, up/down switches weapon (in the menu
-	// it scrolls instead, and turning is dropped by VR_ApplyHeadAim)
+	// the turning stick: left/right turns, up/down switches weapon (in the
+	// menu it scrolls instead, and turning is dropped by VR_ApplyHeadAim)
 	if ( VR_GameOwnsView() ) {
 		vr.pendingTurn = 0.0f;	// e.g. paused: don't pile up turns
 	}
@@ -2674,6 +2726,9 @@ static qboolean VR_HandGone( int h ) {
 static void VR_GunAim( void ) {
 	const int gunHand = VR_GunHand();
 
+	// (each hand's aim as it points, before the tilt: where Move Direction's
+	// "where your hand points" takes you)
+	memcpy( vr.handAimAxis, vrClient.aimAxis, sizeof( vr.handAimAxis ) );
 	if ( !vr.handValid[gunHand] ) {
 		return;
 	}
@@ -2862,10 +2917,10 @@ static void VR_UpdateTracking( void ) {
 	vrClient.grabbing[VR_HAND_RIGHT] = vr.grabbing[VR_HAND_RIGHT];
 	vrClient.trigger[VR_HAND_LEFT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_LEFT];
 	vrClient.trigger[VR_HAND_RIGHT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_RIGHT];
-	vrClient.stick[VR_HAND_LEFT][0] = vr.moveX;
-	vrClient.stick[VR_HAND_LEFT][1] = vr.moveY;
-	vrClient.stick[VR_HAND_RIGHT][0] = vr.turnX;
-	vrClient.stick[VR_HAND_RIGHT][1] = vr.turnY;
+	vrClient.stick[VR_HAND_LEFT][0] = vr.stick[VR_HAND_LEFT][0];	// (each hand's, whichever moves you)
+	vrClient.stick[VR_HAND_LEFT][1] = vr.stick[VR_HAND_LEFT][1];
+	vrClient.stick[VR_HAND_RIGHT][0] = vr.stick[VR_HAND_RIGHT][0];
+	vrClient.stick[VR_HAND_RIGHT][1] = vr.stick[VR_HAND_RIGHT][1];
 	vrClient.fingers[VR_HAND_LEFT] = vr.fingers[VR_HAND_LEFT];
 	vrClient.fingers[VR_HAND_RIGHT] = vr.fingers[VR_HAND_RIGHT];
 	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
@@ -2992,12 +3047,19 @@ void VR_AddMovement( usercmd_t *cmd ) {
 	if ( vr.moveX == 0.0f && vr.moveY == 0.0f ) {
 		return;
 	}
+	const int hand = VR_MoveStickHand();
+	if ( vr.wheelState == VR_WHEEL_OPEN && hand == VR_HAND_RIGHT ) {
+		return;	// (the right stick's picking in the pose wheel)
+	}
+	if ( vr.moveLatched ) {
+		return;	// (...it was, as it shut: till it's back in the middle)
+	}
 
-	// The stick moves relative to where you look (or where your left hand
-	// points); the usercmd is relative to the game camera's yaw.
+	// The stick moves relative to where you look (or where the hand holding
+	// it points); the usercmd is relative to the game camera's yaw.
 	float moveYaw = vr.headYaw;
-	if ( vr_moveDirection->integer == 1 && vr.handValid[VR_HAND_LEFT] ) {
-		moveYaw = VR_ForwardYaw( vrClient.aimAxis[VR_HAND_LEFT], vr.headYaw );
+	if ( vr_moveDirection->integer == 1 && vr.handValid[hand] ) {
+		moveYaw = VR_ForwardYaw( vr.handAimAxis[hand], vr.headYaw );
 	}
 	const float rel = DEG2RAD( AngleSubtract( moveYaw, vrRender.referenceYaw ) );
 	const float c = cosf( rel ), sn = sinf( rel );
@@ -3246,20 +3308,62 @@ static void VR_Mirror( qboolean crop, qboolean force ) {
 	}
 }
 
-static void VR_PlaceMenuQuad( void ) {
-	// Snapshot the head when a menu appears and put the quad in front of it.
-	vec3_t axis[3];
-	VR_QuatToAxis( &vr.headPose.orientation, axis );
-	const float yaw = DEG2RAD( VR_AxisYaw( axis ) );
-	const float dist = Com_Clamp( 0.5f, 20.0f, vr_menuDistance->value );
+static float VR_MenuDistance( void ) {
+	return Com_Clamp( 0.5f, 20.0f, vr_menuDistance->value );
+}
 
-	vr.quadPose.position.x = vr.headPose.position.x - sinf( yaw ) * dist;
-	vr.quadPose.position.y = vr.headPose.position.y;
-	vr.quadPose.position.z = vr.headPose.position.z - cosf( yaw ) * dist;
+static float VR_MenuHeight( void ) {
+	return Com_Clamp( 0.2f, 20.0f, vr_menuHeight->value );
+}
+
+// The quad as far in front of where the head was as it was placed, and as
+// tall, as Menu Distance and Menu Size have it.
+static void VR_SetMenuQuadDistance( void ) {
+	const float yaw = vr.quadYaw;
+	vr.quadDist = vr.quadWantDist = VR_MenuDistance();
+	vr.quadHeight = vr.quadWantHeight = VR_MenuHeight();
+	vr.quadPose.position.x = vr.quadOrigin.x - sinf( yaw ) * vr.quadDist;
+	vr.quadPose.position.y = vr.quadOrigin.y;
+	vr.quadPose.position.z = vr.quadOrigin.z - cosf( yaw ) * vr.quadDist;
 	vr.quadPose.orientation.x = 0.0f;
 	vr.quadPose.orientation.y = sinf( yaw * 0.5f );
 	vr.quadPose.orientation.z = 0.0f;
 	vr.quadPose.orientation.w = cosf( yaw * 0.5f );
+}
+
+static void VR_PlaceMenuQuad( void ) {
+	// Snapshot the head when a menu appears and put the quad in front of it.
+	vec3_t axis[3];
+	VR_QuatToAxis( &vr.headPose.orientation, axis );
+	vr.quadYaw = DEG2RAD( VR_AxisYaw( axis ) );
+	vr.quadOrigin = vr.headPose.position;
+	VR_SetMenuQuadDistance();
+}
+
+// Menu Distance or Menu Size changed with the menu screen up (VR View's own
+// rows): it moves (nearer or further, the same way) and grows or shrinks once
+// they've stayed put a moment, nothing held - no trigger, no stick held
+// scrolling - not as they're dragged or stepped (moving, the screen moved the
+// pointer onto another value, which the held trigger or stick then changed).
+#define VR_MENU_SETTLE_MS	600
+static void VR_SettleMenuQuad( void ) {
+	const float dist = VR_MenuDistance(), h = VR_MenuHeight();
+	const int now = Sys_Milliseconds();
+
+	if ( dist == vr.quadDist && h == vr.quadHeight ) {
+		vr.quadWantDist = dist;
+		vr.quadWantHeight = h;
+		return;
+	}
+	if ( dist != vr.quadWantDist || h != vr.quadWantHeight || VR_Clicking() || vr.pressing || vr.scrollDir ) {
+		vr.quadWantDist = dist;
+		vr.quadWantHeight = h;
+		vr.quadWantTime = now;	// (changing still, or held: from now)
+		return;
+	}
+	if ( now - vr.quadWantTime >= VR_MENU_SETTLE_MS ) {
+		VR_SetMenuQuadDistance();
+	}
 }
 
 // layer: 0 = none, 1 = stereo projection, 2 = menu quad
@@ -3298,7 +3402,7 @@ static void VR_EndFrame( int layer ) {
 		fei.layerCount = 1;
 		fei.layers = layers;
 	} else if ( layer == 2 ) {
-		const float h = Com_Clamp( 0.2f, 20.0f, vr_menuHeight->value );
+		const float h = vr.quadHeight > 0.0f ? vr.quadHeight : VR_MenuHeight();
 		memset( &quad, 0, sizeof( quad ) );
 		quad.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
 		quad.space = vr.localSpace;
@@ -3349,6 +3453,8 @@ qboolean VR_UpdateScreen( void ) {
 	if ( drawVR ) {
 		if ( screenLayer && !vr.lastScreenLayer ) {
 			VR_PlaceMenuQuad();
+		} else if ( screenLayer ) {
+			VR_SettleMenuQuad();	// (moved by the menu's own Menu Distance or Size)
 		}
 		vr.lastScreenLayer = screenLayer;
 	}
@@ -3503,7 +3609,8 @@ void VR_Init( void ) {
 	vr_turnMode			= Cvar_Get( "vr_turnMode",			"0",	CVAR_ARCHIVE, "Right stick turning: 0 = snap, 1 = smooth" );
 	vr_turnAngle		= Cvar_Get( "vr_turnAngle",			"45",	CVAR_ARCHIVE, "Snap turn angle in degrees" );
 	vr_turnSpeed		= Cvar_Get( "vr_turnSpeed",			"180",	CVAR_ARCHIVE, "Smooth turn speed in degrees per second" );
-	vr_moveDirection	= Cvar_Get( "vr_moveDirection",		"0",	CVAR_ARCHIVE, "Left stick moves: 0 = where you look, 1 = where your left hand points" );
+	vr_moveDirection	= Cvar_Get( "vr_moveDirection",		"0",	CVAR_ARCHIVE, "The moving stick moves you: 0 = where you look, 1 = where the hand holding it points" );
+	vr_swapSticks		= Cvar_Get( "vr_swapSticks",		"0",	CVAR_ARCHIVE, "1: move with the right stick, turn and switch weapon with the left (their clicks swap too)" );
 	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );
 	vr_gunPitch			= Cvar_Get( "vr_gunPitch",			"0",	CVAR_ARCHIVE, "Tilt guns in your hand (degrees, + = barrel up); also tilts the aim" );
 	vr_leftHanded		= Cvar_Get( "vr_leftHanded",		"0",	CVAR_ARCHIVE, "Left-handed: guns and the saber in your left hand, the Force on the right grip and Use on the left" );

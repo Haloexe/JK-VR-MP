@@ -1454,6 +1454,9 @@ void Menus_CloseAll()
 	g_waitingForKey = qfalse;
 	g_editingField = qfalse;	// OpenJK VR: nor typing in a field (it's shut)
 	g_editItem = NULL;
+	itemCapture = NULL;			// OpenJK VR: nor dragging a slider or a scroll bar - shut mid-drag,
+	captureFunc = NULL;			// the drag went on setting the slider (hidden) from the pointer
+	captureData = NULL;
 
 	for (i = 0; i < menuCount; i++)
 	{
@@ -3900,14 +3903,22 @@ static void Scroll_ListBox_ThumbFunc(void *p) {
 }
 
 // OpenJK VR: a slider's value as it's set - one showing its value (showValue)
-// goes in tenths, as it's shown (whole numbers with a valueStep of 1 or more)
+// goes in tenths, as it's shown (whole numbers with a valueStep of 1 or more,
+// hundredths with one under a tenth)
 static qboolean Item_Slider_Whole( const editFieldDef_t *editDef ) {
 	return (qboolean)( editDef && editDef->valueStep >= 1.0f );
+}
+
+static qboolean Item_Slider_Hundredths( const editFieldDef_t *editDef ) {
+	return (qboolean)( editDef && editDef->valueStep > 0.0f && editDef->valueStep < 0.0999f );
 }
 
 static const char *Item_Slider_Value( const editFieldDef_t *editDef, float value ) {
 	if ( editDef && editDef->showValue && Item_Slider_Whole( editDef ) ) {
 		return va( "%.0f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value + 0.5f ) ) );
+	}
+	if ( editDef && editDef->showValue && Item_Slider_Hundredths( editDef ) ) {
+		return va( "%.2f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value * 100.0f + 0.5f ) * 0.01f ) );
 	}
 	if ( editDef && editDef->showValue ) {
 		return va( "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value * 10.0f + 0.5f ) * 0.1f ) );
@@ -4378,8 +4389,11 @@ void Menu_HandleKey(menuDef_t *menu, int key, qboolean down) {
 	}
 
 	// get the item with focus
+	// OpenJK VR: one shown - a hidden one can keep the focus (its page closed
+	// and opened again, another part of it shown), but takes no keys: Enter on
+	// it doesn't do what it does (a hidden button - Controls' Recenter - ran)
 	for (i = 0; i < menu->itemCount; i++) {
-		if (menu->items[i]->window.flags & WINDOW_HASFOCUS) {
+		if ((menu->items[i]->window.flags & (WINDOW_HASFOCUS | WINDOW_VISIBLE)) == (WINDOW_HASFOCUS | WINDOW_VISIBLE)) {
 			item = menu->items[i];
 		}
 	}
@@ -5252,7 +5266,8 @@ void Item_Slider_Paint(itemDef_t *item) {
 	if ( item->cvar && item->typeData.edit && ( (editFieldDef_t *)item->typeData.edit )->showValue ) {
 		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
 		DC->drawText( x + SLIDER_WIDTH + SLIDER_THUMB_WIDTH / 2 + 6, item->text ? item->textRect.y : y + item->textaligny, item->textscale, newColor,
-			va( Item_Slider_Whole( editDef ) ? "%.0f" : "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) ) ), 0, 0,
+			va( Item_Slider_Whole( editDef ) ? "%.0f" : Item_Slider_Hundredths( editDef ) ? "%.2f" : "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal,
+			DC->getCVarValue( item->cvar ) ) ), 0, 0,
 			item->textStyle, item->iMenuFont );
 		DC->setColor( newColor );
 	}
@@ -6683,8 +6698,10 @@ void Item_Paint(itemDef_t *item)
 						if (parent->descAlignment == ITEM_ALIGN_CENTER)
 						{
 							// only this one will auto-shrink the scale until we eventually fit...
+							// OpenJK VR: ...at the left too (a menu that isn't centred - the
+							// in-game ones - put a long one off the screen)
 							//
-							if (xPos + textWidth > (SCREEN_WIDTH-4)) {
+							if ((xPos + textWidth > (SCREEN_WIDTH-4) || xPos < 4) && fDescScale > 0.1f) {
 								fDescScale -= 0.001f;
 								continue;
 							}
@@ -8308,7 +8325,8 @@ qboolean ItemParse_showValue( itemDef_t *item, int handle ) {
 
 // OpenJK VR: valueStep <n> - how far the arrow keys and the mouse wheel (the
 // VR controller's stick, pointing at it) move a showValue slider; 1 or more,
-// it goes in whole numbers (Item_Slider_Value). After its type, as showValue.
+// it goes in whole numbers, under a tenth in hundredths (Item_Slider_Value).
+// After its type, as showValue.
 qboolean ItemParse_valueStep( itemDef_t *item, int handle ) {
 	editFieldDef_t *editPtr;
 	float step;
@@ -9715,6 +9733,14 @@ int Menu_Count() {
 
 void Menu_PaintAll() {
 	int i;
+	// OpenJK VR: a drag ends with its item hidden, or its menu shut (no key
+	// reaches a hidden item to end it - Menu_HandleKey)
+	if ( captureFunc && itemCapture && ( !( itemCapture->window.flags & WINDOW_VISIBLE ) ||
+		( itemCapture->parent && !( ( (menuDef_t *)itemCapture->parent )->window.flags & WINDOW_VISIBLE ) ) ) ) {
+		itemCapture = NULL;
+		captureFunc = NULL;
+		captureData = NULL;
+	}
 	if (captureFunc) {
 		captureFunc(captureData);
 	}

@@ -15,7 +15,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
 
   * Stereo 3D with the headset's own field of view and lens geometry
   * Head tracking (rotation + limited positional movement)
-  * VR controllers: thumbstick movement, snap/smooth turning, buttons
+  * VR controllers: thumbstick movement, snap/smooth turning, buttons;
+    the comfort settings in Setup > Controls (VR MOVEMENT AND VR VIEW)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
@@ -85,9 +86,10 @@ If no headset is found the game starts in normal desktop mode.
 
 CONTROLS (Quest / Touch layout; other controllers are similar)
 --------
-  Left stick           move (in the direction you look)
+  Left stick           move (where you look, or where your hand points:
+                       see VR MOVEMENT AND VR VIEW)
   Left stick click     walk (hold)
-  Right stick L/R      turn (snap 45 degrees; vr_turnMode 1 = smooth)
+  Right stick L/R      turn (snap 45 degrees, or smooth)
   Right stick up/down  next / previous weapon (straight to your hand)
   Right stick click    change saber style
   Right trigger        attack (saber in your hand, where blades are real:
@@ -117,6 +119,52 @@ LEFT-HANDED (Setup > VR, or vr_leftHanded 1): your guns go in your left hand
 and you aim with it, your saber goes in your left fist, and the grips swap:
 the Force on the right grip, use on the left. A trigger or grip goes on
 doing what it did when you pressed it until you let go.
+Swap Sticks (below) moves you with the right stick and turns you - and
+switches weapon - with the left; the sticks' clicks go with them.
+
+VR MOVEMENT AND VR VIEW: Setup > Controls - in the main menu, and Controls
+in the game's menu - has two buttons under Other, with the settings for
+moving about and seeing in the headset. Point at one and click it (the
+other trigger steps a choice back), or pick it with the arrow keys (or Tab)
+and change it with left, right or Enter; push the stick up or down on a
+slider to move it a step.
+  VR Movement
+    Turning          Snap (a step at a time) or Smooth
+    Snap Angle       15, 30, 45 (as it comes), 60 or 90 degrees
+    Turn Speed       smooth turning: 60 to 360 degrees a second
+    Move Direction   where you look, or where the hand holding the moving
+                     stick points
+    Always Run       the game's own: Yes, the moving stick runs, and walks
+                     while you hold it in; No, the other way round
+    Swap Sticks      move with the right stick, turn and switch weapon with
+                     the left - their clicks swap too (the pose wheel still
+                     picks with the right stick: moving with it, you stop
+                     while the wheel is open, and move again once the stick
+                     has come back to the middle)
+    Stick Deadzone   how far a stick must move before it does anything
+                     (0.05 to 0.5: more if you drift standing still)
+    Recenter         where you stand now becomes the middle, and the menu
+                     screen comes in front of you
+  VR View
+    Head Movement    your view moves as your head does - leaning, ducking
+    Head Reach       how far your view follows your head from your body
+                     (0.1 to 0.5 m)
+    World Scale      the game's units in a metre (28 to 40: more makes the
+                     world around you feel smaller)
+    HUD Distance     1 to 6 m in front of you
+    HUD Size         30 to 90 degrees of your view
+    Menu Distance    1.5 to 6 m in front of you
+    Menu Size        1 to 4 m tall (these two move the screen a moment
+                     after you stop changing them and let go)
+    Gun Aim          where the hand holding the gun points, or where you
+                     look
+    Gun Angle        tilt guns in your hand (-30 to 30 degrees; their aim
+                     tilts with them)
+    Resolution       70% to 140% of what the headset asks for (more is
+                     sharper, and slower) - from when the game next starts
+                     (or after vid_restart)
+    Desktop View     what you see in the headset, in the game's window
+Each is a console setting as well (SETTINGS, below).
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
 where it points. Your main hand points (the right; the left, left-handed);
@@ -704,7 +752,8 @@ quick press of Y still picks the next Force power):
                       see ROLEPLAY)
 Rest on Poses or Roleplay a moment and its ring opens: push toward what you
 want there and let go of Y (Back, up and to the left, goes back; let go
-with the stick in the middle and nothing happens). What can't be done now
+with the stick in the middle and nothing happens). A stick already pushed
+as the wheel or a ring comes up picks nothing till it moves off that slot. What can't be done now
 is greyed out, and the line under the wheel says why. Without the
 headset, hold P (or O or I, whichever was free the first time: bind <key>
 +posewheel for another), move the mouse toward a slot and let go (Escape:
@@ -954,6 +1003,9 @@ Console (Shift+~) commands:
 
 SETTINGS (console cvars, saved automatically)
 ---------------------------------------------
+(The ones for turning, moving, your view, the HUD, the menu screen, guns'
+aim and the resolution are in Setup > Controls too: VR MOVEMENT AND VR
+VIEW, above.)
   vr_enabled 1           0 = desktop mode (then: vid_restart); the VR
                          launcher always starts in VR (for desktop mode
                          use "Launch OpenJK Desktop.bat")
@@ -971,7 +1023,10 @@ SETTINGS (console cvars, saved automatically)
   vr_turnMode 0          0 = snap turn, 1 = smooth turn
   vr_turnAngle 45        snap turn angle
   vr_turnSpeed 180       smooth turn speed (degrees per second)
-  vr_moveDirection 0     1 = move where your left hand points
+  vr_moveDirection 0     1 = move where the hand holding the moving stick
+                         points
+  vr_swapSticks 0        1 = move with the right stick, turn and switch
+                         weapon with the left (their clicks swap too)
   vr_deadzone 0.2        thumbstick deadzone
   cg_vrAimDot 1          the floating crosshair (cg_vrAimDotSize to resize)
   cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
@@ -1138,6 +1193,8 @@ no client. Source files:
   codemp/game/bg_vrsaber.h     how heavy a blade feels, and the share of
                                its cut speeds that makes up for it
   codemp/ui/ui_vrsetup.c       the VR page of Setup (base\ui\vr_setup.menu)
+  codemp/ui/ui_vrcontrols.c    VR Movement and VR View in Setup > Controls
+                               (base\ui\vr_controls.menu)
   codemp/cgame/cg_vrholster.c  holsters, the player's side: where they hang
                                on the model, taking out, putting away,
                                swapping, two sabers, everyone's hilts

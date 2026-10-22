@@ -220,8 +220,12 @@ static void CG_PW_Ring( int ring ) {
 	}
 }
 
-// +posewheel: the wheel up
+// +posewheel: the wheel up - the right stick already pushed as it comes up
+// (turning, or moving you: Swap Sticks), what it points at isn't picked
+// until it moves off it, as with a ring opened
 void CG_PoseWheelDown_f( void ) {
+	const vrClientState_t *vr = CG_VR();
+
 	if ( pw.open || !cg.snap ) {
 		return;
 	}
@@ -230,9 +234,14 @@ void CG_PoseWheelDown_f( void ) {
 	pw.pick = -1;
 	pw.waiting = qfalse;
 	pw.mx = pw.my = pw.wx = pw.wy = 0.0f;
-	pw.mouse = CG_VR() ? qfalse : qtrue;
+	pw.mouse = vr ? qfalse : qtrue;
 	if ( pw.mouse ) {
 		trap->Key_SetCatcher( trap->Key_GetCatcher() | KEYCATCH_CGAME );	// (the mouse picks, not turns)
+	} else {
+		pw.wx = vr->stick[VR_HAND_RIGHT][0];
+		pw.wy = vr->stick[VR_HAND_RIGHT][1];
+		pw.waitSlot = CG_PW_Slot( pw.ring, pw.wx, pw.wy, PW_STICK );
+		pw.waiting = (qboolean)( pw.waitSlot >= 0 );
 	}
 }
 

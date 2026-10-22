@@ -55,6 +55,7 @@ void		UI_AnchorRect( float *x, float *w );
 
 // ui_vrsetup.c (OpenJK VR: the VR page of Setup)
 void		UI_VRSetup_AddPage( void );
+void		UI_VRControls_AddPages( void );	// OpenJK VR: VR Movement and VR View on Controls (ui_vrcontrols.c)
 
 // ui_vrvideo.c (OpenJK VR: display mode and resolutions on the Video page)
 void		UI_VRVideo_AddSettings( void );

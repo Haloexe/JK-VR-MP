@@ -27,8 +27,9 @@ after the blended surfaces (SS_BLEND0: glass, water) and before the
 additive ones (SS_BLEND1: every other blade, trails, sparks):
   gfx/vr/bc<n>_glow       its glow, tinted
   gfx/vr/bc<n>_core       its core: tinted edges, the dark middle blended
-                          over them (into the glow pass too, so the bloom
-                          doesn't fill it in)
+                          over them (drawn dark into the glow pass's
+                          picture too, so the bloom added over the blade
+                          afterwards doesn't light the middle back up)
   gfx/vr/bc<n>_depth      where the dark middle is, nothing drawn: a little
                           nearer the eye than it (cg_players.c), so what's
                           drawn after and behind it - a farther blade, its

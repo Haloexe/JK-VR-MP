@@ -1,0 +1,475 @@
+//----------------------------------------------------------------------------------------------
+//
+//	OpenJK VR: THE VR SECTIONS OF SETUP > CONTROLS
+//
+//	The game's menu code (ui_vrcontrols.c) puts two buttons on Setup > Controls - in the main
+//	menu and in game - under the page's own (Movement, Interaction, Weapons, Force Powers,
+//	Mouse/Joystick, Other): VR Movement and VR View. Each shows these settings, in this order,
+//	where the page shows its own. Where they go, and the font, size and colour of their text,
+//	follow the page's own Other settings, so their rects and fonts here don't matter there.
+//
+//	showValue:	the slider shows its value after it - in whole numbers with a valueStep of 1 or
+//				more, hundredths with one under a tenth, tenths otherwise; the arrow keys (and the
+//				stick, pointing at it) move it by its valueStep (a tenth if it has none)
+//	YESNO:		Yes or No after it; clicking it, Enter or the arrow keys change it
+//	MULTI:		its choice after it; clicking it, Enter or the arrow keys go to the next
+//	BUTTON:		does what it says when clicked
+//
+//----------------------------------------------------------------------------------------------
+{
+	menuDef
+	{
+		name				"vr_controls_move"
+		visible				0
+		fullScreen			0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vrmove_turning
+			group			vrmove
+			type			ITEM_TYPE_MULTI
+			text			"Turning"
+			cvar			"vr_turnMode"
+			cvarFloatList	{ "Snap" 0 "Smooth" 1 }
+			rect			260 188 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Snap: turn a step at a time (Snap Angle); Smooth: turn round smoothly (Turn Speed)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_snapangle
+			group			vrmove
+			type			ITEM_TYPE_MULTI
+			text			"Snap Angle"
+			cvar			"vr_turnAngle"
+			cvarFloatList	{ "15" 15 "30" 30 "45" 45 "60" 60 "90" 90 }
+			rect			260 202 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far one snap turns you, in degrees"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_turnspeed
+			group			vrmove
+			type			ITEM_TYPE_SLIDER
+			text			"Turn Speed"
+			cvarfloat		"vr_turnSpeed" 180 60 360
+			showValue
+			valueStep		10
+			rect			260 216 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How fast smooth turning turns you, in degrees a second"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_direction
+			group			vrmove
+			type			ITEM_TYPE_MULTI
+			text			"Move Direction"
+			cvar			"vr_moveDirection"
+			cvarFloatList	{ "Where You Look" 0 "Where Your Hand Points" 1 }
+			rect			260 230 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"The moving stick takes you where you look, or where the hand holding it points"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_alwaysrun
+			group			vrmove
+			type			ITEM_TYPE_YESNO
+			text			"Always Run"
+			cvar			"cl_run"
+			rect			260 244 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Yes: the moving stick runs, and walks while you hold it in; No: the other way round"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_swapsticks
+			group			vrmove
+			type			ITEM_TYPE_YESNO
+			text			"Swap Sticks"
+			cvar			"vr_swapSticks"
+			rect			260 258 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Move with the right stick; turn and switch weapon with the left (clicks too)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_deadzone
+			group			vrmove
+			type			ITEM_TYPE_SLIDER
+			text			"Stick Deadzone"
+			cvarfloat		"vr_deadzone" 0.2 0.05 0.5
+			showValue
+			valueStep		0.05
+			rect			260 272 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far a stick must move before it does anything - more if you drift"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_recenter
+			group			vrmove
+			type			ITEM_TYPE_BUTTON
+			text			"Recenter"
+			rect			260 286 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Where you stand now becomes the middle, and the menu screen comes in front of you"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				exec		"vr_recenter"
+			}
+		}
+	}
+
+	menuDef
+	{
+		name				"vr_controls_view"
+		visible				0
+		fullScreen			0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name			vrview_headmove
+			group			vrview
+			type			ITEM_TYPE_YESNO
+			text			"Head Movement"
+			cvar			"vr_positional"
+			rect			260 188 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your view moves as your head does - leaning, ducking - as well as turning"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_headreach
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"Head Reach (m)"
+			cvarfloat		"vr_positionalMax" 0.25 0.1 0.5
+			showValue
+			valueStep		0.05
+			rect			260 202 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far, in metres, your view follows your head away from your body"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_worldscale
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"World Scale"
+			cvarfloat		"vr_worldScale" 34 28 40
+			showValue
+			valueStep		1
+			rect			260 216 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"The game's units in a metre: more makes the world around you feel smaller"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_huddistance
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"HUD Distance (m)"
+			cvarfloat		"vr_hudDepth" 3 1 6
+			showValue
+			valueStep		0.5
+			rect			260 230 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far in front of you the HUD is, in metres"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_hudsize
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"HUD Size"
+			cvarfloat		"vr_hudFov" 50 30 90
+			showValue
+			valueStep		5
+			rect			260 244 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How much of your view the HUD takes up, in degrees from top to bottom"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_menudistance
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"Menu Distance (m)"
+			cvarfloat		"vr_menuDistance" 3 1.5 6
+			showValue
+			valueStep		0.5
+			rect			260 258 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How far in front of you the menu screen is, in metres - it moves once you let go"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_menusize
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"Menu Size (m)"
+			cvarfloat		"vr_menuHeight" 2.2 1 4
+			showValue
+			rect			260 272 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How tall the menu screen is, in metres - it changes once you let go"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_gunaim
+			group			vrview
+			type			ITEM_TYPE_MULTI
+			text			"Gun Aim"
+			cvar			"vr_handAim"
+			cvarFloatList	{ "Your Hand" 1 "Your Head" 0 }
+			rect			260 286 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Guns aim where the hand holding them points, or where you look"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_gunangle
+			group			vrview
+			type			ITEM_TYPE_SLIDER
+			text			"Gun Angle"
+			cvarfloat		"vr_gunPitch" 0 -30 30
+			showValue
+			valueStep		5
+			rect			260 300 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Tilt guns in your hand, in degrees (more: barrel up) - their aim tilts too"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_resolution
+			group			vrview
+			type			ITEM_TYPE_MULTI
+			text			"Resolution"
+			cvar			"vr_resolutionScale"
+			cvarFloatList	{ "70%" 0.7 "80%" 0.8 "90%" 0.9 "100%" 1 "120%" 1.2 "140%" 1.4 }
+			rect			260 314 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Picture sharpness (100%: what the headset asks for; more is slower) - after a restart"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrview_desktop
+			group			vrview
+			type			ITEM_TYPE_YESNO
+			text			"Desktop View"
+			cvar			"vr_mirror"
+			rect			260 328 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Show what you see in the headset in the game's window on the PC"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+	}
+}

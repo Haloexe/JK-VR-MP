@@ -79,6 +79,7 @@ set(MPUIUIFiles
 	"${MPDir}/ui/ui_syscalls.c"
 	"${MPDir}/ui/ui_vrcomp.c"
 	"${MPDir}/ui/ui_vrcolor.c"
+	"${MPDir}/ui/ui_vrcontrols.c"
 	"${MPDir}/ui/ui_vrrp.c"
 	"${MPDir}/ui/ui_vrvideo.c"
 	"${MPDir}/ui/ui_vrsetup.c"
