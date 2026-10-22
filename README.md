@@ -43,6 +43,10 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   character's eyes and your head and arms still tracked) or reach roleplay;
   a keyboard comes up whenever something takes typing. Players without VR get
   the wheel on a key.
+- **Menus in the headset:** point at them with a controller and pull the
+  trigger to click (the other trigger right-clicks). Setup has a VR page for
+  playing left-handed, finger tracking, Body Bends, how heavy sabers feel,
+  controller rumble and the holsters.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.
