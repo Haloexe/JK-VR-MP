@@ -6,14 +6,24 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Real lightsaber combat:** your blade cuts, blocks and clashes where you
   actually swing it, harder the faster you swing. Blades are solid: yours
   rests on another blade and slides along it instead of passing through. Saber
-  styles become the blade's weight (light, medium, heavy), you can grip a saber
-  with both hands, and the controllers rumble with every hit.
+  styles become the blade's weight (light, medium, heavy), and a heavy blade
+  lags behind a fast swing. Hold a saber in either hand, anywhere along the
+  hilt, the usual way or reversed; pass it from hand to hand or grip it with
+  both. The controllers rumble with every hit.
+- **Holsters:** your weapons hang on your body, at your hips and over your
+  shoulders, and you take them out and put them away with your hands. As it
+  comes, a saber stays in your hand only while you hold the grip, and holding
+  the trigger as you draw lights it as it comes out. Carry two sabers, and see
+  everyone's hilts on their belts.
 - **Your body in VR:** you see your character's body under you. Its arms,
-  elbows and shoulders follow your controllers naturally, and it works with any
-  player model on the standard skeleton, custom models included.
+  elbows and shoulders follow your controllers naturally, and its fingers
+  follow yours on the controllers, so you can point, give a thumbs up or make
+  a fist. Standing still, it leans, bows, turns and crouches the way you do,
+  its feet planted. It works with any player model on the standard skeleton,
+  custom models included.
 - **Multiplayer that shows it:** other players see you as you really move
-  (head, arms, hands and saber), and lag compensation judges blades as each
-  player saw them.
+  (head, body, arms, fingers and saber), and lag compensation judges blades as
+  each player saw them.
 - **Roleplay:** servers can switch on a roleplay mode at any time. Players log
   in to an account and play characters of their own (a name, a faction, a
   description and a bio) that everyone sees, with talk that reaches only those
@@ -21,10 +31,13 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   you see by looking at someone. Passwords never leave the player's PC. In a
   fight, running out of health puts a character down instead of killing them,
   until someone of their faction helps them up or they give up, and NPCs take
-  sides by the players' factions. Server owners can make trusted accounts
-  admins, who get every cheat (and a menu page to spawn any NPC or vehicle)
-  without cheats being turned on for everyone. Only the server's console or
-  rcon can make an admin, and logging in works with roleplay switched off.
+  sides by the players' factions. Characters keep companions of their own (up
+  to six, two out at a time, as it comes) that follow them, fight for them,
+  get them back up and take orders from the wheel. Server owners can make
+  trusted accounts admins, who get every cheat (and a menu page to spawn any
+  NPC or vehicle) without cheats being turned on for everyone. Only the
+  server's console or rcon can make an admin, and logging in works with
+  roleplay switched off.
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
   a pose (sit, sit cross-legged, kneel or lie down, with your view at your
   character's eyes and your head and arms still tracked) or reach roleplay;
@@ -35,7 +48,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   can go on at once, each pair on its own, and bots accept challenges too.
 - **Proximity voice chat:** talk to the players near you and hear them from
   where they stand.
-- **Guns in your hand:** aim with your hand, with a 3D aim dot.
+- **Guns in your hand:** aim with your hand (the left one if you play
+  left-handed), with a 3D aim dot.
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a
@@ -85,8 +99,10 @@ settings and commands. Players need the same OpenJK VR version as the server.
 
 The VR code lives in the engine (`codemp/client/cl_vr.cpp`, voice chat in
 `cl_voice.cpp`), the renderer (`codemp/rd-vanilla`), the client game
-(`codemp/cgame/cg_vrbody.c`: body, arms, solid blades and haptics) and the server game
-(`codemp/game/g_vrsaber.c`: saber combat; `g_vrrp.c`: roleplay; `g_vrdown.c`: down, not dead). The "HOW IT WORKS" section of
+(`codemp/cgame/cg_vrbody.c`: body, arms, fingers, bending, solid blades and haptics;
+`cg_vrholster.c`: holsters) and the server game (`codemp/game/g_vrsaber.c`: saber
+combat; `g_vrrp.c`: roleplay; `g_vrdown.c`: down, not dead; `g_vrcomp.c`:
+companions). The "HOW IT WORKS" section of
 `vr/README-VR.txt` has the details.
 
 ## Credits
