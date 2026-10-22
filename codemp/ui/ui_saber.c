@@ -53,9 +53,9 @@ static qhandle_t blueSaberGlowShader;
 static qhandle_t blueSaberCoreShader;
 static qhandle_t purpleSaberGlowShader;
 static qhandle_t purpleSaberCoreShader;
-static qhandle_t vrSaberGlowShader;			// OpenJK VR: a blade of any colour; a black core's glow,
-static qhandle_t vrSaberCoreShader;			// bright edge and dark core (the renderer's own:
-static qhandle_t vrSaberBlackCore[3];		// tr_vrsaber.cpp - the first turn's: a preview's alone)
+static qhandle_t vrSaberGlowShader;			// OpenJK VR: a blade of any colour; a black core's glow and
+static qhandle_t vrSaberCoreShader;			// core (the renderer's own: tr_vrsaber.cpp - the first
+static qhandle_t vrSaberBlackCore[2];		// turn's: a preview's alone)
 
 void UI_CacheSaberGlowGraphics( void )
 {//FIXME: these get fucked by vid_restarts
@@ -74,8 +74,7 @@ void UI_CacheSaberGlowGraphics( void )
 	vrSaberGlowShader			= trap->R_RegisterShaderNoMip( "gfx/vr/saber_glow" );
 	vrSaberCoreShader			= trap->R_RegisterShaderNoMip( "gfx/vr/saber_core" );
 	vrSaberBlackCore[0]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_glow" );
-	vrSaberBlackCore[1]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_rim" );
-	vrSaberBlackCore[2]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_core" );
+	vrSaberBlackCore[1]			= trap->R_RegisterShaderNoMip( "gfx/vr/bc0_core" );
 }
 
 qboolean UI_SaberModelForSaber( const char *saberName, char *saberModel )
@@ -252,7 +251,7 @@ void UI_SaberLoadParms( void )
 
 // OpenJK VR: drawn as the game draws it (cg_players.c, CG_DoSaber): a colour
 // of its own (bc->rgb) with white images tinted by it, never too dim; a
-// black core (bc->blackCore) dark over a bright edge in the blade's colour
+// black core (bc->blackCore) as a white one is but its middle dark
 
 void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float radius, saber_colors_t color, const vrBladeColor_t *bc )
 {
@@ -319,7 +318,7 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 		// (its glow and edge its colour - its light's, for a stock one)
 		int k;
 		glow = vrSaberBlackCore[0];
-		blade = vrSaberBlackCore[2];
+		blade = vrSaberBlackCore[1];
 		for ( k = 0; k < 3; k++ ) {
 			tint[k] = own ? tint[k] : (byte)Com_Clampi( 0, 255, (int)( rgb[k] * 255.0f + 0.5f ) );
 		}
@@ -357,9 +356,6 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	saber.shaderRGBA[2] = tint[2];
 	saber.shaderRGBA[3] = 0xff;
 	//saber.renderfx = rfx;
-	if ( black ) {
-		saber.radius *= VR_SC_GLOW_WIDER;
-	}
 
 	trap->R_AddRefEntityToScene( &saber );
 
@@ -371,15 +367,6 @@ void UI_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	radiusStart = radius/3.0f;
 	saber.radius = (radiusStart + Q_flrand(-1.0f, 1.0f) * radiusRange)*radiusmult;
 //	saber.radius = (1.0 + Q_flrand(-1.0f, 1.0f) * 0.2f)*radiusmult;
-
-	if ( black ) {
-		// OpenJK VR: its bright edge in the blade's colour, the dark core over it
-		refEntity_t rim = saber;
-		rim.customShader = vrSaberBlackCore[1];
-		rim.radius = saber.radius * VR_SC_RIM_WIDE;
-		trap->R_AddRefEntityToScene( &rim );
-		saber.radius *= VR_SC_CORE_WIDER;
-	}
 
 	trap->R_AddRefEntityToScene( &saber );
 }

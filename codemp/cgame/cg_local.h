@@ -1164,7 +1164,7 @@ typedef struct cgMedia_s {
 	qhandle_t	swordTrailShader;
 	qhandle_t	vrSaberGlowShader;		// OpenJK VR: a blade of any colour: its glow, its core;
 	qhandle_t	vrSaberCoreShader;		// a black core's in each turn (farthest first): its glow,
-	qhandle_t	vrSaberBlackCore[VR_SC_RANKS][4];	// edge, dark core, depth (the renderer's own: tr_vrsaber.cpp)
+	qhandle_t	vrSaberBlackCore[VR_SC_RANKS][3];	// its core, its depth (the renderer's own: tr_vrsaber.cpp)
 
 	qhandle_t	yellowDroppedSaberShader;
 

@@ -5443,8 +5443,8 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	float radiusRange;
 	float radiusStart;
 	// OpenJK VR: a colour of its own (bc->rgb) is drawn with white images tinted
-	// by it, never too dim (bg_vrcolor.h); a black core (bc->blackCore), dark,
-	// over a bright edge in the blade's colour, in its turn among the others
+	// by it, never too dim (bg_vrcolor.h); a black core (bc->blackCore) as a
+	// white one is but its middle dark, in its turn among the others
 	const qboolean rgb = (qboolean)( bc && bc->rgb ), black = (qboolean)( bc && bc->blackCore );
 	byte tint[3] = { 0xff, 0xff, 0xff };
 	vec3_t light = { 1.0f, 1.0f, 1.0f };
@@ -5513,7 +5513,7 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 		}
 		bcShaders = cgs.media.vrSaberBlackCore[BG_VRSC_Rank( Distance( mid, eye ) )];
 		glow = bcShaders[0];
-		blade = bcShaders[2];
+		blade = bcShaders[1];
 		for ( k = 0; k < 3; k++ ) {
 			tint[k] = rgb ? tint[k] : (byte)Com_Clampi( 0, 255, (int)( light[k] * 255.0f + 0.5f ) );
 		}
@@ -5566,9 +5566,6 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	saber.shaderRGBA[2] = tint[2];
 	saber.shaderRGBA[3] = 0xff;
 	saber.renderfx = rfx;
-	if ( black ) {
-		saber.radius *= VR_SC_GLOW_WIDER;
-	}
 
 	trap->R_AddRefEntityToScene( &saber );
 
@@ -5591,19 +5588,15 @@ void CG_DoSaber( vec3_t origin, vec3_t dir, float length, float lengthMax, float
 	saber.shaderRGBA[3] = 0xff;
 
 	if ( black ) {
-		// OpenJK VR: a bright edge in the blade's colour, the dark core over it,
-		// then where the core is - a little nearer the eye, nothing drawn - so
-		// what's drawn after and behind it doesn't show through (tr_vrsaber.cpp)
-		refEntity_t rim = saber, depth;
+		// OpenJK VR: its core (the dark middle over tinted edges), then where the
+		// dark middle is - a little nearer the eye, nothing drawn - so what's
+		// drawn after and behind it doesn't show through (tr_vrsaber.cpp)
+		refEntity_t depth;
 		vec3_t toEye;
 		float ahead;
-		rim.customShader = bcShaders[1];
-		rim.radius = saber.radius * VR_SC_RIM_WIDE;
-		trap->R_AddRefEntityToScene( &rim );
-		saber.radius *= VR_SC_CORE_WIDER;
 		trap->R_AddRefEntityToScene( &saber );
 		depth = saber;
-		depth.customShader = bcShaders[3];
+		depth.customShader = bcShaders[2];
 		VectorSubtract( eye, mid, toEye );
 		ahead = VectorNormalize( toEye ) * 0.25f;	// (Q_min would normalize it twice)
 		ahead = Q_min( VR_SC_DEPTH_AHEAD, ahead );

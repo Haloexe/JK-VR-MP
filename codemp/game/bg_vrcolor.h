@@ -25,13 +25,12 @@ General Public License version 2, like the rest of OpenJK.
 
 #define VR_SC_GLOW_FLOOR	64		// no blade glows dimmer than this: its brightest of red, green and blue (of 255)
 
-// A black core's blade (cg_players.c, CG_DoSaber; ui_saber.c, UI_DoSaber):
-#define VR_SC_GLOW_WIDER	1.1f	// its glow this much wider than a white core's,
-#define VR_SC_CORE_WIDER	1.15f	// its core this much wider,
-#define VR_SC_RIM_WIDE		2.2f	// its bright edge this many times the core's width
-#define VR_SC_DEPTH_AHEAD	3.0f	// where its core is, for what's drawn after it: this much nearer the eye (a quarter of the way at most)
+// A black core's blade (cg_players.c, CG_DoSaber; ui_saber.c, UI_DoSaber) is
+// drawn as a white core's is - as wide, its glow as wide - with its middle
+// dark (tr_vrsaber.cpp), and where its core is, for what's drawn after it:
+#define VR_SC_DEPTH_AHEAD	3.0f	// this much nearer the eye (a quarter of the way at most)
 // Black cores are drawn in turns, farthest first (tr_vrsaber.cpp has each
-// turn's shaders: gfx/vr/bc<n>_glow, _rim, _core and _depth, n 0 to
+// turn's shaders: gfx/vr/bc<n>_glow, _core and _depth, n 0 to
 // VR_SC_RANKS - 1), so a nearer blade always goes over a farther dark core.
 #define VR_SC_RANKS			12
 

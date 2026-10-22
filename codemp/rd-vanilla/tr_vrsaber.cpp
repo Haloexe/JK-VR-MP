@@ -18,21 +18,22 @@ entity's colour (rgbGen vertex): the images are white.
   gfx/vr/saber_core       the core: tinted edges, a white middle
   gfx/vr/holster_ring     the holsters' markers (each corner's own colour
                           and see-through-ness)
-A blade with a black core is drawn in its turn among the others (its
-distance: bg_vrcolor.h, BG_VRSC_Rank), farthest first - glow, edge, dark
-core, depth, then the next turn's - after the blended surfaces (SS_BLEND0:
-glass, water) and before the additive ones (SS_BLEND1: every other blade,
-trails, sparks):
+A blade with a black core is drawn as a white core's is, but for its
+middle: dark, as wide as a white core's white, ending a little short of
+the blade's tip, rounded off, so the blade's colour closes round it. It's
+drawn in its turn among the others (its distance: bg_vrcolor.h,
+BG_VRSC_Rank), farthest first - glow, core, depth, then the next turn's -
+after the blended surfaces (SS_BLEND0: glass, water) and before the
+additive ones (SS_BLEND1: every other blade, trails, sparks):
   gfx/vr/bc<n>_glow       its glow, tinted
-  gfx/vr/bc<n>_rim        its bright edge: the core's tinted edges alone,
-                          wider
-  gfx/vr/bc<n>_core       the dark core, blended over them (into the glow
-                          pass too, so the bloom doesn't fill it in)
-  gfx/vr/bc<n>_depth      where the core is, nothing drawn: a little nearer
-                          the eye than it (cg_players.c), so what's drawn
-                          after and behind it - a farther blade, its own
-                          trail - doesn't show through it, while a nearer
-                          blade goes over it
+  gfx/vr/bc<n>_core       its core: tinted edges, the dark middle blended
+                          over them (into the glow pass too, so the bloom
+                          doesn't fill it in)
+  gfx/vr/bc<n>_depth      where the dark middle is, nothing drawn: a little
+                          nearer the eye than it (cg_players.c), so what's
+                          drawn after and behind it - a farther blade, its
+                          own trail - doesn't show through it, while a
+                          nearer blade goes over it
 The dark core can't be sorted simply after every glow: blades write no
 depth, so it would go over a nearer blade too.
 
@@ -43,8 +44,9 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "tr_local.h"
 
-#define VRS_SIZE	64		// (each image's width and height)
-#define VRS_RANKS	12		// black cores' turns (bg_vrcolor.h's VR_SC_RANKS)
+#define VRS_SIZE		64		// (each image's width and height - but the dark core's)
+#define VRS_DARK_LEN	512		// (the dark core's height: down the blade, fine enough for its rounded end)
+#define VRS_RANKS		12		// black cores' turns (bg_vrcolor.h's VR_SC_RANKS)
 
 static float VRS_Smooth( float e0, float e1, float x ) {
 	float t = ( x - e0 ) / ( e1 - e0 );
@@ -69,8 +71,7 @@ float R_VR_SaberTip( float t ) {
 	return VRS_Smooth( 0.0f, 3.0f / VRS_SIZE, t );
 }
 
-// Across the core (s 0..1): the white middle, the tinted edges, the dark
-// core's cover.
+// Across the core (s 0..1): the white middle, the tinted edges.
 float R_VR_SaberWhite( float s ) {
 	const float x = ( s - 0.5f ) / 0.17f;
 	return expf( -x * x );
@@ -80,8 +81,29 @@ float R_VR_SaberEdge( float s ) {
 	return 0.85f * powf( Q_max( 0.0f, sinf( (float)M_PI * s ) ), 1.2f );
 }
 
-float R_VR_SaberDark( float s ) {
-	return 0.95f * ( 1.0f - VRS_Smooth( 0.28f, 0.5f, fabsf( s - 0.5f ) ) );
+// A black core's dark middle (s across the core, t down it from its tip):
+// near black across the middle, soft at its sides - as wide as a white
+// core's white - ending a little short of the blade's tip (of its length),
+// rounded off.
+#define VRS_DARK_WIDE	0.55f	// (its half-width, of the core's)
+#define VRS_DARK_SHORT	0.012f	// (its end, this far from the blade's tip)
+#define VRS_DARK_ROUND	0.02f	// (rounding off over this)
+
+float R_VR_SaberDark( float s, float t ) {
+	const float x = fabsf( s - 0.5f ) * 2.0f;
+	float w = 1.0f;
+
+	if ( t < VRS_DARK_SHORT ) {
+		return 0.0f;
+	}
+	if ( t < VRS_DARK_SHORT + VRS_DARK_ROUND ) {
+		const float a = ( VRS_DARK_SHORT + VRS_DARK_ROUND - t ) / VRS_DARK_ROUND;
+		w = sqrtf( Q_max( 0.0f, 1.0f - a * a ) );
+		if ( w <= 0.0f ) {
+			return 0.0f;
+		}
+	}
+	return 0.95f * ( 1.0f - VRS_Smooth( 0.55f, 1.0f, x / ( VRS_DARK_WIDE * w ) ) );
 }
 
 static byte VRS_Byte( float v ) {
@@ -92,7 +114,7 @@ static byte VRS_Byte( float v ) {
 // own are: a name starting '*', no '/').
 void R_VR_CreateSaberImages( void ) {
 	static byte glow[VRS_SIZE][VRS_SIZE][4], white[VRS_SIZE][VRS_SIZE][4], edge[VRS_SIZE][VRS_SIZE][4],
-		dark[VRS_SIZE][VRS_SIZE][4];
+		dark[VRS_DARK_LEN][VRS_SIZE][4];
 	int x, y;
 
 	for ( y = 0; y < VRS_SIZE; y++ ) {
@@ -106,19 +128,24 @@ void R_VR_CreateSaberImages( void ) {
 			glow[y][x][0] = glow[y][x][1] = glow[y][x][2] = glow[y][x][3] = g;
 			white[y][x][0] = white[y][x][1] = white[y][x][2] = white[y][x][3] = w;
 			edge[y][x][0] = edge[y][x][1] = edge[y][x][2] = edge[y][x][3] = e;
+		}
+	}
+	for ( y = 0; y < VRS_DARK_LEN; y++ ) {
+		const float t = ( y + 0.5f ) / VRS_DARK_LEN;
+		for ( x = 0; x < VRS_SIZE; x++ ) {
 			dark[y][x][0] = dark[y][x][1] = 6;
 			dark[y][x][2] = 7;
-			dark[y][x][3] = VRS_Byte( R_VR_SaberDark( s ) * tip );
+			dark[y][x][3] = VRS_Byte( R_VR_SaberDark( ( x + 0.5f ) / VRS_SIZE, t ) );
 		}
 	}
 	R_CreateImage( "*vrsaberglow", (byte *)glow, VRS_SIZE, VRS_SIZE, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
 	R_CreateImage( "*vrsaberwhite", (byte *)white, VRS_SIZE, VRS_SIZE, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
 	R_CreateImage( "*vrsaberedge", (byte *)edge, VRS_SIZE, VRS_SIZE, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
-	R_CreateImage( "*vrsaberdark", (byte *)dark, VRS_SIZE, VRS_SIZE, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
+	R_CreateImage( "*vrsaberdark", (byte *)dark, VRS_SIZE, VRS_DARK_LEN, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
 }
 
 // A black core's turn's shaders' sort: n the turn (0 first), part 0 its
-// glow, 1 its edge, 2 its dark core, 3 its depth.
+// glow, 1 its core, 2 its depth.
 float R_VR_BlackCoreSort( int n, int part ) {
 	return (float)SS_BLEND0 + 0.1f + n * 0.06f + part * 0.01f;
 }
@@ -182,7 +209,7 @@ const char *R_VR_BuiltinShaderText( void ) {
 			"		glow\n"
 			"	}\n"
 			"}\n"
-			"gfx/vr/bc%i_rim\n"
+			"gfx/vr/bc%i_core\n"
 			"{\n"
 			"	cull none\n"
 			"	nopicmip\n"
@@ -193,21 +220,15 @@ const char *R_VR_BuiltinShaderText( void ) {
 			"		rgbGen vertex\n"
 			"		glow\n"
 			"	}\n"
-			"}\n",
-			n, R_VR_BlackCoreSort( n, 0 ), n, R_VR_BlackCoreSort( n, 1 ) ) );
-		Q_strcat( text, sizeof( text ), va(
-			"gfx/vr/bc%i_core\n"
-			"{\n"
-			"	cull none\n"
-			"	nopicmip\n"
-			"	sort %.2f\n"
 			"	{\n"
 			"		clampmap *vrsaberdark\n"
 			"		blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA\n"
 			"		rgbGen identity\n"
 			"		glow\n"
 			"	}\n"
-			"}\n"
+			"}\n",
+			n, R_VR_BlackCoreSort( n, 0 ), n, R_VR_BlackCoreSort( n, 1 ) ) );
+		Q_strcat( text, sizeof( text ), va(
 			"gfx/vr/bc%i_depth\n"
 			"{\n"
 			"	cull none\n"
@@ -221,7 +242,7 @@ const char *R_VR_BuiltinShaderText( void ) {
 			"		rgbGen identity\n"
 			"	}\n"
 			"}\n",
-			n, R_VR_BlackCoreSort( n, 2 ), n, R_VR_BlackCoreSort( n, 3 ) ) );
+			n, R_VR_BlackCoreSort( n, 2 ) ) );
 	}
 	return text;
 }
