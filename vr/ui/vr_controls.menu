@@ -96,13 +96,59 @@
 
 		itemDef
 		{
+			name			vrmove_snapfade
+			group			vrmove
+			type			ITEM_TYPE_MULTI
+			text			"Snap Fade"
+			cvar			"vr_snapFade"
+			cvarFloatList	{ "Off" 0 "On" 1 }
+			rect			260 230 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your view dips to dark for a moment as you snap turn, so you never see it jump"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_vignette
+			group			vrmove
+			type			ITEM_TYPE_MULTI
+			text			"Comfort Vignette"
+			cvar			"vr_vignette"
+			cvarFloatList	{ "Off" 0 "Low" 1 "Medium" 2 "High" 3 }
+			rect			260 244 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Darkens your view's edges as you move - the stick, turning, a fall - more the faster"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vrmove_direction
 			group			vrmove
 			type			ITEM_TYPE_MULTI
 			text			"Move Direction"
 			cvar			"vr_moveDirection"
 			cvarFloatList	{ "Where You Look" 0 "Where Your Hand Points" 1 }
-			rect			260 230 340 14
+			rect			260 258 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -124,7 +170,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Always Run"
 			cvar			"cl_run"
-			rect			260 244 340 14
+			rect			260 272 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -146,7 +192,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Swap Sticks"
 			cvar			"vr_swapSticks"
-			rect			260 258 340 14
+			rect			260 286 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -170,7 +216,7 @@
 			cvarfloat		"vr_deadzone" 0.2 0.05 0.5
 			showValue
 			valueStep		0.05
-			rect			260 272 340 14
+			rect			260 300 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -191,7 +237,7 @@
 			group			vrmove
 			type			ITEM_TYPE_BUTTON
 			text			"Recenter"
-			rect			260 286 340 14
+			rect			260 314 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0

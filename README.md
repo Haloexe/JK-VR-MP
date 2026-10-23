@@ -69,8 +69,10 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   controller rumble and the holsters.
 - **Comfort settings:** Setup > Controls has VR Movement and VR View. Turn in
   snaps (15 to 90 degrees, 45 as it comes) or smoothly at your own speed,
-  move where you look or where your hand points, swap the sticks, set the
-  sticks' deadzone and recentre. Choose whether your view follows your head,
+  dip the view to dark as you snap turn, darken the edges of your view while
+  the game moves you (a comfort vignette, Low to High: the stick, smooth
+  turning, jumps and falls), move where you look or where your hand points,
+  swap the sticks, set the sticks' deadzone and recentre. Choose whether your view follows your head,
   the world's scale, how far away and how big the HUD and the menu screen
   are, how guns aim and tilt in your hand, and the headset's resolution.
 - **Duels with a salute:** challenge someone to a private duel by saluting

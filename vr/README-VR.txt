@@ -132,6 +132,18 @@ slider to move it a step.
     Turning          Snap (a step at a time) or Smooth
     Snap Angle       15, 30, 45 (as it comes), 60 or 90 degrees
     Turn Speed       smooth turning: 60 to 360 degrees a second
+    Snap Fade        On: your view dips to dark for about a tenth of a
+                     second as you snap turn, and turns while it's dark,
+                     so you never see the world jump (Off as it comes)
+    Comfort Vignette Off (as it comes), Low, Medium or High: the edges of
+                     your view darken while the game moves you - the
+                     stick, smooth turning, a jump, a fall or a knock -
+                     more the faster you go, and clear as you stop.
+                     Nothing while you stand still or move in real life
+                     (following someone, it goes by how fast they go).
+                     Low only shades the far edges, High closes in to a
+                     window straight ahead - over the HUD too. Try it if
+                     moving with the stick makes you queasy
     Move Direction   where you look, or where the hand holding the moving
                      stick points
     Always Run       the game's own: Yes, the moving stick runs, and walks
@@ -1023,6 +1035,8 @@ VIEW, above.)
   vr_turnMode 0          0 = snap turn, 1 = smooth turn
   vr_turnAngle 45        snap turn angle
   vr_turnSpeed 180       smooth turn speed (degrees per second)
+  vr_snapFade 0          1 = snap turns dip the view to dark (Snap Fade)
+  vr_vignette 0          Comfort Vignette: 1 = low, 2 = medium, 3 = high
   vr_moveDirection 0     1 = move where the hand holding the moving stick
                          points
   vr_swapSticks 0        1 = move with the right stick, turn and switch
@@ -1177,7 +1191,9 @@ server (openjkded.x86_64.exe) is the same server code and game module, with
 no client. Source files:
 
   codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim,
-                               controllers, menu pointer
+                               controllers, menu pointer; the Comfort
+                               Vignette and Snap Fade, drawn over each
+                               eye's finished picture (VR_DrawComfort)
   codemp/qcommon/vr_public.h   state the engine shares with the cgame
   codemp/rd-common/tr_vr.h     state shared with the renderer
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement

@@ -186,6 +186,8 @@ static cvar_t *vr_handAim;
 static cvar_t *vr_turnMode;
 static cvar_t *vr_turnAngle;
 static cvar_t *vr_turnSpeed;
+static cvar_t *vr_snapFade;
+static cvar_t *vr_vignette;
 static cvar_t *vr_moveDirection;
 static cvar_t *vr_swapSticks;
 static cvar_t *vr_deadzone;
@@ -217,6 +219,15 @@ Minimal OpenGL framebuffer object entry points (loaded through SDL)
 #define VR_GL_RGBA8							0x8058
 #define VR_GL_FRAMEBUFFER_SRGB				0x8DB9
 #define VR_GL_CLAMP_TO_EDGE					0x812F
+// (what the renderer may leave on that VR_DrawComfort turns off while it draws)
+#define VR_GL_TEXTURE0						0x84C0
+#define VR_GL_MAX_TEXTURE_UNITS				0x84E2
+#define VR_GL_TEXTURE_3D					0x806F
+#define VR_GL_TEXTURE_CUBE_MAP				0x8513
+#define VR_GL_TEXTURE_RECTANGLE				0x84F5
+#define VR_GL_VERTEX_PROGRAM_ARB			0x8620
+#define VR_GL_FRAGMENT_PROGRAM_ARB			0x8804
+#define VR_GL_REGISTER_COMBINERS_NV			0x8522
 
 typedef void	(APIENTRY *vrGenFramebuffers_t)( GLsizei n, GLuint *ids );
 typedef void	(APIENTRY *vrDeleteFramebuffers_t)( GLsizei n, const GLuint *ids );
@@ -232,6 +243,7 @@ typedef void	(APIENTRY *vrBlitFramebuffer_t)( GLint sx0, GLint sy0, GLint sx1, G
 typedef void	(APIENTRY *vrCopyImageSubData_t)( GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ,
 										GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ,
 										GLsizei width, GLsizei height, GLsizei depth );
+typedef void	(APIENTRY *vrActiveTexture_t)( GLenum texture );
 
 static vrGenFramebuffers_t			vglGenFramebuffers;
 static vrDeleteFramebuffers_t		vglDeleteFramebuffers;
@@ -245,6 +257,13 @@ static vrFramebufferRenderbuffer_t	vglFramebufferRenderbuffer;
 static vrCheckFramebufferStatus_t	vglCheckFramebufferStatus;
 static vrBlitFramebuffer_t			vglBlitFramebuffer;
 static vrCopyImageSubData_t			vglCopyImageSubData;	// optional (GL 4.3 / ARB_copy_image)
+static vrActiveTexture_t			vglActiveTexture;		// optional (GL 1.3; without it, one texture unit)
+
+// What the driver has that the renderer may leave on (VR_DrawComfort turns it
+// off while it draws; asked once a session has its context, VR_ComfortGL).
+static qboolean						vrGLAsked;
+static int							vrGLTextureUnits;		// fixed-function texture units, each one's texturing off
+static qboolean						vrGLRectangle, vrGLVertexProgram, vrGLFragmentProgram, vrGLCombiners;
 
 static qboolean VR_LoadGL( void ) {
 #define VRGL(name, type) v##name = (type)SDL_GL_GetProcAddress( #name ); if ( !v##name ) { Com_Printf( S_COLOR_YELLOW "VR: missing OpenGL function %s\n", #name ); return qfalse; }
@@ -261,7 +280,44 @@ static qboolean VR_LoadGL( void ) {
 	VRGL( glBlitFramebuffer,			vrBlitFramebuffer_t );
 #undef VRGL
 	vglCopyImageSubData = (vrCopyImageSubData_t)SDL_GL_GetProcAddress( "glCopyImageSubData" );
+	vglActiveTexture = (vrActiveTexture_t)SDL_GL_GetProcAddress( "glActiveTexture" );
+	if ( !vglActiveTexture ) {
+		vglActiveTexture = (vrActiveTexture_t)SDL_GL_GetProcAddress( "glActiveTextureARB" );
+	}
+	vrGLAsked = qfalse;	// (asked again of this context)
 	return qtrue;
+}
+
+static qboolean VR_GLHasExtension( const char *name ) {
+	const char *all = (const char *)glGetString( GL_EXTENSIONS );
+	const size_t len = strlen( name );
+
+	for ( const char *p = all; p && ( p = strstr( p, name ) ) != NULL; p += len ) {
+		if ( ( p == all || p[-1] == ' ' ) && ( p[len] == ' ' || p[len] == '\0' ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// What VR_DrawComfort turns off is only what the driver has: turning off what
+// it hasn't would be a GL error (fatal with r_ignoreGLErrors 0).
+static void VR_ComfortGL( void ) {
+	if ( vrGLAsked ) {
+		return;
+	}
+	vrGLAsked = qtrue;
+	vrGLTextureUnits = 1;
+	if ( vglActiveTexture ) {
+		GLint units = 1;
+		glGetIntegerv( VR_GL_MAX_TEXTURE_UNITS, &units );
+		vrGLTextureUnits = Com_Clampi( 1, 32, units );
+	}
+	vrGLRectangle = (qboolean)( VR_GLHasExtension( "GL_ARB_texture_rectangle" ) || VR_GLHasExtension( "GL_EXT_texture_rectangle" ) ||
+		VR_GLHasExtension( "GL_NV_texture_rectangle" ) );
+	vrGLVertexProgram = VR_GLHasExtension( "GL_ARB_vertex_program" );
+	vrGLFragmentProgram = VR_GLHasExtension( "GL_ARB_fragment_program" );
+	vrGLCombiners = VR_GLHasExtension( "GL_NV_register_combiners" );
 }
 
 /*
@@ -475,6 +531,19 @@ typedef struct vrState_s {
 	int						cgameQueryTime;	// last time the cgame read the VR state (cls.realtime)
 	int						lastPollTime;	// for smooth turning (ms)
 	float					lastRefYaw;		// referenceYaw of the previous usercmd
+
+	// comfort: the Comfort Vignette (vr_vignette) and Snap Fade (vr_snapFade)
+	float					comfortMove;	// how hard the moving stick moved you (1: running flat out)...
+	int						comfortMoveTime;	// ...last (ms; VR_AddMovement)
+	float					comfortTurn;	// how fast smooth turning turned you at the last poll (1: VR_COMFORT_TURN_FULL)
+	float					vignette;		// the vignette as it's drawn (0 none, 1 as strong as vr_vignette has it)...
+	int						vignetteTime;	// ...as of (ms)
+	float					snapHeld;		// snap turns held till the view's dark (degrees, as pendingTurn)
+	int						snapPhase;		// VR_SNAP_*
+	float					snapFade;		// how dark the view is (0 not, 1 black)...
+	int						snapFadeTime;	// ...as of (ms)
+	int						snapTurn;		// black, its turn in pendingTurn: VR_SNAP_TURN_* ...
+	int						snapBlackTime;	// ...black since (ms)
 } vrState_t;
 
 static vrState_t		vr;
@@ -2144,7 +2213,340 @@ static void VR_HandControl( int control, int h, float value ) {
 
 static qboolean VR_GameOwnsView( void );
 
+/*
+================================================================================
+
+Comfort: the Comfort Vignette and Snap Fade
+
+The Comfort Vignette (vr_vignette: Low, Medium or High) darkens the edges of
+your view while the game moves you - the stick, smooth turning, and your speed
+(running, a jump, a fall, a knock) - more the faster you go. Nothing while you
+stand still or move in real life: your head moving doesn't move you in the
+game. Snap Fade (vr_snapFade) dips the view to dark as you snap turn, and turns
+you while it's dark, so you never see the world jump.
+
+Both are drawn over each eye's finished picture (VR_DrawComfort): a soft dark
+ring round where your head faces, at the same angles in both eyes - so it sits
+far off, like the rim of a visor, not in front of your nose - and for the fade,
+all of it.
+
+================================================================================
+*/
+
+// How strong the vignette is (0..1) goes by whichever of these is most: the
+// moving stick's push (half, walking), while it moves you (VR_AddMovement) and
+// a moment after; smooth turning's speed (VR_COMFORT_TURN_FULL degrees a
+// second: full); your speed in the game (under VR_COMFORT_SPEED_LOW units a
+// second: nothing; VR_COMFORT_SPEED_FULL, running: full). It comes on quickly
+// and goes off more gently.
+#define VR_COMFORT_STICK_MS		100
+#define VR_COMFORT_TURN_FULL	180.0f
+#define VR_COMFORT_SPEED_LOW	30.0f
+#define VR_COMFORT_SPEED_FULL	250.0f
+#define VR_COMFORT_IN			0.06f		// seconds from nothing to full
+#define VR_COMFORT_OUT			0.25f		// ...and from full to nothing
+#define VR_COMFORT_STALE_MS		250			// the latest snapshot this far behind: its speed doesn't count
+
+// The ring at full strength (Low, Medium, High): clear out to the first angle
+// from where your head faces, black from the second, softening between them.
+// Weaker, it's as much fainter, and further out (VR_VIGNETTE_OPENING degrees,
+// at nothing: past the edges of most headsets' view).
+static const float vrVignetteFull[3][2] = { { 45.0f, 65.0f }, { 35.0f, 55.0f }, { 25.0f, 45.0f } };
+#define VR_VIGNETTE_OPENING		15.0f
+#define VR_VIGNETTE_SEGMENTS	64			// round it
+#define VR_VIGNETTE_BANDS		8			// from clear to black
+
+// Snap Fade: dark in VR_SNAP_FADE_OUT seconds, turned, light again in
+// VR_SNAP_FADE_IN - once the frame that turns you has been drawn (black till
+// then, VR_SNAP_HOLD_MS at most).
+#define VR_SNAP_FADE_OUT		0.04f
+#define VR_SNAP_FADE_IN			0.07f
+#define VR_SNAP_HOLD_MS			100
+enum {
+	VR_SNAP_IDLE,
+	VR_SNAP_DARKENING,		// turns held (snapHeld) till it's dark
+	VR_SNAP_LIGHTENING		// turned
+};
+enum {
+	VR_SNAP_TURN_DRAWN,		// the frame that turns you drawn (black): it can lighten
+	VR_SNAP_TURN_HELD,		// the turn in pendingTurn, for the next command...
+	VR_SNAP_TURN_TAKEN		// ...taken by it (VR_ApplyHeadAim): its frame not drawn yet (VR_UpdateScreen)
+};
+
+// Whether the latest snapshot's speed is how fast the game moves your view:
+// not once snapshots stop coming (Connection Interrupted: it's the last one's),
+// nor at the intermission, frozen or paused (where nothing clears it).
+// Following someone, it's theirs: your view moves with them.
+static qboolean VR_SnapSpeedCounts( void ) {
+	if ( cls.state != CA_ACTIVE || !cl.snap.valid || cl.serverTime - cl.snap.serverTime >= VR_COMFORT_STALE_MS ) {
+		return qfalse;
+	}
+	if ( com_sv_running->integer && sv_paused->integer && cl_paused->integer ) {
+		return qfalse;
+	}
+	switch ( cl.snap.ps.pm_type ) {
+	case PM_FREEZE:
+	case PM_INTERMISSION:
+	case PM_SPINTERMISSION:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+// How strong the vignette would be now, as the game moves you (0..1).
+static float VR_ComfortTarget( int now ) {
+	float target = vr.comfortTurn;
+
+	if ( now - vr.comfortMoveTime < VR_COMFORT_STICK_MS && !VR_GameOwnsView() ) {
+		target = Q_max( target, vr.comfortMove );	// (dead, or following someone, the stick doesn't move you)
+	}
+	if ( VR_SnapSpeedCounts() ) {
+		const float speed = VectorLength( cl.snap.ps.velocity );
+		target = Q_max( target, ( speed - VR_COMFORT_SPEED_LOW ) / ( VR_COMFORT_SPEED_FULL - VR_COMFORT_SPEED_LOW ) );
+	}
+	return Com_Clamp( 0.0f, 1.0f, target );
+}
+
+// Once a frame (VR_UpdateScreen): the vignette eased towards how strong it
+// would be - in the game's own view, with the setting on. Off, or in a menu:
+// none, at once.
+static void VR_ComfortFrame( qboolean inGame ) {
+	const int now = Sys_Milliseconds();
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( now - vr.vignetteTime ) * 0.001f );
+
+	vr.vignetteTime = now;
+	if ( !inGame || vr_vignette->integer <= 0 ) {
+		vr.vignette = 0.0f;
+		return;
+	}
+	const float target = VR_ComfortTarget( now );
+	if ( target > vr.vignette ) {
+		vr.vignette = Q_min( target, vr.vignette + dt / VR_COMFORT_IN );
+	} else {
+		vr.vignette = Q_max( target, vr.vignette - dt / VR_COMFORT_OUT );
+	}
+}
+
+// Snap Fade's turns held, and its dark, dropped (as pendingTurn is: in a menu,
+// the game steering the view, the session stopped - VR_PollInput,
+// VR_ApplyHeadAim).
+static void VR_DropSnapTurn( void ) {
+	vr.snapHeld = vr.snapFade = 0.0f;
+	vr.snapPhase = VR_SNAP_IDLE;
+}
+
+// Once a frame, after the controllers' poll (VR_UpdateTracking): Snap Fade.
+// Snap turns held while it darkens (snapHeld: VR_PollInput) go to pendingTurn
+// as it's black, and it stays black till the frame whose command took them
+// has been drawn - frames begun late (polled after their command) too - so
+// the frame that turns you is black; then it lightens. In a menu, or with the
+// game steering the view, they're dropped; Snap Fade switched off midway,
+// they turn you at once.
+static void VR_SnapFadeFrame( void ) {
+	const int now = Sys_Milliseconds();
+	const float dt = Q_max( 0.0f, ( now - vr.snapFadeTime ) * 0.001f );
+
+	vr.snapFadeTime = now;
+	if ( vr.snapPhase == VR_SNAP_IDLE ) {
+		return;
+	}
+	const qboolean dropped = (qboolean)( VR_UseScreenLayer() || VR_GameOwnsView() );
+	if ( dropped || !vr_snapFade->integer ) {
+		if ( !dropped ) {
+			vr.pendingTurn += vr.snapHeld;
+		}
+		VR_DropSnapTurn();
+		return;
+	}
+	if ( vr.snapPhase == VR_SNAP_DARKENING ) {
+		vr.snapFade += dt / VR_SNAP_FADE_OUT;
+		if ( vr.snapFade >= 1.0f ) {
+			vr.snapFade = 1.0f;
+			vr.pendingTurn += vr.snapHeld;
+			vr.snapHeld = 0.0f;
+			vr.snapPhase = VR_SNAP_LIGHTENING;
+			vr.snapTurn = VR_SNAP_TURN_HELD;
+			vr.snapBlackTime = now;
+		}
+	} else if ( vr.snapTurn == VR_SNAP_TURN_DRAWN || now - vr.snapBlackTime >= VR_SNAP_HOLD_MS ) {
+		vr.snapFade -= dt / VR_SNAP_FADE_IN;
+		if ( vr.snapFade <= 0.0f ) {
+			vr.snapFade = 0.0f;
+			vr.snapPhase = VR_SNAP_IDLE;
+		}
+	}
+}
+
+// The head's right, up and back (OpenXR's x, y and z) as an eye has them: a
+// canted display's eyes look a little outwards. As the eye's own if they're
+// more than 30 degrees apart (one of them not tracked a moment).
+static void VR_EyeBasis( int eye, float basis[3][3] ) {
+	const XrQuaternionf *q = &vr.views[eye].pose.orientation;
+	const XrQuaternionf eyeInverse = { -q->x, -q->y, -q->z, q->w };
+
+	for ( int i = 0; i < 3; i++ ) {
+		const float unit[3] = { i == 0 ? 1.0f : 0.0f, i == 1 ? 1.0f : 0.0f, i == 2 ? 1.0f : 0.0f };
+		float local[3];
+		VR_XrRotate( &vr.headPose.orientation, unit, local );
+		VR_XrRotate( &eyeInverse, local, basis[i] );
+	}
+	if ( basis[2][2] < 0.866f ) {	// (cos 30 degrees)
+		for ( int i = 0; i < 3; i++ ) {
+			basis[i][0] = basis[i][1] = basis[i][2] = 0.0f;
+			basis[i][i] = 1.0f;
+		}
+	}
+}
+
+// Where a direction from your head (OpenXR's: x right, y up, -z where it
+// faces) falls in an eye's picture: -1..1 across and up, as GL draws it. One
+// more than 85 degrees from where the eye looks goes in to 85 - still far off
+// the picture; past 90 it would be behind the eye.
+static void VR_EyeNDC( int eye, const float basis[3][3], const float dir[3], float out[2] ) {
+	float d[3];
+
+	for ( int i = 0; i < 3; i++ ) {
+		d[i] = dir[0] * basis[0][i] + dir[1] * basis[1][i] + dir[2] * basis[2][i];
+	}
+	const float side = sqrtf( d[0] * d[0] + d[1] * d[1] );
+	const float ahead = Q_max( -d[2], Q_max( side * 0.0875f, 0.0001f ) );	// (0.0875: the cotangent of 85 degrees)
+	const float tl = vrRender.tanLeft[eye], tr = vrRender.tanRight[eye], tu = vrRender.tanUp[eye], td = vrRender.tanDown[eye];
+	out[0] = ( 2.0f * d[0] / ahead - ( tr + tl ) ) / ( tr - tl );
+	out[1] = ( 2.0f * d[1] / ahead - ( tu + td ) ) / ( tu - td );
+}
+
+// The vignette in an eye (VR_DrawComfort's GL state): its soft edge, band by
+// band from clear to black, then black from there out past the picture's edges.
+static void VR_DrawVignette( int eye, float strength ) {
+	const int level = Com_Clampi( 1, 3, vr_vignette->integer ) - 1;
+	const float open = ( 1.0f - strength ) * VR_VIGNETTE_OPENING;
+	const float clear = vrVignetteFull[level][0] + open, dark = vrVignetteFull[level][1] + open;
+	float basis[3][3], center[2], ring[VR_VIGNETTE_BANDS + 1][VR_VIGNETTE_SEGMENTS][2], alpha[VR_VIGNETTE_BANDS + 1];
+	static const float ahead[3] = { 0.0f, 0.0f, -1.0f };
+
+	VR_EyeBasis( eye, basis );
+	VR_EyeNDC( eye, basis, ahead, center );
+	for ( int b = 0; b <= VR_VIGNETTE_BANDS; b++ ) {
+		const float f = (float)b / VR_VIGNETTE_BANDS;
+		const float angle = DEG2RAD( clear + ( dark - clear ) * f );
+		alpha[b] = strength * f * f * ( 3.0f - 2.0f * f );	// (smoothly)
+		for ( int i = 0; i < VR_VIGNETTE_SEGMENTS; i++ ) {
+			const float az = DEG2RAD( 360.0f * i / VR_VIGNETTE_SEGMENTS );	// (round from the right)
+			const float dir[3] = { sinf( angle ) * cosf( az ), sinf( angle ) * sinf( az ), -cosf( angle ) };
+			VR_EyeNDC( eye, basis, dir, ring[b][i] );
+		}
+	}
+	// (neighbouring strips share their edge's points exactly: no gap, no overlap)
+	for ( int b = 0; b < VR_VIGNETTE_BANDS; b++ ) {
+		glBegin( GL_TRIANGLE_STRIP );
+		for ( int i = 0; i <= VR_VIGNETTE_SEGMENTS; i++ ) {
+			const int s = i % VR_VIGNETTE_SEGMENTS;
+			glColor4f( 0.0f, 0.0f, 0.0f, alpha[b] );
+			glVertex2f( ring[b][s][0], ring[b][s][1] );
+			glColor4f( 0.0f, 0.0f, 0.0f, alpha[b + 1] );
+			glVertex2f( ring[b + 1][s][0], ring[b + 1][s][1] );
+		}
+		glEnd();
+	}
+	glColor4f( 0.0f, 0.0f, 0.0f, strength );
+	glBegin( GL_TRIANGLE_STRIP );
+	for ( int i = 0; i <= VR_VIGNETTE_SEGMENTS; i++ ) {
+		const float *p = ring[VR_VIGNETTE_BANDS][i % VR_VIGNETTE_SEGMENTS];
+		const float dx = p[0] - center[0], dy = p[1] - center[1];
+		const float len = sqrtf( dx * dx + dy * dy );
+		const float further = 8.0f / len;	// (8 across: the picture's 2; len is a ring's radius, 25 degrees at least)
+		glVertex2f( p[0], p[1] );
+		glVertex2f( p[0] + dx * further, p[1] + dy * further );
+	}
+	glEnd();
+}
+
+// Over an eye's finished picture, still in its framebuffer (VR_UpdateScreen,
+// once the renderer's done with it): the vignette, then the fade, in black.
+// Everything of GL's this changes is put back as it was: the renderer keeps a
+// copy of what it last set, and goes on from it.
+static void VR_DrawComfort( int eye ) {
+	const float vignette = vr.vignette, fade = vr.snapFade;	// (both 0..1)
+
+	if ( vignette < 0.01f && fade < 0.01f ) {
+		return;
+	}
+	if ( vrRender.tanRight[eye] - vrRender.tanLeft[eye] < 0.001f || vrRender.tanUp[eye] - vrRender.tanDown[eye] < 0.001f ) {
+		return;	// (the eyes not located yet)
+	}
+	VR_ComfortGL();
+
+	vglBindFramebuffer( VR_GL_FRAMEBUFFER, vr.targets[eye].fbo );
+	glPushAttrib( GL_ALL_ATTRIB_BITS );	// (texture units' too, and which is active)
+	glMatrixMode( GL_PROJECTION );
+	glPushMatrix();
+	glLoadIdentity();
+	glMatrixMode( GL_MODELVIEW );
+	glPushMatrix();
+	glLoadIdentity();
+
+	// plain black, blended over all of the picture
+	for ( int u = vrGLTextureUnits - 1; u >= 0; u-- ) {
+		if ( vglActiveTexture ) {
+			vglActiveTexture( VR_GL_TEXTURE0 + u );
+		}
+		glDisable( GL_TEXTURE_1D );
+		glDisable( GL_TEXTURE_2D );
+		glDisable( VR_GL_TEXTURE_3D );
+		glDisable( VR_GL_TEXTURE_CUBE_MAP );
+		if ( vrGLRectangle ) {
+			glDisable( VR_GL_TEXTURE_RECTANGLE );
+		}
+	}
+	if ( vrGLVertexProgram ) {
+		glDisable( VR_GL_VERTEX_PROGRAM_ARB );
+	}
+	if ( vrGLFragmentProgram ) {
+		glDisable( VR_GL_FRAGMENT_PROGRAM_ARB );
+	}
+	if ( vrGLCombiners ) {
+		glDisable( VR_GL_REGISTER_COMBINERS_NV );
+	}
+	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_FOG );
+	glDisable( GL_LIGHTING );
+	glDisable( GL_CLIP_PLANE0 );
+	glDisable( GL_COLOR_LOGIC_OP );
+	glDisable( GL_POLYGON_STIPPLE );
+	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE );
+	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+	glShadeModel( GL_SMOOTH );
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+	glViewport( 0, 0, vr.width, vr.height );
+
+	if ( vignette >= 0.01f ) {
+		VR_DrawVignette( eye, vignette );
+	}
+	if ( fade >= 0.01f ) {
+		glColor4f( 0.0f, 0.0f, 0.0f, fade );
+		glBegin( GL_TRIANGLE_STRIP );
+		glVertex2f( -1.0f, -1.0f );
+		glVertex2f( 1.0f, -1.0f );
+		glVertex2f( -1.0f, 1.0f );
+		glVertex2f( 1.0f, 1.0f );
+		glEnd();
+	}
+
+	glMatrixMode( GL_PROJECTION );
+	glPopMatrix();
+	glMatrixMode( GL_MODELVIEW );
+	glPopMatrix();
+	glPopAttrib();
+}
+
 static void VR_PollInput( void ) {
+	vr.comfortTurn = 0.0f;	// (smooth turning says how fast it's turning you, polled)
 	if ( !vr.inputAttached ) {
 		return;
 	}
@@ -2275,12 +2677,21 @@ static void VR_PollInput( void ) {
 		}
 		if ( ax > ay && !vr.turnLatched ) {
 			vr.pendingTurn -= vr.turnX * vr_turnSpeed->value * dt;
+			if ( !VR_GameOwnsView() ) {
+				vr.comfortTurn = ax * vr_turnSpeed->value / VR_COMFORT_TURN_FULL;	// (the Comfort Vignette)
+			}
 		}
 	} else {
-		// snap turn
+		// snap turn (Snap Fade: held till the view's dark - VR_SnapFadeFrame)
 		if ( ax > ay && ax > 0.7f ) {
 			if ( !vr.turnLatched ) {
-				vr.pendingTurn -= ( vr.turnX > 0.0f ? 1.0f : -1.0f ) * Com_Clamp( 1.0f, 180.0f, vr_turnAngle->value );
+				const float turn = ( vr.turnX > 0.0f ? 1.0f : -1.0f ) * Com_Clamp( 1.0f, 180.0f, vr_turnAngle->value );
+				if ( vr_snapFade->integer ) {
+					vr.snapHeld -= turn;
+					vr.snapPhase = VR_SNAP_DARKENING;
+				} else {
+					vr.pendingTurn -= turn;
+				}
 				vr.turnLatched = qtrue;
 			}
 		} else if ( ax < 0.3f ) {
@@ -2481,6 +2892,8 @@ qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight ) {
 	// safety net and runs before the renderer creates any GL objects)
 	VR_DestroySession();
 	vr.lost = qfalse;
+	vr.pendingTurn = 0.0f;
+	VR_DropSnapTurn();
 
 	// Drain events left over from a previous session; if the runtime quit or
 	// restarted meanwhile, start over with a fresh instance.
@@ -2859,8 +3272,10 @@ static void VR_UpdateTracking( void ) {
 		VR_ComputeHudRect( e );
 	}
 
-	// Controllers (buttons become key events, poses are sampled)
+	// Controllers (buttons become key events, poses are sampled), and a snap
+	// turn's fade (it turns you as it's dark)
 	VR_PollInput();
+	VR_SnapFadeFrame();
 
 	// Hands in the same space as the eyes. The gun hand, briefly losing
 	// tracking, keeps its last pose for a moment.
@@ -3004,6 +3419,7 @@ void VR_ApplyHeadAim( void ) {
 	if ( !VR_IsRunning() || !vr.poseValid ) {
 		vr.haveLastYaw = qfalse;
 		vr.pendingTurn = 0.0f;
+		VR_DropSnapTurn();
 		return;
 	}
 
@@ -3021,6 +3437,9 @@ void VR_ApplyHeadAim( void ) {
 
 	const float turn = Com_Clamp( -180.0f, 180.0f, vr.pendingTurn );
 	vr.pendingTurn = 0.0f;
+	if ( vr.snapTurn == VR_SNAP_TURN_HELD ) {
+		vr.snapTurn = VR_SNAP_TURN_TAKEN;	// (Snap Fade's, taken - or dropped: its frame's next)
+	}
 
 	if ( VR_UseScreenLayer() ) {
 		return;
@@ -3070,6 +3489,10 @@ void VR_AddMovement( usercmd_t *cmd ) {
 	const float speed = ( cmd->buttons & BUTTON_WALKING ) ? 64.0f : 127.0f;
 	cmd->forwardmove = ClampChar( cmd->forwardmove + (int)( fwd * speed ) );
 	cmd->rightmove = ClampChar( cmd->rightmove + (int)( right * speed ) );
+
+	// (the Comfort Vignette: as hard as the stick's moving you)
+	vr.comfortMove = Q_min( 1.0f, sqrtf( vr.moveX * vr.moveX + vr.moveY * vr.moveY ) ) * ( speed / 127.0f );
+	vr.comfortMoveTime = Sys_Milliseconds();
 }
 
 const vrClientState_t *VR_GetClientState( void ) {
@@ -3461,6 +3884,7 @@ qboolean VR_UpdateScreen( void ) {
 	if ( screenLayer ) {
 		vrClient.active = qfalse;	// flat view under the menu: no gun-in-hand
 	}
+	VR_ComfortFrame( (qboolean)( drawVR && !screenLayer ) );	// (the vignette: in the game's own view)
 
 	vr.inUpdateScreen = qtrue;
 	try {
@@ -3481,12 +3905,16 @@ qboolean VR_UpdateScreen( void ) {
 				VR_BindTarget( eye );
 				SCR_DrawScreenField( eye == 0 ? STEREO_LEFT : STEREO_RIGHT );
 				re->EndFrame( NULL, NULL );
+				VR_DrawComfort( eye );	// (the Comfort Vignette and Snap Fade, over it)
 				VR_UnbindTarget();
 				if ( !VR_CopyToSwapchain( eye ) ) {
 					copied = qfalse;
 				}
 			}
 			vrRender.active = qfalse;
+			if ( vr.snapTurn == VR_SNAP_TURN_TAKEN ) {
+				vr.snapTurn = VR_SNAP_TURN_DRAWN;	// (Snap Fade's turn drawn, black: it can lighten)
+			}
 			VR_Mirror( qtrue, qfalse );
 			layer = copied ? 1 : 0;
 		} else {
@@ -3609,6 +4037,8 @@ void VR_Init( void ) {
 	vr_turnMode			= Cvar_Get( "vr_turnMode",			"0",	CVAR_ARCHIVE, "Right stick turning: 0 = snap, 1 = smooth" );
 	vr_turnAngle		= Cvar_Get( "vr_turnAngle",			"45",	CVAR_ARCHIVE, "Snap turn angle in degrees" );
 	vr_turnSpeed		= Cvar_Get( "vr_turnSpeed",			"180",	CVAR_ARCHIVE, "Smooth turn speed in degrees per second" );
+	vr_snapFade			= Cvar_Get( "vr_snapFade",			"0",	CVAR_ARCHIVE, "Snap Fade: the view dips to dark for a moment as you snap turn, turning you while it's dark" );
+	vr_vignette			= Cvar_Get( "vr_vignette",			"0",	CVAR_ARCHIVE, "Comfort Vignette: the edges of your view darken while the game moves you - the stick, smooth turning, a jump, a fall - more the faster (0 = off, 1 = low, 2 = medium, 3 = high)" );
 	vr_moveDirection	= Cvar_Get( "vr_moveDirection",		"0",	CVAR_ARCHIVE, "The moving stick moves you: 0 = where you look, 1 = where the hand holding it points" );
 	vr_swapSticks		= Cvar_Get( "vr_swapSticks",		"0",	CVAR_ARCHIVE, "1: move with the right stick, turn and switch weapon with the left (their clicks swap too)" );
 	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );

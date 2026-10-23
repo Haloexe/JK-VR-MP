@@ -16,6 +16,9 @@ otherwise left as it is.
     Turning           snap or smooth                       vr_turnMode 0/1
     Snap Angle        15, 30, 45, 60, 90 degrees           vr_turnAngle
     Turn Speed        smooth turning, 60-360 degrees/s     vr_turnSpeed
+    Snap Fade         snap turns dip the view to dark      vr_snapFade 0/1
+    Comfort Vignette  the edges of your view darken as     vr_vignette 0-3
+                      you move: off, low, medium, high
     Move Direction    where you look, or where the hand    vr_moveDirection 0/1
                       holding the moving stick points
     Always Run        the game's own                       cl_run
@@ -79,7 +82,7 @@ static const struct {
 	const char	*desc;
 } vrcSections[VRC_SECTIONS] = {
 	{ "vr_controls_move", "vrmove", "vrmovebutton", "vrmovebutton_glow", "vrmove_highlight", "VR Movement",
-		"Turning, moving and the sticks in VR - and recentering" },
+		"Turning, moving and the sticks in VR, comfort settings - and recentering" },
 	{ "vr_controls_view", "vrview", "vrviewbutton", "vrviewbutton_glow", "vrview_highlight", "VR View",
 		"Your view in VR: head movement, the HUD, the menu screen, gun aim, resolution" },
 };
