@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-12"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-13"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -41,6 +41,13 @@ General Public License version 2, like the rest of OpenJK.
 												// -12: vrClientState_t.fingers (what the controllers
 												//     sense of your fingers), vrAvatarHand_t.fingers,
 												//     vrAvatar_t.head (VR_POSE_PROTOCOL 5)
+												// -13: ext.VR_SetEyeDrop (your height: Real Crouch)
+
+// ext.VR_SetEyeDrop( drop, flags ): flags
+#define VR_EYES_POSED			( 1 << 0 )	// in a pose (getting down into it, or up out of it: bg_vrpose.c)
+#define VR_EYES_SWIMMING		( 1 << 1 )	// in water to the waist (as you'd stand: the game swims you)
+#define VR_EYES_OWN				( 1 << 2 )	// the camera's at your character's eyes, yours to move (not from
+											// behind, a demo, following someone, dead): the drop's theirs
 
 // ext.VR_SetGrabZones( hands | VR_GRAB_HOLDS ): the grips hold what they've
 // taken hold of (holsters, Saber Grip: Hold) - a grab is let go of only once

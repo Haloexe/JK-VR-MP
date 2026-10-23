@@ -72,9 +72,11 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   dip the view to dark as you snap turn, darken the edges of your view while
   the game moves you (a comfort vignette, Low to High: the stick, smooth
   turning, jumps and falls), move where you look or where your hand points,
-  swap the sticks, set the sticks' deadzone and recentre. Choose whether your view follows your head,
-  the world's scale, how far away and how big the HUD and the menu screen
-  are, how guns aim and tilt in your hand, and the headset's resolution.
+  swap the sticks, set the sticks' deadzone, play seated with your character
+  standing, set your height and crouch for real, and recentre. Choose whether
+  your view follows your head, the world's scale, how far away and how big
+  the HUD and the menu screen are, how guns aim and tilt in your hand, and
+  the headset's resolution.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.

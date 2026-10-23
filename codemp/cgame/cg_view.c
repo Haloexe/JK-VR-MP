@@ -1510,6 +1510,58 @@ Sets cg.refdef view values
 ===============
 */
 void CG_EmplacedView(vec3_t angles);
+/*
+=================
+CG_VR_ReportEyes
+
+OpenJK VR: tells the engine how far below standing the eyes are, as the
+camera has them (crouched, a pose, the duck smoothed: CG_OffsetFirstPersonView)
+- the camera yours, at your character's eyes (VR_EYES_OWN: first person,
+flying about or gripped too - not a view from behind, a vehicle's, the
+intermission's, a demo's or someone else's: then 0, and your view moves with
+your head as far as Head Reach, as ever) - and, your body yours to move (on
+your feet, from behind too), whether you're in a pose, or in water to the
+waist as you'd stand (where the game swims you: bg_pmove.c PM_SetWaterLevel).
+Real Crouch keeps your view at your head as your character crouches for
+you, and waits in those two (cl_vr.cpp VR_SetEyeDrop). Said for each eye,
+as the camera's placed for it.
+=================
+*/
+static void CG_VR_ReportEyes( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	float drop = 0.0f;
+	int flags = 0;
+
+	if ( !CG_VR() || !trap->ext.VR_SetEyeDrop ) {
+		return;
+	}
+	if ( !cg.demoPlayback && ps->clientNum == cg.clientNum && !( ps->pm_flags & PMF_FOLLOW ) ) {
+		if ( ps->pm_type == PM_NORMAL && !ps->m_iVehicleNum ) {
+			vec3_t waist;
+
+			if ( CG_VR_Posed() ) {
+				flags |= VR_EYES_POSED;
+			}
+			VectorCopy( ps->origin, waist );
+			waist[2] += MINS_Z + ( DEFAULT_VIEWHEIGHT - MINS_Z ) / 2;
+			if ( CG_PointContents( waist, ps->clientNum ) & MASK_WATER ) {
+				flags |= VR_EYES_SWIMMING;
+			}
+		}
+		if ( !cg.renderingThirdPerson && ps->pm_type != PM_INTERMISSION && !ps->m_iVehicleNum ) {
+			const int timeDelta = cg.time - cg.duckTime;
+			float eyes = ps->viewheight + CG_VR_PoseEyeAdjust();
+
+			if ( timeDelta < DUCK_TIME ) {
+				eyes -= cg.duckChange * ( DUCK_TIME - timeDelta ) / DUCK_TIME;
+			}
+			drop = DEFAULT_VIEWHEIGHT - eyes;
+			flags |= VR_EYES_OWN;
+		}
+	}
+	trap->ext.VR_SetEyeDrop( drop, flags );
+}
+
 static int CG_CalcViewValues( void ) {
 	qboolean manningTurret = qfalse;
 	playerState_t	*ps;
@@ -2675,6 +2727,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	// build cg.refdef
 	inwater = CG_CalcViewValues();
 	CG_SetupFrustum();
+	CG_VR_ReportEyes();	// OpenJK VR: where the eyes are, for the engine (your height)
 
 	if (cg_linearFogOverride)
 	{

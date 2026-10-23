@@ -3913,6 +3913,19 @@ static qboolean Item_Slider_Hundredths( const editFieldDef_t *editDef ) {
 	return (qboolean)( editDef && editDef->valueStep > 0.0f && editDef->valueStep < 0.0999f );
 }
 
+// OpenJK VR: one showing its value (showValue) whose default is below its
+// range (Eye Height's 0) can be "not set": at that default, or anything else
+// outside its range - shown as such ("Not Set"). The arrow keys and the
+// wheel leave it so (a click along the slider sets it, or Set Height), and
+// take it there going down past its least.
+static qboolean Item_Slider_CanUnset( const editFieldDef_t *editDef ) {
+	return (qboolean)( editDef->defVal < editDef->minVal );
+}
+
+static qboolean Item_Slider_NotSet( const editFieldDef_t *editDef, float value ) {
+	return (qboolean)( Item_Slider_CanUnset( editDef ) && ( value < editDef->minVal || value > editDef->maxVal ) );
+}
+
 static const char *Item_Slider_Value( const editFieldDef_t *editDef, float value ) {
 	if ( editDef && editDef->showValue && Item_Slider_Whole( editDef ) ) {
 		return va( "%.0f", Com_Clamp( editDef->minVal, editDef->maxVal, floorf( value + 0.5f ) ) );
@@ -4047,9 +4060,13 @@ qboolean Item_Slider_HandleKey(itemDef_t *item, int key, qboolean down) {
 		} else if ( key == A_CURSOR_LEFT || key == A_KP_4 || key == A_MWHEELDOWN ) {
 			step = -by;
 		}
-		if ( step != 0.0f ) {
-			value = Com_Clamp( editDef->minVal, editDef->maxVal, DC->getCVarValue( item->cvar ) );
-			DC->setCVar( item->cvar, Item_Slider_Value( editDef, value + step ) );
+		value = DC->getCVarValue( item->cvar );
+		if ( step < 0.0f && Item_Slider_CanUnset( editDef ) && value == editDef->minVal ) {
+			DC->setCVar( item->cvar, va( "%g", editDef->defVal ) );	// (down past its least: not set)
+			return qtrue;
+		}
+		if ( step != 0.0f && !Item_Slider_NotSet( editDef, value ) ) {	// (not set: left so)
+			DC->setCVar( item->cvar, Item_Slider_Value( editDef, Com_Clamp( editDef->minVal, editDef->maxVal, value ) + step ) );
 			return qtrue;
 		}
 	}
@@ -5262,14 +5279,19 @@ void Item_Slider_Paint(itemDef_t *item) {
 	DC->setColor(newColor);
 	DC->drawHandlePic( x, y, SLIDER_WIDTH, SLIDER_HEIGHT, DC->Assets.sliderBar );
 
-	// OpenJK VR ("showValue"): its value, after it
+	// OpenJK VR ("showValue"): its value, after it (or that it's not set)
 	if ( item->cvar && item->typeData.edit && ( (editFieldDef_t *)item->typeData.edit )->showValue ) {
 		const editFieldDef_t *editDef = (editFieldDef_t *)item->typeData.edit;
+		const float shown = DC->getCVarValue( item->cvar );
 		DC->drawText( x + SLIDER_WIDTH + SLIDER_THUMB_WIDTH / 2 + 6, item->text ? item->textRect.y : y + item->textaligny, item->textscale, newColor,
+			Item_Slider_NotSet( editDef, shown ) ? "Not Set" :
 			va( Item_Slider_Whole( editDef ) ? "%.0f" : Item_Slider_Hundredths( editDef ) ? "%.2f" : "%.1f", Com_Clamp( editDef->minVal, editDef->maxVal,
-			DC->getCVarValue( item->cvar ) ) ), 0, 0,
+			shown ) ), 0, 0,
 			item->textStyle, item->iMenuFont );
 		DC->setColor( newColor );
+		if ( Item_Slider_NotSet( editDef, shown ) ) {
+			return;	// (not set: no thumb on it)
+		}
 	}
 
 	x = Item_Slider_ThumbPosition(item);
@@ -8300,8 +8322,9 @@ qboolean ItemParse_clipToBox( itemDef_t *item, int handle ) {
 
 // OpenJK VR: showValue - a slider whose value is shown after it, which the
 // arrow keys and the mouse wheel move a tenth at a time (Item_Slider_Paint,
-// Item_Slider_HandleKey). A slider's, after its type: anything else's is
-// passed over (its type's data isn't a slider's).
+// Item_Slider_HandleKey). Its default below its range ("cvarfloat <cvar> 0 1
+// 2.5"), it can be "not set" (Item_Slider_NotSet). A slider's, after its
+// type: anything else's is passed over (its type's data isn't a slider's).
 qboolean ItemParse_showValue( itemDef_t *item, int handle ) {
 	editFieldDef_t *editPtr;
 

@@ -6098,6 +6098,12 @@ static void CG_VRB_PoseEyes( const centity_t *cent, const vec3_t eyes ) {
 	vrb.poseEyeTime = cg.time;
 }
 
+// Whether you're in a pose (getting down into it, or up out of it), as your
+// own game predicts it.
+qboolean CG_VR_Posed( void ) {
+	return (qboolean)( BG_VRPosePhase( &cg.predictedPlayerState, CG_VRB_Anims(), NULL, NULL ) != VRPHASE_NONE );
+}
+
 float CG_VR_PoseEyeAdjust( void ) {
 	if ( !CG_VR() || !cg_vrBody.integer || cg.predictedPlayerState.clientNum != cg.clientNum ) {
 		return 0.0f;

@@ -112,7 +112,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
-  A / B                jump / crouch
+  A / B                jump / crouch (or crouch for real: Real Crouch,
+                       below)
   X / Y                previous / next Force power
   Left menu button     game menu (press again to close it)
 LEFT-HANDED (Setup > VR, or vr_leftHanded 1): your guns go in your left hand
@@ -155,11 +156,29 @@ slider to move it a step.
                      has come back to the middle)
     Stick Deadzone   how far a stick must move before it does anything
                      (0.05 to 0.5: more if you drift standing still)
+    Play Seated      Yes: you sit, your character stands - your head as
+                     you sit up straight is its standing height (taken as
+                     you switch it on, and at Recenter)
+    Set Height       stand up straight and click it: the game learns how
+                     high your eyes are (your controllers buzz, short and
+                     firm; long and soft, it couldn't: no floor set up,
+                     or not standing up straight - the console says)
+    Eye Height (m)   what Set Height measured - or click along it to set
+                     it yourself (1 to 2.5 m; Not Set until then: the
+                     stick and the arrow keys leave it so, and take it
+                     back there going down past 1)
+    Real Crouch      Yes (as it comes): once the game knows your height,
+                     crouch for real - your head below 70% of your height
+                     - and your character crouches; stand up past 75%
+                     and it stands. B crouches too
     Recenter         where you stand now becomes the middle, and the menu
-                     screen comes in front of you
+                     screen comes in front of you (playing seated, sit up
+                     straight: your height comes from there; in a pose,
+                     your view goes back to your character's eyes)
   VR View
     Head Movement    your view moves as your head does - leaning, ducking
     Head Reach       how far your view follows your head from your body
+                     (ducking, further, once the game knows your height)
                      (0.1 to 0.5 m)
     World Scale      the game's units in a metre (28 to 40: more makes the
                      world around you feel smaller)
@@ -177,6 +196,29 @@ slider to move it a step.
                      (or after vid_restart)
     Desktop View     what you see in the headset, in the game's window
 Each is a console setting as well (SETTINGS, below).
+
+YOUR HEIGHT. Until the game knows your height, your view goes up and down
+with your head from where it was when the game started (or you last pressed
+Recenter): recentre in the way you'll play. Once you've used Set Height
+(stand up straight, click it - your headset needs its floor set up), the
+game goes by how high your head is above the floor: your eyes at your
+height are your character's eyes, and ducking, your view follows you down
+past Head Reach. Real Crouch crouches your character as you crouch down,
+your view staying at your head (running, crouching rolls you, as B does; in
+water deep enough to swim in it waits - crouching would take you down). B
+still crouches it - standing up, your view goes down with it. No floor? Set
+Eye Height yourself, and press Recenter standing up straight. Playing
+seated, switch Play Seated on, sit up straight and press Recenter: your
+character stands, and (your height known) leaning well down crouches it. In
+a pose from the wheel your view starts at your character's eyes, and Real
+Crouch waits (crouching would get you up): sit or kneel for real if you
+like, and press Recenter to bring your view back to your character's eyes
+(as the pose ends, it eases back to your head). Take a pose standing up -
+the game won't sit or kneel you from a crouch. Your view never goes lower
+than a character lying down has its eyes, so never under the floor; seen
+from behind (a saber lock, knocked down, dead) it moves with your head only
+as far as Head Reach. Real Crouch needs this build's game files: on a
+server with a mod's own, only B crouches.
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
 where it points. Your main hand points (the right; the left, left-handed);
@@ -231,8 +273,9 @@ its head where yours is: lean or bow and it leans and bows - half of a bow
 at the hips, the rest along its back - lean to a side and it does; reach
 past arm's length and it leans in from the waist. Crouch for real and its
 knees bend, its hips going back over its feet, as low as the view follows
-you down (about 25 cm, vr_positionalMax): to the game you're still
-standing, so to duck under something press B, which crouches you as ever.
+you down (about 25 cm, vr_positionalMax - further once the game knows your
+height): to the game you're still standing, until Real Crouch crouches you
+(your height set: YOUR HEIGHT, above) or you press B.
 Each foot stands on the ground under it, on a step or a slope. Look to a
 side and its neck turns first, its chest next (once you look more than 45
 degrees away), its hips last; swing a saber out and its chest turns with
@@ -1010,6 +1053,8 @@ rebind them in the console, e.g.  bind AUX23 force_throw
 
 Console (Shift+~) commands:
   vr_recenter        re-centre your position and the menu screen
+  vr_setHeight       your eyes' height above the floor becomes your height
+                     (stand up straight)
   vr_status          print headset / runtime information
 
 
@@ -1042,6 +1087,11 @@ VIEW, above.)
   vr_swapSticks 0        1 = move with the right stick, turn and switch
                          weapon with the left (their clicks swap too)
   vr_deadzone 0.2        thumbstick deadzone
+  vr_seated 0            1 = Play Seated: your head as you sit is at your
+                         height (taken at Recenter)
+  vr_height 0            how high your eyes are, standing, in metres above
+                         the floor (vr_setHeight measures it; 0 = not known)
+  vr_realCrouch 1        your head below 70% of vr_height crouches you
   cg_vrAimDot 1          the floating crosshair (cg_vrAimDotSize to resize)
   cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
   cg_vrWorldGun 1        0 = hold the old first-person gun models instead
@@ -1193,7 +1243,11 @@ no client. Source files:
   codemp/client/cl_vr.cpp      OpenXR session, frame loop, tracking, aim,
                                controllers, menu pointer; the Comfort
                                Vignette and Snap Fade, drawn over each
-                               eye's finished picture (VR_DrawComfort)
+                               eye's finished picture (VR_DrawComfort);
+                               your height, Play Seated and Real Crouch
+                               (VR_HeightFrame, VR_PlaceEyes; the cgame
+                               says where the game's eyes are each frame:
+                               cg_view.c CG_VR_ReportEyes)
   codemp/qcommon/vr_public.h   state the engine shares with the cgame
   codemp/rd-common/tr_vr.h     state shared with the renderer
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement

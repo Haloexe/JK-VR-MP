@@ -89,6 +89,10 @@ void		VR_SetWeaponHand( int hand );
 void		VR_SetCmdButtons( int buttons );
 // A generic command for the next command that has none.
 void		VR_GenericCmd( int genCmd );
+// How far below standing the game's eyes are as the cgame places its camera
+// (units), and VR_EYES_* (cgameImport_t.ext.VR_SetEyeDrop, every frame):
+// your height - Real Crouch keeps your view at your head as they go down.
+void		VR_SetEyeDrop( float drop, int flags );
 
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.

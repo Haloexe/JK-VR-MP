@@ -758,6 +758,10 @@ typedef struct cgameImport_s {
 		// OpenJK VR: a generic command (GENCMD_*) to go with the next command
 		// that has none (one per command, in turn)
 		void			(*VR_GenericCmd)						( int genCmd );
+		// OpenJK VR: how far below standing the eyes are as the camera's placed
+		// (units: crouched, a pose, the duck smoothed; 0 when the view isn't the
+		// player's own to move) and VR_EYES_* - call every frame, before drawing
+		void			(*VR_SetEyeDrop)						( float drop, int flags );
 	} ext;
 } cgameImport_t;
 

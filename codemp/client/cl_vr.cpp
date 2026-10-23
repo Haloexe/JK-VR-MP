@@ -188,6 +188,9 @@ static cvar_t *vr_turnAngle;
 static cvar_t *vr_turnSpeed;
 static cvar_t *vr_snapFade;
 static cvar_t *vr_vignette;
+static cvar_t *vr_seated;
+static cvar_t *vr_height;
+static cvar_t *vr_realCrouch;
 static cvar_t *vr_moveDirection;
 static cvar_t *vr_swapSticks;
 static cvar_t *vr_deadzone;
@@ -417,6 +420,7 @@ typedef struct vrState_s {
 	qboolean				lost;			// runtime ended the session (needs vid_restart)
 	XrSpace					localSpace;
 	XrSpace					viewSpace;
+	XrSpace					stageSpace;		// the floor (XR_NULL_HANDLE: the runtime hasn't one)
 	int64_t					colorFormat;
 	vrSwapchain_t			swapchains[2];
 
@@ -431,6 +435,30 @@ typedef struct vrState_s {
 	XrPosef					headPose;
 	qboolean				recenterPending;
 	XrVector3f				positionOrigin;
+	qboolean				floorValid;		// your head's height above the floor this frame...
+	float					floorHeadY;		// ...(metres, the stage space's)
+	qboolean				floorLocalKnown;	// the floor's height in the local space, as last located...
+	float					floorLocalY;	// ...(kept while it isn't)
+	qboolean				seatedWas;		// Play Seated was on (switched on: your head then is how you sit)
+	float					headV;			// your height known: your head's height, as standing, this frame (metres)
+	qboolean				crouching;		// Real Crouch: your head low, the commands crouch you
+	// the game's eyes, as the cgame says each frame (VR_SetEyeDrop)
+	float					eyeDrop;		// how far below its standing eyes they are now (units: crouched, a pose)...
+	int						eyeDropTime;	// ...said then (cls.realtime)
+	qboolean				gamePosed;		// in a pose (getting down into it, or up out of it)...
+	float					poseRefV;		// ...your head's height (headV) as you took it, or recentred in it
+	qboolean				gameSwimming;	// in water to the waist
+	qboolean				gameOwnEyes;	// the camera at your character's eyes, yours to move (first person)
+	qboolean				crouchOwnsDrop;	// they're down because Real Crouch crouched you: your view stays at your head
+	qboolean				keyCrouch;		// the crouch key (B) down in the last command
+	float					viewOfs[3];		// your head's offset from the game's eyes, as far as it goes (tracking space, metres)
+	// a switch in how high your view goes (your height set, a pose begun or
+	// over, whose the crouch is) eased over from where it was, not jumped
+	// (VR_RiseSwitch)
+	float					riseH;			// the height it went by...
+	float					riseCarry;		// ...what's still to ease out (metres)...
+	int						riseTime;		// ...as of (ms)
+	float					upReach;		// how far above the game's eyes your view goes now (metres, eased)
 
 	// head angles, tracking space, Quake convention (degrees)
 	float					headYaw;
@@ -2732,6 +2760,12 @@ static void VR_DestroyXrSession( void ) {
 		xrDestroySpace( vr.viewSpace );
 		vr.viewSpace = XR_NULL_HANDLE;
 	}
+	if ( vr.stageSpace != XR_NULL_HANDLE ) {
+		xrDestroySpace( vr.stageSpace );
+		vr.stageSpace = XR_NULL_HANDLE;
+	}
+	vr.floorValid = qfalse;
+	vr.floorLocalKnown = qfalse;
 	if ( vr.localSpace != XR_NULL_HANDLE ) {
 		xrDestroySpace( vr.localSpace );
 		vr.localSpace = XR_NULL_HANDLE;
@@ -2953,6 +2987,13 @@ qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight ) {
 	if ( !VR_Check( xrCreateReferenceSpace( vr.session, &rsci, &vr.viewSpace ), "xrCreateReferenceSpace(VIEW)" ) ) {
 		VR_DestroySession();
 		return qfalse;
+	}
+	// (the floor, where the runtime has one: your height above it - Set Height,
+	// standing play, Real Crouch)
+	rsci.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+	if ( XR_FAILED( xrCreateReferenceSpace( vr.session, &rsci, &vr.stageSpace ) ) ) {
+		vr.stageSpace = XR_NULL_HANDLE;
+		Com_Printf( "VR: the runtime doesn't say where the floor is: Set Height can't measure (vr_height sets it)\n" );
 	}
 
 	vr.colorFormat = VR_ChooseColorFormat();
@@ -3186,6 +3227,385 @@ static void VR_ComputeHudRect( int eye ) {
 	vrRender.hudH[eye] = Q_max( 1, (int)( y1 - y0 ) );
 }
 
+/*
+================================================================================
+
+Your height: Set Height, Play Seated, Real Crouch
+
+Your view goes up and down with your head (vr_positional, as far as
+vr_positionalMax: Head Reach) from where the game's eyes are: from your head
+as it was at the last Recenter (as the game starts, or you press it) -
+unless the game knows your height (vr_height: how high your eyes are,
+standing, above the floor; Set Height measures it). Then it goes by how high
+your head is as if you stood (VR_HeightFrame): above the floor, standing
+(where the runtime has one - a moment it's lost, where it was); playing
+seated (vr_seated), from where you sat at Recenter (or as you switched it
+on), that at your height: your character stands. Your eyes at your height
+are the game's standing eyes, and ducking, your view follows you down past
+Head Reach (VR_DOWN_REACH of your height).
+
+Real Crouch (vr_realCrouch, your height known): your head below
+VR_CROUCH_DOWN of your height crouches you - the game's crouch, as B's - and
+above VR_CROUCH_UP stands you up again. The cgame says each frame how far
+below standing its camera has the game's eyes (VR_SetEyeDrop): crouched by
+Real Crouch, your view stays at your head as they go down - and wherever
+the game puts them while you're down (it rolls you, a saber lock stands you
+up, you jump; a low ceiling keeps you down as you stand: no more than Head
+Reach above them). Crouched by B with your head up, your view goes down with
+them, as ever (VR_DropIsYours).
+
+In a pose (bg_vrpose.c) your view starts at your character's eyes as you
+take it, and goes with your head from there (Recenter in it: from there);
+Real Crouch waits - crouching gets you up out of a pose.
+
+================================================================================
+*/
+
+#define VR_HEIGHT_MIN		1.0f		// a height outside these (metres): not set
+#define VR_HEIGHT_MAX		2.5f
+#define VR_CROUCH_DOWN		0.70f		// your head below this much of your height: crouched...
+#define VR_CROUCH_UP		0.75f		// ...above this much: standing again
+#define VR_DOWN_REACH		0.5f		// how far below the game's eyes your view follows you down, of your height
+#define VR_UP_HELD			3.0f		// held down by the game, your view goes this far above its eyes at most (units: inside its crouched body)
+#define VR_DROP_NONE		0.5f		// the game's eyes this close to standing (units): standing
+#define VR_EYES_FRESH		1000		// ms the cgame's word on the game's eyes holds (then: standing, no pose, dry, the camera at them)
+#define VR_RISE_EASE		0.15f		// seconds a switch in how high your view goes eases out over (time constant)
+
+// Your height (vr_height), 0 if it's not set.
+static float VR_Height( void ) {
+	const float h = vr_height->value;
+
+	return ( h >= VR_HEIGHT_MIN && h <= VR_HEIGHT_MAX ) ? h : 0.0f;
+}
+
+// Whether you're in a pose (bg_vrpose.c: sitting, kneeling, lying down, down
+// in a fight - or getting into one), on a server that has them ("vrPose" in
+// its info): which, the player state's userInt1..3 say.
+static qboolean VR_InPose( const playerState_t *ps ) {
+	if ( !( ( ps->userInt1 | ps->userInt2 | ps->userInt3 ) & 1 ) ) {
+		return qfalse;
+	}
+	const char *serverInfo = cl.gameState.stringData + cl.gameState.stringOffsets[CS_SERVERINFO];
+	return (qboolean)( atoi( Info_ValueForKey( serverInfo, "vrPose" ) ) > 0 );
+}
+
+// Whether the cgame's word on the game's eyes (VR_SetEyeDrop) holds: said
+// lately, in a game.
+static qboolean VR_EyesSaid( void ) {
+	return (qboolean)( cls.state == CA_ACTIVE && cls.realtime - vr.eyeDropTime <= VR_EYES_FRESH );
+}
+
+// Whether your head may crouch you now (your height known: VR_HeightFrame
+// asks only then): Real Crouch on; the game yours - the headset's focus, the
+// controllers, nothing else taking the keys (the menu screen, the chat line:
+// the game's own crouch waits then too), not a demo; the cgame saying where
+// its eyes are (VR_SetEyeDrop: an older cgame or a mod's doesn't - your view
+// would go down twice; B only); on your feet - not dead, spectating or flying
+// about (a jetpack, a grip), not swimming (crouching would take you down),
+// not following someone, in a vehicle or at an emplaced gun - and not in a
+// pose (crouching gets you up out of one).
+static qboolean VR_RealCrouchAllowed( void ) {
+	if ( !vr_realCrouch->integer || !vr.focused || !vr.inputAttached || VR_UseScreenLayer() || Key_GetCatcher() || clc.demoplaying ||
+		!cl.snap.valid || !VR_EyesSaid() || vr.gamePosed || vr.gameSwimming ) {
+		return qfalse;
+	}
+	const playerState_t *ps = &cl.snap.ps;
+	return (qboolean)( ps->pm_type == PM_NORMAL && !( ps->pm_flags & PMF_FOLLOW ) && !ps->m_iVehicleNum && !ps->emplacedIndex &&
+		!VR_InPose( ps ) );
+}
+
+// How far below its standing eyes the game's eyes are now (metres), as the
+// cgame said lately (VR_SetEyeDrop) - at standing height if it hasn't.
+static float VR_EyeDrop( void ) {
+	if ( !VR_EyesSaid() ) {
+		return 0.0f;
+	}
+	return vr.eyeDrop / Com_Clamp( 1.0f, 1000.0f, vr_worldScale->value );
+}
+
+// How far down the game has its eyes, as the cgame said lately: 0 standing
+// (or higher), 1 crouched (or lower).
+static float VR_HeldDown( void ) {
+	return VR_EyesSaid() ? Com_Clamp( 0.0f, 1.0f, vr.eyeDrop / (float)( DEFAULT_VIEWHEIGHT - CROUCH_VIEWHEIGHT ) ) : 0.0f;
+}
+
+// How high your head is as if you stood (metres), your height H: above the
+// floor where it is, or was a moment ago; playing seated, or no floor ever,
+// your head at Recenter at your height.
+static float VR_HeadV( float H ) {
+	const float head = vr.headPose.position.y;
+
+	if ( !vr_seated->integer && vr.floorLocalKnown ) {
+		return head - vr.floorLocalY;
+	}
+	return H + ( head - vr.positionOrigin.y );
+}
+
+// How far your head is up from the game's eyes (metres, - down), each way,
+// before a switch between them has eased out: from your head at Recenter
+// (your height H not known); in a pose, from your head as you took it;
+// else from your height - the game's eyes down yours (owns) or not.
+static float VR_RawRise( float H, qboolean posed, qboolean owns ) {
+	if ( H <= 0.0f ) {
+		return vr.headPose.position.y - vr.positionOrigin.y;
+	}
+	if ( posed ) {
+		return VR_HeadV( H ) - vr.poseRefV;
+	}
+	return VR_HeadV( H ) - H + ( owns ? VR_EyeDrop() : 0.0f );
+}
+
+// Whether you're in a pose, as the cgame said lately.
+static qboolean VR_Posed( void ) {
+	return (qboolean)( VR_EyesSaid() && vr.gamePosed );
+}
+
+// Whether the camera's at your character's eyes, yours to move (first person:
+// not from behind, a demo, following someone, dead), as the cgame said lately
+// - not said, as if it were.
+static qboolean VR_OwnEyes( void ) {
+	return (qboolean)( !VR_EyesSaid() || vr.gameOwnEyes );
+}
+
+// How far above and below the game's eyes your view may go (metres), your
+// height H, in a pose or not, the game's eyes going down yours (owns) or not:
+// as far as Head Reach - or, your height known, up as far as Head Reach (held
+// down by the game with your head up, less), down past it (VR_DOWN_REACH of
+// your height; not as B takes the game's eyes down); in a pose, down past it.
+// Never lower than the game's own lowest eyes, lying down, above your
+// character's feet (DEAD_VIEWHEIGHT: a low pose, crouched and tall - not
+// under the floor). The camera not at your character's eyes (from behind,
+// dead, following someone): as far as Head Reach, whatever else.
+static void VR_RiseLimits( float H, qboolean posed, qboolean owns, float *up, float *down ) {
+	const float reach = Q_max( 0.0f, vr_positionalMax->value );
+
+	*up = *down = reach;
+	if ( !VR_OwnEyes() ) {
+		return;
+	}
+	if ( posed ) {
+		*down = Q_max( reach, VR_DOWN_REACH * H );	// (your height not known: 0)
+	} else if ( H > 0.0f ) {
+		*down = Q_max( reach, VR_DOWN_REACH * H * ( owns ? 1.0f : 1.0f - VR_HeldDown() ) );
+		*up = Q_min( reach, vr.upReach );
+	}
+	*down = Q_min( *down, Q_max( 0.0f, (float)( DEFAULT_VIEWHEIGHT - DEAD_VIEWHEIGHT ) / Com_Clamp( 1.0f, 1000.0f, vr_worldScale->value ) - VR_EyeDrop() ) );
+}
+
+// A switch in how high your view goes - your height set, changed or let go
+// of, a pose begun or over, whose the crouch is - from things as they were
+// (H, posed, owns) to as they are (toH, toPosed, toOwns): what's still to ease
+// out (riseCarry) set so your view's drawn where it was - your head's rise as
+// it was, where that's drawn the same now; else (it goes further now: B let
+// go of, down for real) where it was drawn - easing over from there. (No
+// switch, nothing changes.)
+static void VR_RiseSwitch( float H, qboolean posed, qboolean owns, float toH, qboolean toPosed, qboolean toOwns ) {
+	const float rise = VR_RawRise( H, posed, owns ) + vr.riseCarry;
+	float up, down, toUp, toDown;
+
+	VR_RiseLimits( H, posed, owns, &up, &down );
+	VR_RiseLimits( toH, toPosed, toOwns, &toUp, &toDown );
+	const float drawn = Com_Clamp( -down, up, rise );
+	vr.riseCarry = ( Com_Clamp( -toDown, toUp, rise ) == drawn ? rise : drawn ) - VR_RawRise( toH, toPosed, toOwns );
+}
+
+// Your height this frame, once as it begins: a switch easing out, Play
+// Seated switched on taken, the floor kept, how high your head is as if you
+// stood (headV), whether Real Crouch has you crouched, and how far above the
+// game's eyes your view goes.
+static void VR_HeightFrame( qboolean recentred ) {
+	const float H = VR_Height();
+	const float head = vr.headPose.position.y;
+	const float reach = Q_max( 0.0f, vr_positionalMax->value );
+	const int now = Sys_Milliseconds();
+	const float ease = expf( -Q_max( 0.0f, ( now - vr.riseTime ) * 0.001f ) / VR_RISE_EASE );
+
+	vr.riseTime = now;
+	vr.riseCarry = ( recentred || Q_isnan( vr.riseCarry ) ) ? 0.0f : vr.riseCarry * ease;	// (Recenter: at once; broken - a bad number: gone)
+	// (Play Seated switched on: your head now is how you sit)
+	if ( vr.poseValid ) {
+		if ( vr_seated->integer && !vr.seatedWas ) {
+			vr.positionOrigin.y = head;
+		}
+		vr.seatedWas = (qboolean)( vr_seated->integer != 0 );
+	}
+	// (the floor in the local space as it's located: while it isn't, where it
+	// was)
+	if ( vr.floorValid ) {
+		vr.floorLocalY = head - vr.floorHeadY;
+		vr.floorLocalKnown = qtrue;
+	}
+	// (your height set, changed or let go of: eased over)
+	if ( !recentred ) {
+		VR_RiseSwitch( vr.riseH, VR_Posed(), vr.crouchOwnsDrop, H, VR_Posed(), vr.crouchOwnsDrop );
+	}
+	vr.riseH = H;
+	float upTarget = reach;
+	if ( H <= 0.0f ) {
+		vr.crouching = qfalse;
+	} else {
+		vr.headV = VR_HeadV( H );
+		if ( recentred ) {
+			vr.poseRefV = vr.headV;	// (Recenter in a pose: your view back at your character's eyes)
+		}
+		if ( !VR_RealCrouchAllowed() ) {
+			vr.crouching = qfalse;
+		} else if ( vr.headV < VR_CROUCH_DOWN * H ) {
+			vr.crouching = qtrue;
+		} else if ( vr.headV > VR_CROUCH_UP * H ) {
+			vr.crouching = qfalse;
+		}
+		// held down by the game with your head up (B, a low ceiling): up not
+		// out of the top of its crouched body (VR_RiseLimits: Head Reach at most)
+		if ( vr.headV >= VR_CROUCH_UP * H ) {
+			upTarget = reach - ( reach - VR_UP_HELD / Com_Clamp( 1.0f, 1000.0f, vr_worldScale->value ) ) * VR_HeldDown();
+		}
+	}
+	vr.upReach = ( recentred || Q_isnan( vr.upReach ) ) ? upTarget : upTarget + ( vr.upReach - upTarget ) * ease;
+}
+
+// How far your head is up from the game's eyes now (metres, - down), where
+// those eyes are in tracking space (eyesY: the local space's height), and how
+// far above and below them your view may go (up, down: VR_RiseLimits) - from
+// your head at Recenter, or your height, or in a pose your head as you took
+// it (VR_RawRise), with what's still to ease out.
+static float VR_HeadRise( float *eyesY, float *up, float *down ) {
+	const float H = VR_Height();
+	const qboolean posed = VR_Posed();
+	const float rise = VR_RawRise( H, posed, vr.crouchOwnsDrop ) + vr.riseCarry;
+
+	VR_RiseLimits( H, posed, vr.crouchOwnsDrop, up, down );
+	*eyesY = vr.headPose.position.y - rise;
+	return rise;
+}
+
+// Your head's offset from the game's eyes (viewOfs), as far as it goes:
+// sideways as far as Head Reach, up and down as VR_HeadRise says, each on its
+// own (Head Movement off: none) - and the eyes the picture's drawn from, and
+// what the compositor's told (where they really are, as far as the view
+// follows you): both, or one (-1: both) - the eye the cgame's drawing for.
+static void VR_PlaceEyes( int only ) {
+	float eyesY, up, down;
+	const float rise = VR_HeadRise( &eyesY, &up, &down );
+	const float ofs[3] = {
+		vr.headPose.position.x - vr.positionOrigin.x,
+		rise,
+		vr.headPose.position.z - vr.positionOrigin.z
+	};
+	const float reach = Q_max( 0.0f, vr_positionalMax->value );
+	const float side = sqrtf( ofs[0] * ofs[0] + ofs[2] * ofs[2] );
+	float scale[3] = { 1.0f, 1.0f, 1.0f };
+
+	if ( !vr_positional->integer ) {
+		scale[0] = scale[1] = scale[2] = 0.0f;
+	} else {
+		if ( side > reach ) {
+			scale[0] = scale[2] = reach / side;
+		}
+		if ( rise > up ) {
+			scale[1] = up / rise;
+		} else if ( -rise > down ) {
+			scale[1] = down / -rise;
+		}
+	}
+	for ( int i = 0; i < 3; i++ ) {
+		vr.viewOfs[i] = ofs[i] * scale[i];
+	}
+	VR_XrToQuake( vr.viewOfs, vrClient.headOrigin );
+
+	for ( int e = 0; e < 2; e++ ) {
+		if ( only >= 0 && e != only ) {
+			continue;
+		}
+		const XrPosef *p = &vr.views[e].pose;
+		// eye = (the head's offset) + (the eye from the head: the IPD)
+		const float eyePos[3] = {
+			vr.viewOfs[0] + ( p->position.x - vr.headPose.position.x ),
+			vr.viewOfs[1] + ( p->position.y - vr.headPose.position.y ),
+			vr.viewOfs[2] + ( p->position.z - vr.headPose.position.z )
+		};
+		VR_XrToQuake( eyePos, vrRender.eyeOrigin[e] );
+
+		// Tell the compositor the pose the image is really rendered from.
+		vr.submitPose[e].orientation = p->orientation;
+		vr.submitPose[e].position.x = vr.positionOrigin.x + eyePos[0];
+		vr.submitPose[e].position.y = eyesY + eyePos[1];
+		vr.submitPose[e].position.z = vr.positionOrigin.z + eyePos[2];
+	}
+}
+
+// The hands in the same space as the eyes: from the head as the controllers
+// are, with the head's offset (one a moment lost keeps where it was).
+static void VR_PlaceHands( void ) {
+	for ( int h = 0; h < 2; h++ ) {
+		if ( !vr.handValid[h] ) {
+			continue;
+		}
+		const XrPosef *g = &vr.gripPose[h], *a = &vr.aimPose[h];
+		const float gp[3] = {
+			vr.viewOfs[0] + ( g->position.x - vr.headPose.position.x ),
+			vr.viewOfs[1] + ( g->position.y - vr.headPose.position.y ),
+			vr.viewOfs[2] + ( g->position.z - vr.headPose.position.z )
+		};
+		const float ap[3] = {
+			vr.viewOfs[0] + ( a->position.x - vr.headPose.position.x ),
+			vr.viewOfs[1] + ( a->position.y - vr.headPose.position.y ),
+			vr.viewOfs[2] + ( a->position.z - vr.headPose.position.z )
+		};
+		VR_XrToQuake( gp, vrClient.gripOrigin[h] );
+		VR_XrToQuake( ap, vrClient.aimOrigin[h] );
+	}
+}
+
+// Whether the game's eyes going down is yours from now on: Real Crouch on,
+// and your head down by its line (below where it stands you up; your height
+// not known, the floor) - your view stays at your head as they go. (Settled
+// while they're at standing height - B pressed with your head up, they take
+// your view down with them; with your head down, not - and yours once your
+// head's down with B not held.)
+static qboolean VR_DropIsYours( void ) {
+	return (qboolean)( vr_realCrouch->integer && vr.headV < VR_CROUCH_UP * VR_Height() );
+}
+
+// The cgame, each frame, as it places its camera for an eye (ext.VR_SetEyeDrop):
+// how far below standing the game's eyes are (units: crouched, a pose - its
+// smoothing too; 0 when the view isn't yours to move: dead, following
+// someone, a demo, a view from behind) and VR_EYES_*. That eye and the hands
+// placed again with it, for its picture.
+void VR_SetEyeDrop( float drop, int flags ) {
+	const qboolean posed = ( flags & VR_EYES_POSED ) ? qtrue : qfalse;
+	const qboolean wasSaid = VR_EyesSaid();
+	const qboolean wasPosed = VR_Posed();
+	const qboolean wasOwned = vr.crouchOwnsDrop;
+	const float H = VR_Height();
+
+	vr.eyeDrop = Q_isnan( drop ) ? 0.0f : Com_Clamp( -64.0f, 128.0f, drop );
+	vr.eyeDropTime = cls.realtime;
+	vr.gameSwimming = ( flags & VR_EYES_SWIMMING ) ? qtrue : qfalse;
+	vr.gameOwnEyes = ( flags & VR_EYES_OWN ) ? qtrue : qfalse;
+	if ( posed && !vr.gamePosed ) {
+		vr.poseRefV = vr.headV;	// (a pose taken - not the one you were in, said again after a while: your view at your character's eyes)
+	}
+	// (whose the game's eyes going down is: settled at standing height; your
+	// head down, B not held - let go of, or the game keeping you down - yours)
+	if ( fabsf( vr.eyeDrop ) < VR_DROP_NONE ) {
+		vr.crouchOwnsDrop = VR_DropIsYours();
+	} else if ( !vr.keyCrouch && VR_DropIsYours() ) {
+		vr.crouchOwnsDrop = qtrue;
+	}
+	vr.gamePosed = posed;
+	// (a switch - a pose begun or over, whose the crouch is - eased over from
+	// where your view is, the game's eyes as they are now; said again after a
+	// while - the menus - as it is now)
+	if ( wasSaid ) {
+		VR_RiseSwitch( H, wasPosed, wasOwned, H, posed, vr.crouchOwnsDrop );
+	}
+	if ( VR_IsRunning() && vr.poseValid ) {
+		VR_PlaceEyes( vrRender.eye );	// (the eye it's drawing for: the other's drawn, or placed in its turn)
+		VR_PlaceHands();
+	}
+}
+
 static void VR_UpdateTracking( void ) {
 	const XrTime t = vr.frameState.predictedDisplayTime;
 
@@ -3199,6 +3619,17 @@ static void VR_UpdateTracking( void ) {
 			vr.headPose.position = loc.pose.position;
 		}
 		vr.poseValid = qtrue;
+	}
+	// (your head's height above the floor)
+	vr.floorValid = qfalse;
+	if ( vr.stageSpace != XR_NULL_HANDLE ) {
+		XrSpaceLocation floor;
+		memset( &floor, 0, sizeof( floor ) );
+		floor.type = XR_TYPE_SPACE_LOCATION;
+		if ( XR_SUCCEEDED( xrLocateSpace( vr.viewSpace, vr.stageSpace, t, &floor ) ) && ( floor.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT ) ) {
+			vr.floorHeadY = floor.pose.position.y;
+			vr.floorValid = qtrue;
+		}
 	}
 
 	XrViewLocateInfo vli;
@@ -3220,9 +3651,11 @@ static void VR_UpdateTracking( void ) {
 		vr.views[1] = views[1];
 	}
 
+	qboolean recentred = qfalse;
 	if ( vr.recenterPending && vr.poseValid ) {
 		vr.positionOrigin = vr.headPose.position;
 		vr.recenterPending = qfalse;
+		recentred = qtrue;
 	}
 
 	// Head angles in tracking space
@@ -3231,42 +3664,18 @@ static void VR_UpdateTracking( void ) {
 	vr.headYaw = VR_AxisYaw( headAxis );
 	vr.headPitch = RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, -headAxis[0][2] ) ) );
 
-	// Positional offset of the head from the recentred origin (clamped)
-	const float headOfs[3] = {
-		vr.headPose.position.x - vr.positionOrigin.x,
-		vr.headPose.position.y - vr.positionOrigin.y,
-		vr.headPose.position.z - vr.positionOrigin.z
-	};
-	const float len = sqrtf( headOfs[0] * headOfs[0] + headOfs[1] * headOfs[1] + headOfs[2] * headOfs[2] );
-	const float maxLen = Q_max( 0.0f, vr_positionalMax->value );
-	float posScale = vr_positional->integer ? 1.0f : 0.0f;
-	if ( len > maxLen && len > 0.0f ) {
-		posScale *= maxLen / len;
-	}
-
+	// Your height (Real Crouch decided), and the eyes: the head's offset from
+	// the game's eyes - placed again as the cgame says where they are now
+	// (VR_SetEyeDrop)
+	VR_HeightFrame( recentred );
 	for ( int e = 0; e < 2; e++ ) {
-		const XrPosef *p = &vr.views[e].pose;
-		VR_QuatToAxis( &p->orientation, vrRender.eyeAxis[e] );
-
-		// eye = (clamped head offset) + (eye relative to head, i.e. IPD)
-		const float eyePos[3] = {
-			headOfs[0] * posScale + ( p->position.x - vr.headPose.position.x ),
-			headOfs[1] * posScale + ( p->position.y - vr.headPose.position.y ),
-			headOfs[2] * posScale + ( p->position.z - vr.headPose.position.z )
-		};
-		VR_XrToQuake( eyePos, vrRender.eyeOrigin[e] );
-
-		// Tell the compositor the pose the image is really rendered from.
-		vr.submitPose[e].orientation = p->orientation;
-		vr.submitPose[e].position.x = vr.positionOrigin.x + eyePos[0];
-		vr.submitPose[e].position.y = vr.positionOrigin.y + eyePos[1];
-		vr.submitPose[e].position.z = vr.positionOrigin.z + eyePos[2];
-
+		VR_QuatToAxis( &vr.views[e].pose.orientation, vrRender.eyeAxis[e] );
 		vrRender.tanLeft[e] = tanf( vr.views[e].fov.angleLeft );
 		vrRender.tanRight[e] = tanf( vr.views[e].fov.angleRight );
 		vrRender.tanUp[e] = tanf( vr.views[e].fov.angleUp );
 		vrRender.tanDown[e] = tanf( vr.views[e].fov.angleDown );
 	}
+	VR_PlaceEyes( -1 );
 
 	for ( int e = 0; e < 2; e++ ) {
 		VR_ComputeHudRect( e );
@@ -3287,22 +3696,10 @@ static void VR_UpdateTracking( void ) {
 			continue;
 		}
 		vrClient.handValid[h] = qtrue;
-		const XrPosef *g = &vr.gripPose[h], *a = &vr.aimPose[h];
-		const float gp[3] = {
-			headOfs[0] * posScale + ( g->position.x - vr.headPose.position.x ),
-			headOfs[1] * posScale + ( g->position.y - vr.headPose.position.y ),
-			headOfs[2] * posScale + ( g->position.z - vr.headPose.position.z )
-		};
-		const float ap[3] = {
-			headOfs[0] * posScale + ( a->position.x - vr.headPose.position.x ),
-			headOfs[1] * posScale + ( a->position.y - vr.headPose.position.y ),
-			headOfs[2] * posScale + ( a->position.z - vr.headPose.position.z )
-		};
-		VR_XrToQuake( gp, vrClient.gripOrigin[h] );
-		VR_XrToQuake( ap, vrClient.aimOrigin[h] );
-		VR_QuatToAxis( &g->orientation, vrClient.gripAxis[h] );
-		VR_QuatToAxis( &a->orientation, vrClient.aimAxis[h] );
+		VR_QuatToAxis( &vr.gripPose[h].orientation, vrClient.gripAxis[h] );
+		VR_QuatToAxis( &vr.aimPose[h].orientation, vrClient.aimAxis[h] );
 	}
+	VR_PlaceHands();
 	VR_GunAim();
 
 	// Who aims, and which tracking yaw lines up with the game camera's yaw:
@@ -3341,8 +3738,6 @@ static void VR_UpdateTracking( void ) {
 	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
-	const float hp[3] = { headOfs[0] * posScale, headOfs[1] * posScale, headOfs[2] * posScale };
-	VR_XrToQuake( hp, vrClient.headOrigin );
 	VectorCopy( headAxis[0], vrClient.headAxis[0] );
 	VectorCopy( headAxis[1], vrClient.headAxis[1] );
 	VectorCopy( headAxis[2], vrClient.headAxis[2] );
@@ -3460,8 +3855,14 @@ void VR_ApplyHeadAim( void ) {
 }
 
 void VR_AddMovement( usercmd_t *cmd ) {
+	vr.keyCrouch = (qboolean)( cmd->upmove < 0 );	// (B, as the keys have it: VR_SetEyeDrop)
 	if ( !VR_IsRunning() || !vr.inputAttached || VR_UseScreenLayer() || ( Key_GetCatcher() & KEYCATCH_MESSAGE ) ) {
 		return;
+	}
+	// Real Crouch: crouched by your head (VR_HeadRise) - jumping (A) stands
+	// you up to jump
+	if ( vr.crouching && cmd->upmove <= 0 ) {
+		cmd->upmove = -127;
 	}
 	if ( vr.moveX == 0.0f && vr.moveY == 0.0f ) {
 		return;
@@ -3970,6 +4371,30 @@ static void VR_Recenter_f( void ) {
 	Com_Printf( "VR: recentred\n" );
 }
 
+// Set Height: how high your eyes are above the floor, standing up straight,
+// becomes your height (vr_height) - felt in both hands, a short firm buzz;
+// a long soft one, it couldn't (no floor, or not standing).
+static void VR_SetHeight_f( void ) {
+	if ( !VR_IsRunning() || !vr.poseValid ) {
+		Com_Printf( "VR: Set Height needs your headset on\n" );
+		return;
+	}
+	if ( !vr.floorValid || vr.floorHeadY < VR_HEIGHT_MIN || vr.floorHeadY > VR_HEIGHT_MAX ) {
+		if ( !vr.floorValid ) {
+			Com_Printf( "VR: your headset doesn't say where the floor is - set it up, or set Eye Height yourself (Setup > Controls, VR Movement)\n" );
+		} else {
+			Com_Printf( "VR: your eyes are %.2f m up - stand up straight, and Set Height again\n", vr.floorHeadY );
+		}
+		VR_Pulse( VR_HAND_LEFT, 0.4f, 0.2f );	// (a long soft buzz: not set)
+		VR_Pulse( VR_HAND_RIGHT, 0.4f, 0.2f );
+		return;
+	}
+	Cvar_Set( "vr_height", va( "%.2f", vr.floorHeadY ) );
+	VR_Pulse( VR_HAND_LEFT, 0.1f, 0.5f );	// (a short firm one: set)
+	VR_Pulse( VR_HAND_RIGHT, 0.1f, 0.5f );
+	Com_Printf( "VR: your height set: your eyes %.2f m up\n", vr.floorHeadY );
+}
+
 static void VR_Status_f( void ) {
 	if ( vr.instance == XR_NULL_HANDLE ) {
 		Com_Printf( "VR: no OpenXR instance (vr_enabled %d)\n", vr_enabled ? vr_enabled->integer : 0 );
@@ -3990,6 +4415,16 @@ static void VR_Status_f( void ) {
 				RAD2DEG( vr.views[e].fov.angleUp ), RAD2DEG( vr.views[e].fov.angleDown ),
 				vrRender.hudX[e], vrRender.hudY[e], vrRender.hudW[e], vrRender.hudH[e] );
 		}
+	}
+	{
+		char floor[64] = "the floor not known";
+		if ( vr.floorValid ) {
+			Com_sprintf( floor, sizeof( floor ), "your eyes %.2f m above the floor", vr.floorHeadY );
+		}
+		Com_Printf( "VR: height %s, %s, %s; Real Crouch %s%s; the game's eyes %.0f below standing%s%s%s\n",
+			VR_Height() > 0.0f ? va( "%.2f m", VR_Height() ) : "not set", vr_seated->integer ? "playing seated" : "standing", floor,
+			vr_realCrouch->integer ? "on" : "off", vr.crouching ? " (crouched)" : "", vr.eyeDrop, vr.gamePosed ? ", in a pose" : "",
+			vr.gameSwimming ? ", swimming" : "", vr.gameOwnEyes ? "" : ", the camera not at them" );
 	}
 	for ( int h = 0; h < 2; h++ ) {
 		static const struct {
@@ -4039,6 +4474,9 @@ void VR_Init( void ) {
 	vr_turnSpeed		= Cvar_Get( "vr_turnSpeed",			"180",	CVAR_ARCHIVE, "Smooth turn speed in degrees per second" );
 	vr_snapFade			= Cvar_Get( "vr_snapFade",			"0",	CVAR_ARCHIVE, "Snap Fade: the view dips to dark for a moment as you snap turn, turning you while it's dark" );
 	vr_vignette			= Cvar_Get( "vr_vignette",			"0",	CVAR_ARCHIVE, "Comfort Vignette: the edges of your view darken while the game moves you - the stick, smooth turning, a jump, a fall - more the faster (0 = off, 1 = low, 2 = medium, 3 = high)" );
+	vr_seated			= Cvar_Get( "vr_seated",			"0",	CVAR_ARCHIVE, "Play Seated: you sit, your character stands - your head as it is at Recenter (sitting up straight) is your standing height" );
+	vr_height			= Cvar_Get( "vr_height",			"0",	CVAR_ARCHIVE, "How high your eyes are when you stand, in metres above the floor (vr_setHeight measures it; 0 = not set)" );
+	vr_realCrouch		= Cvar_Get( "vr_realCrouch",		"1",	CVAR_ARCHIVE, "Real Crouch: your head below 70% of your height (vr_height) crouches your character" );
 	vr_moveDirection	= Cvar_Get( "vr_moveDirection",		"0",	CVAR_ARCHIVE, "The moving stick moves you: 0 = where you look, 1 = where the hand holding it points" );
 	vr_swapSticks		= Cvar_Get( "vr_swapSticks",		"0",	CVAR_ARCHIVE, "1: move with the right stick, turn and switch weapon with the left (their clicks swap too)" );
 	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );
@@ -4054,6 +4492,7 @@ void VR_Init( void ) {
 	VR_DefaultPoseWheelBind();
 
 	Cmd_AddCommand( "vr_recenter", VR_Recenter_f, "Re-centre the VR position and menu screen" );
+	Cmd_AddCommand( "vr_setHeight", VR_SetHeight_f, "Stand up straight: your eyes' height above the floor becomes vr_height" );
 	Cmd_AddCommand( "vr_status", VR_Status_f, "Print VR runtime and headset status" );
 }
 
@@ -4089,6 +4528,7 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {}
 void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
 void VR_SetCmdButtons( int buttons ) {}
+void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_GenericCmd( int genCmd ) {}
 void VR_DrawOverlay( void ) {}
 

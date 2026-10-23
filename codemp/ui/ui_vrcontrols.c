@@ -25,6 +25,10 @@ otherwise left as it is.
     Swap Sticks       move with the right, turn with the   vr_swapSticks
                       left (cl_vr.cpp)
     Stick Deadzone    0.05-0.5                             vr_deadzone
+    Play Seated       you sit, your character stands       vr_seated
+    Set Height        (a button): your eyes' height        vr_setHeight
+    Eye Height        what it measured, 1-2.5 m            vr_height
+    Real Crouch       crouch for real, crouch in the game  vr_realCrouch
     Recenter          (a button)                           vr_recenter
   VR View
     Head Movement     your view follows your head          vr_positional
@@ -82,7 +86,7 @@ static const struct {
 	const char	*desc;
 } vrcSections[VRC_SECTIONS] = {
 	{ "vr_controls_move", "vrmove", "vrmovebutton", "vrmovebutton_glow", "vrmove_highlight", "VR Movement",
-		"Turning, moving and the sticks in VR, comfort settings - and recentering" },
+		"Turning, moving and the sticks in VR, comfort, your height - and recentering" },
 	{ "vr_controls_view", "vrview", "vrviewbutton", "vrviewbutton_glow", "vrview_highlight", "VR View",
 		"Your view in VR: head movement, the HUD, the menu screen, gun aim, resolution" },
 };

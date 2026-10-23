@@ -1934,6 +1934,7 @@ qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qb
 int CG_VR_SaberHand( int saberNum );
 void CG_VR_BodyRebolt( centity_t *cent );
 float CG_VR_PoseEyeAdjust( void );
+qboolean CG_VR_Posed( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );
 qboolean CG_VRB_GazeShared( void );

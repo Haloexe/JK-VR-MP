@@ -1937,6 +1937,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetWeaponHand				= VR_SetWeaponHand;
 		cgi.ext.VR_SetCmdButtons				= VR_SetCmdButtons;
 		cgi.ext.VR_GenericCmd					= VR_GenericCmd;
+		cgi.ext.VR_SetEyeDrop					= VR_SetEyeDrop;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
@@ -1948,6 +1949,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetWeaponHand				= NULL;
 		cgi.ext.VR_SetCmdButtons				= NULL;
 		cgi.ext.VR_GenericCmd					= NULL;
+		cgi.ext.VR_SetEyeDrop					= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

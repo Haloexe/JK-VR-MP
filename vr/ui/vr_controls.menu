@@ -10,7 +10,10 @@
 //
 //	showValue:	the slider shows its value after it - in whole numbers with a valueStep of 1 or
 //				more, hundredths with one under a tenth, tenths otherwise; the arrow keys (and the
-//				stick, pointing at it) move it by its valueStep (a tenth if it has none)
+//				stick, pointing at it) move it by its valueStep (a tenth if it has none). Its
+//				default below its range (Eye Height: cvarfloat "vr_height" 0 1 2.5), it shows
+//				"Not Set" there (or anywhere outside its range): the keys leave it so, a click
+//				along it sets it, and going down past its least takes it back there
 //	YESNO:		Yes or No after it; clicking it, Enter or the arrow keys change it
 //	MULTI:		its choice after it; clicking it, Enter or the arrow keys go to the next
 //	BUTTON:		does what it says when clicked
@@ -233,11 +236,101 @@
 
 		itemDef
 		{
+			name			vrmove_seated
+			group			vrmove
+			type			ITEM_TYPE_YESNO
+			text			"Play Seated"
+			cvar			"vr_seated"
+			rect			260 314 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Yes: you sit and your character stands - Recenter sitting up straight"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_setheight
+			group			vrmove
+			type			ITEM_TYPE_BUTTON
+			text			"Set Height"
+			rect			260 328 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Stand up straight and click: the game learns how high your eyes are"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				exec		"vr_setHeight"
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_eyeheight
+			group			vrmove
+			type			ITEM_TYPE_SLIDER
+			text			"Eye Height (m)"
+			cvarfloat		"vr_height" 0 1 2.5
+			showValue
+			valueStep		0.01
+			rect			260 342 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How high your eyes are when you stand, in metres - Set Height measures it"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrmove_realcrouch
+			group			vrmove
+			type			ITEM_TYPE_YESNO
+			text			"Real Crouch"
+			cvar			"vr_realCrouch"
+			rect			260 356 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Crouch for real and your character crouches (once the game knows your height)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vrmove_recenter
 			group			vrmove
 			type			ITEM_TYPE_BUTTON
 			text			"Recenter"
-			rect			260 314 340 14
+			rect			260 370 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
