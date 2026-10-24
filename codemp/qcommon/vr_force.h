@@ -11,7 +11,8 @@ out with the Force:
   thrust it out                 Push, the way it went
   reach out, yank it back in    Pull, toward where it was yanked from
   held out still a moment       Grip: whoever it points at, held as long
-                                as the grip is
+                                as the grip is (not with the palm turned
+                                up: that's Drain coming)
   its trigger                   Lightning, where it points - with the palm
                                 turned up, Drain - as long as it's held
   a quick squeeze               the Force power picked (the wheel's Force
@@ -76,12 +77,13 @@ General Public License version 2, like the rest of OpenJK.
 #define VRF_PULL_MS			700		// a Pull: yanked in within this long of reaching out
 #define VRF_SETTLE			0.5f	// metres a second: after a Push or a Pull, slower than this...
 #define VRF_GAP_MS			250		// ...and this long after it, before another (or Grip)
-#define VRF_STILL			0.3f	// metres a second: held still...
-#define VRF_GRIP_MS			350		// ...out, this long: Grip
+#define VRF_STILL			0.4f	// metres a second: held still...
+#define VRF_GRIP_MS			350		// ...out, this long (the palm not up: VRF_PALM_UP): Grip (a moment past a quick squeeze's)
 #define VRF_TAP_MS			300		// the Force grip let go within this, the hand moved...
 #define VRF_TAP_MOVE		0.10f	// ...less than this, nothing done: a quick squeeze...
 #define VRF_TAP_HOLD_MS		150		// ...holds Use Force this long (the server sees it, whatever its pace)
-#define VRF_PALM_UP			0.5f	// the palm this far up (1: straight up) as the trigger's pulled: Drain
+#define VRF_PALM_UP			0.5f	// the palm this far up (1: straight up) as the trigger's pulled: Drain (and held out so,
+										// no Grip)
 #define VRF_OPEN			0.3f	// Open hand: the grip squeezed less than this, the trigger pulled less
 #define VRF_SPEED_MS		40		// how fast the hand goes: over this long at least...
 #define VRF_SPEED_MAX_MS	150		// ...from no further back than this (else it isn't known)
@@ -321,9 +323,10 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 
 	// Grip: reaching out, nothing done yet this squeeze (once a Push, a Pull or
 	// the trigger is, not till it's squeezed afresh), held out still a moment -
-	// then held as long as the Force grip is
+	// the palm not turned up (Drain's to come) - then held as long as the Force
+	// grip is
 	if ( st->reaching && !st->done ) {
-		if ( known && speed < VRF_STILL && reachingOut ) {
+		if ( known && speed < VRF_STILL && reachingOut && in->palmUp < VRF_PALM_UP ) {
 			if ( !st->stillTime ) {
 				st->stillTime = in->time;
 			}

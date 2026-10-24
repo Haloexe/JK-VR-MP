@@ -233,12 +233,17 @@ GOOD TO KNOW
 * VR players' Force powers come from their Force hand (their empty hand,
   with Force gestures on): Push and Pull the way they thrust or yanked it,
   Grip, Lightning and Drain where it points - each straight at someone
-  within 10 degrees of that whom it works on (never onto, or off, someone
-  cloaked or mind-tricking them) - and everyone on this build sees them
-  leave that hand ("vrForce 1" in the server info). Each power keeps the
-  game's own levels, costs and reach. g_vrForce 0: the game's own aim,
-  where they look. games.log says where each came from (g_vrSaberLog:
-  Lightning's and Drain's aim at most four times a second).
+  within 10 degrees of that (Grip: 15), anywhere on them, whom it works on
+  (never onto, or off, someone cloaked or mind-tricking them) - and
+  everyone on this build sees them leave that hand ("vrForce 2" in the
+  server info; 1, the build before this one's). Each power keeps the
+  game's own levels and costs, and its reach - but Grip from the hand, a
+  quarter further (320 units, about 9 m; the game's 256 for everyone
+  else), catching nobody the game's hold would let go of at once (out of
+  sight of where they stand). g_vrForce 0: the game's own aim and reach,
+  where they look.
+  games.log says where each came from (g_vrSaberLog: Lightning's and
+  Drain's aim at most four times a second).
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).

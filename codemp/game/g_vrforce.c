@@ -12,35 +12,42 @@ gesture, the Force grip's quick squeeze, a key:
 
   Push, Pull         the way the hand thrust it (a gesture's), else where
                      it points
-  Grip               whom it catches, where it points (no one further
-                     from them than the game's held Grip holds - nor anyone
-                     once a Push or a Pull has gone with its button held,
-                     nobody caught, till it's let go); then held
-                     as long as the game holds a Grip (DoGripAction: level
-                     1 five seconds, 2 and 3 four), below level 3 only
-                     while it points within the game's 25 degrees of them,
-                     side to side (InFront: up and down don't count) -
-                     level 3 floats them along where it points
+  Grip               whom it catches, where it points - from the hand,
+                     VR_FORCE_GRIP_REACH (qcommon/vr_public.h: a quarter
+                     further than the game's own), nobody further from them
+                     than that (nor anyone once a Push or a Pull has gone
+                     with its button held, nobody caught, till it's let
+                     go); then held as long as the game holds a Grip
+                     (DoGripAction: level 1 five seconds, 2 and 3 four), as
+                     far as that, below level 3 only while it points within
+                     the game's 25 degrees of them, side to side (InFront:
+                     up and down don't count) - level 3 floats them along
+                     where it points
   Lightning, Drain   where it points
 
-each snapped onto someone within VR_FORCE_SNAP degrees of that line - the
-one nearest it - alive, in the power's reach and in sight of the hand, not
-on your side, the power working on them (ForcePowerUsableOn: not down, not
-your companion, not in a duel...; Drain, some Force in them) - but never
-onto, nor off, someone hidden from you (cloaked, or mind-tricking you,
-while your Seeing isn't going): nearest the line, it stays as it is (as
-the game's own aim would have it, hitting them if it's on them). The cgame
-draws it so too (cg_vrforce.c's CG_VR_ForceSnap). The rest of each power is
-the game's own (w_force.c): its levels, reach and cones, who it works on,
-what it costs. The hand is where the player's avatar has it (within reach
-of their eyes: g_vrsaber.c), from where they are now; a hand reaching
+each snapped onto someone within VR_FORCE_SNAP degrees of that line
+(Grip, VR_FORCE_SNAP_GRIP) - anywhere on them, their body a line up
+through the middle of their box (VR_ForceBodyPoint) - the one nearest it,
+alive, in the power's reach and in sight of the hand (Grip's, as its catch
+sees: no player clip between), not on your side, the power working on them
+(ForcePowerUsableOn: not down, not your companion, not in a duel...; Drain,
+some Force in them) - but never onto, nor off, someone hidden from you
+(cloaked, or mind-tricking you, while your Seeing isn't going): nearest the
+line, it stays as it is (as the game's own aim would have it, hitting them
+if it's on them). Their game picks whom it's aimed at (cg_vrforce.c: along
+where the controller points, or where their hand is as they see it) and
+points it straight at them; it draws it so too (CG_VR_ForceSnap). The rest
+of each power is the game's own
+(w_force.c): its levels, reach and cones, who it works on, what it
+costs. The hand is where the player's avatar has it (within reach of
+their eyes: g_vrsaber.c), from where they are now; a hand reaching
 into a wall, or into someone, gives way there. Their commands coming
 without an avatar, it's gone at once; not coming, VR_FORCE_FRESH on.
 
 Everyone else sees the Force come from that hand too: the avatar the
 server passes on keeps it (cg_vrforce.c draws it). g_vrForce 0: the game's
 own aim, where they look - and no Force hand passed on. "vrForce" in the
-serverinfo says which.
+serverinfo says which (VR_FORCE_SERVED, or 0).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -49,7 +56,6 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "g_local.h"
 
-#define VR_FORCE_SNAP		10.0f	// degrees: someone this near the hand's line is who it's aimed at
 #define VR_FORCE_FRESH		250		// ms: a Force hand not heard of for this long is gone
 #define VR_FORCE_LOG_MS		1000	// (the log: a power aimed at the same one again within this isn't said again...
 #define VR_FORCE_LOG_HELD_MS	250		// ...nor a held one - Lightning, Drain - aimed anew within this: its hand wavering)
@@ -81,10 +87,11 @@ qboolean G_VRForceOn( void ) {
 	return (qboolean)( G_VRPosesAvailable() && g_vrForce.integer > 0 );
 }
 
-// "vrForce 1" in the serverinfo: VR players' Force comes from their hand
-// here (their game draws it so).
+// "vrForce" in the serverinfo: VR players' Force comes from their hand here,
+// as this build aims it (VR_FORCE_SERVED - their game draws it so, and picks
+// whom it's aimed at as this does); 0, not.
 void G_VRForcePublish( void ) {
-	trap->Cvar_Set( "vrForce", G_VRForceOn() ? "1" : "0" );
+	trap->Cvar_Set( "vrForce", G_VRForceOn() ? va( "%i", VR_FORCE_SERVED ) : "0" );
 }
 
 // A player's slot taken or left: nothing of theirs kept.
@@ -193,20 +200,45 @@ static void VRF_From( gentity_t *self, const vrForceHand_t *f, vec3_t from ) {
 	}
 }
 
-// Someone the hand's line goes within VR_FORCE_SNAP degrees of - alive, a body
-// in the world, within range of it and in sight of it, not on your side (Push
-// and Pull: never, friendly fire or not - ForceThrow's), the power working on
-// them (ForcePowerUsableOn; Grip: no one it can't catch now, nor further from
-// you than a held Grip holds; Drain: some Force in them) - the one nearest that
-// line: the way to their middle. Of them, someone hidden from you (cloaked, or
+// Whether a Grip holds ent from where self stands - DoGripAction lets go at
+// once of one it doesn't: where they stand in sight of where self does
+// (MASK_PLAYERSOLID: player clips, bodies - but their own).
+qboolean G_VRForceGripHolds( gentity_t *self, gentity_t *ent ) {
+	trace_t tr;
+
+	trap->Trace( &tr, self->client->ps.origin, NULL, NULL, ent->client->ps.origin, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0 );
+	return (qboolean)( tr.fraction >= 1.0f || tr.entityNum == ent->s.number );
+}
+
+// Where on someone a power aimed from 'from' along dir goes: the point of their
+// body - the line up through the middle of their box (VR_ForceBodySpan) -
+// nearest the aim's line.
+static void VRF_BodyPoint( const gentity_t *ent, const vec3_t from, const vec3_t dir, vec3_t point ) {
+	float bottom, top;
+
+	VR_ForceBodySpan( ent->r.currentOrigin[2], ent->r.mins[2], ent->r.maxs[2], &bottom, &top );
+	VR_ForceBodyPoint( from, dir, ent->r.currentOrigin[0] + ( ent->r.mins[0] + ent->r.maxs[0] ) * 0.5f,
+		ent->r.currentOrigin[1] + ( ent->r.mins[1] + ent->r.maxs[1] ) * 0.5f, bottom, top, point );
+}
+
+// Someone the hand's line goes within VR_FORCE_SNAP degrees of (Grip:
+// VR_FORCE_SNAP_GRIP), anywhere on them (VRF_BodyPoint) - alive, a body in the
+// world, within range of it and in sight of it (Grip: as its catch sees,
+// MASK_PLAYERSOLID - player clips in the way, corpses not - and only if a Grip
+// along it would hold them, G_VRForceGripHolds and DoGripAction's InFront),
+// not on your side (Push and
+// Pull: never, friendly fire or not - ForceThrow's), the power working on them
+// (ForcePowerUsableOn; Grip: no one it can't catch now, nor further from you
+// than it reaches; Drain: some Force in them) - the one nearest that line: the
+// way to that point of them. Of them, someone hidden from you (cloaked, or
 // tricking you - your Seeing not going: it shows both) is never snapped onto,
 // nor off: nearest the line, the line stays as it is. (The line as it is:
 // nobody.)
 static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_t from, vec3_t dir ) {
-	const float least = cosf( DEG2RAD( VR_FORCE_SNAP ) );
+	const float least = cosf( DEG2RAD( ( power == FP_GRIP ) ? VR_FORCE_SNAP_GRIP : VR_FORCE_SNAP ) );
 	const qboolean seeing = (qboolean)( ( self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) ) != 0 );
 	int list[MAX_GENTITIES], n, i;
-	vec3_t mins, maxs, best;
+	vec3_t mins, maxs, best, lineAngles;
 	float bestDot = least;
 	gentity_t *pick = NULL;
 
@@ -214,10 +246,11 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_
 		mins[i] = from[i] - range;
 		maxs[i] = from[i] + range;
 	}
+	vectoangles( dir, lineAngles );
 	n = trap->EntitiesInBox( mins, maxs, list, MAX_GENTITIES );
 	for ( i = 0; i < n; i++ ) {
 		gentity_t *ent = &g_entities[list[i]];
-		vec3_t mid, to;
+		vec3_t at, to;
 		trace_t tr;
 		float d, dot;
 		qboolean hidden;
@@ -230,15 +263,14 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_
 		}
 		if ( power == FP_GRIP && ( ( ent->client->ps.fd.forcePowersActive & ( 1 << FP_ABSORB ) ) || ent->client->ps.fd.forceGripCripple ||
 			ent->client->ps.fd.forceGripBeingGripped >= level.time || DistanceSquared( ent->client->ps.origin, self->client->ps.origin ) > range * range ) ) {
-			continue;	// (absorbing it - asked here: ForcePowerUsableOn sounds that - still choking, gripped, or out of a held Grip's reach)
+			continue;	// (absorbing it - asked here: ForcePowerUsableOn sounds that - still choking, gripped, or out of the Grip's reach)
 		}
 		if ( ( power == FP_DRAIN && ent->client->ps.fd.forcePower <= 0 ) || !ForcePowerUsableOn( self, ent, (forcePowers_t)power ) ) {
 			continue;	// (it won't work on them: down, your companion, knocked down, in a duel, ysalamiri... - no Force to drain)
 		}
 		hidden = (qboolean)( !seeing && ( ent->client->ps.powerups[PW_CLOAKED] || G_IsMindTricked( &ent->client->ps.fd, self->s.number ) ) );
-		VectorAdd( ent->r.absmin, ent->r.absmax, mid );
-		VectorScale( mid, 0.5f, mid );
-		VectorSubtract( mid, from, to );
+		VRF_BodyPoint( ent, from, dir, at );
+		VectorSubtract( at, from, to );
 		d = VectorNormalize( to );
 		if ( d < 1.0f || d > range ) {
 			continue;
@@ -247,9 +279,14 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_
 		if ( dot <= bestDot ) {
 			continue;
 		}
-		trap->Trace( &tr, from, NULL, NULL, mid, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+		trap->Trace( &tr, from, NULL, NULL, at, self->s.number, ( power == FP_GRIP ) ? MASK_PLAYERSOLID : MASK_SHOT, qfalse, 0, 0 );
 		if ( tr.fraction < 1.0f && tr.entityNum != ent->s.number ) {
-			continue;	// (out of sight of the hand)
+			continue;	// (out of sight of the hand - Grip's, as ForceGrip's catch sees: player clips in the way, not corpses)
+		}
+		if ( power == FP_GRIP && ( !InFront( ent->client->ps.origin, (float *)from, lineAngles, VR_FORCE_GRIP_FRONT ) ||
+			!G_VRForceGripHolds( self, ent ) ) ) {
+			continue;	// (a Grip along the line wouldn't hold them: off to the side of it - steeply over or under - or where they stand
+						// out of sight of where you do, behind a crate, say: DoGripAction lets go at once)
 		}
 		bestDot = dot;
 		VectorCopy( to, best );
@@ -274,9 +311,9 @@ static const char *VRF_PowerName( int power ) {
 
 // Where a power of a VR player's goes from - their Force hand - and which way
 // (w_force.c): Push and Pull the way a gesture thrust them, else (and the rest)
-// where it points, snapped onto someone within VR_FORCE_SNAP degrees of that,
-// in range of it. qfalse: no Force hand - start and dir as they were (the
-// game's own: their eyes, where they look).
+// where it points, snapped onto someone within VR_FORCE_SNAP degrees of that
+// (Grip: VR_FORCE_SNAP_GRIP), in range of it. qfalse: no Force hand - start
+// and dir as they were (the game's own: their eyes, where they look).
 qboolean G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir ) {
 	vrForceHand_t *f = VRF_Hand( self );
 	const gentity_t *onto;

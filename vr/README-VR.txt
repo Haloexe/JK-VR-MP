@@ -214,6 +214,8 @@ stick up or down on a slider to move it a step.
     Thrust Speed     how fast a thrust or a yank must be for Push and Pull:
                      0.8 to 3 metres a second (1.6 as it comes) - lower if
                      they don't come, higher if they come by accident
+    Aim Glow         whoever your Grip is aimed at glows while you hold
+                     the Force grip out (Yes, as it comes)
 Each is a console setting as well (SETTINGS, below).
 
 YOUR HEIGHT. Until the game knows your height, your view goes up and down
@@ -763,13 +765,14 @@ grip, squeezed as far as Use):
   Pull             reach out (not fast: a quick thrust out is a Push),
                    then yank it back toward you in one go: Pull goes
                    toward where you yanked it from
-  Grip             hold it out still a moment, pointing at someone, first
-                   thing after you squeeze: they stay held while you hold
-                   the Force grip, as long as the game holds a Grip (five
-                   seconds at level 1, four at levels 2 and 3 - still
-                   holding, it grips again three seconds on); below level
-                   3, only while you point at them (within 25 degrees or
-                   so, side to side)
+  Grip             hold it out still a moment (about a third of a second),
+                   pointing at someone, first thing after you squeeze -
+                   not with your palm turned up (that's Drain coming):
+                   they stay held while you hold the Force grip, as long
+                   as the game holds a Grip (five seconds at level 1, four
+                   at levels 2 and 3 - still holding, it grips again three
+                   seconds on); below level 3, only while you point at them
+                   (within 25 degrees or so, side to side)
   Lightning        its trigger, pointing at them - as long as you hold it
   Drain            the same, your palm turned up
   a quick squeeze  any other power: the one picked on the wheel's Force
@@ -785,19 +788,41 @@ controller tells you what happens: a light buzz as you reach out, a thump
 as you Push and a tug as you Pull (when the game does them), a strain
 while you Grip someone, a crackle with Lightning, a steady pull with
 Drain. Holding your hand out still before a yank grips instead of pulling:
-pull in one go. A hand holding a saber (two sabers, or both hands on one)
-holds it: its grip does what it always did. Force Jump is still A held. On
-a server running this build ("vrForce 1" in its server info) the Force
+pull in one go - and before the trigger, it grips them first (the trigger
+then lets go for Lightning or Drain): for Lightning at once, pull the
+trigger before your hand settles. A hand holding a saber (two sabers, or
+both hands on one) holds it: its grip does what it always did. Force Jump
+is still A held.
+On a server running this build ("vrForce 2" in its server info) the Force
 comes out of your hand: Push and Pull go the way you thrust or yanked,
-Grip, Lightning and Drain where your hand points - each straight at
-someone within 10 degrees of that whom the power works on (never onto, or
-off, someone cloaked or hidden from you by a mind trick, unless your
-Seeing shows them) - and everyone on this build sees your Lightning and
-Drain go from your hand to them. On other servers the gestures still work,
-but every power aims where you look (with a gun out, where it points), as
-in the normal game - and a Grip that's caught nobody, held on through a
-Push or a Pull, can still catch whom you look at after it. The Force
-Gestures and Thrust Speed settings are under VR Force (above).
+Grip, Lightning and Drain where your hand points - where the controller
+points, or, your hand held up where you see it, where your hand is as you
+see it: put it over them. Whoever's near either of those, anywhere on them
+(head to foot), within 15 degrees for Grip and 10 for Lightning and Drain,
+is whom the power goes straight at - someone it works on, in its reach,
+the one nearest (once it's on someone it stays on them till someone else
+is clearly nearer; never onto, or off, someone cloaked or hidden from you
+by a mind trick, unless your Seeing shows them); nobody near, it goes
+where the controller points. Everyone on this build sees your Lightning
+and Drain go from your hand to them. While you hold the Force grip, your
+hand held out to Grip (reaching out, the palm not turned up), and your
+Grip could catch someone (not after a Push, a Pull or the trigger in that
+squeeze - squeeze again - nor in the three seconds after a Grip ends),
+whoever it would catch glows (Aim Glow), and the controller ticks as it
+lands on someone new (glow or no glow). Nobody the Grip couldn't hold
+glows - someone you can't see from where you stand (over a low wall,
+say), or high over you with your hand off to their side - and from your
+hand it won't catch them at all (the game would let go of them at once,
+your Force spent and the wait begun). Once you hold someone, the Grip
+follows your hand along whichever of the two lines holds them. Grip from your hand reaches a quarter
+further than the game's (320 units: about 9 m, 7.5 m before). A server running the build before this one ("vrForce
+1") takes your Force from your hand as well, but there it goes where the
+controller points, and nobody glows. On other servers the gestures still
+work, but every power aims where you look (with a gun out, where it
+points), as in the normal game - and a Grip that's caught nobody, held on
+through a Push or a Pull, can still catch whom you look at after it. The
+Force Gestures, Thrust Speed and Aim Glow settings are under VR Force
+(above).
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
@@ -1229,6 +1254,9 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
                          too, 0 = off (the Force grip uses the power picked)
   vr_forceThrust 1.6     how fast a thrust or yank must be for Push and Pull
                          (metres a second, 0.8 to 3)
+  cg_vrForceGlow 1       0 = no glow on whom your Grip's aimed at (the tick
+                         as it lands on someone still comes; Setup,
+                         Controls, VR Force: Aim Glow)
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the

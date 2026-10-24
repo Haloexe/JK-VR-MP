@@ -1396,6 +1396,7 @@ void ForceGrip( gentity_t *self )
 	trace_t tr;
 	vec3_t tfrom, tto, fwd;
 	qboolean byHand;	// OpenJK VR
+	float reach;		// OpenJK VR
 
 	if ( self->health <= 0 )
 	{
@@ -1430,10 +1431,11 @@ void ForceGrip( gentity_t *self )
 	VectorCopy(self->client->ps.origin, tfrom);
 	tfrom[2] += self->client->ps.viewheight;
 	AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
-	byHand = G_VRForceAim( self, FP_GRIP, MAX_GRIP_DISTANCE, tfrom, fwd );	// OpenJK VR: a VR player's Force hand, where it points (g_vrforce.c)
-	tto[0] = tfrom[0] + fwd[0]*MAX_GRIP_DISTANCE;
-	tto[1] = tfrom[1] + fwd[1]*MAX_GRIP_DISTANCE;
-	tto[2] = tfrom[2] + fwd[2]*MAX_GRIP_DISTANCE;
+	byHand = G_VRForceAim( self, FP_GRIP, VR_FORCE_GRIP_REACH, tfrom, fwd );	// OpenJK VR: a VR player's Force hand, where it points (g_vrforce.c)...
+	reach = byHand ? VR_FORCE_GRIP_REACH : MAX_GRIP_DISTANCE;					// ...as far as it reaches (qcommon/vr_public.h)
+	tto[0] = tfrom[0] + fwd[0]*reach;
+	tto[1] = tfrom[1] + fwd[1]*reach;
+	tto[2] = tfrom[2] + fwd[2]*reach;
 
 	trap->Trace(&tr, tfrom, NULL, NULL, tto, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
 
@@ -1444,7 +1446,8 @@ void ForceGrip( gentity_t *self )
 		g_entities[tr.entityNum].client->ps.fd.forceGripBeingGripped < level.time &&
 		ForcePowerUsableOn(self, &g_entities[tr.entityNum], FP_GRIP) &&
 		(g_friendlyFire.integer || !OnSameTeam(self, &g_entities[tr.entityNum])) && //don't grip someone who's still crippled
-		( !byHand || DistanceSquared( g_entities[tr.entityNum].client->ps.origin, self->client->ps.origin ) <= MAX_GRIP_DISTANCE * MAX_GRIP_DISTANCE ) ) // OpenJK VR: from the Force hand, none out of their body's reach (DoGripAction lets go of them at once)
+		( !byHand || ( DistanceSquared( g_entities[tr.entityNum].client->ps.origin, self->client->ps.origin ) <= reach * reach &&
+		G_VRForceGripHolds( self, &g_entities[tr.entityNum] ) ) ) ) // OpenJK VR: from the Force hand, none out of their body's reach, nor where they stand out of sight of where you do (DoGripAction lets go of them at once)
 	{
 		if (g_entities[tr.entityNum].s.number < MAX_CLIENTS && g_entities[tr.entityNum].client->ps.m_iVehicleNum)
 		{ //a player on a vehicle
@@ -3875,6 +3878,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 	vec3_t a;
 	vec3_t fwd, fwd_o, start_o, nvel;
 	vec3_t gripFrom, gripAngles, gripDir;	// OpenJK VR
+	qboolean byHand;						// OpenJK VR
 
 	self->client->dangerTime = level.time;
 	self->client->ps.eFlags &= ~EF_INVULNERABLE;
@@ -3911,18 +3915,19 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 		return;
 	}
 
-	if (VectorLength(a) > MAX_GRIP_DISTANCE)
+	// OpenJK VR: a VR player's Force hand holds them - from it, where it points (g_vrforce.c), as far as it reaches
+	VectorCopy( self->client->ps.origin, gripFrom );
+	VectorCopy( self->client->ps.viewangles, gripAngles );
+	byHand = G_VRForceHand( self, gripFrom, gripDir );
+	if ( byHand )
+	{
+		vectoangles( gripDir, gripAngles );
+	}
+
+	if (VectorLength(a) > ( byHand ? VR_FORCE_GRIP_REACH : MAX_GRIP_DISTANCE ))
 	{
 		WP_ForcePowerStop(self, forcePower);
 		return;
-	}
-
-	// OpenJK VR: a VR player's Force hand holds them - from it, where it points (g_vrforce.c)
-	VectorCopy( self->client->ps.origin, gripFrom );
-	VectorCopy( self->client->ps.viewangles, gripAngles );
-	if ( G_VRForceHand( self, gripFrom, gripDir ) )
-	{
-		vectoangles( gripDir, gripAngles );
 	}
 	if ( !InFront( gripEnt->client->ps.origin, gripFrom, gripAngles, 0.9f ) &&
 		gripLevel < FORCE_LEVEL_3)

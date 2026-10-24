@@ -336,3 +336,50 @@ static inline void VR_ToWorld( const vrClientState_t *vr, const vec3_t camOrigin
 		outOrigin[2] = camOrigin[2] + origin[2] * vr->worldScale;
 	}
 }
+
+/*
+--------------------------------------------------------------------------------
+The Force from a VR player's Force hand, as a server running this build aims
+it (game/g_vrforce.c) - and the cgame picks it (cgame/cg_vrforce.c): the same
+numbers on both sides.
+--------------------------------------------------------------------------------
+*/
+#define VR_FORCE_SERVED			2		// "vrForce" in the serverinfo of a server aiming it so (1: one from before these
+										// numbers - the cgame picks no one for it)
+#define VR_FORCE_SNAP			10.0f	// degrees: someone this near the hand's line is who it's aimed at...
+#define VR_FORCE_SNAP_GRIP		15.0f	// ...Grip's, wider
+#define VR_FORCE_GRIP_REACH		320.0f	// how far a Grip from the hand reaches (a quarter further than the game's own,
+										// MAX_GRIP_DISTANCE: 256) - and holds them
+#define VR_FORCE_GRIP_FRONT		0.9f	// a Grip below level 3 holds them while where it points is this near them, side to
+										// side (DoGripAction's InFront) - none's aimed at whom it wouldn't hold
+#define VR_FORCE_BODY_FOOT		6.0f	// someone's body, where the Force aimed at them goes: the line up through the middle
+#define VR_FORCE_BODY_HEAD		2.0f	// of their box, from this far above its bottom to this far below its top
+
+// Someone's body, up from where they stand (z) - their box's bottom and top
+// (lo, hi) from there: from just above the one to just below the other (a box
+// too small for that, its middle).
+static inline void VR_ForceBodySpan( float z, float lo, float hi, float *bottom, float *top ) {
+	*bottom = z + lo + VR_FORCE_BODY_FOOT;
+	*top = z + hi - VR_FORCE_BODY_HEAD;
+	if ( *top < *bottom ) {
+		*bottom = *top = z + ( lo + hi ) * 0.5f;
+	}
+}
+
+// Where a power aimed from 'from' along dir (unit) goes at someone whose body
+// runs straight up through (x, y), from bottom to top: the point on it
+// nearest the aim's line (the two lines' nearest points - kept on the body).
+static inline void VR_ForceBodyPoint( const vec3_t from, const vec3_t dir, float x, float y, float bottom, float top,
+	vec3_t point ) {
+	const float b = dir[2];
+	const float d = dir[0] * ( from[0] - x ) + dir[1] * ( from[1] - y ) + dir[2] * from[2];
+	const float denom = 1.0f - b * b;
+	float z = from[2];	// (aimed straight up or down: as high as it comes from)
+
+	if ( denom > 1e-4f ) {
+		z = ( from[2] - b * d ) / denom;
+	}
+	point[0] = x;
+	point[1] = y;
+	point[2] = ( z < bottom ) ? bottom : ( z > top ) ? top : z;
+}

@@ -51,8 +51,10 @@ them again. The page is otherwise left as it is.
                       (Push and Pull), or off
     Thrust Speed      how fast a thrust (Push) or a yank   vr_forceThrust
                       (Pull) goes, 0.8-3 m/s
+    Aim Glow          whom Grip's aimed at glows           cg_vrForceGlow Yes/No
 
-They're the engine's settings (but Always Run, the game's): all there
+They're the engine's settings (but Always Run and Aim Glow, the game's: Aim
+Glow made here, as it comes, before the game's there - vrcCvars): all there
 before the menus load, and taking effect at once - but Resolution, which
 the headset's picture takes when it's made. (The menus set it as they set
 any: at once - the engine's latching only holds back the console's - and
@@ -86,6 +88,15 @@ extern void		Menu_UpdatePosition( menuDef_t *menu );
 
 static const char *vrcPages[] = { "controlsMenu", "ingame_controls" };
 
+// the game's settings among them, as the game has them (cgame/cg_xcvar.h)
+static const struct {
+	const char	*name;
+	const char	*value;
+	uint32_t	flags;
+} vrcCvars[] = {
+	{ "cg_vrForceGlow",		"1",	CVAR_ARCHIVE },
+};
+
 static const struct {
 	const char	*menu;		// its settings: this menuDef in ui/vr_controls.menu
 	const char	*group;		// their group, on the page
@@ -100,7 +111,7 @@ static const struct {
 	{ "vr_controls_view", "vrview", "vrviewbutton", "vrviewbutton_glow", "vrview_highlight", "VR View",
 		"Your view in VR: head movement, the HUD, the menu screen, gun aim, resolution" },
 	{ "vr_controls_force", "vrforce", "vrforcebutton", "vrforcebutton_glow", "vrforce_highlight", "VR Force",
-		"Your Force hand in VR: gestures for Push, Pull, Grip, Lightning and Drain" },
+		"Your Force hand in VR: gestures for Push, Pull, Grip, Lightning and Drain, and its aim" },
 };
 
 /*
@@ -649,6 +660,9 @@ static void UI_VRC_AddTo( menuDef_t *menu ) {
 void UI_VRControls_AddPages( void ) {
 	int i;
 
+	for ( i = 0; i < (int)ARRAY_LEN( vrcCvars ); i++ ) {
+		trap->Cvar_Register( NULL, vrcCvars[i].name, vrcCvars[i].value, vrcCvars[i].flags );
+	}
 	for ( i = 0; i < (int)ARRAY_LEN( vrcPages ); i++ ) {
 		menuDef_t *menu = Menus_FindByName( vrcPages[i] );
 		if ( menu ) {

@@ -665,5 +665,27 @@
 				play		"sound/interface/button1.wav" ;
 			}
 		}
+
+		itemDef
+		{
+			name			vrforce_glow
+			group			vrforce
+			type			ITEM_TYPE_YESNO
+			text			"Aim Glow"
+			cvar			"cg_vrForceGlow"
+			rect			260 216 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Whoever your Force hand's Grip is aimed at glows while you hold the Force grip"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
 	}
 }

@@ -1955,6 +1955,8 @@ void		CG_VR_ForceFrame( const vrClientState_t *vr );
 qboolean	CG_VR_ForceServed( void );
 int			CG_VR_ForceFx( centity_t *cent, vec3_t dir );
 void		CG_VR_ForceSnap( int shooter, int power, const vec3_t from, float range, vec3_t dir );
+void		CG_VR_ForceAim( const vrClientState_t *vr, const vec3_t hand, const vec3_t controller, vec3_t dir );
+qboolean	CG_VR_ForceGlow( const centity_t *cent );
 float		CG_VR_ForceReach( int power, int level );
 int			CG_VR_ForceRingPowers( int powers[], int max );
 const char	*CG_VR_ForcePowerName( int power );

@@ -8638,6 +8638,28 @@ static qboolean CG_VRForceOrigin( centity_t *cent, clientInfo_t *ci, vec3_t org,
 	return qtrue;
 }
 
+// OpenJK VR: whom your Force hand's Grip would catch now (cg_vrforce.c) - a glow
+// over them, as they're drawn (legs), its colour slowly breathing; seen as
+// they are, not through walls.
+static void CG_VRForceGlow( centity_t *cent, const refEntity_t *legs ) {
+	refEntity_t glow;
+	float breath;
+
+	if ( !CG_VR_ForceGlow( cent ) ) {
+		return;
+	}
+	glow = *legs;
+	breath = 0.8f + 0.2f * sinf( cg.time * 0.006f );
+	glow.shaderRGBA[0] = (byte)( 255 * breath );
+	glow.shaderRGBA[1] = (byte)( 70 * breath );
+	glow.shaderRGBA[2] = (byte)( 30 * breath );
+	glow.shaderRGBA[3] = 255;
+	glow.renderfx &= ~( RF_RGB_TINT | RF_FORCE_ENT_ALPHA | RF_NODEPTH );
+	glow.renderfx |= RF_MINLIGHT;
+	glow.customShader = cgs.media.sightShell;
+	trap->R_AddRefEntityToScene( &glow );
+}
+
 void CG_Player( centity_t *cent ) {
 	clientInfo_t	*ci;
 	refEntity_t		legs;
@@ -11302,6 +11324,8 @@ stillDoSaber:
 
 		trap->R_AddRefEntityToScene( &legs );
 	}
+
+	CG_VRForceGlow( cent, &legs );	// OpenJK VR: whom your Force hand's Grip would catch now
 
 	// Electricity
 	//------------------------------------------------

@@ -8,6 +8,7 @@ off, the Force grip's):
 
   reaching out      a light buzz as the Force grip goes in, then a faint
                     hum while it's held
+  aimed at someone  a light tick as Grip's aim lands on someone new
   Push              a thump
   Pull              a tug
   a quick squeeze   a tick (Use Force: the power picked)
@@ -15,20 +16,25 @@ off, the Force grip's):
   Lightning         a crackle while it's going
   Drain             a steady pull while it's going
 
-Push and Pull are felt if you know them and the game would do them now
-(not with someone gripped, Lightning or Drain going, the last Push's
-wait not over, a swing going...: CG_VRF_ThrowWorks); Grip, Lightning and
-Drain while the game has them going (your player state), however you
-started them - and none of it while you watch (following someone,
-spectating, a demo: their Force isn't yours). The log (cg_vrLog) says
-what the hand did.
+Push and Pull are felt if the game would do them now (you know them; not
+with someone gripped, Lightning or Drain going, the last Push's wait not
+over, a swing going...: CG_VRF_ThrowWorks); Grip, Lightning and Drain while
+the game has them going (your player state), however you started them - and
+none of it while you watch (following someone, spectating, a demo: their
+Force isn't yours). The log (cg_vrLog) says what the hand did.
 
 On a server that aims the Force from the hand ("vrForce" in its
 serverinfo: game/g_vrforce.c) it comes out of it, too: Lightning and
 Drain from that hand, the way it points - onto whom the server snaps it,
 as near as this can tell (CG_VR_ForceSnap) - Push's ripple and Grip's
 glow round it (yours, in the headset, too); yours, drawn as your VR body,
-and another VR player's, from their avatar (cg_players.c).
+and another VR player's, from their avatar (cg_players.c). On one aiming it
+as this build does (VR_FORCE_SERVED), your hand aims it (CG_VR_ForceAim):
+along where the controller points - and, held up in view, where your hand is
+as you see it: someone on either line, anywhere on them, is whom it goes
+straight at (your avatar's forceDir, which the server snaps the same way).
+Whom your Grip would catch glows while you hold the Force grip out
+(cg_vrForceGlow).
 
 And the wheel's Force ring (cg_vrpose.c) picks the Force powers that
 aren't gestures - the one the Force grip's quick squeeze uses, as X and Y
@@ -40,10 +46,11 @@ General Public License version 2, like the rest of OpenJK.
 */
 
 #include "cg_local.h"
+#include "qcommon/vr_force.h"	// (the gestures' own: how Grip wants the hand held - CG_VRF_GripPose)
 
 /*
 --------------------------------------------------------------------------------
-What the Force hand feels
+What the Force hand feels - and what's become of your squeeze, and your Grip
 --------------------------------------------------------------------------------
 */
 
@@ -53,7 +60,34 @@ static struct {
 	qboolean	reaching;
 	int			held;
 	int			active;					// your Force powers going, as last seen (the log)
-} cgf;
+	int			ticked, tickedTime;		// whom Grip's aim was last on (-1: nobody yet), and when (a tick: someone new)
+} cgf = { qfalse, 0, 0, 0, qfalse, 0, 0, -1, 0 };
+
+#define CGF_TICK_AGAIN	600		// ms: Grip's aim back on whom it was on within this long - no one new (no tick)
+
+// Where your Force hand aimed (CG_VR_ForceAim), a frame of it.
+typedef struct {
+	int			time;		// cg.time it aimed (0: never)
+	vec3_t		dir;		// where your Force went (world, unit)
+	int			power;		// whose rules it was aimed by (-1: none)...
+	int			pick;		// ...at whom (-1: nobody)
+} cgfAim_t;
+
+#define CGF_AIM_FRESH	100		// ms: where your Force hand aimed this long ago is where it aims (its effects, the glow)
+#define CGF_CAUGHT_MS	1000	// ms: your Grip going, whom its aim went at this lately is whom it caught
+#define CGF_GRIP_WAIT	3000	// ms: a Grip over, no other for this long (WP_ForcePowerStop: forceGripUseTime)
+
+// Where your Force hand aims, and what's become of your squeeze and your Grip
+// (CG_VRF_Track).
+static struct {
+	cgfAim_t	now, was;			// this frame's aim (or the last one's), and the one before it (CG_VRF_Drawn)
+	int			gripWho, gripTime;	// whom Grip's aim last went at (-1: nobody yet), and when
+	qboolean	spent;				// the Force grip held - a Push, a Pull, Lightning or Drain since it was: no Grip of it...
+	int			sqPushes, sqPulls;	// ...(the engine's counts as it was)
+	qboolean	gripping;			// your Grip going (the game's word), as last seen...
+	int			caught;				// ...whom it caught, as near as this can tell (-1: not known)...
+	int			gripOver;			// ...when one last ended (as the game begins: long enough ago)
+} cgfa = { { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, -1, 0, qfalse, 0, 0, qfalse, -1, -CGF_GRIP_WAIT };
 
 // Whether you're watching, not playing: following someone (the player state's
 // theirs), spectating, a demo - no Force of your own to feel or pick. (cg.snap:
@@ -67,15 +101,14 @@ extern int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS];
 
 // Whether a Push or a Pull (power) would do anything now, as far as your player
 // state says - the game's own reasons it does nothing (ForceThrow's,
-// WP_ForcePowerUsable's): it can't be used now (BG_CanUseFPNow: a ysalamiri,
-// a duel, a vehicle, a broken arm...; down; in a pose; not enough Force),
-// your hand busy (someone gripped, Lightning or Drain going, the last Push or
-// Pull still out, a choke, a taunt...; knocked down, unless getting up), a
-// swing going, the last Push's or Pull's wait not over.
+// WP_ForcePowerUsable's): it can't be used now (not known; BG_CanUseFPNow: a
+// ysalamiri, a duel, a vehicle, a broken arm...; down; in a pose; not enough
+// Force - your levels aren't sent you, but a Push and a Pull cost the same at
+// every level), your hand busy (someone gripped, Lightning or Drain going, the
+// last Push or Pull still out, a choke, a taunt...; knocked down, unless
+// getting up), a swing going, the last Push's or Pull's wait not over.
 static qboolean CG_VRF_ThrowWorks( const playerState_t *ps, int power ) {
-	const int level = ps->fd.forcePowerLevel[power];
-
-	if ( level <= FORCE_LEVEL_0 || level >= NUM_FORCE_POWER_LEVELS || ps->fd.forcePower < forcePowerNeeded[level][power] ||
+	if ( !( ps->fd.forcePowersKnown & ( 1 << power ) ) || ps->fd.forcePower < forcePowerNeeded[FORCE_LEVEL_1][power] ||
 		!BG_CanUseFPNow( cgs.gametype, (playerState_t *)ps, cg.time, (forcePowers_t)power ) || CG_RP_IsDown() || CG_VR_Posed() ) {
 		return qfalse;
 	}
@@ -85,6 +118,75 @@ static qboolean CG_VRF_ThrowWorks( const playerState_t *ps, int power ) {
 	}
 	return (qboolean)( ps->forceHandExtend == HANDEXTEND_NONE ||
 		( ps->forceHandExtend == HANDEXTEND_KNOCKDOWN && !BG_InKnockDownOnly( ps->legsAnim ) ) );
+}
+
+// Your squeeze and your Grip as this frame has them (CG_VR_ForceAim's and
+// CG_VR_ForceFrame's, whichever comes first - twice is once): the Force grip
+// held, a Push, a Pull, Lightning or Drain since it was spends it - no Grip of
+// it (the gestures', and the server's: g_vrforce.c's vrGripSpent) till it's
+// squeezed afresh; your Grip going (the game's word), whom it caught - whom
+// Grip's aim went at lately - and when it's over (its wait).
+static void CG_VRF_Track( const vrClientState_t *vr, const playerState_t *ps ) {
+	const qboolean gripping = (qboolean)( ( ps->fd.forcePowersActive & ( 1 << FP_GRIP ) ) != 0 );
+
+	if ( !vr->force.reaching ) {
+		cgfa.spent = qfalse;
+		cgfa.sqPushes = vr->force.pushes;
+		cgfa.sqPulls = vr->force.pulls;
+	} else if ( vr->force.pushes != cgfa.sqPushes || vr->force.pulls != cgfa.sqPulls ||
+		( vr->force.held & ( VR_FORCE_LIGHTNING | VR_FORCE_DRAIN ) ) ) {
+		cgfa.spent = qtrue;
+	}
+	if ( gripping && !cgfa.gripping ) {
+		cgfa.caught = ( cg.time - cgfa.gripTime >= 0 && cg.time - cgfa.gripTime <= CGF_CAUGHT_MS ) ? cgfa.gripWho : -1;
+	} else if ( !gripping && cgfa.gripping ) {
+		cgfa.gripOver = cg.time;
+	}
+	cgfa.gripping = gripping;
+}
+
+// Whether your Grip would catch anyone now, as far as your player state says -
+// the game's own reasons it wouldn't (ForceGrip's, WP_ForcePowerUsable's): it
+// can't be used now (not known; BG_CanUseFPNow; down; in a pose; not enough
+// Force - your level isn't sent you: level 1's cost, the least), your hand busy
+// (a Push or a Pull still out, a choke, a taunt, knocked down...), a swing
+// going, the last Grip's wait not over; or this squeeze spent (CG_VRF_Track).
+static qboolean CG_VRF_GripWorks( const playerState_t *ps ) {
+	if ( !( ps->fd.forcePowersKnown & ( 1 << FP_GRIP ) ) || ps->fd.forcePower < forcePowerNeeded[FORCE_LEVEL_1][FP_GRIP] ||
+		!BG_CanUseFPNow( cgs.gametype, (playerState_t *)ps, cg.time, FP_GRIP ) || CG_RP_IsDown() || CG_VR_Posed() ) {
+		return qfalse;
+	}
+	if ( ps->weaponTime > 0 || ps->forceHandExtend != HANDEXTEND_NONE || cgfa.spent ) {
+		return qfalse;
+	}
+	return (qboolean)( cg.time - cgfa.gripOver >= CGF_GRIP_WAIT || cg.time - cgfa.gripOver < 0 );
+}
+
+// Whether your Force hand (h) is held as the gestures' Grip wants it
+// (qcommon/vr_force.h's VRF_Update): reaching out from its shoulder, not
+// hanging down - its palm not turned up (Drain's coming). Not whether it's
+// still, nor long enough: the glow shows whom it would catch as you aim. Its
+// controller's pose as the engine reads it: from your head, in metres.
+static qboolean CG_VRF_GripPose( const vrClientState_t *vr, int h ) {
+	vrfInput_t in;
+	vec3_t shoulder, way;
+	vec3_t head[3];
+	int i;
+
+	memset( &in, 0, sizeof( in ) );
+	in.hand = h;
+	VectorCopy( vr->gripOrigin[h], in.pos );
+	VectorCopy( vr->headOrigin, in.head );
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( vr->headAxis[i], head[i] );
+	}
+	in.headYaw = VR_AxisYaw( head );
+	VRF_Shoulder( &in, shoulder );
+	VectorSubtract( in.pos, shoulder, way );
+	if ( VectorNormalize( way ) < VRF_REACH || way[2] <= VRF_HANGING ) {
+		return qfalse;
+	}
+	return (qboolean)( ( ( h == VR_HAND_LEFT ) ? -vr->gripAxis[h][1][2] : vr->gripAxis[h][1][2] ) < VRF_PALM_UP );	// (cl_vr.cpp's palmUp)
 }
 
 static const char *CG_VRF_Held( int held ) {
@@ -100,7 +202,7 @@ static const char *CG_VRF_Held( int held ) {
 // (CG_VR_BodyEndFrame).
 void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
-	int h, i, active;
+	int h, i, active, glow;
 
 	if ( cg.secondEye ) {
 		return;
@@ -115,8 +217,10 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 		cgf.pushes = vr->force.pushes;
 		cgf.pulls = vr->force.pulls;
 		cgf.taps = vr->force.taps;
+		cgf.ticked = -1;
 		cgf.init = qtrue;
 	}
+	CG_VRF_Track( vr, ps );
 	h = vr->force.hand;
 	if ( h != VR_HAND_LEFT && h != VR_HAND_RIGHT ) {
 		h = ( CG_VR_GunHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;	// (the Force grip's)
@@ -132,10 +236,23 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	}
 	cgf.reaching = vr->force.reaching;
 
+	// Grip's aim landing on someone new (CG_VR_ForceAim, this frame - not aimed:
+	// your body not drawn as yours): a tick - back on whom it was on a moment
+	// ago, no one new (it wavered off them)
+	glow = ( cgfa.now.time == cg.time && cgfa.now.power == FP_GRIP ) ? cgfa.now.pick : -1;
+	if ( glow >= 0 ) {
+		if ( glow != cgf.ticked || cg.time - cgf.tickedTime > CGF_TICK_AGAIN || cg.time - cgf.tickedTime < 0 ) {
+			CG_VR_Feel( h, 0.2f, 12, 0.0f, 0 );
+			CG_VR_Log( "force: Grip aimed at %i\n", glow );
+		}
+		cgf.ticked = glow;
+		cgf.tickedTime = cg.time;
+	}
+
 	// what it did (a Push or a Pull the game won't do now: not felt)
 	if ( vr->force.pushes != cgf.pushes ) {
 		const qboolean known = (qboolean)( ( ps->fd.forcePowersKnown & ( 1 << FP_PUSH ) ) != 0 ), works = CG_VRF_ThrowWorks( ps, FP_PUSH );
-		if ( known && works ) {
+		if ( works ) {
 			CG_VR_Feel( h, 1.0f, 70, 0.6f, 140 );
 		}
 		CG_VR_Log( "force: Push, thrust at %.1f m/s%s\n", vr->force.speed,
@@ -144,7 +261,7 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	}
 	if ( vr->force.pulls != cgf.pulls ) {
 		const qboolean known = (qboolean)( ( ps->fd.forcePowersKnown & ( 1 << FP_PULL ) ) != 0 ), works = CG_VRF_ThrowWorks( ps, FP_PULL );
-		if ( known && works ) {
+		if ( works ) {
 			CG_VR_Feel( h, 0.75f, 50, 0.7f, 250 );
 		}
 		CG_VR_Log( "force: Pull, yanked at %.1f m/s%s\n", vr->force.speed,
@@ -186,19 +303,38 @@ Where the Force comes out
 --------------------------------------------------------------------------------
 */
 
-#define VR_FORCE_SNAP	10.0f	// degrees: someone this near the Force's line is who it goes at (the server's: g_vrforce.c)
+// What the server says of VR players' Force ("vrForce" in its serverinfo:
+// game/g_vrforce.c) - 0, the game's own; from their hand, VR_FORCE_SERVED as
+// this build aims it (1, one from before).
+static int CG_VRF_Served( void ) {
+	return atoi( Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), "vrForce" ) );
+}
 
 // Whether the server aims VR players' Force from their Force hand.
 qboolean CG_VR_ForceServed( void ) {
-	return (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), "vrForce" ) ) > 0 );
+	return (qboolean)( CG_VRF_Served() > 0 );
+}
+
+// Where your Force hand aimed as this frame draws it (your effects, the glow):
+// as of the frame before - this frame's comes after the left eye's drawn, and
+// the right eye draws as the left one did - lately (CGF_AIM_FRESH), else NULL.
+static const cgfAim_t *CG_VRF_Drawn( void ) {
+	const cgfAim_t *a = ( cgfa.now.time == cg.time ) ? &cgfa.was : &cgfa.now;
+
+	if ( !a->time || cg.time - a->time < 0 || cg.time - a->time > CGF_AIM_FRESH ) {
+		return NULL;
+	}
+	return a;
 }
 
 // Where a player's Force comes out for its effects (cg_players.c): their
 // Force hand (VR_HAND_*) and the way it points (world axes) - yours, drawn as
-// your VR body, or another VR player's, from their avatar - on a server that
-// aims it from there. -1: the game's own (the left hand, the way they face).
+// your VR body (where your hand aimed it, CG_VR_ForceAim: lately - else the
+// controller's line), or another VR player's, from their avatar - on a server
+// that aims it from there. -1: the game's own (the left hand, the way they face).
 int CG_VR_ForceFx( centity_t *cent, vec3_t dir ) {
 	const vrClientState_t *vr;
+	const cgfAim_t *a;
 	vec3_t aim[3], world[3];
 	int h, i;
 
@@ -213,6 +349,11 @@ int CG_VR_ForceFx( centity_t *cent, vec3_t dir ) {
 	if ( ( h != VR_HAND_LEFT && h != VR_HAND_RIGHT ) || !vr->handValid[h] ) {
 		return -1;
 	}
+	a = CG_VRF_Drawn();
+	if ( a ) {
+		VectorCopy( a->dir, dir );
+		return h;
+	}
 	for ( i = 0; i < 3; i++ ) {
 		VectorCopy( vr->aimAxis[h][i], aim[i] );
 	}
@@ -224,6 +365,44 @@ int CG_VR_ForceFx( centity_t *cent, vec3_t dir ) {
 #define CGF_NONE	0	// (CG_VRF_Target: not someone the server would snap the Force onto...
 #define CGF_SEEN	1	// ...someone it would...
 #define CGF_HIDDEN	2	// ...someone hidden from the shooter: never snapped onto, nor off - nearest the line, it stays)
+
+// Someone's body, where the Force aimed at them goes: the line up through the
+// middle of their box (VR_ForceBodySpan, VR_ForceBodyPoint) - and where they
+// stand.
+typedef struct {
+	float	x, y, bottom, top;
+	vec3_t	origin;
+} cgfBody_t;
+
+static void CG_VRF_Body( const vec3_t origin, float lo, float hi, cgfBody_t *body ) {
+	VectorCopy( origin, body->origin );
+	body->x = origin[0];
+	body->y = origin[1];
+	VR_ForceBodySpan( origin[2], lo, hi, &body->bottom, &body->top );
+}
+
+// Someone's body as they're drawn: you (or whom you follow) as your game has
+// you, anyone else as the snapshot does - their box as the server put it.
+// qfalse: none (not in the snapshot; not solid - no body the server's Force
+// finds, CONTENTS_BODY).
+static qboolean CG_VRF_BodyOf( int n, cgfBody_t *body ) {
+	const entityState_t *es;
+
+	if ( n == cg.predictedPlayerState.clientNum ) {
+		const playerState_t *ps = &cg.predictedPlayerState;
+		CG_VRF_Body( ps->origin, DEFAULT_MINS_2, ( ps->pm_flags & PMF_DUCKED ) ? CROUCH_MAXS_2 : DEFAULT_MAXS_2, body );	// (a player's box)
+		return qtrue;
+	}
+	if ( n < 0 || n >= ENTITYNUM_MAX_NORMAL || !cg_entities[n].currentValid ) {
+		return qfalse;
+	}
+	es = &cg_entities[n].currentState;
+	if ( !es->solid || es->solid == SOLID_BMODEL ) {
+		return qfalse;
+	}
+	CG_VRF_Body( cg_entities[n].lerpOrigin, -(float)( ( es->solid >> 8 ) & 255 ), (float)( ( ( es->solid >> 16 ) & 255 ) - 32 ), body );
+	return qtrue;
+}
 
 // Whether two players are on one side, as the server has it (OnSameTeam), as far
 // as this can tell: a Power Duel's pair, a team game's team.
@@ -238,17 +417,18 @@ static qboolean CG_VRF_SameSide( int a, int b ) {
 }
 
 // Whom the server would snap a VR player's Force (power) onto, as far as this
-// can tell (g_vrforce.c's VRF_Snap): someone alive and drawn, the power working
-// on them (ForcePowerUsableOn: not down, not in a duel, no ysalamiri; an NPC
-// not the shooter's companion nor, in Siege, any but a vehicle - a vehicle,
-// Lightning alone), not on the shooter's side; CGF_HIDDEN, hidden from the
+// can tell (g_vrforce.c's VRF_Snap): someone alive and drawn, with a body
+// (CG_VRF_BodyOf), the power working on them (ForcePowerUsableOn: not down,
+// not in a duel, no ysalamiri; an NPC not the shooter's companion nor, in
+// Siege, any but a vehicle - a vehicle, Lightning alone; Grip, no one
+// absorbing it), not on the shooter's side; CGF_HIDDEN, hidden from the
 // shooter (cloaked, or tricking them, while their Seeing isn't going) - with
-// where their middle is drawn.
-static int CG_VRF_Target( int shooter, int power, int n, vec3_t mid ) {
-	int eFlags, powerups, trick[4];
+// their body.
+static int CG_VRF_Target( int shooter, int power, int n, cgfBody_t *body ) {
+	int eFlags, powerups, trick[4], active;
 	qboolean duel;
 
-	if ( n == shooter || n < 0 || n >= ENTITYNUM_MAX_NORMAL ) {
+	if ( n == shooter || !CG_VRF_BodyOf( n, body ) ) {
 		return CGF_NONE;
 	}
 	if ( n == cg.predictedPlayerState.clientNum ) {
@@ -269,8 +449,7 @@ static int CG_VRF_Target( int shooter, int power, int n, vec3_t mid ) {
 		trick[2] = ps->fd.forceMindtrickTargetIndex3;
 		trick[3] = ps->fd.forceMindtrickTargetIndex4;
 		duel = ps->duelInProgress;
-		VectorCopy( ps->origin, mid );
-		mid[2] += ( ps->pm_flags & PMF_DUCKED ) ? -4.0f : 8.0f;	// (the middle of a player's box, crouched or not)
+		active = ps->fd.forcePowersActive;
 	} else {
 		const entityState_t *es = &cg_entities[n].currentState;
 		if ( ( es->eType != ET_PLAYER && es->eType != ET_NPC ) ||
@@ -285,16 +464,11 @@ static int CG_VRF_Target( int shooter, int power, int n, vec3_t mid ) {
 		trick[2] = es->trickedentindex3;
 		trick[3] = es->trickedentindex4;
 		duel = (qboolean)( es->eType == ET_PLAYER && es->bolt1 );	// (a player in a duel: BG_PlayerStateToEntityState's)
-		VectorCopy( cg_entities[n].lerpOrigin, mid );
-		if ( es->solid && es->solid != SOLID_BMODEL ) {
-			mid[2] += ( ( ( ( es->solid >> 16 ) & 255 ) - 32 ) - ( ( es->solid >> 8 ) & 255 ) ) * 0.5f;	// (its box, as the server put it)
-		} else {
-			mid[2] += 8.0f;
-		}
+		active = es->forcePowersActive;
 	}
 	if ( ( eFlags & ( EF_DEAD | EF_NODRAW ) ) || duel || ( powerups & ( 1 << PW_YSALAMIRI ) ) ||
 		( cgs.gametype == GT_CTY && ( powerups & ( ( 1 << PW_REDFLAG ) | ( 1 << PW_BLUEFLAG ) ) ) ) ||
-		CG_RP_DownBody( &cg_entities[n] ) || CG_VRF_SameSide( n, shooter ) ) {
+		( power == FP_GRIP && ( active & ( 1 << FP_ABSORB ) ) ) || CG_RP_DownBody( &cg_entities[n] ) || CG_VRF_SameSide( n, shooter ) ) {
 		return CGF_NONE;
 	}
 	if ( ( ( powerups & ( 1 << PW_CLOAKED ) ) && !( cg_entities[shooter].currentState.forcePowersActive & ( 1 << FP_SEE ) ) ) ||
@@ -314,50 +488,253 @@ float CG_VR_ForceReach( int power, int level ) {
 	return ( power == FP_DRAIN ) ? 512.0f : 300.0f;
 }
 
+#define CGF_STICK	3.0f	// degrees: whom your Force hand's aimed at stays so till another's this much nearer a line - or
+							// they're this far past the cone
+// Whether a Grip from 'from' along line holds someone standing at spot, below
+// level 3 (DoGripAction's InFront: the line's way and the way to them, side
+// to side alone, within VR_FORCE_GRIP_FRONT).
+static qboolean CG_VRF_InFront( const vec3_t from, const vec3_t line, const vec3_t spot ) {
+	vec3_t side, flat;
+
+	VectorSubtract( spot, from, side );
+	side[2] = 0.0f;
+	VectorNormalize( side );
+	VectorSet( flat, line[0], line[1], 0.0f );
+	VectorNormalize( flat );
+	return (qboolean)( DotProduct( flat, side ) > VR_FORCE_GRIP_FRONT );
+}
+
+// Whom a VR player's Force (power) from 'from' along any of lines[0..count-1]
+// goes at, as near as this can tell (g_vrforce.c's VRF_Snap, along each):
+// someone it works on (CG_VRF_Target) - anywhere on them (VR_ForceBodyPoint) -
+// within VR_FORCE_SNAP degrees of a line (Grip, VR_FORCE_SNAP_GRIP: a line
+// that would hold them, CG_VRF_InFront), within range of 'from' (Grip: and of
+// the shooter) and in sight of it (Grip's, as its catch sees - and where they
+// stand, of where the shooter does), the one nearest a line - keep, whom it
+// went at last, that much nearer (CGF_STICK):
+// at, the point of them it goes at. -1: nobody - or, nearest, someone hidden
+// from the shooter (never snapped onto, nor off).
+static int CG_VRF_Nearest( int shooter, int power, const vec3_t from, float range, vec3_t lines[], int count, int keep, vec3_t at ) {
+	const float *where = ( shooter == cg.predictedPlayerState.clientNum ) ? cg.predictedPlayerState.origin :
+		cg_entities[shooter].lerpOrigin;
+	float best = ( power == FP_GRIP ) ? VR_FORCE_SNAP_GRIP : VR_FORCE_SNAP;	// (degrees off a line: the nearest so far)
+	int i, l, pick = -1, kind = CGF_NONE;
+
+	for ( i = -1; i < cg.snap->numEntities; i++ ) {
+		const int n = ( i < 0 ) ? cg.predictedPlayerState.clientNum : cg.snap->entities[i].number;	// (-1: you)
+		cgfBody_t body;
+		vec3_t point, to;
+		trace_t tr;
+		float dot = -1.0f, off;
+		const int k = CG_VRF_Target( shooter, power, n, &body );
+
+		if ( k == CGF_NONE || ( power == FP_GRIP && DistanceSquared( body.origin, where ) > range * range ) ) {
+			continue;	// (Grip: no one further from them than it reaches)
+		}
+		for ( l = 0; l < count; l++ ) {
+			vec3_t p;
+			float d, t;
+			if ( power == FP_GRIP && !CG_VRF_InFront( from, lines[l], body.origin ) ) {
+				continue;	// (Grip: a line that wouldn't hold them - steeply over or under it, off to the side: let go at once)
+			}
+			VR_ForceBodyPoint( from, lines[l], body.x, body.y, body.bottom, body.top, p );
+			VectorSubtract( p, from, to );
+			d = VectorNormalize( to );
+			if ( d < 1.0f || d > range ) {
+				continue;
+			}
+			t = DotProduct( to, lines[l] );
+			if ( t > dot ) {
+				dot = t;
+				VectorCopy( p, point );
+			}
+		}
+		off = RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, dot ) ) ) - ( ( n == keep ) ? CGF_STICK : 0.0f );
+		if ( off >= best ) {
+			continue;
+		}
+		CG_Trace( &tr, from, NULL, NULL, point, shooter, ( power == FP_GRIP ) ? MASK_PLAYERSOLID : MASK_SHOT );
+		if ( tr.fraction < 1.0f && tr.entityNum != n ) {
+			continue;	// (out of sight of the hand)
+		}
+		if ( power == FP_GRIP ) {
+			CG_Trace( &tr, where, NULL, NULL, body.origin, shooter, MASK_PLAYERSOLID );
+			if ( tr.fraction < 1.0f && tr.entityNum != n ) {
+				continue;	// (where they stand out of sight of the shooter's: a held Grip lets go at once - DoGripAction)
+			}
+		}
+		best = off;
+		VectorCopy( point, at );
+		pick = n;
+		kind = k;
+	}
+	return ( kind == CGF_SEEN ) ? pick : -1;	// (hidden: the line as it is)
+}
+
 // Where a VR player's Lightning or Drain (power) goes from 'from' (cg_players.c
 // draws it so): onto whom the server snaps it (g_vrforce.c), as near as this
-// can tell - someone (CG_VRF_Target) within VR_FORCE_SNAP degrees of the line
-// dir, within range and in sight of 'from', the one nearest it: dir becomes the
-// way to their middle (nobody, or someone hidden nearest: as it was).
+// can tell (CG_VRF_Nearest): dir becomes the way to them (nobody, or someone
+// hidden nearest: as it was).
 void CG_VR_ForceSnap( int shooter, int power, const vec3_t from, float range, vec3_t dir ) {
-	float bestDot = cosf( DEG2RAD( VR_FORCE_SNAP ) );
-	vec3_t best;
-	qboolean found = qfalse;
-	int i;
+	vec3_t lines[1], at;
 
 	if ( !cg.snap ) {
 		return;
 	}
-	for ( i = -1; i < cg.snap->numEntities; i++ ) {
-		const int n = ( i < 0 ) ? cg.predictedPlayerState.clientNum : cg.snap->entities[i].number;	// (-1: you)
-		vec3_t mid, to;
-		trace_t tr;
-		float d, dot;
-		const int kind = CG_VRF_Target( shooter, power, n, mid );
+	VectorCopy( dir, lines[0] );
+	if ( CG_VRF_Nearest( shooter, power, from, range, lines, 1, -1, at ) >= 0 ) {
+		VectorSubtract( at, from, dir );
+		VectorNormalize( dir );
+	}
+}
 
-		if ( kind == CGF_NONE ) {
-			continue;
-		}
-		VectorSubtract( mid, from, to );
-		d = VectorNormalize( to );
-		if ( d < 1.0f || d > range ) {
-			continue;
-		}
-		dot = DotProduct( to, dir );
-		if ( dot <= bestDot ) {
-			continue;
-		}
-		CG_Trace( &tr, from, NULL, NULL, mid, shooter, MASK_SHOT );
-		if ( tr.fraction < 1.0f && tr.entityNum != n ) {
-			continue;	// (out of sight of the hand)
-		}
-		bestDot = dot;
-		VectorCopy( to, best );
-		found = (qboolean)( kind == CGF_SEEN );	// (hidden: the line as it is)
+/*
+--------------------------------------------------------------------------------
+Where your Force hand aims
+--------------------------------------------------------------------------------
+On a server that aims the Force from the hand as this build does, your hand
+aims it, along two lines: where the controller points, and - your hand held
+up in view, out from your eyes - where it is as you see it (the line from
+your eyes through it). Who's on either (CG_VRF_Nearest) is whom it goes
+straight at: your avatar's forceDir, which the server snaps along too
+(g_vrforce.c). Whom it goes at is the power's - the trigger's Lightning or
+Drain held, theirs; else, the Force grip held (Grip, or not yet: the hand
+held out as Grip's gesture wants, CG_VRF_GripPose), Grip's, if it can catch
+anyone now (CG_VRF_GripWorks): whom it would, who glows. Nobody: the
+controller's line. Someone caught, it's held along whichever line is nearer
+them (CG_VRF_HeldLine): a held Grip goes where the hand points.
+*/
+
+#define CGF_AIM_VIEW	30.0f	// degrees: your hand this near where you look is up in view...
+#define CGF_AIM_NEAR	0.2f	// ...this far out from your eyes (metres): aimed with as you see it too
+
+// Where your Force comes from, as the server has it (g_vrforce.c's VRF_From):
+// your hand, where it's drawn - or, the way to it from your eyes blocked (a
+// wall, a door, someone), just short of that.
+static void CG_VRF_From( const vec3_t hand, vec3_t from ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	vec3_t eye, back;
+	trace_t tr;
+
+	VectorCopy( ps->origin, eye );
+	eye[2] += ps->viewheight;
+	CG_Trace( &tr, eye, NULL, NULL, hand, ps->clientNum, MASK_SHOT );
+	if ( tr.startsolid ) {
+		VectorCopy( eye, from );
+	} else if ( tr.fraction < 1.0f ) {
+		VectorSubtract( eye, tr.endpos, back );
+		VectorNormalize( back );
+		VectorMA( tr.endpos, 1.0f, back, from );
+	} else {
+		VectorCopy( hand, from );
 	}
-	if ( found ) {
-		VectorCopy( best, dir );
+}
+
+// Your Grip held (someone caught): along whichever of lines[0..count-1] is
+// nearest whom it caught (cgfa.caught, as they're drawn) - of those that hold
+// them below level 3 (CG_VRF_InFront), first - straight along it, not at them:
+// a held Grip goes where the hand points (DoGripAction - level 3 floats them
+// along it). Whom it caught not known (nor drawn): dir as it is.
+static void CG_VRF_HeldLine( const vec3_t from, vec3_t lines[], int count, vec3_t dir ) {
+	cgfBody_t body;
+	float best = -9.0f;
+	int l;
+
+	if ( !CG_VRF_BodyOf( cgfa.caught, &body ) ) {
+		return;
 	}
+	for ( l = 0; l < count; l++ ) {
+		vec3_t p, to;
+		float t;
+		VR_ForceBodyPoint( from, lines[l], body.x, body.y, body.bottom, body.top, p );
+		VectorSubtract( p, from, to );
+		VectorNormalize( to );
+		t = DotProduct( to, lines[l] ) + ( CG_VRF_InFront( from, lines[l], body.origin ) ? 4.0f : 0.0f );
+		if ( t > best ) {
+			best = t;
+			VectorCopy( lines[l], dir );
+		}
+	}
+}
+
+// Where your Force hand aims (CG_VRB_FillAvatar, your avatar going out): hand,
+// where it's drawn, and the controller's line (world, unit). dir: where your
+// Force goes (world, unit).
+void CG_VR_ForceAim( const vrClientState_t *vr, const vec3_t hand, const vec3_t controller, vec3_t dir ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	vec3_t head[3], eye, world[3], from, lines[2], at;
+	qboolean out, seen;
+	int i, power = -1, n = -1;
+	float range = 0.0f;
+
+	if ( cg.secondEye && cgfa.now.time == cg.time ) {
+		VectorCopy( cgfa.now.dir, dir );	// (the right eye: as the left one had it)
+		return;
+	}
+	VectorCopy( controller, dir );
+	if ( !vr || !cg.snap ) {
+		return;
+	}
+	CG_VRF_Track( vr, ps );
+
+	// the lines it aims along: the controller's - and, your hand out from your
+	// eyes, the one from them through it: up in view, whom it goes at is found
+	// along that too; a Grip held, it's held along it in view or not (no jump
+	// as your hand leaves it)
+	VectorCopy( controller, lines[0] );
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( vr->headAxis[i], head[i] );
+	}
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->headOrigin, head, eye, world );
+	VectorSubtract( hand, eye, lines[1] );
+	out = (qboolean)( VectorNormalize( lines[1] ) >= CGF_AIM_NEAR * vr->worldScale );
+	seen = (qboolean)( out && DotProduct( lines[1], world[0] ) >= cosf( DEG2RAD( CGF_AIM_VIEW ) ) );
+	CG_VRF_From( hand, from );
+
+	// whom it's aimed at - the power's (Grip's: held out as its gesture wants,
+	// or held already, nobody caught)
+	if ( CG_VRF_Served() >= VR_FORCE_SERVED && !CG_VRF_Watching() ) {
+		const int active = ps->fd.forcePowersActive;
+		if ( vr->force.held & VR_FORCE_LIGHTNING ) {
+			power = FP_LIGHTNING;
+			range = CG_VR_ForceReach( FP_LIGHTNING, ( active & ( 1 << FP_LIGHTNING ) ) ? ps->activeForcePass : FORCE_LEVEL_1 );
+		} else if ( vr->force.held & VR_FORCE_DRAIN ) {
+			power = FP_DRAIN;	// (going: its level and 3 - w_force.c)
+			range = CG_VR_ForceReach( FP_DRAIN, ( active & ( 1 << FP_DRAIN ) ) ? ps->activeForcePass - FORCE_LEVEL_3 : FORCE_LEVEL_1 );
+		} else if ( active & ( 1 << FP_GRIP ) ) {
+			CG_VRF_HeldLine( from, lines, out ? 2 : 1, dir );
+		} else if ( ( ( vr->force.held & VR_FORCE_GRIP ) || ( vr->force.reaching && CG_VRF_GripPose( vr, vr->force.hand ) ) ) &&
+			CG_VRF_GripWorks( ps ) ) {
+			power = FP_GRIP;
+			range = VR_FORCE_GRIP_REACH;
+		}
+	}
+	if ( power >= 0 ) {
+		n = CG_VRF_Nearest( ps->clientNum, power, from, range, lines, seen ? 2 : 1, ( cgfa.now.power == power ) ? cgfa.now.pick : -1, at );
+		if ( n >= 0 ) {
+			VectorSubtract( at, from, dir );
+			VectorNormalize( dir );
+		}
+	}
+	if ( cgfa.now.time != cg.time ) {
+		cgfa.was = cgfa.now;
+	}
+	cgfa.now.time = cg.time;
+	VectorCopy( dir, cgfa.now.dir );
+	cgfa.now.power = power;
+	cgfa.now.pick = n;
+	if ( power == FP_GRIP && n >= 0 ) {
+		cgfa.gripWho = n;
+		cgfa.gripTime = cg.time;
+	}
+}
+
+// Whether cent glows: whom your Grip would catch, as this frame draws your
+// Force hand's aim (CG_VRF_Drawn) - cg_vrForceGlow.
+qboolean CG_VR_ForceGlow( const centity_t *cent ) {
+	const cgfAim_t *a = CG_VRF_Drawn();
+
+	return (qboolean)( cg_vrForceGlow.integer && a && a->power == FP_GRIP && cent && cent->currentState.number == a->pick );
 }
 
 /*

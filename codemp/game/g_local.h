@@ -1536,6 +1536,7 @@ void		G_VRForceCmdDone( gentity_t *ent );
 qboolean	G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir );
 qboolean	G_VRForceHand( gentity_t *self, vec3_t start, vec3_t dir );
 qboolean	G_VRForceGripSpent( gentity_t *self );
+qboolean	G_VRForceGripHolds( gentity_t *self, gentity_t *ent );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //

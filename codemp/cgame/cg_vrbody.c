@@ -6680,7 +6680,7 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 		}
 	}
 	// your Force hand (Force gestures on, the hand empty - and drawn so): where
-	// it points, its aim (cg_vrforce.c)
+	// it aims (cg_vrforce.c) - from where it's drawn, its controller's line
 	h = vr->force.hand;
 	if ( ( h == VR_HAND_LEFT || h == VR_HAND_RIGHT ) && vr->handValid[h] && a->hand[h].grip == VR_GRIP_FREE ) {
 		for ( i = 0; i < 3; i++ ) {
@@ -6689,7 +6689,7 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, NULL, head, NULL, world );
 		a->forceValid = qtrue;
 		a->forceHand = h;
-		VectorCopy( world[0], a->forceDir );
+		CG_VR_ForceAim( vr, vrb.sent[h].origin, world[0], a->forceDir );
 	}
 }
 

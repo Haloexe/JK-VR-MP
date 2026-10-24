@@ -32,10 +32,12 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   point and hold it still to Grip, pull its trigger for Lightning (palm up:
   Drain), and squeeze quickly for any other power, picked on the wheel's new
   Force ring. On a server running this build each power comes from your hand
-  and goes where it points (or the way you thrust), snapping onto someone
-  within 10 degrees, and the controller thumps, tugs, strains and crackles
-  with it. Or push and pull with an open hand, or turn the gestures off, under
-  VR Force in Setup > Controls.
+  and goes where it points - or where your hand is as you see it: put it over
+  them - (or the way you thrust), snapping onto someone within 10 degrees
+  (Grip: 15, and reaching a quarter further), whoever your Grip's aimed at
+  glowing, and the controller thumps, tugs, strains and crackles with it. Or
+  push and pull with an open hand, or turn the gestures off, under VR Force in
+  Setup > Controls.
 - **Saber colours:** any RGB colour for each of your sabers, and a black core
   inside the coloured glow, picked on the RGB Colors page (Profile >
   Lightsaber, or Setup > VR) with sliders or a hex code while a preview shows
