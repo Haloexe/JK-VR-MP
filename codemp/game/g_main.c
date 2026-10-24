@@ -297,6 +297,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 
 	// OpenJK VR: physical lightsaber
 	G_VRSaberInit();
+	G_VRForceInit();		// OpenJK VR: the Force hand (g_vrforce.c; after G_VRSaberInit: the poses)
 	G_VRHolsterInit();		// OpenJK VR: holsters (g_vrholster.c)
 	G_VRColorInit();		// OpenJK VR: saber colours (g_vrcolor.c)
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)

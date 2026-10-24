@@ -63,6 +63,10 @@ static void CVU_VRSaber(void) {
 	G_VRSaberPublish();	// OpenJK VR: the serverinfo "vrSaber" follows it
 }
 
+static void CVU_VRForce(void) {
+	G_VRForcePublish();	// OpenJK VR: the serverinfo "vrForce" follows it (g_vrforce.c)
+}
+
 static void CVU_VRSaberRGB(void) {
 	G_VRColorPublish();	// OpenJK VR: the serverinfo "vrSaberRGB" follows it, and everyone's told (g_vrcolor.c)
 }

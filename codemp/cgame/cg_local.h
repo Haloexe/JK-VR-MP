@@ -1948,6 +1948,18 @@ qboolean CG_VR_BothHandsHold( void );
 void CG_VR_PassSaberOver( qboolean pass );
 qboolean CG_VR_OtherHoldsSaber( int clientNum, int saberNum );
 void QDECL CG_VR_Log( const char *fmt, ... );
+int CG_VR_AvatarForce( centity_t *cent, vec3_t dir );
+void CG_VR_FeelSteady( int hand, float amp, float grain );
+// cg_vrforce.c (OpenJK VR: the Force hand - its feel, its Force's effects, the wheel's Force ring)
+void		CG_VR_ForceFrame( const vrClientState_t *vr );
+qboolean	CG_VR_ForceServed( void );
+int			CG_VR_ForceFx( centity_t *cent, vec3_t dir );
+void		CG_VR_ForceSnap( int shooter, int power, const vec3_t from, float range, vec3_t dir );
+float		CG_VR_ForceReach( int power, int level );
+int			CG_VR_ForceRingPowers( int powers[], int max );
+const char	*CG_VR_ForcePowerName( int power );
+const char	*CG_VR_ForceRingWhy( int power );
+void		CG_VR_ForcePick( int power );
 // cg_vrholster.c (OpenJK VR: holsters - your weapons hang on your body)
 void		CG_VRH_Init( void );
 void		CG_VRH_Shutdown( void );

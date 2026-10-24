@@ -1499,6 +1499,7 @@ void		G_VRSaberWeightsChanged( void );
 void		G_VRSaberClientReset( int clientNum );
 void		G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd );
 qboolean	G_VRSaberOn( void );
+qboolean	G_VRPosesAvailable( void );
 void		G_VRSaberPublish( void );
 qboolean	G_VRSaberBodyYaw( int clientNum, float *yaw );
 qboolean	G_VRSaberClient( gentity_t *ent );
@@ -1523,6 +1524,18 @@ void		G_VRSaberBoxesOut( gentity_t *missile, const vec3_t end );
 void		G_VRSaberBoxesBack( void );
 void		G_VRSaberDeferHit( gentity_t *attacker, gentity_t *victim, const vec3_t dir, const vec3_t spot, int dmg, int dflags,
 				int saberNum, int bladeNum );
+
+// g_vrforce.c (OpenJK VR: VR players' Force from their Force hand)
+void		G_VRForceInit( void );
+qboolean	G_VRForceOn( void );
+void		G_VRForcePublish( void );
+void		G_VRForceClientReset( int clientNum );
+void		G_VRForceDrop( int clientNum );
+void		G_VRForceTake( gentity_t *ent, vrAvatar_t *a, const vrUserPose_t *pose );
+void		G_VRForceCmdDone( gentity_t *ent );
+qboolean	G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir );
+qboolean	G_VRForceHand( gentity_t *self, vec3_t start, vec3_t dir );
+qboolean	G_VRForceGripSpent( gentity_t *self );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //
@@ -1582,6 +1595,7 @@ void WP_InitForcePowers( gentity_t *ent );
 void WP_SpawnInitForcePowers( gentity_t *ent );
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd );
 int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forcePower);
+qboolean G_IsMindTricked(forcedata_t *fd, int client);	// OpenJK VR: (w_force.c's - g_vrforce.c asks it)
 void ForceHeal( gentity_t *self );
 void ForceSpeed( gentity_t *self, int forceDuration );
 void ForceRage( gentity_t *self );

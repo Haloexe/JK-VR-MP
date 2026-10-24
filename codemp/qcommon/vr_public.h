@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-13"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-14"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -42,6 +42,9 @@ General Public License version 2, like the rest of OpenJK.
 												//     sense of your fingers), vrAvatarHand_t.fingers,
 												//     vrAvatar_t.head (VR_POSE_PROTOCOL 5)
 												// -13: ext.VR_SetEyeDrop (your height: Real Crouch)
+												// -14: vrClientState_t.force (the Force hand: Force
+												//     gestures), vrAvatar_t.forceValid, forceHand,
+												//     forceDir, vrUserPose_t.thrust (VR_POSE_PROTOCOL 7)
 
 // ext.VR_SetEyeDrop( drop, flags ): flags
 #define VR_EYES_POSED			( 1 << 0 )	// in a pose (getting down into it, or up out of it: bg_vrpose.c)
@@ -88,9 +91,10 @@ first saber is in the left hand; a saber passed from one hand to the other).
 twoHanded: the other hand holds that saber's hilt too (grip2 is that hand).
 --------------------------------------------------------------------------------
 */
-#define VR_POSE_PROTOCOL		6		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed;
+#define VR_POSE_PROTOCOL		7		// 2: twoHanded, grip2; 3: avatar, svc_vrAvatars; 4: hand, avatar hands' saber, hilt, reversed;
 										// 5: avatar head, avatar hands' fingers; 6: the avatar's head where its body's eyes go, its
-										// shift - bent - where its feet stand (the same bits as 5)
+										// shift - bent - where its feet stand (the same bits as 5); 7: the avatar's Force hand, the
+										// pose's thrust
 #define VR_POSE_HEAD_BACK		4.0f	// (5: the avatar's head was the headset itself - the body's eyes went this far behind it,
 										// the way it faced: cg_vrBodyBack as it was)
 #define VR_POSE_MAX_SABERS		2		// the first saber, the second (each in either hand)
@@ -167,6 +171,11 @@ typedef struct vrAvatar_s {
 	vec3_t			head;			// where the body's eyes go (the headset, the neck just behind it): an offset like the hands'
 									// (all 0: none - an older build's demo)
 	vrAvatarHand_t	hand[2];		// VR_HAND_LEFT, VR_HAND_RIGHT
+	// the hand the player's Force powers come from and aim with - their Force gestures on, that hand empty
+	// (FREE): forceHand (VR_HAND_*) - and where it points (forceDir: world axes, unit; the cgame's, from its aim)
+	qboolean		forceValid;
+	int				forceHand;
+	vec3_t			forceDir;
 } vrAvatar_t;
 
 typedef struct vrUserPose_s {
@@ -180,6 +189,11 @@ typedef struct vrUserPose_s {
 	vec3_t			grip2[VR_POSE_MAX_SABERS];		// ...here (offset from the camera)
 	vrBladePose_t	blade[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
 	vrAvatar_t		avatar;		// the whole player, for everyone else (offsets from the camera)
+	// a Force gesture's Push or Pull goes with this command (its generic_cmd): the way the hand thrust it - for a
+	// Pull, back toward where it was yanked from (world axes, unit; the engine's: client/cl_vr.cpp). Only with the
+	// avatar, whose Force hand it came from; the server's game alone sees it.
+	qboolean		thrustValid;
+	vec3_t			thrust;
 } vrUserPose_t;
 
 // Angles that AnglesToAxis turns back into axis (forward, left, up).
@@ -221,6 +235,25 @@ typedef struct vrFingerSense_s {
 	float		squeeze;		// how far the grip's squeezed (0..1; a grip that only clicks: 0 or 1)
 	float		indexCurl;		// VR_SENSE_INDEX_CURL: 0 the index finger straight .. 1 curled onto the trigger
 } vrFingerSense_t;
+
+// The Force hand (Force gestures, vr_forceGestures - qcommon/vr_force.h), as
+// the engine reads it: what its gestures hold down now (the game's own
+// buttons for them: BUTTON_FORCEGRIP, _LIGHTNING, _DRAIN)...
+#define VR_FORCE_GRIP			1	// Grip: held out still, the Force grip held
+#define VR_FORCE_LIGHTNING		2	// Lightning: its trigger, the Force grip held
+#define VR_FORCE_DRAIN			4	// Drain: the same, the palm turned up
+
+// ...and the rest the cgame feels in your hand (cg_vrforce.c)
+typedef struct vrForceState_s {
+	int			hand;		// your Force hand now - the Force grip's, gestures on, the hand empty, in a game (VR_HAND_*;
+							// -1: none)
+	qboolean	reaching;	// its Force grip held: reaching out with the Force
+	int			held;		// VR_FORCE_*: what its gestures hold down
+	int			pushes;		// Pushes, Pulls and quick squeezes (Use Force) its gestures have done, counted: one more is
+	int			pulls;		// one more done (the engine's count, from when it started)
+	int			taps;
+	float		speed;		// the last Push's or Pull's speed (metres a second)
+} vrForceState_t;
 
 typedef struct vrClientState_s {
 	// headset running and tracked
@@ -268,6 +301,9 @@ typedef struct vrClientState_s {
 	// what each controller senses of your fingers (above): the cgame's
 	// hands follow them (cg_vrFingers)
 	vrFingerSense_t	fingers[2];
+
+	// your Force hand (above)
+	vrForceState_t	force;
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

@@ -1395,6 +1395,7 @@ void ForceGrip( gentity_t *self )
 {
 	trace_t tr;
 	vec3_t tfrom, tto, fwd;
+	qboolean byHand;	// OpenJK VR
 
 	if ( self->health <= 0 )
 	{
@@ -1421,9 +1422,15 @@ void ForceGrip( gentity_t *self )
 		return;
 	}
 
+	if ( G_VRForceGripSpent( self ) )
+	{//OpenJK VR: a Push or a Pull since its button was pressed, nobody caught - none now (g_vrforce.c)
+		return;
+	}
+
 	VectorCopy(self->client->ps.origin, tfrom);
 	tfrom[2] += self->client->ps.viewheight;
 	AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+	byHand = G_VRForceAim( self, FP_GRIP, MAX_GRIP_DISTANCE, tfrom, fwd );	// OpenJK VR: a VR player's Force hand, where it points (g_vrforce.c)
 	tto[0] = tfrom[0] + fwd[0]*MAX_GRIP_DISTANCE;
 	tto[1] = tfrom[1] + fwd[1]*MAX_GRIP_DISTANCE;
 	tto[2] = tfrom[2] + fwd[2]*MAX_GRIP_DISTANCE;
@@ -1436,7 +1443,8 @@ void ForceGrip( gentity_t *self )
 		!g_entities[tr.entityNum].client->ps.fd.forceGripCripple &&
 		g_entities[tr.entityNum].client->ps.fd.forceGripBeingGripped < level.time &&
 		ForcePowerUsableOn(self, &g_entities[tr.entityNum], FP_GRIP) &&
-		(g_friendlyFire.integer || !OnSameTeam(self, &g_entities[tr.entityNum])) ) //don't grip someone who's still crippled
+		(g_friendlyFire.integer || !OnSameTeam(self, &g_entities[tr.entityNum])) && //don't grip someone who's still crippled
+		( !byHand || DistanceSquared( g_entities[tr.entityNum].client->ps.origin, self->client->ps.origin ) <= MAX_GRIP_DISTANCE * MAX_GRIP_DISTANCE ) ) // OpenJK VR: from the Force hand, none out of their body's reach (DoGripAction lets go of them at once)
 	{
 		if (g_entities[tr.entityNum].s.number < MAX_CLIENTS && g_entities[tr.entityNum].client->ps.m_iVehicleNum)
 		{ //a player on a vehicle
@@ -1776,7 +1784,7 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 void ForceShootLightning( gentity_t *self )
 {
 	trace_t	tr;
-	vec3_t	end, forward;
+	vec3_t	end, forward, from;
 	gentity_t	*traceEnt;
 
 	if ( self->health <= 0 )
@@ -1785,6 +1793,10 @@ void ForceShootLightning( gentity_t *self )
 	}
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
+	// OpenJK VR: a VR player's from their Force hand, where it points (g_vrforce.c)
+	VectorCopy( self->client->ps.origin, from );
+	G_VRForceAim( self, FP_LIGHTNING, ( self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 ) ? FORCE_LIGHTNING_RADIUS : 2048,
+		from, forward );
 
 	if ( self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
 	{//arc
@@ -1794,7 +1806,7 @@ void ForceShootLightning( gentity_t *self )
 		int			iEntityList[MAX_GENTITIES];
 		int		e, numListedEntities, i;
 
-		VectorCopy( self->client->ps.origin, center );
+		VectorCopy( from, center );
 		for ( i = 0 ; i < 3 ; i++ )
 		{
 			mins[i] = center[i] - radius;
@@ -1862,13 +1874,13 @@ void ForceShootLightning( gentity_t *self )
 			}
 
 			//in PVS?
-			if ( !traceEnt->r.bmodel && !trap->InPVS( ent_org, self->client->ps.origin ) )
+			if ( !traceEnt->r.bmodel && !trap->InPVS( ent_org, from ) )
 			{//must be in PVS
 				continue;
 			}
 
 			//Now check and see if we can actually hit it
-			trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+			trap->Trace( &tr, from, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0 );
 			if ( tr.fraction < 1.0f && tr.entityNum != traceEnt->s.number )
 			{//must have clear LOS
 				continue;
@@ -1880,9 +1892,9 @@ void ForceShootLightning( gentity_t *self )
 	}
 	else
 	{//trace-line
-		VectorMA( self->client->ps.origin, 2048, forward, end );
+		VectorMA( from, 2048, forward, end );
 
-		trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+		trap->Trace( &tr, from, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
 		if ( tr.entityNum == ENTITYNUM_NONE || tr.fraction == 1.0 || tr.allsolid || tr.startsolid )
 		{
 			return;
@@ -2058,7 +2070,7 @@ void ForceDrainDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t 
 int ForceShootDrain( gentity_t *self )
 {
 	trace_t	tr;
-	vec3_t	end, forward;
+	vec3_t	end, forward, from;
 	gentity_t	*traceEnt;
 	int			gotOneOrMore = 0;
 
@@ -2068,6 +2080,10 @@ int ForceShootDrain( gentity_t *self )
 	}
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
+	// OpenJK VR: a VR player's from their Force hand, where it points (g_vrforce.c)
+	VectorCopy( self->client->ps.origin, from );
+	G_VRForceAim( self, FP_DRAIN, ( self->client->ps.fd.forcePowerLevel[FP_DRAIN] > FORCE_LEVEL_2 ) ? MAX_DRAIN_DISTANCE : 2048,
+		from, forward );
 
 	if ( self->client->ps.fd.forcePowerLevel[FP_DRAIN] > FORCE_LEVEL_2 )
 	{//arc
@@ -2077,7 +2093,7 @@ int ForceShootDrain( gentity_t *self )
 		int			iEntityList[MAX_GENTITIES];
 		int		e, numListedEntities, i;
 
-		VectorCopy( self->client->ps.origin, center );
+		VectorCopy( from, center );
 		for ( i = 0 ; i < 3 ; i++ )
 		{
 			mins[i] = center[i] - radius;
@@ -2147,13 +2163,13 @@ int ForceShootDrain( gentity_t *self )
 			}
 
 			//in PVS?
-			if ( !traceEnt->r.bmodel && !trap->InPVS( ent_org, self->client->ps.origin ) )
+			if ( !traceEnt->r.bmodel && !trap->InPVS( ent_org, from ) )
 			{//must be in PVS
 				continue;
 			}
 
 			//Now check and see if we can actually hit it
-			trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+			trap->Trace( &tr, from, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0 );
 			if ( tr.fraction < 1.0f && tr.entityNum != traceEnt->s.number )
 			{//must have clear LOS
 				continue;
@@ -2166,9 +2182,9 @@ int ForceShootDrain( gentity_t *self )
 	}
 	else
 	{//trace-line
-		VectorMA( self->client->ps.origin, 2048, forward, end );
+		VectorMA( from, 2048, forward, end );
 
-		trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+		trap->Trace( &tr, from, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
 		if ( tr.entityNum == ENTITYNUM_NONE || tr.fraction == 1.0 || tr.allsolid || tr.startsolid || !g_entities[tr.entityNum].client || !g_entities[tr.entityNum].inuse )
 		{
 			return 0;
@@ -2956,6 +2972,8 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	vec3_t		thispush_org;
 	vec3_t		tfrom, tto, fwd, a;
 	int			powerUse = 0;
+	vec3_t		handFrom;	// OpenJK VR
+	qboolean	byHand;
 
 	visionArc = 0;
 
@@ -3054,6 +3072,17 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	VectorCopy( self->client->ps.viewangles, fwdangles );
 	AngleVectors( fwdangles, forward, right, NULL );
 	VectorCopy( self->client->ps.origin, center );
+	// OpenJK VR: a VR player's from their Force hand - the way a gesture
+	// thrust it, else where it points (g_vrforce.c)
+	VectorCopy( self->client->ps.origin, handFrom );
+	handFrom[2] += self->client->ps.viewheight;
+	byHand = G_VRForceAim( self, powerUse, ( self->client->ps.fd.forcePowerLevel[powerUse] == FORCE_LEVEL_1 ) ? radius / 2 : radius,
+		handFrom, forward );
+	if ( byHand )
+	{
+		vectoangles( forward, fwdangles );
+		VectorCopy( handFrom, center );
+	}
 
 	for ( i = 0 ; i < 3 ; i++ )
 	{
@@ -3092,6 +3121,11 @@ void ForceThrow( gentity_t *self, qboolean pull )
 		VectorCopy(self->client->ps.origin, tfrom);
 		tfrom[2] += self->client->ps.viewheight;
 		AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+		if ( byHand )
+		{//OpenJK VR: from the Force hand
+			VectorCopy( handFrom, tfrom );
+			VectorCopy( forward, fwd );
+		}
 		tto[0] = tfrom[0] + fwd[0]*radius/2;
 		tto[1] = tfrom[1] + fwd[1]*radius/2;
 		tto[2] = tfrom[2] + fwd[2]*radius/2;
@@ -3168,10 +3202,14 @@ void ForceThrow( gentity_t *self, qboolean pull )
 			{ //not in the arc, don't consider it
 				VectorCopy(self->client->ps.origin, tto);
 				tto[2] += self->client->ps.viewheight;
+				if ( byHand )
+				{//OpenJK VR: from the Force hand, the way it went
+					VectorCopy( handFrom, tto );
+				}
 				VectorSubtract(thispush_org, tto, a);
 				vectoangles(a, a);
 
-				if (ent->client && !InFieldOfVision(self->client->ps.viewangles, visionArc, a) &&
+				if (ent->client && !InFieldOfVision(fwdangles, visionArc, a) &&
 					ForcePowerUsableOn(self, ent, powerUse))
 				{ //only bother with arc rules if the victim is a client
 					entityList[e] = ENTITYNUM_NONE;
@@ -3609,7 +3647,14 @@ void ForceThrow( gentity_t *self, qboolean pull )
 				VectorCopy(self->client->ps.origin, trFrom);
 				trFrom[2] += self->client->ps.viewheight;
 
-				AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
+				if ( byHand )
+				{//OpenJK VR: from the Force hand, the way it went
+					VectorCopy( handFrom, trFrom );
+				}
+				else
+				{
+					AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
+				}
 				VectorNormalize( forward );
 				VectorMA( trFrom, radius, forward, end );
 				trap->Trace( &tr, trFrom, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
@@ -3829,6 +3874,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 	trace_t tr;
 	vec3_t a;
 	vec3_t fwd, fwd_o, start_o, nvel;
+	vec3_t gripFrom, gripAngles, gripDir;	// OpenJK VR
 
 	self->client->dangerTime = level.time;
 	self->client->ps.eFlags &= ~EF_INVULNERABLE;
@@ -3871,7 +3917,14 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 		return;
 	}
 
-	if ( !InFront( gripEnt->client->ps.origin, self->client->ps.origin, self->client->ps.viewangles, 0.9f ) &&
+	// OpenJK VR: a VR player's Force hand holds them - from it, where it points (g_vrforce.c)
+	VectorCopy( self->client->ps.origin, gripFrom );
+	VectorCopy( self->client->ps.viewangles, gripAngles );
+	if ( G_VRForceHand( self, gripFrom, gripDir ) )
+	{
+		vectoangles( gripDir, gripAngles );
+	}
+	if ( !InFront( gripEnt->client->ps.origin, gripFrom, gripAngles, 0.9f ) &&
 		gripLevel < FORCE_LEVEL_3)
 	{
 		WP_ForcePowerStop(self, forcePower);
@@ -3960,7 +4013,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 			float nvLen = 0;
 
 			VectorCopy(gripEnt->client->ps.origin, start_o);
-			AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+			AngleVectors(gripAngles, fwd, NULL, NULL);	// OpenJK VR: (where the Force hand points)
 			fwd_o[0] = self->client->ps.origin[0] + fwd[0]*128;
 			fwd_o[1] = self->client->ps.origin[1] + fwd[1]*128;
 			fwd_o[2] = self->client->ps.origin[2] + fwd[2]*128;

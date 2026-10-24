@@ -18,6 +18,9 @@ one. Out of the middle:
                          to a duel, give up (when you're down: cg_vrdown.c),
                          the Roleplay menu (roleplay on or off: logging in
                          works either way)
+  up and  Force >        the Force powers that aren't gestures, those you
+  right                  know (cg_vrforce.c): the one picked is what the
+                         Force grip's quick squeeze uses (as X and Y pick)
 
 Resting on a ring (>) for a moment opens it; Back, up and to the left,
 goes back. A ring that opens waits for the stick to move before it picks
@@ -57,10 +60,11 @@ enum {
 	PWA_DUEL,		// challenge them to a duel
 	PWA_GIVEUP,		// give up, down (cg_vrdown.c)
 	PWA_MENU,		// the Roleplay menu
-	PWA_COMPANION	// an order to your companions (arg: cg_vrcomp.c's)
+	PWA_COMPANION,	// an order to your companions (arg: cg_vrcomp.c's)
+	PWA_FORCE		// a Force power picked (arg: FP_*)
 };
 
-enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_RINGS };
+enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_FORCE, PW_RINGS };
 
 typedef struct {
 	int			way;		// 0 up, 1 up and right, 2 right... 7 up and left
@@ -71,6 +75,7 @@ typedef struct {
 
 static const pwSlot_t pwMain[] = {
 	{ 0, "Say...",			PWA_SAY,		0 },
+	{ 1, "Force",			PWA_RING,		PW_FORCE },
 	{ 2, "Poses",			PWA_RING,		PW_POSES },
 	{ 4, "Companions",		PWA_RING,		PW_COMPANIONS },
 	{ 6, "Roleplay",		PWA_RING,		PW_ROLEPLAY },
@@ -100,6 +105,10 @@ static const pwSlot_t pwRoleplay[] = {
 	{ 7, "Back",			PWA_BACK,		0 },
 };
 
+// the Force ring: the powers you know, made as it opens (CG_PW_ForceSlots)
+#define PW_FORCE_MAX	7
+static pwSlot_t pwForce[PW_FORCE_MAX + 1];
+
 static const struct {
 	const char		*title;
 	const pwSlot_t	*slot;
@@ -109,7 +118,38 @@ static const struct {
 	{ "Poses",		pwPoses,		(int)ARRAY_LEN( pwPoses ) },
 	{ "Companions",	pwCompanions,	(int)ARRAY_LEN( pwCompanions ) },
 	{ "Roleplay",	pwRoleplay,		(int)ARRAY_LEN( pwRoleplay ) },
+	{ "Force",		pwForce,		0 },
 };
+static int pwForceCount;	// (the Force ring's, as it opened)
+
+// The slots a ring has.
+static int CG_PW_Count( int ring ) {
+	return ( ring == PW_FORCE ) ? pwForceCount : pwRings[ring].count;
+}
+
+static const pwSlot_t *CG_PW_At( int ring, int i ) {
+	return &pwRings[ring].slot[i];
+}
+
+// The Force ring's slots: the powers you know of those it has (cg_vrforce.c),
+// round it - four or fewer, up, right, down and left - and Back.
+static void CG_PW_ForceSlots( void ) {
+	static const int fourWays[4] = { 0, 2, 4, 6 };
+	int powers[PW_FORCE_MAX], n, i;
+
+	n = CG_VR_ForceRingPowers( powers, PW_FORCE_MAX );
+	for ( i = 0; i < n; i++ ) {
+		pwForce[i].way = ( n <= 4 ) ? fourWays[i] : i;
+		pwForce[i].label = CG_VR_ForcePowerName( powers[i] );
+		pwForce[i].action = PWA_FORCE;
+		pwForce[i].arg = powers[i];
+	}
+	pwForce[n].way = 7;
+	pwForce[n].label = "Back";
+	pwForce[n].action = PWA_BACK;
+	pwForce[n].arg = 0;
+	pwForceCount = n + 1;
+}
 
 static struct {
 	qboolean	open;
@@ -145,9 +185,9 @@ static int CG_PW_Slot( int ring, float x, float y, float enough ) {
 	if ( len < enough ) {
 		return -1;
 	}
-	for ( i = 0; i < pwRings[ring].count; i++ ) {
+	for ( i = 0; i < CG_PW_Count( ring ); i++ ) {
 		float sx, sy, d;
-		CG_PW_Way( pwRings[ring].slot[i].way, &sx, &sy );
+		CG_PW_Way( CG_PW_At( ring, i )->way, &sx, &sy );
 		d = ( x * sx + y * sy ) / len;
 		if ( d > bestDot ) {
 			bestDot = d;
@@ -169,6 +209,9 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 		}
 		if ( slot->arg == PW_COMPANIONS ) {
 			return CG_RP_CompsWhy();
+		}
+		if ( slot->arg == PW_FORCE ) {
+			return CG_VR_ForceRingWhy( -1 );	// (spectating, or none of its powers known: cg_vrforce.c)
 		}
 		return NULL;
 	case PWA_POSE:
@@ -192,6 +235,8 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 		return CG_RP_MenuWhy();	// (roleplay off: logging in there all the same)
 	case PWA_COMPANION:
 		return CG_RP_CompOrderWhy( slot->arg );
+	case PWA_FORCE:
+		return CG_VR_ForceRingWhy( slot->arg );
 	default:
 		return NULL;
 	}
@@ -209,6 +254,9 @@ static void CG_PW_Close( void ) {
 // Another ring: what the stick points at in it now isn't picked until it
 // moves off it (the mouse starts again from the middle).
 static void CG_PW_Ring( int ring ) {
+	if ( ring == PW_FORCE ) {
+		CG_PW_ForceSlots();
+	}
 	pw.ring = ring;
 	pw.pick = -1;
 	pw.pickTime = cg.time;
@@ -273,6 +321,9 @@ static void CG_PW_Do( const pwSlot_t *slot ) {
 	case PWA_COMPANION:
 		CG_RP_CompOrder( slot->arg );
 		break;
+	case PWA_FORCE:
+		CG_VR_ForcePick( slot->arg );	// (cg_vrforce.c)
+		break;
 	default:
 		break;	// (a ring, Back: rested on, not let go on)
 	}
@@ -285,7 +336,7 @@ void CG_PoseWheelUp_f( void ) {
 	if ( !pw.open ) {
 		return;
 	}
-	slot = ( pw.pick >= 0 ) ? &pwRings[pw.ring].slot[pw.pick] : NULL;
+	slot = ( pw.pick >= 0 ) ? CG_PW_At( pw.ring, pw.pick ) : NULL;
 	if ( slot && !CG_PW_Why( slot ) && Q_stricmp( CG_Argv( 1 ), "cancel" ) &&
 		!( pw.mouse && ( trap->Key_GetCatcher() & ~KEYCATCH_CGAME ) ) ) {	// (not as the console or a menu took the keys)
 		CG_PW_Close();	// (first: the chat line or the menu takes the keys next)
@@ -359,7 +410,7 @@ void CG_PoseWheelFrame( void ) {
 	}
 	// resting on a ring (or Back): it opens
 	if ( pw.pick >= 0 && cg.time - pw.pickTime >= PW_REST ) {
-		const pwSlot_t *slot = &pwRings[pw.ring].slot[pw.pick];
+		const pwSlot_t *slot = CG_PW_At( pw.ring, pw.pick );
 		if ( slot->action == PWA_RING && !CG_PW_Why( slot ) ) {
 			CG_PW_Ring( slot->arg );
 		} else if ( slot->action == PWA_BACK ) {
@@ -378,7 +429,7 @@ static void CG_PW_Place( int way, float *cx, float *cy ) {
 }
 
 static void CG_PW_Tile( int i ) {
-	const pwSlot_t *slot = &pwRings[pw.ring].slot[i];
+	const pwSlot_t *slot = CG_PW_At( pw.ring, i );
 	const qboolean picked = (qboolean)( i == pw.pick );
 	const qboolean usable = (qboolean)!CG_PW_Why( slot );
 	const qboolean opens = (qboolean)( slot->action == PWA_RING || slot->action == PWA_BACK );
@@ -399,6 +450,9 @@ static void CG_PW_Tile( int i ) {
 		text[3] = 0.35f;
 		back[3] = 0.35f;
 		edge[3] = 0.25f;
+	}
+	if ( slot->action == PWA_FORCE && slot->arg == cg.forceSelect ) {
+		VectorSet4( edge, 1.0f, 0.85f, 0.35f, 0.9f );	// (the Force power picked now)
 	}
 	if ( picked ) {
 		if ( usable ) {
@@ -434,7 +488,7 @@ void CG_DrawPoseWheel( void ) {
 	if ( !pw.open || !cg.snap ) {
 		return;
 	}
-	for ( i = 0; i < pwRings[pw.ring].count; i++ ) {
+	for ( i = 0; i < CG_PW_Count( pw.ring ); i++ ) {
 		CG_PW_Tile( i );
 	}
 	if ( title[0] ) {
@@ -444,13 +498,15 @@ void CG_DrawPoseWheel( void ) {
 	// where it points
 	CG_FillRect( 320.0f - 3.0f + pw.wx * 30.0f, 240.0f - 3.0f - pw.wy * 30.0f, 6.0f, 6.0f, mark );
 
-	hint = ( pw.pick >= 0 ) ? CG_PW_Why( &pwRings[pw.ring].slot[pw.pick] ) : NULL;
+	hint = ( pw.pick >= 0 ) ? CG_PW_Why( CG_PW_At( pw.ring, pw.pick ) ) : NULL;
 	if ( hint ) {
 		VectorSet4( dim, 1.0f, 0.6f, 0.45f, 1.0f );	// (why it's greyed)
-	} else if ( pw.pick >= 0 && pwRings[pw.ring].slot[pw.pick].action == PWA_RING ) {
+	} else if ( pw.pick >= 0 && CG_PW_At( pw.ring, pw.pick )->action == PWA_RING ) {
 		hint = "Hold it there to open it";
-	} else if ( pw.pick >= 0 && pwRings[pw.ring].slot[pw.pick].action == PWA_BACK ) {
+	} else if ( pw.pick >= 0 && CG_PW_At( pw.ring, pw.pick )->action == PWA_BACK ) {
 		hint = "Hold it there to go back";
+	} else if ( pw.pick >= 0 && CG_PW_At( pw.ring, pw.pick )->action == PWA_FORCE ) {
+		hint = pw.mouse ? "Let go to pick it - Use Force uses it" : "Let go of Y to pick it - a quick squeeze of the Force grip uses it";
 	} else if ( pw.waiting ) {
 		hint = "Move the stick to one";
 	} else if ( pw.mouse ) {

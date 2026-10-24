@@ -1467,7 +1467,7 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	// the voice chat settings go on it (with menudef.h's definitions still
 	// loaded)
 	UI_VRSetup_AddPage();
-	// OpenJK VR: VR Movement and VR View on Controls - laid out as its Other
+	// OpenJK VR: VR Movement, VR View and VR Force on Controls - laid out as its Other
 	// settings are
 	UI_VRControls_AddPages();
 	// OpenJK VR: the voice chat settings, on the Sound page of Setup

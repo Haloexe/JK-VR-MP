@@ -671,6 +671,11 @@ qboolean G_VRSaberOn( void ) {
 	return (qboolean)( vrPosesAvailable && g_vrSaber.integer > 0 );
 }
 
+// Whether VR players' poses come in at all: this engine, offering sv_vrx.
+qboolean G_VRPosesAvailable( void ) {
+	return vrPosesAvailable;
+}
+
 void G_VRSaberPublish( void ) {
 	trap->Cvar_Set( "vrSaber", G_VRSaberOn() ? "1" : "0" );
 }
@@ -685,6 +690,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		vrsAvatarSet[clientNum] = qfalse;
 		vrsGunLeft[clientNum] = qfalse;
 		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
+		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
 	}
 }
 
@@ -824,6 +830,7 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	}
 	if ( !pose || !pose->avatar.valid || !VRS_AvatarShown( ent ) ) {
 		VRS_ClearAvatar( clientNum );
+		G_VRForceDrop( clientNum );	// (nor a Force hand, from now: g_vrforce.c)
 		return;
 	}
 	a = pose->avatar;
@@ -899,6 +906,7 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 		}
 		VectorSubtract( hand->origin, cl->ps.origin, hand->origin );
 	}
+	G_VRForceTake( ent, &a, pose );	// (their Force hand, if they've one: g_vrforce.c - else it isn't passed on)
 	trap->ext.VR_SetAvatar( clientNum, &a );
 	vrsAvatarSet[clientNum] = qtrue;
 	vrsBodyYaw[clientNum] = a.bodyYaw;

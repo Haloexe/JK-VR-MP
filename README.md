@@ -27,6 +27,15 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   Hold a saber in either hand, anywhere along the hilt, the usual way or
   reversed; pass it from hand to hand or grip it with both. The controllers
   rumble with every hit.
+- **The Force in your hand:** hold the Force grip and your empty hand reaches
+  out with the Force - thrust it out to Push, reach and yank it back to Pull,
+  point and hold it still to Grip, pull its trigger for Lightning (palm up:
+  Drain), and squeeze quickly for any other power, picked on the wheel's new
+  Force ring. On a server running this build each power comes from your hand
+  and goes where it points (or the way you thrust), snapping onto someone
+  within 10 degrees, and the controller thumps, tugs, strains and crackles
+  with it. Or push and pull with an open hand, or turn the gestures off, under
+  VR Force in Setup > Controls.
 - **Saber colours:** any RGB colour for each of your sabers, and a black core
   inside the coloured glow, picked on the RGB Colors page (Profile >
   Lightsaber, or Setup > VR) with sliders or a hex code while a preview shows
@@ -69,8 +78,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   trigger to click (the other trigger right-clicks). Setup has a VR page for
   playing left-handed, finger tracking, Body Bends, how heavy sabers feel,
   controller rumble and the holsters.
-- **Comfort settings:** Setup > Controls has VR Movement and VR View. Turn in
-  snaps (15 to 90 degrees, 45 as it comes) or smoothly at your own speed,
+- **Comfort settings:** Setup > Controls has VR Movement and VR View (and VR
+  Force). Turn in snaps (15 to 90 degrees, 45 as it comes) or smoothly at your own speed,
   dip the view to dark as you snap turn, darken the edges of your view while
   the game moves you (a comfort vignette, Low to High: the stick, smooth
   turning, jumps and falls), move where you look or where your hand points,

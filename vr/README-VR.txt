@@ -16,7 +16,10 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Stereo 3D with the headset's own field of view and lens geometry
   * Head tracking (rotation + limited positional movement)
   * VR controllers: thumbstick movement, snap/smooth turning, buttons;
-    the comfort settings in Setup > Controls (VR MOVEMENT AND VR VIEW)
+    the comfort settings in Setup > Controls (VR MOVEMENT, VR VIEW AND
+    VR FORCE)
+  * The Force in your hand: thrust to Push, yank to Pull, point to Grip,
+    the trigger for Lightning and Drain (see THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
@@ -88,7 +91,7 @@ If no headset is found the game starts in normal desktop mode.
 CONTROLS (Quest / Touch layout; other controllers are similar)
 --------
   Left stick           move (where you look, or where your hand points:
-                       see VR MOVEMENT AND VR VIEW)
+                       see VR MOVEMENT, VR VIEW AND VR FORCE)
   Left stick click     walk (hold)
   Right stick L/R      turn (snap 45 degrees, or smooth)
   Right stick up/down  next / previous weapon (straight to your hand)
@@ -97,7 +100,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        switch it on and off) - the trigger of the hand that
                        holds your weapon: your saber in your left hand, the
                        left one
-  Left trigger         alternate attack (the other trigger)
+  Left trigger         alternate attack (the other trigger) - but while
+                       you hold the Force grip, Lightning (THE FORCE, below)
   Right grip           use (doors, switches, pick-ups), squeezed most of
                        the way (Setup > VR: Grip Press, 85%) - a lighter
                        squeeze only closes your character's fingers; at a
@@ -105,17 +109,20 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        holding your saber (Saber Grip: Hold), it holds it
                        - no use meanwhile; let go and it's back in its
                        holster
-  Left grip            use the selected Force power, squeezed as far as
-                       Use (or, at your saber's hilt, take hold of it with
-                       both hands; at a holster, take out or put away;
-                       holding a saber (Saber Grip: Hold), it holds it - no
-                       Force meanwhile)
+  Left grip            the Force grip: hold it and your empty hand reaches
+                       out with the Force - thrust, yank, point, the trigger
+                       (THE FORCE, below); a quick squeeze uses the selected
+                       Force power - squeezed as far as Use (or, at your
+                       saber's hilt, take hold of it with both hands; at a
+                       holster, take out or put away; holding a saber
+                       (Saber Grip: Hold), it holds it - no Force meanwhile)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
   A / B                jump / crouch (or crouch for real: Real Crouch,
                        below)
-  X / Y                previous / next Force power
+  X / Y                previous / next Force power (or pick one on the
+                       wheel's Force ring)
   Left menu button     game menu (press again to close it)
 LEFT-HANDED (Setup > VR, or vr_leftHanded 1): your guns go in your left hand
 and you aim with it, your saber goes in your left fist, and the grips swap:
@@ -124,12 +131,12 @@ doing what it did when you pressed it until you let go.
 Swap Sticks (below) moves you with the right stick and turns you - and
 switches weapon - with the left; the sticks' clicks go with them.
 
-VR MOVEMENT AND VR VIEW: Setup > Controls - in the main menu, and Controls
-in the game's menu - has two buttons under Other, with the settings for
-moving about and seeing in the headset. Point at one and click it (the
-other trigger steps a choice back), or pick it with the arrow keys (or Tab)
-and change it with left, right or Enter; push the stick up or down on a
-slider to move it a step.
+VR MOVEMENT, VR VIEW AND VR FORCE: Setup > Controls - in the main menu, and
+Controls in the game's menu - has three buttons under Other, with the
+settings for moving about, seeing and using the Force in the headset. Point
+at one and click it (the other trigger steps a choice back), or pick it with
+the arrow keys (or Tab) and change it with left, right or Enter; push the
+stick up or down on a slider to move it a step.
   VR Movement
     Turning          Snap (a step at a time) or Smooth
     Snap Angle       15, 30, 45 (as it comes), 60 or 90 degrees
@@ -196,6 +203,17 @@ slider to move it a step.
                      sharper, and slower) - from when the game next starts
                      (or after vid_restart)
     Desktop View     what you see in the headset, in the game's window
+  VR Force
+    Force Gestures   Force grip held (as it comes): your Force hand's
+                     gestures (THE FORCE, below), while you hold the Force
+                     grip; Open hand: Push and Pull with your hand open
+                     too, no grip held - more magical, and easier to set
+                     off by accident in a fight; Off: no gestures - the
+                     Force grip uses the power picked as long as you hold
+                     it, as in the normal game
+    Thrust Speed     how fast a thrust or a yank must be for Push and Pull:
+                     0.8 to 3 metres a second (1.6 as it comes) - lower if
+                     they don't come, higher if they come by accident
 Each is a console setting as well (SETTINGS, below).
 
 YOUR HEIGHT. Until the game knows your height, your view goes up and down
@@ -737,6 +755,50 @@ bolts are blocked for them automatically, as before), g_vrSaberDebug 1
 (prints every cut's speed and damage, and how every clash ended, to the
 console), and the stock g_dismember 100 if you want limbs to come off.
 
+THE FORCE: your Force hand - the left (the right, left-handed), whenever
+it's empty - reaches out with the Force while you hold its grip (the Force
+grip, squeezed as far as Use):
+  Push             thrust it out, fast and far (from near your chest):
+                   Push goes the way you thrust
+  Pull             reach out (not fast: a quick thrust out is a Push),
+                   then yank it back toward you in one go: Pull goes
+                   toward where you yanked it from
+  Grip             hold it out still a moment, pointing at someone, first
+                   thing after you squeeze: they stay held while you hold
+                   the Force grip, as long as the game holds a Grip (five
+                   seconds at level 1, four at levels 2 and 3 - still
+                   holding, it grips again three seconds on); below level
+                   3, only while you point at them (within 25 degrees or
+                   so, side to side)
+  Lightning        its trigger, pointing at them - as long as you hold it
+  Drain            the same, your palm turned up
+  a quick squeeze  any other power: the one picked on the wheel's Force
+                   ring (Heal, Speed, Protect, Absorb, Mind Trick, Seeing,
+                   Rage, the team powers) or with X and Y
+While a Grip holds someone, or Lightning or Drain is going, a thrust or a
+yank does nothing (as in the game) - and after a Push, a Pull or the
+trigger, let go and squeeze again to Grip. Squeeze the Force grip first,
+then the trigger: pulled first, or both at once in a fist, the trigger
+does what it always does (alt-attack; with the saber out, throws it). Each
+power is as the game has it - your level, its cost, its reach - and the
+controller tells you what happens: a light buzz as you reach out, a thump
+as you Push and a tug as you Pull (when the game does them), a strain
+while you Grip someone, a crackle with Lightning, a steady pull with
+Drain. Holding your hand out still before a yank grips instead of pulling:
+pull in one go. A hand holding a saber (two sabers, or both hands on one)
+holds it: its grip does what it always did. Force Jump is still A held. On
+a server running this build ("vrForce 1" in its server info) the Force
+comes out of your hand: Push and Pull go the way you thrust or yanked,
+Grip, Lightning and Drain where your hand points - each straight at
+someone within 10 degrees of that whom the power works on (never onto, or
+off, someone cloaked or hidden from you by a mind trick, unless your
+Seeing shows them) - and everyone on this build sees your Lightning and
+Drain go from your hand to them. On other servers the gestures still work,
+but every power aims where you look (with a gun out, where it points), as
+in the normal game - and a Grip that's caught nobody, held on through a
+Push or a Pull, can still catch whom you look at after it. The Force
+Gestures and Thrust Speed settings are under VR Force (above).
+
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
   * their body faces where theirs does, their head turns, nods and tilts
@@ -825,6 +887,11 @@ otherwise). cg_vrDuelSalute 0 turns the salute off.
 The wheel: hold Y, push the right stick toward a slot and let go of Y (a
 quick press of Y still picks the next Force power):
   up     Say...       the chat line, with the headset's keyboard
+  up and Force        pick a Force power that isn't a gesture - the ones you
+  right               know (Heal, Speed, Protect, Absorb, Mind Trick,
+                      Seeing, Rage, the team powers): a quick squeeze of the
+                      Force grip uses it (see THE FORCE; not while you
+                      spectate)
   right  Poses        sit (on a chair or a bench: stand with your back to
                       it first), kneel, lie down, sit cross-legged
   down   Companions   orders to your companions (see COMPANIONS, under
@@ -833,14 +900,14 @@ quick press of Y still picks the next Force power):
                       duel, give up (when you're down), the Roleplay menu
                       (roleplay on or off: you log in there either way -
                       see ROLEPLAY)
-Rest on Poses or Roleplay a moment and its ring opens: push toward what you
-want there and let go of Y (Back, up and to the left, goes back; let go
-with the stick in the middle and nothing happens). A stick already pushed
-as the wheel or a ring comes up picks nothing till it moves off that slot. What can't be done now
-is greyed out, and the line under the wheel says why. Without the
-headset, hold P (or O or I, whichever was free the first time: bind <key>
-+posewheel for another), move the mouse toward a slot and let go (Escape:
-none).
+Rest on Force, Poses or Roleplay a moment and its ring opens: push toward
+what you want there and let go of Y (Back, up and to the left, goes back;
+let go with the stick in the middle and nothing happens). A stick already
+pushed as the wheel or a ring comes up picks nothing till it moves off
+that slot. What can't be done now is greyed out, and the line under the
+wheel says why. Without the headset, hold P (or O or I, whichever was free
+the first time: bind <key> +posewheel for another), move the mouse toward
+a slot and let go (Escape: none).
 
 Poses: your character goes down into it and your view with it, to its
 eyes; your head and arms stay yours, so you can still talk with your
@@ -1091,8 +1158,8 @@ Console (Shift+~) commands:
 SETTINGS (console cvars, saved automatically)
 ---------------------------------------------
 (The ones for turning, moving, your view, the HUD, the menu screen, guns'
-aim and the resolution are in Setup > Controls too: VR MOVEMENT AND VR
-VIEW, above.)
+aim, the resolution and the Force gestures are in Setup > Controls too: VR
+MOVEMENT, VR VIEW AND VR FORCE, above.)
   vr_enabled 1           0 = desktop mode (then: vid_restart); the VR
                          launcher always starts in VR (for desktop mode
                          use "Launch OpenJK Desktop.bat")
@@ -1157,6 +1224,11 @@ VIEW, above.)
   vr_gripPress 0.85      how far a grip must be squeezed for Use and the
                          Force (0.6 to 0.95; Setup, VR: Grip Press) - a
                          lighter squeeze only closes your fingers
+  vr_forceGestures 1     your Force hand's gestures: 1 = while the Force
+                         grip's held, 2 = Push and Pull with an open hand
+                         too, 0 = off (the Force grip uses the power picked)
+  vr_forceThrust 1.6     how fast a thrust or yank must be for Push and Pull
+                         (metres a second, 0.8 to 3)
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
@@ -1230,6 +1302,11 @@ KNOWN LIMITATIONS
     blade, a Force Push) can't be met where it was before that.
   * Guns are held in your gun hand only (the right; the left,
     left-handed); only sabers can be held with both hands.
+  * The Force: Grip holds someone as the game does - lifted at level 2,
+    floated to just in front of you, where your hand points, at level 3 -
+    your hand doesn't carry them about yet. Only the Force grip's hand is
+    the Force hand: with your saber in that hand (and the other one empty),
+    there's none (switch vr_leftHanded).
   * Fingers: the game's skeleton moves three fingers a hand - the thumb,
     the index finger, and the other three together - and each follows
     only what your controller can feel (see YOUR FINGERS).
@@ -1293,14 +1370,20 @@ no client. Source files:
                                blade's weight and solid blades; the blade
                                poses sent to the server, haptics
   codemp/qcommon/vr_net.h      blade poses on the wire, and the avatar
-                               (VR_POSE_PROTOCOL 5: its head and fingers)
+                               (VR_POSE_PROTOCOL 7: its head and fingers,
+                               its Force hand; a Push's or Pull's way)
   codemp/qcommon/vr_fingers.h  your fingers from what the controllers feel
+  codemp/qcommon/vr_force.h    the Force hand's gestures (the engine's:
+                               client/cl_vr.cpp makes the game's inputs)
+  codemp/cgame/cg_vrforce.c    the Force hand, the player's side: its feel,
+                               its effects, the wheel's Force ring
+  codemp/game/g_vrforce.c      the Force aimed from the hand, on the server
   codemp/game/g_vrsaber.c      physical saber combat on the server
   codemp/game/bg_vrsaber.h     how heavy a blade feels, and the share of
                                its cut speeds that makes up for it
   codemp/ui/ui_vrsetup.c       the VR page of Setup (base\ui\vr_setup.menu)
-  codemp/ui/ui_vrcontrols.c    VR Movement and VR View in Setup > Controls
-                               (base\ui\vr_controls.menu)
+  codemp/ui/ui_vrcontrols.c    VR Movement, VR View and VR Force in Setup >
+                               Controls (base\ui\vr_controls.menu)
   codemp/cgame/cg_vrholster.c  holsters, the player's side: where they hang
                                on the model, taking out, putting away,
                                swapping, two sabers, everyone's hilts

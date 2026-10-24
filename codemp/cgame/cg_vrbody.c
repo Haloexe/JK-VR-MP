@@ -5737,6 +5737,9 @@ static void CG_VRB_BlendAvatar( const vrAvatar_t *a, const vrAvatar_t *b, float 
 
 	*out = ( f < 0.5f ) ? *a : *b;
 	out->valid = qtrue;
+	if ( a->forceValid && b->forceValid && a->forceHand == b->forceHand ) {
+		VRB_Slerp( a->forceDir, b->forceDir, f, out->forceDir );	// (where their Force hand points, between)
+	}
 	out->bodyYaw = LerpAngle( a->bodyYaw, b->bodyYaw, f );
 	for ( i = 0; i < 3; i++ ) {
 		out->headAngles[i] = LerpAngle( a->headAngles[i], b->headAngles[i], f );
@@ -6676,6 +6679,45 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 			VectorSubtract( a->hand[h].origin, cg.refdef.vieworg, a->hand[h].origin );
 		}
 	}
+	// your Force hand (Force gestures on, the hand empty - and drawn so): where
+	// it points, its aim (cg_vrforce.c)
+	h = vr->force.hand;
+	if ( ( h == VR_HAND_LEFT || h == VR_HAND_RIGHT ) && vr->handValid[h] && a->hand[h].grip == VR_GRIP_FREE ) {
+		for ( i = 0; i < 3; i++ ) {
+			VectorCopy( vr->aimAxis[h][i], head[i] );
+		}
+		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, NULL, head, NULL, world );
+		a->forceValid = qtrue;
+		a->forceHand = h;
+		VectorCopy( world[0], a->forceDir );
+	}
+}
+
+// Another VR player's Force hand, as their avatar has it this frame (them
+// drawn as their VR body): which (VR_HAND_*), and where it points (world
+// axes). -1: none.
+int CG_VR_AvatarForce( centity_t *cent, vec3_t dir ) {
+	const int n = cent->currentState.number;
+	const vrAvatar_t *a;
+
+	if ( n < 0 || n >= MAX_CLIENTS || n == cg.clientNum || !CG_VRB_OtherUsable( cent ) ) {
+		return -1;
+	}
+	a = &vrbOthers[n].avatar;
+	if ( !a->forceValid || ( a->forceHand != VR_HAND_LEFT && a->forceHand != VR_HAND_RIGHT ) ||
+		a->hand[a->forceHand].grip != VR_GRIP_FREE ) {
+		return -1;
+	}
+	VectorCopy( a->forceDir, dir );
+	return a->forceHand;
+}
+
+static void CG_VRB_FeelSteady( int hand, float amp, float grain );
+
+// Something lasting in a hand, this frame only (cg_vrforce.c's: mixed with
+// the rest, CG_VRB_FeelFrame).
+void CG_VR_FeelSteady( int hand, float amp, float grain ) {
+	CG_VRB_FeelSteady( hand, amp, grain );
 }
 
 // After the frame's scene is built: the entities' real positions back (next
@@ -6781,7 +6823,9 @@ void CG_VR_BodyEndFrame( void ) {
 		trap->ext.VR_SetWeaponHand( CG_VRB_WeaponHand() );
 	}
 
-	// and what your hands feel this frame
+	// and what your hands feel this frame (the Force hand's with the rest:
+	// cg_vrforce.c)
+	CG_VR_ForceFrame( vr );
 	CG_VRB_FeelFrame();
 }
 

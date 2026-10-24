@@ -8612,6 +8612,32 @@ void CG_CheckThirdPersonAlpha( centity_t *cent, refEntity_t *legs )
 	}
 }
 
+// OpenJK VR: where a player's Force (power, at level) comes out for its
+// effects - their Force hand, the way it points (cg_vrforce.c): its point, and
+// the axis it goes along, onto whom the server snaps it within its reach
+// (CG_VR_ForceSnap, CG_VR_ForceReach). qfalse: the game's own (org and axis as
+// they are).
+static qboolean CG_VRForceOrigin( centity_t *cent, clientInfo_t *ci, vec3_t org, matrix3_t axis, int power, int level ) {
+	mdxaBone_t m;
+	vec3_t dir, angles;
+	const int h = CG_VR_ForceFx( cent, dir );
+
+	if ( h < 0 || !cent->ghoul2 ) {
+		return qfalse;
+	}
+	trap->G2API_GetBoltMatrix( cent->ghoul2, 0, ( h == VR_HAND_RIGHT ) ? ci->bolt_rhand : ci->bolt_lhand, &m, cent->turAngles,
+		cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale );
+	org[0] = m.matrix[0][3];
+	org[1] = m.matrix[1][3];
+	org[2] = m.matrix[2][3];
+	if ( axis ) {
+		CG_VR_ForceSnap( cent->currentState.number, power, org, CG_VR_ForceReach( power, level ), dir );
+		vectoangles( dir, angles );
+		AnglesToAxis( angles, axis );
+	}
+	return qtrue;
+}
+
 void CG_Player( centity_t *cent ) {
 	clientInfo_t	*ci;
 	refEntity_t		legs;
@@ -9656,6 +9682,7 @@ void CG_Player( centity_t *cent ) {
 		}
 
 		AnglesToAxis( fAng, axis );
+		CG_VRForceOrigin( cent, ci, efOrg, axis, FP_DRAIN, realForceLev );	// OpenJK VR: from a VR player's Force hand, the way it points
 
 		if ( realForceLev > FORCE_LEVEL_2 )
 		{//arc
@@ -9703,6 +9730,7 @@ void CG_Player( centity_t *cent ) {
 		efOrg[2] = lHandMatrix.matrix[2][3];
 
 		AnglesToAxis( fAng, axis );
+		CG_VRForceOrigin( cent, ci, efOrg, axis, FP_LIGHTNING, cent->currentState.activeForcePass );	// OpenJK VR: from a VR player's Force hand, the way it points
 
 		if ( cent->currentState.activeForcePass > FORCE_LEVEL_2 )
 		{//arc
@@ -9736,6 +9764,7 @@ void CG_Player( centity_t *cent ) {
 	{
 		vec3_t tAng;
 		vec3_t efOrg;
+		qboolean vrForceHand;	// OpenJK VR
 
 		//VectorSet( tAng, 0, cent->pe.torso.yawAngle, 0 );
 		VectorSet( tAng, cent->turAngles[PITCH], cent->turAngles[YAW], cent->turAngles[ROLL] );
@@ -9750,9 +9779,11 @@ void CG_Player( centity_t *cent ) {
 		efOrg[0] = lHandMatrix.matrix[0][3];
 		efOrg[1] = lHandMatrix.matrix[1][3];
 		efOrg[2] = lHandMatrix.matrix[2][3];
+		// OpenJK VR: round a VR player's Force hand - yours too, in the headset
+		vrForceHand = CG_VRForceOrigin( cent, ci, efOrg, NULL, FP_GRIP, 0 );
 
 		if ( (cent->currentState.forcePowersActive & (1 << FP_GRIP)) &&
-			(cg.renderingThirdPerson || cent->currentState.number != cg.snap->ps.clientNum) )
+			(cg.renderingThirdPerson || cent->currentState.number != cg.snap->ps.clientNum || vrForceHand) )
 		{
 			vec3_t boltDir;
 			vec3_t origBolt;

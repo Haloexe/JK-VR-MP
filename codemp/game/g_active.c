@@ -3504,6 +3504,9 @@ void ClientThink( int clientNum, usercmd_t *ucmd ) {
 	else if ( clientNum >= MAX_CLIENTS ) {
 		ClientThink_real( ent );
 	}
+	if ( clientNum < MAX_CLIENTS ) {
+		G_VRForceCmdDone( ent );	// OpenJK VR: this command's Push or Pull's way is used up (g_vrforce.c)
+	}
 
 /*	This was moved to clientthink_real, but since its sort of a risky change i left it here for
     now as a more concrete reference - BSD

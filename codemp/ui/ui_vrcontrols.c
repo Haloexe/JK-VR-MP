@@ -1,16 +1,18 @@
 /*
 ===========================================================================
 OpenJK VR (multiplayer) - the VR sections of Setup > Controls (the main
-menu's "controlsMenu" and the in-game "ingame_controls"): VR Movement and VR
-View, the settings for moving about and seeing in a headset.
+menu's "controlsMenu" and the in-game "ingame_controls"): VR Movement, VR
+View and VR Force, the settings for moving about, seeing and using the Force
+in a headset.
 
-When the menus load, two buttons go under the page's own (Movement,
+When the menus load, three buttons go under the page's own (Movement,
 Interaction, Weapons, Force Powers, Mouse/Joystick, Other), looking like
-them, and the settings in ui/vr_controls.menu go where the page shows the
-others', laid out as its Other settings are and looking like them. Choosing
-one shows its settings and hides whatever the page's own buttons show;
-choosing any of those (or opening the page) hides them again. The page is
-otherwise left as it is.
+them - as far apart as they are, or closer to fit in the page (the in-game
+one), down to VRC_BUTTON_MIN - and the settings in ui/vr_controls.menu go
+where the page shows the others', laid out as its Other settings are and
+looking like them. Choosing one shows its settings and hides whatever the
+page's own buttons show; choosing any of those (or opening the page) hides
+them again. The page is otherwise left as it is.
 
   VR Movement
     Turning           snap or smooth                       vr_turnMode 0/1
@@ -43,6 +45,12 @@ otherwise left as it is.
     Resolution        70%-140%, from when the game next    vr_resolutionScale
                       starts (or after vid_restart)
     Desktop View      the headset's view in the window     vr_mirror
+  VR Force
+    Force Gestures    your Force hand's: while the Force   vr_forceGestures 1/2/0
+                      grip's held, with the hand open too
+                      (Push and Pull), or off
+    Thrust Speed      how fast a thrust (Push) or a yank   vr_forceThrust
+                      (Pull) goes, 0.8-3 m/s
 
 They're the engine's settings (but Always Run, the game's): all there
 before the menus load, and taking effect at once - but Resolution, which
@@ -72,7 +80,9 @@ extern void		Menu_UpdatePosition( menuDef_t *menu );
 #define VRC_MAX_BUTTONS		16
 #define VRC_ROW_MIN			12.0f					// rows can't be closer together than this
 #define VRC_ROW_GAP			2.0f					// rows made shorter to fit are this far apart
-#define VRC_SECTIONS		2
+#define VRC_BUTTON_MIN		18.0f					// the buttons can't be closer together than this
+#define VRC_DESC_TOP		1.5f					// a description's text starts this far under its line (as much of it as the buttons may reach)
+#define VRC_SECTIONS		3
 
 static const char *vrcPages[] = { "controlsMenu", "ingame_controls" };
 
@@ -89,6 +99,8 @@ static const struct {
 		"Turning, moving and the sticks in VR, comfort, your height - and recentering" },
 	{ "vr_controls_view", "vrview", "vrviewbutton", "vrviewbutton_glow", "vrview_highlight", "VR View",
 		"Your view in VR: head movement, the HUD, the menu screen, gun aim, resolution" },
+	{ "vr_controls_force", "vrforce", "vrforcebutton", "vrforcebutton_glow", "vrforce_highlight", "VR Force",
+		"Your Force hand in VR: gestures for Push, Pull, Grip, Lightning and Drain" },
 };
 
 /*
@@ -456,6 +468,7 @@ static void UI_VRC_AddTo( menuDef_t *menu ) {
 	vrcRows_t rows[VRC_SECTIONS];
 	vrcButtons_t buttons;
 	rectDef_t r[VRC_SECTIONS];
+	float pitch, height, first, bottom, room, descLine;
 	int lastRef = -1, i, k, s;
 
 	if ( Menu_FindItemByName( menu, vrcSections[0].button ) ) {
@@ -493,14 +506,33 @@ static void UI_VRC_AddTo( menuDef_t *menu ) {
 	}
 
 	// the buttons: under the lowest, as far apart as it is from the one above
-	// (or right under it), in the menu, clear of everything shown there
+	// (or right under it) - or, to fit in the menu (above the line the page
+	// shows its descriptions on, if that's under its buttons: a description's
+	// text starts a little under it), closer, and as short (not closer than
+	// VRC_BUTTON_MIN), starting right under it - clear of everything shown
+	// there
+	pitch = above ? last->window.rectClient.y - above->window.rectClient.y : last->window.rectClient.h;
+	height = last->window.rectClient.h;
+	first = last->window.rectClient.y + pitch;
+	bottom = menu->window.rect.h + 0.5f;
+	descLine = (float)menu->descY - menu->window.rect.y;
+	if ( descLine >= last->window.rectClient.y + last->window.rectClient.h && descLine + VRC_DESC_TOP < bottom ) {
+		bottom = descLine + VRC_DESC_TOP;
+	}
+	if ( first + ( VRC_SECTIONS - 1 ) * pitch + height > bottom ) {
+		room = bottom - ( last->window.rectClient.y + last->window.rectClient.h );
+		pitch = Q_min( pitch, floorf( room / VRC_SECTIONS ) );
+		height = Q_min( height, pitch );
+		first = last->window.rectClient.y + last->window.rectClient.h + ( pitch - height );
+	}
+	if ( pitch < VRC_BUTTON_MIN || first + ( VRC_SECTIONS - 1 ) * pitch + height > bottom ) {
+		Com_Printf( S_COLOR_YELLOW "%s: no room for the VR buttons under the others (the VR settings still work from the console)\n", pageName );
+		return;
+	}
 	for ( s = 0; s < VRC_SECTIONS; s++ ) {
 		r[s] = last->window.rectClient;
-		r[s].y += ( s + 1 ) * ( above ? last->window.rectClient.y - above->window.rectClient.y : last->window.rectClient.h );
-		if ( r[s].y + r[s].h > menu->window.rect.h + 0.5f ) {
-			Com_Printf( S_COLOR_YELLOW "%s: no room for the VR buttons under the others (the VR settings still work from the console)\n", pageName );
-			return;
-		}
+		r[s].y = first + s * pitch;
+		r[s].h = height;
 		for ( i = 0; i < menu->itemCount; i++ ) {
 			const itemDef_t *it = menu->items[i];
 			if ( !( it->window.flags & WINDOW_DECORATION ) && ( it->window.flags & WINDOW_VISIBLE ) && UI_VRC_Overlap( &it->window.rectClient, &r[s] ) ) {
@@ -563,6 +595,7 @@ static void UI_VRC_AddTo( menuDef_t *menu ) {
 		if ( stockGlow ) {
 			rectDef_t gr = stockGlow->window.rectClient;
 			gr.y += r[s].y - last->window.rectClient.y;
+			gr.h -= last->window.rectClient.h - r[s].h;	// (as much shorter as the button)
 			glow[s] = UI_VRC_CopyBar( stockGlow, vrcSections[s].glow, &gr );
 		}
 		if ( glow[s] ) {

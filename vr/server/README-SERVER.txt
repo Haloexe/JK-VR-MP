@@ -209,8 +209,9 @@ GOOD TO KNOW
   players' salutes too).
 * Poses (sit, sit cross-legged, kneel, lie down) need nothing set up:
   players take them with the pose wheel, or the pose command.
-* The log games.log keeps every VR swing, cut and clash (g_vrSaberLog). It
-  only grows: delete it now and then, or set g_vrSaberLog 0.
+* The log games.log keeps every VR swing, cut and clash, and where VR
+  players' Force came from (g_vrSaberLog). It only grows: delete it now
+  and then, or set g_vrSaberLog 0.
 * Saber colors: players on this build give their sabers any color and a
   black core (Setup > VR > Saber Colors), and everyone on this build sees
   them; players of the normal game see the nearest stock color. Team games
@@ -229,6 +230,15 @@ GOOD TO KNOW
   first: players near them can see a bolt hang in the air for a moment.
   g_vrSaberBolts 0: bolts are blocked for VR players automatically, as
   for anyone, as before.
+* VR players' Force powers come from their Force hand (their empty hand,
+  with Force gestures on): Push and Pull the way they thrust or yanked it,
+  Grip, Lightning and Drain where it points - each straight at someone
+  within 10 degrees of that whom it works on (never onto, or off, someone
+  cloaked or mind-tricking them) - and everyone on this build sees them
+  leave that hand ("vrForce 1" in the server info). Each power keeps the
+  game's own levels, costs and reach. g_vrForce 0: the game's own aim,
+  where they look. games.log says where each came from (g_vrSaberLog:
+  Lightning's and Drain's aim at most four times a second).
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).
