@@ -1516,6 +1516,11 @@ void		G_VRSaberGuard( gentity_t *self );
 void		G_VRSaberEndFrame( void );
 void		G_VRSaberBladeOrigin( gentity_t *ent, const vec3_t origin );
 qboolean	G_VRSaberDefersHit( gentity_t *attacker, gentity_t *victim, int saberNum );
+qboolean	G_VRSaberBolts( gentity_t *ent );
+qboolean	G_VRSaberHoldsBolt( gentity_t *m, trace_t *tr );
+qboolean	G_VRSaberBoltHeld( gentity_t *m );
+void		G_VRSaberBoxesOut( gentity_t *missile, const vec3_t end );
+void		G_VRSaberBoxesBack( void );
 void		G_VRSaberDeferHit( gentity_t *attacker, gentity_t *victim, const vec3_t dir, const vec3_t spot, int dmg, int dflags,
 				int saberNum, int bladeNum );
 void Team_CheckDroppedItem( gentity_t *dropped );

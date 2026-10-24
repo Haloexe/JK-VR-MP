@@ -19,12 +19,14 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 > It comes with no warranty of any kind (see the [licence](#licence)).
 
 - **Real lightsaber combat:** your blade cuts, blocks and clashes where you
-  actually swing it, harder the faster you swing. Blades are solid: yours
-  rests on another blade and slides along it instead of passing through. Saber
-  styles become the blade's weight (light, medium, heavy), and a heavy blade
-  lags behind a fast swing. Hold a saber in either hand, anywhere along the
-  hilt, the usual way or reversed; pass it from hand to hand or grip it with
-  both. The controllers rumble with every hit.
+  actually swing it, harder the faster you swing, and deflects blaster bolts
+  where it meets them - its angle aims them, and Saber Defense 3 bends them
+  back onto the shooter. Blades are solid: yours rests on another blade and
+  slides along it instead of passing through. Saber styles become the blade's
+  weight (light, medium, heavy), and a heavy blade lags behind a fast swing.
+  Hold a saber in either hand, anywhere along the hilt, the usual way or
+  reversed; pass it from hand to hand or grip it with both. The controllers
+  rumble with every hit.
 - **Saber colours:** any RGB colour for each of your sabers, and a black core
   inside the coloured glow, picked on the RGB Colors page (Profile >
   Lightsaber, or Setup > VR) with sliders or a hex code while a preview shows

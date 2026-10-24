@@ -30,9 +30,10 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     controller points - in either hand, held anywhere along the hilt, the
     usual way or reversed, passed from hand to hand
   * Physical saber combat in games you host (and on servers running this
-    build): your real blade cuts, blocks and clashes, harder the faster you
-    swing; blades are solid - yours rests on another blade and slides along
-    it rather than passing through; saber styles are the blade's weight
+    build): your real blade cuts, blocks, clashes and deflects blaster
+    bolts, harder the faster you swing; blades are solid - yours rests on
+    another blade and slides along it rather than passing through; saber
+    styles are the blade's weight
   * Saber, fists and scopes aim where you look
   * HUD on a floating plane in front of you
   * Menus, console and loading screens on a floating screen; point at the
@@ -599,6 +600,29 @@ server running this build: your real blade is the weapon.
     swing that meets your blade held still bounces off it (a much stronger
     guard knocks it away; a much stronger swing jars your guard for a
     moment); one that misses your blade lands.
+  * Deflect blaster bolts with it. A bolt your blade meets - where you
+    saw it coming - goes off it as off a mirror held along the blade:
+    square across its way (upright, or lying across), it goes straight
+    back; lean the blade's point towards the shooter and it goes off at
+    twice the lean - down off an upright blade, away from the point off
+    one lying across (lean it towards you: the other way); swing into it
+    and it's batted the way you swing. Your Saber Defense counts: none
+    or 1 stops it dead on the blade, 2 sends it where the blade does,
+    and 3 sends it onto whoever fired it too, when that's within 30
+    degrees of where the blade sends it. Your hand feels a sharp tap as
+    it goes. A bolt your blade misses hits you: no automatic block, and
+    the box round the saber stops nothing - nor does a bolt coming along
+    the blade at you (pointed at whoever fired) turn: it glances on into
+    you, so hold the blade across its way. With lag, a bolt that hits
+    something near you - you, a wall, someone beside you - or bounces off
+    it waits there for your moves of that moment (a quarter of a second
+    at most), in case your blade met it first: it can hang in the air for
+    a moment, for everyone, before it lands or goes off your blade. As in
+    the normal game, rockets, thermals, mines, det packs, the DEMP2's
+    bolts, the concussion rifle's shots and the repeater's and
+    flechette's alternate fire aren't deflected, and in a duel other
+    people's bolts just stop on the blade; the disruptor's beam is still
+    blocked automatically.
   * Blades are solid. Yours can't go through another blade as you see it:
     swung or pushed into one, it stops there and rests on it - the cores
     touching, sparking where they meet - and slides along it as you move
@@ -679,6 +703,7 @@ server running this build: your real blade is the weapon.
           the heavier the blade), then a grind while they rest together,
           harder the harder you push, and a sharp give if it slips by; a
           grind when it scrapes a wall;
+          a bolt going off your blade: a sharp tap;
           getting cut: a jolt in both hands.
         Holding the saber with both hands, both feel all of it, the second
         as strongly as the first. cg_vrHaptics sets how strong it all is
@@ -707,9 +732,10 @@ clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 50
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
 weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
 half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
-below), g_vrSaberDebug 1 (prints every cut's speed and damage, and how
-every clash ended, to the console), and the stock g_dismember 100 if you
-want limbs to come off.
+below), g_vrSaberBolts (1: VR players' blades deflect blaster bolts; 0:
+bolts are blocked for them automatically, as before), g_vrSaberDebug 1
+(prints every cut's speed and damage, and how every clash ended, to the
+console), and the stock g_dismember 100 if you want limbs to come off.
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
@@ -733,9 +759,11 @@ others where the server had them a moment ago, and your moves reach it a
 moment later still (20-60 ms on a LAN), so your blade meets their blade and
 their body where they were when you saw them, and their cut on you waits
 for your moves of that moment - if your blade met that swing of theirs
-first, or cut them down first, the cut never lands. (Between two VR
-players, blades meet where the server has them. Server setting
-g_vrSaberUnlag 0 turns it off.)
+first, or cut them down first, the cut never lands. Bolts too: your blade
+meets them where you saw them, and one that hits something near you
+waits for your moves of that moment. (Between two VR players, blades
+meet where the server has them. Server setting g_vrSaberUnlag 0 turns it
+off.)
 
 VOICE CHAT: talk to the players near you, and hear them from where they
 are - louder near, quieter further off, from the side they're on, their
@@ -1032,8 +1060,10 @@ LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
                which weight, one or two hands - every cut and clash, every
                bot swing your blade stopped, every touch of blades, every
-               guard raised against you (bots, players without VR), and
-               every cut on you your blade stopped as you saw it ("blocked")
+               guard raised against you (bots, players without VR),
+               every cut on you your blade stopped as you saw it
+               ("blocked"), and every bolt your blade deflected
+               ("deflect": whose, your Saber Defense, what became of it)
   vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, the
                animation and fingers of the hand holding the saber, every
                2 s how your arms are drawn ("arms:" - each elbow's height,
@@ -1187,11 +1217,17 @@ KNOWN LIMITATIONS
   * On normal servers saber hits and blocks still come from the game's
     swing animations; your real blade only counts on servers running this
     build.
-  * Saber combat: blaster bolts are still deflected automatically; no
-    saber locks or disarming while you hold the saber in VR; a clash or a
-    cut shows on your blade a moment after it happens (it comes back from
-    the game's server); custom sabers with more than two blades only fight
-    with the first two.
+  * Saber combat: the disruptor's beam is still blocked automatically; no
+    saber locks or disarming while you hold the saber in VR; a clash, a
+    cut or a bolt going off your blade shows a moment after it happens (it
+    comes back from the game's server); custom sabers with more than two
+    blades only fight with the first two.
+  * A bolt your blade sends back goes on from the moment it met the blade
+    as you saw it: with lag, the others - and whoever fired it - see it
+    jump a little way along its new way, and one held near you can be
+    seen hanging in the air for a moment first. With lag, a bolt turned by
+    something else before your moves of that moment came in (another
+    blade, a Force Push) can't be met where it was before that.
   * Guns are held in your gun hand only (the right; the left,
     left-handed); only sabers can be held with both hands.
   * Fingers: the game's skeleton moves three fingers a hand - the thumb,

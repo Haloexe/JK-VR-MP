@@ -507,6 +507,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		ent->methodOfDeath != MOD_CONC_ALT &&
 		other->client->ps.saberBlockTime < level.time &&
 		!isKnockedSaber &&
+		!G_VRSaberBolts(other) && //OpenJK VR: only their blade deflects (g_vrsaber.c)
 		WP_SaberCanBlock(other, ent->r.currentOrigin, 0, 0, qtrue, 0))
 	{ //only block one projectile per 200ms (to prevent giant swarms of projectiles being blocked)
 		vec3_t fwd;
@@ -818,6 +819,11 @@ void G_RunMissile( gentity_t *ent ) {
 	int			passent;
 	qboolean	isKnockedSaber = qfalse;
 
+	if ( G_VRSaberBoltHeld( ent ) )
+	{ //OpenJK VR: waiting where it met something for VR players' moves (G_VRSaberHoldsBolt)
+		return;
+	}
+
 	if (ent->neverFree && ent->s.weapon == WP_SABER && (ent->flags & FL_BOUNCE_HALF))
 	{
 		isKnockedSaber = qtrue;
@@ -845,6 +851,7 @@ void G_RunMissile( gentity_t *ent ) {
 		}
 	}
 	// trace a line from the previous position to the current position
+	G_VRSaberBoxesOut( ent, origin );	//OpenJK VR: the boxes round VR players' sabers in their hands stop nothing - their blades meet it (g_vrsaber.c)
 	if (d_projectileGhoul2Collision.integer)
 	{
 		trap->Trace( &tr, ent->r.currentOrigin, ent->r.mins, ent->r.maxs, origin, passent, ent->clipmask, qfalse, G2TRFLAG_DOGHOULTRACE|G2TRFLAG_GETSURFINDEX|G2TRFLAG_THICK|G2TRFLAG_HITCORPSES, g_g2TraceLod.integer );
@@ -878,6 +885,7 @@ void G_RunMissile( gentity_t *ent ) {
 	else {
 		VectorCopy( tr.endpos, ent->r.currentOrigin );
 	}
+	G_VRSaberBoxesBack();	//OpenJK VR
 
 	if (ent->passThroughNum && tr.entityNum == (ent->passThroughNum-1))
 	{
@@ -924,6 +932,10 @@ void G_RunMissile( gentity_t *ent ) {
 			}
 			else if (ent->s.weapon != G2_MODEL_PART)
 			{
+				if ( G_VRSaberHoldsBolt( ent, &tr ) )
+				{ //OpenJK VR: into the sky past a VR player - their blade may have met it first (it goes once their moves are in)
+					return;
+				}
 				G_FreeEntity( ent );
 				return;
 			}
@@ -978,6 +990,11 @@ void G_RunMissile( gentity_t *ent ) {
 			}
 		}
 #endif
+
+		if ( G_VRSaberHoldsBolt( ent, &tr ) )
+		{ //OpenJK VR: waits there for VR players' moves of that moment - their blade may have met it first
+			return;
+		}
 
 		G_MissileImpact( ent, &tr );
 

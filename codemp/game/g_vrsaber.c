@@ -40,6 +40,16 @@ fights with those blades instead of the animated ones:
 	stop it.
   - The attack button doesn't swing a saber held in VR (the client drops
 	it, and so does the server).
+  - Blaster bolts and the like are deflected only by a VR blade they
+	really meet, as its player saw them coming - off it as off a mirror
+	along the blade: its angle aims them, a swing into them bats them its
+	way. By the player's Saber Defense they stop dead (none or 1), go off
+	that way (2), and bend onto whoever fired them when that's near (3). A
+	bolt a VR blade misses hits: no automatic block, parry or saber box for
+	them. With lag compensation, a bolt that meets something near a VR
+	player waits there for their moves of that moment (G_VRSaberHoldsBolt),
+	in case their blade met it first. (g_vrSaberBolts 0: bolts are blocked
+	for VR players automatically, as for anyone.)
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -64,6 +74,7 @@ qboolean PM_SaberInBrokenParry( int move );
 qboolean BG_SabersOff( playerState_t *ps );
 qboolean WP_SaberBladeUseSecondBladeStyle( saberInfo_t *saber, int bladeNum );
 void G_Knockdown( gentity_t *victim );
+void G_MissileImpact( gentity_t *ent, trace_t *trace );	// (g_missile.c)
 
 #define VR_SABER_SAMPLES	32		// poses kept per player (about a third of a second)
 #define VR_SABER_MIN_GAP	4		// ms: a pose closer than this to the last one isn't kept
@@ -113,6 +124,17 @@ void G_Knockdown( gentity_t *victim );
 #define VR_UNLAG_LEAD		VR_UNLAG_SLACK	// ms of a VR player's moves past a blow on them before it lands
 									// (as far as a meeting that still stops it can come after it)
 #define VR_UNLAG_REACH		300.0f	// players this near a VR player are taken back for the cuts of their sweep
+#define VR_BOLT_REACH		4.0f	// a bolt meets a blade passing this close to its core (the core, the bolt, a little glow)
+#define VR_BOLT_STEP		3.0f	// max blade and bolt travel per test step (units)
+#define VR_BOLT_MAX_STEPS	24		// test steps from one pose to the next
+#define VR_BOLT_ARM			72.0f	// a bolt passing this much more than their longest lit blade from a VR player's eyes could
+									// meet it (a long reach - not VR_SABER_REACH's limit - and room to move meanwhile)
+#define VR_BOLT_AIM_HELP	30.0f	// degrees: Saber Defense 3 sends a bolt this near its shooter onto them
+#define VR_BOLT_HELD		64		// bolts waiting at once for VR players' moves (more: the oldest lands)
+#define VR_BOLT_NEAR_BLADE	64		// bolts near one blade's sweep at once
+#define VR_BOLT_THROUGH		50		// ms at most a bolt that met someone still counts for their blade, on its way to their middle
+#define VR_BOLT_BODY		10.0f	// a VR player's body round their middle, seen from above (their box is wider): a bolt their blade
+									// would send on into it only glanced off along the blade
 
 typedef struct vrSaberSample_s {
 	int				time;			// usercmd serverTime (clamped like ClientThink_real does)
@@ -136,6 +158,8 @@ typedef struct vrSaberState_s {
 	qboolean		inVR;				// a saber is in the player's VR hands (as of the newest pose)
 	int				poseTime;			// level.time the newest pose arrived
 	int				sweptTime[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// sample time the damage sweep reached
+	double			boltSwept[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// the bolts' time (on their ways) the sweep through them reached...
+	int				boltSweepAt[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];	// ...as of this level.time (its sweep ran then)
 	int				recoverTime;		// after a clash the blades cut nothing until then
 	int				clashEnt;			// last clash (sparks are debounced)
 	int				clashTime;
@@ -182,7 +206,28 @@ typedef struct {
 } vrsHilt_t;
 static vrsHilt_t		vrsHilts[MAX_CLIENTS][VR_POSE_MAX_SABERS];
 
+// A bolt that met something near VR players, waiting where it met it for
+// their moves of that moment (G_VRSaberHoldsBolt): their blade may have met
+// it first, as they saw it. Meanwhile it stands still there for everyone.
+typedef struct {
+	int				ent;			// the bolt (0: unused)
+	trajectory_t	path;			// the way it came in
+	trace_t			trace;			// what it met, there...
+	double			metTime;		// ...then (level time, ms)
+	float			through;		// ms on from then its way still counts for the blade of whom it met (G_VRSaberHoldsBolt)
+	int				heldAt;			// level.time it was held
+	int				victimSpawn;	// the player it met: their respawn count then (-1: not a player)
+	qboolean		surfaceSet;		// the part of their body it hit (its move's trace)
+	int				surface;
+	double			need[MAX_CLIENTS];	// VR players whose blades it waits to see swept up to then (the bolts' time; 0: not)
+	vec3_t			frozenAt;		// (where it stands meanwhile, and since when: it's still that bolt)
+	int				frozenTime;
+} vrsHeldBolt_t;
+static vrsHeldBolt_t	vrsHeld[VR_BOLT_HELD];
+
 static void VRS_ResetUnlag( int clientNum );			// (lag compensation, below)
+static void VRS_SettleBolts( void );					// (bolts, below)
+static void VRS_LandBolt( int i );
 static void VRS_RecordHistory( void );
 static void VRS_SettlePending( void );
 static void VRS_CancelPending( int attacker, int victim, int since, int swing );
@@ -606,6 +651,7 @@ void G_VRSaberInit( void ) {
 	memset( vrsAvatarSet, 0, sizeof( vrsAvatarSet ) );
 	memset( vrsGunLeft, 0, sizeof( vrsGunLeft ) );
 	memset( vrsHilts, 0, sizeof( vrsHilts ) );
+	memset( vrsHeld, 0, sizeof( vrsHeld ) );
 	VRS_ResetUnlag( -1 );
 
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
@@ -965,7 +1011,8 @@ void G_VRSaberBodyAnim( gentity_t *ent, int *legsAnim, int *torsoAnim ) {
 }
 
 // Once a frame, after everyone moved: animated blades' cuts on VR players
-// that waited for their moves land (or were blocked); where everyone and
+// that waited for their moves land (or were blocked), and bolts that waited
+// for them (or were deflected meanwhile); where everyone and
 // their animated blades are now is kept (lag compensation); and avatars of
 // players who died, started spectating or left the game go (their animation
 // shows again).
@@ -976,6 +1023,7 @@ void G_VRSaberEndFrame( void ) {
 		return;
 	}
 	VRS_SettlePending();
+	VRS_SettleBolts();
 	VRS_RecordHistory();
 	if ( !trap->ext.VR_SetAvatar ) {
 		return;
@@ -2215,6 +2263,9 @@ static void VRS_ResetUnlag( int clientNum ) {
 		return;
 	}
 	memset( &vrsHist[clientNum], 0, sizeof( vrsHist[clientNum] ) );
+	for ( i = 0; i < VR_BOLT_HELD; i++ ) {
+		vrsHeld[i].need[clientNum] = 0.0;
+	}
 	for ( i = 0; i < VRS_MAX_PENDING; i++ ) {
 		if ( vrsPending[i].inuse && ( vrsPending[i].attacker == clientNum || vrsPending[i].victim == clientNum ) ) {
 			vrsPending[i].inuse = qfalse;
@@ -2947,6 +2998,747 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 	return num;
 }
 
+/*
+--------------------------------------------------------------------------------
+Blades against bolts
+--------------------------------------------------------------------------------
+(The bolts' times - when a bolt was where on its way - are doubles:
+level.time runs on as long as a map is up, and a float's milliseconds grow
+coarse after a few hours of it.)
+*/
+
+// Whether this player's blade deflects the bolts it meets - and nothing else
+// does for them (no automatic block, parry or saber box): they fight in VR
+// (G_VRSaberClient: through lag too, so lag hands out no automatic blocks)
+// and the server has it (g_vrSaberBolts; 0: bolts are blocked for VR
+// players automatically, as for anyone).
+qboolean G_VRSaberBolts( gentity_t *ent ) {
+	return (qboolean)( g_vrSaberBolts.integer > 0 && G_VRSaberClient( ent ) );
+}
+
+// Can a blade deflect this missile (still: it may have gone since it was
+// found)? As the game's saber blocks: blaster bolts and the like - not
+// rockets, thermals, mines, det packs, DEMP2's, the repeater's and
+// flechette's alt fire, the concussion rifle's, sabers (thrown ones:
+// G_VRSaberStopsThrown) or flying limbs.
+static qboolean VRS_Deflectable( const gentity_t *m ) {
+	if ( !m->inuse || m->s.eType != ET_MISSILE || m->neverFree ) {
+		return qfalse;
+	}
+	switch ( m->s.weapon ) {
+	case WP_ROCKET_LAUNCHER:
+	case WP_THERMAL:
+	case WP_TRIP_MINE:
+	case WP_DET_PACK:
+	case WP_DEMP2:
+	case WP_SABER:
+	case G2_MODEL_PART:
+		return qfalse;
+	default:
+		break;
+	}
+	switch ( m->methodOfDeath ) {
+	case MOD_REPEATER_ALT:
+	case MOD_FLECHETTE_ALT_SPLASH:
+	case MOD_CONC:
+	case MOD_CONC_ALT:
+		return qfalse;
+	default:
+		return qtrue;
+	}
+}
+
+// The bolt held in that slot - if it's still that one, standing where it
+// met something. (Anything else - a blade sending it on, its going, its
+// slot taken by another - ends the wait.)
+static qboolean VRS_HeldStill( const vrsHeldBolt_t *h ) {
+	const gentity_t *m;
+
+	if ( h->ent <= 0 || h->ent >= ENTITYNUM_WORLD ) {
+		return qfalse;
+	}
+	m = &g_entities[h->ent];
+	return (qboolean)( m->inuse && m->s.eType == ET_MISSILE && m->s.pos.trType == TR_STATIONARY &&
+		m->s.pos.trTime == h->frozenTime && VectorCompare( m->s.pos.trBase, h->frozenAt ) );
+}
+
+// This bolt's wait for VR players' moves, if it's waiting.
+static vrsHeldBolt_t *VRS_HeldBolt( const gentity_t *m ) {
+	int i;
+
+	for ( i = 0; i < VR_BOLT_HELD; i++ ) {
+		if ( vrsHeld[i].ent == m->s.number && VRS_HeldStill( &vrsHeld[i] ) ) {
+			return &vrsHeld[i];
+		}
+	}
+	return NULL;
+}
+
+// Is this bolt waiting where it met something for VR players' moves? (It
+// doesn't move meanwhile: G_RunMissile.)
+qboolean G_VRSaberBoltHeld( gentity_t *m ) {
+	return (qboolean)( m && VRS_HeldBolt( m ) != NULL );
+}
+
+// Where a path takes a bolt at time t (ms, fractions too) - and how fast.
+static void VRS_PathAt( const trajectory_t *tr, double t, vec3_t out ) {
+	const float dt = (float)( ( t - tr->trTime ) * 0.001 );
+
+	VectorMA( tr->trBase, dt, tr->trDelta, out );
+	if ( tr->trType == TR_GRAVITY ) {
+		out[2] -= 0.5f * DEFAULT_GRAVITY * dt * dt;
+	}
+}
+
+static void VRS_PathVelocity( const trajectory_t *tr, double t, vec3_t out ) {
+	VectorCopy( tr->trDelta, out );
+	if ( tr->trType == TR_GRAVITY ) {
+		out[2] -= DEFAULT_GRAVITY * (float)( ( t - tr->trTime ) * 0.001 );
+	}
+}
+
+// When a bolt was where it is (r.currentOrigin, on its way): as the players'
+// blades are swept, where its move this frame starts (players come before
+// missiles in a frame) - the frame before's, unless it came out since, or a
+// blade sent it on from there as from then (VRS_DeflectBolt); as G_RunMissile
+// asks whether to hold it, where that move met something.
+static double VRS_BoltTime( const gentity_t *m ) {
+	const trajectory_t *tr = &m->s.pos;
+	const int axes = ( tr->trType == TR_GRAVITY ) ? 2 : 3;	// (falling: across, it goes straight on)
+	double along = 0.0, speed2 = 0.0;
+	int k;
+
+	for ( k = 0; k < axes; k++ ) {
+		along += (double)( m->r.currentOrigin[k] - tr->trBase[k] ) * tr->trDelta[k];
+		speed2 += (double)tr->trDelta[k] * tr->trDelta[k];
+	}
+	if ( speed2 < 1.0 ) {
+		return (double)level.previousTime;	// (falling straight down: as one moved the frame before)
+	}
+	return tr->trTime + 1000.0 * along / speed2;
+}
+
+// The way a bolt went, as self's blade could meet it, and until when it
+// went that way: its own, up to now - on past where it has been moved to
+// (VRS_BoltTime), where VRS_BoltClear looks for anything in its way first -
+// or, held where it met something, the way it came in, up to then (and, for
+// the blade of whom it met, on to their middle: a guard held inside their
+// box meets it, the bolt stopped at its edge). qfalse: not a bolt that goes
+// anywhere.
+static qboolean VRS_BoltPath( const gentity_t *m, const gentity_t *self, const trajectory_t **path, double *end ) {
+	const vrsHeldBolt_t *h = VRS_HeldBolt( m );
+
+	if ( h ) {
+		*path = &h->path;
+		*end = h->metTime + ( ( h->trace.entityNum == self->s.number ) ? h->through : 0.0f );
+	} else {
+		*path = &m->s.pos;
+		*end = (double)level.time;
+	}
+	return (qboolean)( ( *path )->trType == TR_LINEAR || ( *path )->trType == TR_GRAVITY );
+}
+
+// Where a bolt went between ta and tb (ms), as self's blade could meet it -
+// from o0 (at *t0) to o1 (at *t1), as much of then as it went that way.
+static qboolean VRS_BoltSpan( const gentity_t *m, const gentity_t *self, double ta, double tb, vec3_t o0, vec3_t o1, double *t0, double *t1 ) {
+	const trajectory_t *path;
+	double end;
+
+	if ( !VRS_BoltPath( m, self, &path, &end ) ) {
+		return qfalse;
+	}
+	*t0 = Q_max( ta, (double)path->trTime );
+	*t1 = Q_min( tb, end );
+	if ( *t1 < *t0 ) {
+		return qfalse;
+	}
+	VRS_PathAt( path, *t0, o0 );
+	VRS_PathAt( path, *t1, o1 );
+	return qtrue;
+}
+
+typedef struct {
+	gentity_t	*ent;		// (NULL: deflected already)
+	float		speed;		// units/s
+} vrsBolt_t;
+
+// The bolts (not this player's own) anywhere near a blade between times ta
+// and tb (mins-maxs: where the blade went then).
+static int VRS_GatherBolts( gentity_t *self, const vec3_t mins, const vec3_t maxs, double ta, double tb, vrsBolt_t *out, int max ) {
+	int i, num = 0;
+
+	for ( i = MAX_CLIENTS; i < level.num_entities && num < max; i++ ) {
+		gentity_t *m = &g_entities[i];
+		const trajectory_t *path;
+		vec3_t o0, o1, vel;
+		double t0, t1, end;
+		int k;
+		qboolean apart = qfalse;
+		if ( !VRS_Deflectable( m ) || m->r.ownerNum == self->s.number || !VRS_BoltSpan( m, self, ta, tb, o0, o1, &t0, &t1 ) ) {
+			continue;
+		}
+		for ( k = 0; k < 3; k++ ) {
+			if ( Q_min( o0[k], o1[k] ) > maxs[k] + VR_BOLT_REACH || Q_max( o0[k], o1[k] ) < mins[k] - VR_BOLT_REACH ) {
+				apart = qtrue;
+			}
+		}
+		if ( apart ) {
+			continue;
+		}
+		VRS_BoltPath( m, self, &path, &end );
+		VRS_PathVelocity( path, t0, vel );
+		out[num].ent = m;
+		out[num].speed = VectorLength( vel );
+		num++;
+	}
+	return num;
+}
+
+// A VR blade deflected a bolt: the blaster deflection's flash where it met
+// it (normal: the blade's face it met), and the player's hand feels it
+// (cg_vrbody.c: VR_EVENT_BOLT).
+static void VRS_BoltEvent( gentity_t *self, int s, int b, const vec3_t at, const vec3_t normal ) {
+	vec3_t where;
+	gentity_t *te;
+
+	VectorCopy( at, where );
+	te = G_TempEntity( where, EV_SABER_BLOCK );
+	VectorCopy( at, te->s.origin );
+	VectorCopy( normal, te->s.angles );
+	te->s.eventParm = 0;	// (a bolt's, not a blade's)
+	te->s.weapon = s;
+	te->s.legsAnim = b;
+	te->s.otherEntityNum2 = self->s.number;
+	te->s.generic1 = VR_EVENT_BOLT;
+}
+
+// Where a bolt sent back aims at its shooter: the middle of them.
+static void VRS_ShooterMiddle( gentity_t *shooter, vec3_t out ) {
+	VectorAdd( shooter->r.absmin, shooter->r.absmax, out );
+	VectorScale( out, 0.5f, out );
+}
+
+// A player's Saber Defense against a bolt: none while they can't use it (a
+// ysalamiri, say), and none against a bolt from outside a duel they're in
+// (as it is on any duellist: stopped dead).
+static int VRS_BoltDefense( gentity_t *self, int shooterNum ) {
+	gclient_t *cl = self->client;
+
+	if ( !BG_CanUseFPNow( level.gametype, &cl->ps, level.time, FP_SABER_DEFENSE ) ) {
+		return FORCE_LEVEL_0;
+	}
+	if ( cl->ps.duelInProgress && cl->ps.duelIndex != shooterNum ) {
+		return FORCE_LEVEL_0;
+	}
+	return cl->ps.fd.forcePowerLevel[FP_SABER_DEFENSE];
+}
+
+// Do missiles meet this player's model, not the box round them (G_RunMissile's
+// traces, d_projectileGhoul2Collision)?
+static qboolean VRS_ModelHits( const gentity_t *p ) {
+	return (qboolean)( d_projectileGhoul2Collision.integer && p->ghoul2 );
+}
+
+// Would a bolt going off a blade at 'at' the way 'dir' go on into the player
+// whose blade it is - within VR_BOLT_BODY of their middle seen from above,
+// heading for it, at a height within their box (as linked)? (Met along the
+// blade, coming at them, it only glances on into them.)
+static qboolean VRS_IntoThem( const gentity_t *self, const vec3_t at, const vec3_t dir ) {
+	vec3_t rel;
+	float flat, mid, reach, s0, s1, z0, z1;
+
+	VectorSubtract( at, self->r.currentOrigin, rel );
+	flat = dir[0] * dir[0] + dir[1] * dir[1];
+	if ( flat < 0.0001f ) {
+		// straight up or down: into them over or under their middle, heading at it
+		mid = 0.5f * ( self->r.absmin[2] + self->r.absmax[2] ) - self->r.currentOrigin[2];
+		return (qboolean)( rel[0] * rel[0] + rel[1] * rel[1] < VR_BOLT_BODY * VR_BOLT_BODY && ( rel[2] - mid ) * dir[2] < 0.0f );
+	}
+	mid = -( rel[0] * dir[0] + rel[1] * dir[1] ) / flat;	// (on its way, where it comes nearest their middle seen from above)
+	if ( mid <= 0.0f ) {
+		return qfalse;	// (going away from it)
+	}
+	reach = mid * mid + ( VR_BOLT_BODY * VR_BOLT_BODY - ( rel[0] * rel[0] + rel[1] * rel[1] ) ) / flat;
+	if ( reach <= 0.0f ) {
+		return qfalse;	// (passing further off)
+	}
+	// from s0 to s1 on its way it's that near - at heights z0 to z1
+	reach = sqrtf( reach );
+	s0 = Q_max( 0.0f, mid - reach );
+	s1 = mid + reach;
+	z0 = rel[2] + s0 * dir[2];
+	z1 = rel[2] + s1 * dir[2];
+	return (qboolean)( Q_max( z0, z1 ) > self->r.absmin[2] - self->r.currentOrigin[2] &&
+		Q_min( z0, z1 ) < self->r.absmax[2] - self->r.currentOrigin[2] );
+}
+
+// A VR blade (its axis, moving at bladeVel units/s where it met it) met a
+// bolt at 'at' - at time t, as its player saw it. Like a mirror along the
+// blade facing the way the bolt came at it (as the blade, moving, saw it
+// come), it turns back the bolt's way across the blade and keeps its way
+// along it: the blade's angle aims it, and a swing into it bats it the way
+// of the swing. By the player's Saber Defense it stops dead (none or 1),
+// goes off that way (2) - and if that's near whoever fired it, onto them
+// (3); at the speed it came. It goes on from there as if from then (it's
+// the deflector's now: their view of it goes on unbroken); held, it waits no
+// longer (it's moving again, or gone: VRS_HeldStill). One it would send on
+// into them (met along the blade, coming at them) isn't turned: it goes on
+// as it came (VRS_IntoThem).
+static void VRS_DeflectBolt( gentity_t *self, int s, int b, gentity_t *m, const vec3_t at, const vec3_t axis,
+	const vec3_t bladeVel, double t ) {
+	const int shooterNum = m->r.ownerNum;
+	gentity_t *shooter = ( shooterNum >= 0 && shooterNum < ENTITYNUM_WORLD ) ? &g_entities[shooterNum] : NULL;
+	const int defense = VRS_BoltDefense( self, shooterNum );
+	const trajectory_t *path;
+	trajectory_t was;
+	vec3_t vin, rel, across, face, vout, dir;
+	double end;
+	float speed;
+	const char *result;
+	int start;
+
+	if ( !VRS_BoltPath( m, self, &path, &end ) ) {
+		return;
+	}
+	was = *path;
+	VRS_PathVelocity( &was, t, vin );
+	speed = VectorLength( vin );
+
+	// its way across the blade, as the blade saw it come, turned back
+	VectorSubtract( vin, bladeVel, rel );
+	VectorMA( rel, -DotProduct( rel, axis ), axis, across );
+	VectorMA( vin, -2.0f, across, vout );
+	VectorScale( across, -1.0f, face );
+	if ( VectorNormalize( face ) < 0.001f ) {
+		VectorScale( vin, -1.0f, face );	// (along the blade: its tip)
+		VectorNormalize( face );
+	}
+	if ( VectorNormalize2( vout, dir ) < 0.001f ) {
+		VectorCopy( face, dir );
+	}
+	result = "sent off the blade";
+	if ( defense >= FORCE_LEVEL_3 && shooter && shooter != self && shooter->inuse && shooter->health > 0 ) {
+		vec3_t aim;
+		VRS_ShooterMiddle( shooter, aim );
+		VectorSubtract( aim, at, aim );
+		if ( VectorNormalize( aim ) > 1.0f && DotProduct( aim, dir ) >= cosf( DEG2RAD( VR_BOLT_AIM_HELP ) ) ) {
+			VectorCopy( aim, dir );
+			result = "sent back at them";
+		}
+	}
+	if ( VRS_IntoThem( self, at, dir ) ) {
+		if ( g_vrSaberLog.integer ) {
+			G_LogPrintf( "VRSaber: deflect %i \"%s\" a bolt from %i \"%s\" (Saber Defense %i, %i ms on its way): along the blade into them - "
+				"not turned\n", self->s.number, self->client->pers.netname, shooterNum, shooter && shooter->client ? shooter->client->pers.netname : "",
+				defense, (int)( t - was.trTime ) );
+		}
+		return;
+	}
+
+	VRS_BoltEvent( self, s, b, at, face );
+	self->client->ps.saberEventFlags |= SEF_DEFLECTED;
+	if ( defense <= FORCE_LEVEL_1 ) {
+		result = "stopped dead";
+		G_FreeEntity( m );
+	} else {
+		start = (int)ceil( t );
+		m->s.pos.trType = ( was.trType == TR_GRAVITY ) ? TR_GRAVITY : TR_LINEAR;
+		VectorScale( dir, speed, m->s.pos.trDelta );
+		VectorMA( at, (float)( ( start - t ) * 0.001 ), m->s.pos.trDelta, m->s.pos.trBase );
+		m->s.pos.trTime = start;
+		VectorCopy( at, m->r.currentOrigin );
+		m->r.ownerNum = self->s.number;
+		trap->LinkEntity( (sharedEntity_t *)m );
+	}
+	if ( g_vrSaberLog.integer ) {
+		G_LogPrintf( "VRSaber: deflect %i \"%s\" a bolt from %i \"%s\" (Saber Defense %i, %i ms on its way): %s\n",
+			self->s.number, self->client->pers.netname, shooterNum, shooter && shooter->client ? shooter->client->pers.netname : "",
+			defense, (int)( t - was.trTime ), result );
+	}
+}
+
+// G_RunMissile's: whom a missile's move passes through (its owner, mostly).
+static int VRS_BoltPassEnt( const gentity_t *m ) {
+	if ( m->target_ent ) {
+		return m->target_ent->s.number;
+	}
+	if ( ( m->r.svFlags & SVF_OWNERNOTSHARED ) && ( m->s.eFlags & EF_JETPACK_ACTIVE ) ) {
+		return m->s.number;
+	}
+	return m->r.ownerNum;
+}
+
+// A blade met a bolt at 'at', at time t: on the way it hasn't gone yet (past
+// where it has been moved to, VRS_BoltTime), was anything in its way to
+// there? Then that's what it meets, not the blade - looked along as
+// G_RunMissile will (the bodies' models, d_projectileGhoul2Collision; the
+// boxes round sabers in VR hands out of the world); stuck in something
+// where it is, it meets that there (as G_RunMissile has it). The player
+// whose blade it is too - their model: it meets them first; only their box:
+// a guard held inside it meets it, up to their middle, as when it's held
+// (G_VRSaberHoldsBolt). The way it has gone, or waits on, was traced.
+static qboolean VRS_BoltClear( gentity_t *self, gentity_t *m, const vec3_t at, double t ) {
+	trace_t tr;
+	vec3_t vel;
+
+	if ( VRS_HeldBolt( m ) || t <= VRS_BoltTime( m ) ) {
+		return qtrue;
+	}
+	G_VRSaberBoxesOut( m, at );
+	if ( d_projectileGhoul2Collision.integer ) {
+		trap->Trace( &tr, m->r.currentOrigin, m->r.mins, m->r.maxs, at, VRS_BoltPassEnt( m ), m->clipmask, qfalse,
+			G2TRFLAG_DOGHOULTRACE | G2TRFLAG_GETSURFINDEX | G2TRFLAG_THICK | G2TRFLAG_HITCORPSES, g_g2TraceLod.integer );
+	} else {
+		trap->Trace( &tr, m->r.currentOrigin, m->r.mins, m->r.maxs, at, VRS_BoltPassEnt( m ), m->clipmask, qfalse, 0, 0 );
+	}
+	G_VRSaberBoxesBack();
+	if ( !tr.startsolid && tr.fraction >= 1.0f ) {
+		return qtrue;
+	}
+	if ( tr.startsolid || tr.entityNum != self->s.number || VRS_ModelHits( self ) ) {
+		return qfalse;
+	}
+	VRS_PathVelocity( &m->s.pos, t, vel );
+	return (qboolean)( ( at[0] - self->r.currentOrigin[0] ) * vel[0] + ( at[1] - self->r.currentOrigin[1] ) * vel[1] <= 0.0f );
+}
+
+// Sweep one blade from pose A to pose B through the bolts near it: the
+// bolts going from where they were at time tA to where they were at tB (as
+// the player saw them: VRS_PoseBoltTime): one it meets goes off it
+// (VRS_DeflectBolt) - unless something was in its way there first
+// (VRS_BoltClear). A blade stopped on another one still meets them: it's
+// where the player holds it.
+static void VRS_SweepBolts( gentity_t *self, int s, int b, const vrSaberSample_t *A, const vrSaberSample_t *B, double tA, double tB,
+	vrsBolt_t *bolts, int numBolts ) {
+	const float length = self->client->saber[s].blade[b].lengthMax;
+	const float span = (float)( B->time - A->time );	// (ms: poses are VR_SABER_MIN_GAP apart at least)
+	vec3_t tipA, tipB, prevBase, prevTip, prevDir;
+	float fastest = 0.0f, travel;
+	double tPrev;
+	int steps, k, i;
+
+	VectorMA( A->base[s][b], length, A->dir[s][b], tipA );
+	VectorMA( B->base[s][b], length, B->dir[s][b], tipB );
+	for ( i = 0; i < numBolts; i++ ) {
+		if ( bolts[i].ent ) {
+			fastest = Q_max( fastest, bolts[i].speed );
+		}
+	}
+	travel = Q_max( Distance( A->base[s][b], B->base[s][b] ), Distance( tipA, tipB ) ) + fastest * (float)( ( tB - tA ) * 0.001 );
+	steps = Com_Clampi( 1, VR_BOLT_MAX_STEPS, (int)ceilf( travel / VR_BOLT_STEP ) );
+
+	VectorCopy( A->base[s][b], prevBase );
+	VectorCopy( A->dir[s][b], prevDir );
+	VRS_ClipBlade( self->s.number, prevBase, tipA, prevTip );
+	tPrev = tA;
+	for ( k = 1; k <= steps; k++ ) {
+		const float f = (float)k / steps;
+		const double t = tA + f * ( tB - tA );
+		vec3_t base, dir, fullTip, tip;
+		VRS_Lerp( A->base[s][b], f, B->base[s][b], base );
+		VRS_SlerpDir( A->dir[s][b], B->dir[s][b], f, dir );
+		VectorMA( base, length, dir, fullTip );
+		VRS_ClipBlade( self->s.number, base, fullTip, tip );	// (walls stop the blade)
+		for ( i = 0; i < numBolts; i++ ) {
+			vec3_t o0, o1, point, path, at, rel, was, now, vel;
+			double t0, t1;
+			float u, along, len2;
+			if ( !bolts[i].ent || !VRS_Deflectable( bolts[i].ent ) ||
+				!VRS_BoltSpan( bolts[i].ent, self, tPrev, t, o0, o1, &t0, &t1 ) ||
+				!VRS_BladesMeet( prevBase, prevTip, base, tip, o0, o1, VR_BOLT_REACH, point ) ) {
+				continue;
+			}
+			// where on its way it met the blade, and when; how fast the
+			// blade moved there (as the player swung it)
+			VectorSubtract( o1, o0, path );
+			len2 = DotProduct( path, path );
+			VectorSubtract( point, o0, rel );
+			u = ( len2 > 0.0001f ) ? Com_Clamp( 0.0f, 1.0f, DotProduct( rel, path ) / len2 ) : 0.0f;
+			VectorMA( o0, u, path, at );
+			VectorSubtract( at, base, rel );
+			along = Com_Clamp( 0.0f, length, DotProduct( rel, dir ) );
+			VectorMA( prevBase, along, prevDir, was );
+			VectorMA( base, along, dir, now );
+			VectorSubtract( now, was, vel );
+			VectorScale( vel, 1000.0f * steps / span, vel );
+			if ( VRS_BoltClear( self, bolts[i].ent, at, t0 + u * ( t1 - t0 ) ) ) {
+				VRS_DeflectBolt( self, s, b, bolts[i].ent, at, dir, vel, t0 + u * ( t1 - t0 ) );
+			}
+			bolts[i].ent = NULL;	// (deflected; or it meets what's in its way first)
+		}
+		VectorCopy( base, prevBase );
+		VectorCopy( tip, prevTip );
+		VectorCopy( dir, prevDir );
+		tPrev = t;
+	}
+}
+
+// A VR player's lit blades (as the server has them, as their newest pose
+// does, swept this frame - not while their saber's being raised, say): how
+// long the longest is (0: none) - and *seen, the bolts' time the sweeps of
+// all of them have reached (VRS_SweepBolts: up to then their blades met
+// every bolt's way they could).
+static float VRS_LitBlades( gentity_t *p, double *seen ) {
+	vrSaberState_t *vs = &vrSabers[p->s.number];
+	const vrSaberSample_t *smp = VRS_Sample( vs, 0 );
+	float longest = 0.0f;
+	qboolean any = qfalse;
+	int s, b;
+
+	*seen = 0.0;
+	for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
+		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
+			if ( ( smp->bladeMask[s] & ( 1 << b ) ) && VRS_BladeOn( p->client, s, b ) && vs->boltSweepAt[s][b] == level.time ) {
+				*seen = any ? Q_min( *seen, vs->boltSwept[s][b] ) : vs->boltSwept[s][b];
+				longest = Q_max( longest, p->client->saber[s].blade[b].lengthMax );
+				any = qtrue;
+			}
+		}
+	}
+	return longest;
+}
+
+// A bolt met something (tr, this frame) on a way that passed near VR
+// players with a lit blade whose blades haven't yet been swept that far
+// (their moves of then haven't all come in): it waits there - standing
+// still - until they have (VR_UNLAG_MAX at most), in case one of their
+// blades met it first as they saw it; then it lands (VRS_LandBolt): what it
+// met hit - or it bounces off it, or goes on through a shield (whatever
+// G_MissileImpact does with it). qtrue: held (G_RunMissile goes no further
+// with it). Lag compensation only (as for cuts).
+qboolean G_VRSaberHoldsBolt( gentity_t *m, trace_t *tr ) {
+	vrsHeldBolt_t *h = NULL;
+	gentity_t *hit;
+	vec3_t from, way, vel;
+	double metTime, start, need[MAX_CLIENTS];
+	float len2, through = 0.0f;
+	int c, i, oldest = -1, victimSpawn, surface = 0;
+	qboolean any = qfalse, surfaceSet = qfalse;
+
+	if ( !VRS_Unlag() || !VRS_Deflectable( m ) || ( m->s.pos.trType != TR_LINEAR && m->s.pos.trType != TR_GRAVITY ) ) {
+		return qfalse;	// (held already: standing, TR_STATIONARY)
+	}
+	hit = ( tr->entityNum >= 0 && tr->entityNum < ENTITYNUM_MAX_NORMAL ) ? &g_entities[tr->entityNum] : NULL;
+	metTime = VRS_BoltTime( m );	// (G_RunMissile moved it to where it met it - or, stuck, it's where it started)
+	start = Q_max( (double)m->s.pos.trTime, metTime - VR_UNLAG_MAX );
+	VRS_PathAt( &m->s.pos, start, from );
+	VectorSubtract( tr->endpos, from, way );
+	len2 = DotProduct( way, way );
+	VRS_PathVelocity( &m->s.pos, metTime, vel );
+	for ( c = 0; c < MAX_CLIENTS; c++ ) {
+		gentity_t *p = &g_entities[c];
+		vec3_t eye, rel;
+		double seen;
+		float near, cq, u0 = 0.0f, u1 = 1.0f;
+		need[c] = 0.0;
+		if ( c == m->r.ownerNum || !G_VRSaberActive( p ) || !G_VRSaberBolts( p ) ) {
+			continue;
+		}
+		near = VRS_LitBlades( p, &seen );
+		if ( near <= 0.0f ) {
+			continue;	// (no lit blade)
+		}
+		// until when their blade could meet it: while its way was within
+		// reach of them - of their eyes as of their newest moves (seen), and
+		// as far again as they go meanwhile at the speed they're going (their
+		// moves of then are still to come; on to their middle, if it met them)
+		VectorCopy( p->client->ps.origin, eye );
+		eye[2] += p->client->ps.viewheight;
+		near += VR_BOLT_ARM + VectorLength( p->client->ps.velocity ) * (float)( Q_max( 0.0, metTime - seen ) * 0.001 );
+		VectorSubtract( from, eye, rel );
+		cq = DotProduct( rel, rel ) - near * near;
+		if ( len2 > 0.0001f ) {
+			const float bq = DotProduct( rel, way );
+			const float disc = bq * bq - len2 * cq;
+			if ( disc < 0.0f ) {
+				continue;	// (never near them)
+			}
+			u0 = ( -bq - sqrtf( disc ) ) / len2;
+			u1 = ( -bq + sqrtf( disc ) ) / len2;
+		} else if ( cq > 0.0f ) {
+			continue;
+		}
+		if ( u1 < 0.0f || u0 > 1.0f ) {
+			continue;	// (near them only before it came this way, or beyond where it met that)
+		}
+		if ( c == tr->entityNum ) {
+			// it met them: for their own blade it goes on to their middle (a
+			// guard held inside their box meets it, the bolt stopped at its
+			// edge) - not if it met their model (it stopped at their body)
+			const float across = vel[0] * vel[0] + vel[1] * vel[1];
+			if ( across > 0.0001f && ( !VRS_ModelHits( p ) || tr->startsolid ) ) {
+				through = Com_Clamp( 0.0f, VR_BOLT_THROUGH, -1000.0f * ( ( tr->endpos[0] - p->r.currentOrigin[0] ) * vel[0] +
+					( tr->endpos[1] - p->r.currentOrigin[1] ) * vel[1] ) / across );
+			}
+			need[c] = metTime + through;
+		} else {
+			need[c] = start + Q_min( u1, 1.0f ) * ( metTime - start );
+		}
+		if ( seen >= need[c] ) {
+			need[c] = 0.0;	// (their blades have been there: they didn't meet it)
+			continue;
+		}
+		any = qtrue;
+	}
+	if ( !any ) {
+		return qfalse;
+	}
+	// (whom it met, as of now - before a full store lands its oldest, which may have met them too)
+	victimSpawn = ( hit && hit->client && tr->entityNum < MAX_CLIENTS ) ? hit->client->ps.persistant[PERS_SPAWN_COUNT] : -1;
+	if ( hit && hit->client && hit->client->g2LastSurfaceTime == level.time ) {
+		surfaceSet = qtrue;	// (the part of their body its move's trace hit)
+		surface = hit->client->g2LastSurfaceHit;
+	}
+	for ( i = 0; i < VR_BOLT_HELD; i++ ) {
+		if ( !VRS_HeldStill( &vrsHeld[i] ) ) {
+			h = &vrsHeld[i];
+			break;
+		}
+		if ( oldest < 0 || vrsHeld[i].heldAt < vrsHeld[oldest].heldAt ) {
+			oldest = i;
+		}
+	}
+	if ( !h ) {
+		VRS_LandBolt( oldest );	// (full: the oldest lands at once)
+		h = &vrsHeld[oldest];
+	}
+	memset( h, 0, sizeof( *h ) );
+	h->ent = m->s.number;
+	h->path = m->s.pos;
+	h->trace = *tr;
+	h->metTime = metTime;
+	h->through = through;
+	h->heldAt = level.time;
+	h->victimSpawn = victimSpawn;
+	h->surfaceSet = surfaceSet;
+	h->surface = surface;
+	memcpy( h->need, need, sizeof( h->need ) );
+	// standing where it met it (G_RunMissile moved it there), for everyone,
+	// meanwhile - pointing the way it came (clients draw a bolt along its way)
+	m->s.pos.trType = TR_STATIONARY;
+	VectorCopy( tr->endpos, m->s.pos.trBase );
+	VectorCopy( vel, m->s.pos.trDelta );
+	m->s.pos.trTime = level.time;
+	VectorCopy( tr->endpos, h->frozenAt );
+	h->frozenTime = level.time;
+	trap->LinkEntity( (sharedEntity_t *)m );
+	return qtrue;
+}
+
+// A held bolt lands as it met it: back on its way, what it met hit - but a
+// player it met who has left, or died and come back since, isn't, nor
+// anything gone since (it hits where they were); into the sky, it's gone.
+static void VRS_LandBolt( int i ) {
+	vrsHeldBolt_t *h = &vrsHeld[i];
+	gentity_t *m;
+	trace_t tr;
+
+	if ( !VRS_HeldStill( h ) ) {
+		h->ent = 0;
+		return;
+	}
+	m = &g_entities[h->ent];
+	tr = h->trace;
+	h->ent = 0;
+	m->s.pos = h->path;
+	if ( tr.surfaceFlags & SURF_NOIMPACT ) {
+		G_FreeEntity( m );	// (as G_RunMissile: never explodes on the sky)
+		return;
+	}
+	if ( tr.entityNum < ENTITYNUM_WORLD ) {
+		gentity_t *hit = &g_entities[tr.entityNum];
+		if ( !hit->inuse || ( h->victimSpawn >= 0 && ( !hit->client || hit->client->pers.connected != CON_CONNECTED ||
+			hit->client->ps.persistant[PERS_SPAWN_COUNT] != h->victimSpawn ) ) ) {
+			tr.entityNum = ENTITYNUM_WORLD;
+		} else if ( h->surfaceSet && hit->client ) {
+			hit->client->g2LastSurfaceHit = h->surface;	// (where on them it hit, as when it met them)
+			hit->client->g2LastSurfaceTime = level.time;
+		}
+	}
+	G_MissileImpact( m, &tr );	// (from where it stands: where it met it)
+	if ( tr.entityNum == m->s.otherEntityNum ) {
+		m->s.trickedentindex = 1;	// (as G_RunMissile: its mark goes on whom it hit)
+	}
+}
+
+// Is a held bolt still waiting for one of those VR players' blades (lit) to
+// be swept that far?
+static qboolean VRS_BoltWaits( const vrsHeldBolt_t *h ) {
+	int c;
+
+	for ( c = 0; c < MAX_CLIENTS; c++ ) {
+		double seen;
+		if ( h->need[c] > 0.0 && G_VRSaberActive( &g_entities[c] ) && G_VRSaberBolts( &g_entities[c] ) &&
+			VRS_LitBlades( &g_entities[c], &seen ) > 0.0f && seen < h->need[c] ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Once a frame: held bolts whose VR players' moves have all come in (or
+// that waited VR_UNLAG_MAX) land; ones a blade sent on, or that went, are
+// forgotten.
+static void VRS_SettleBolts( void ) {
+	int i;
+
+	for ( i = 0; i < VR_BOLT_HELD; i++ ) {
+		vrsHeldBolt_t *h = &vrsHeld[i];
+		if ( !h->ent ) {
+			continue;
+		}
+		if ( !VRS_HeldStill( h ) ) {
+			h->ent = 0;
+			continue;
+		}
+		if ( VRS_Unlag() && level.time - h->heldAt < VR_UNLAG_MAX && VRS_BoltWaits( h ) ) {
+			continue;
+		}
+		VRS_LandBolt( i );
+	}
+}
+
+// A missile's move from where it is to 'end' (G_RunMissile): the boxes round
+// the sabers held by players whose blades deflect bolts, anywhere near it,
+// are taken out of the world for its traces - their blades meet it
+// (VRS_SweepBolts) - and put back after (G_VRSaberBoxesBack). (Thrown, a
+// saber stops what it meets as ever.)
+static gentity_t	*vrsBoxesOut[MAX_CLIENTS];
+static int			vrsNumBoxesOut;
+
+void G_VRSaberBoxesOut( gentity_t *m, const vec3_t end ) {
+	int c, k;
+
+	for ( c = 0; c < MAX_CLIENTS; c++ ) {
+		gentity_t *p = &g_entities[c], *box;
+		qboolean apart = qfalse;
+		if ( !G_VRSaberBolts( p ) || p->client->ps.saberInFlight ) {
+			continue;
+		}
+		box = &g_entities[p->client->ps.saberEntityNum];	// (0: none - a body, no saber's box)
+		if ( !box->r.linked || !( box->r.contents & CONTENTS_LIGHTSABER ) ) {
+			continue;
+		}
+		for ( k = 0; k < 3; k++ ) {
+			if ( box->r.absmin[k] > Q_max( m->r.currentOrigin[k], end[k] ) + m->r.maxs[k] + 1.0f ||
+				box->r.absmax[k] < Q_min( m->r.currentOrigin[k], end[k] ) + m->r.mins[k] - 1.0f ) {
+				apart = qtrue;
+			}
+		}
+		if ( apart ) {
+			continue;
+		}
+		trap->UnlinkEntity( (sharedEntity_t *)box );
+		vrsBoxesOut[vrsNumBoxesOut++] = box;
+	}
+}
+
+void G_VRSaberBoxesBack( void ) {
+	while ( vrsNumBoxesOut > 0 ) {
+		trap->LinkEntity( (sharedEntity_t *)vrsBoxesOut[--vrsNumBoxesOut] );
+	}
+}
+
 // Sweep one blade from pose A to pose B. *stopped: it met another blade and
 // stopped (here or before): from there on it cuts nothing more this frame,
 // but it's still where the player holds it - other blades it meets meet a
@@ -3039,16 +3831,24 @@ static void VRS_SweepSegment( gentity_t *self, int s, int b, const vrSaberSample
 	}
 }
 
-// Damage and clashes for one held blade, through every pose since the last
-// server frame (called from WP_SaberPositionUpdate instead of the stock
-// saber damage traces).
+// The bolts' time a pose of the player's saw them at, within a sweep's
+// (G_VRSaberSweep).
+static double VRS_PoseBoltTime( const vrSaberSample_t *smp, int boltShift, double from, double to ) {
+	return Q_min( Q_max( (double)( smp->time + boltShift ), from ), to );
+}
+
+// Damage, clashes and bolts deflected for one held blade, through every pose
+// since the last server frame (called from WP_SaberPositionUpdate instead of
+// the stock saber damage traces).
 void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 	vrSaberState_t *vs = VRS_State( self );
 	const vrSaberSample_t *hist[VR_SABER_SAMPLES];
 	vrsOtherBlade_t others[VRS_MAX_OTHER_BLADES];
+	vrsBolt_t bolts[VR_BOLT_NEAR_BLADE];
 	vec3_t mins, maxs;
 	float length, otherSpeed = 0.0f;
-	int i, n, num, numOthers, swept, stepsLeft = VR_SABER_FRAME_STEPS, shift;
+	int i, n, num, numOthers, numBolts = 0, swept, stepsLeft = VR_SABER_FRAME_STEPS, shift, boltShift;
+	double boltFrom, boltTo;
 	qboolean stopped = qfalse;
 
 	if ( !vs || saberNum < 0 || saberNum >= VR_POSE_MAX_SABERS || bladeNum < 0 || bladeNum >= VR_POSE_MAX_BLADES || !vs->count ) {
@@ -3056,6 +3856,15 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 	}
 	swept = vs->sweptTime[saberNum][bladeNum];
 	vs->sweptTime[saberNum][bladeNum] = VRS_Sample( vs, 0 )->time;
+	vs->boltSweepAt[saberNum][bladeNum] = level.time;
+
+	// (pose times are the player's command times: the time of the world they
+	// were looking at. Lag compensation takes the others back to then; else
+	// the newest pose counts as now. Bolts alike - back no further than
+	// VR_UNLAG_MAX, nor on past now.)
+	shift = level.time - VRS_Sample( vs, 0 )->time;
+	boltShift = VRS_Unlag() ? Q_max( 0, shift - VR_UNLAG_MAX ) : shift;
+	boltTo = Q_min( (double)( VRS_Sample( vs, 0 )->time + boltShift ), (double)level.time );
 
 	// the poses of this blade since the last one already swept
 	n = VRS_BladeHistory( vs, saberNum, bladeNum, hist );
@@ -3065,8 +3874,17 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 		}
 	}
 	if ( num >= n || num < 1 ) {
+		if ( num >= n ) {
+			vs->boltSwept[saberNum][bladeNum] = boltTo;	// (the bolts too)
+		}
 		return;	// (re)starting (sweep from here on), or nothing new
 	}
+	// the bolts from where the last sweep left them (a frame's poses can span
+	// more or less time than it: none of the bolts' goes unswept) - across no
+	// more than a gap between poses that's swept (VR_SABER_GAP) up to the
+	// first new pose
+	boltFrom = Q_min( Q_max( vs->boltSwept[saberNum][bladeNum], (double)( hist[num - 1]->time + boltShift - VR_SABER_GAP ) ), boltTo );
+	vs->boltSwept[saberNum][bladeNum] = boltTo;
 
 	// the other blades anywhere near it this frame
 	length = self->client->saber[saberNum].blade[bladeNum].lengthMax;
@@ -3078,6 +3896,9 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 		AddPointToBounds( tip, mins, maxs );
 	}
 	numOthers = VRS_GatherBlades( self, mins, maxs, (int)VRS_UnlagTime( hist[num]->time ), others, VRS_MAX_OTHER_BLADES );
+	if ( G_VRSaberBolts( self ) ) {
+		numBolts = VRS_GatherBolts( self, mins, maxs, boltFrom, boltTo, bolts, VR_BOLT_NEAR_BLADE );
+	}
 	for ( i = 0; i < numOthers; i++ ) {
 		if ( others[i].time1 > others[i].time0 ) {
 			otherSpeed = Q_max( otherSpeed, Q_max( Distance( others[i].base0, others[i].base ), Distance( others[i].tip0, others[i].tip ) ) /
@@ -3090,10 +3911,19 @@ void G_VRSaberSweep( gentity_t *self, int saberNum, int bladeNum ) {
 		}
 	}
 
-	// (pose times are the player's command times: the time of the world they
-	// were looking at. Lag compensation takes the others back to then; else
-	// the newest pose counts as now.)
-	shift = level.time - VRS_Sample( vs, 0 )->time;
+	// the bolts, pose by pose (stopped or not: it's where they hold it - each
+	// pose at the bolts' time it saw, the first where the last sweep left
+	// them): before the others are taken back for the cuts - a bolt meets
+	// them where they are, as G_RunMissile will
+	for ( i = num; i > 0 && numBolts; i-- ) {
+		const vrSaberSample_t *A = hist[i];
+		const vrSaberSample_t *B = hist[i - 1];
+		if ( B->time - A->time > VR_SABER_GAP ) {
+			continue;	// lag: don't sweep across the gap
+		}
+		VRS_SweepBolts( self, saberNum, bladeNum, A, B, ( i == num ) ? boltFrom : VRS_PoseBoltTime( A, boltShift, boltFrom, boltTo ),
+			VRS_PoseBoltTime( B, boltShift, boltFrom, boltTo ), bolts, numBolts );
+	}
 	for ( i = num; i > 0; i-- ) {
 		const vrSaberSample_t *A = hist[i];
 		const vrSaberSample_t *B = hist[i - 1];

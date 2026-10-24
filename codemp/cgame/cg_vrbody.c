@@ -7980,6 +7980,15 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 			CG_VRB_Log( "event: clash on your %s blade (%s%s)\n", vrbWeightNames[weight],
 				es->otherEntityNum2 == cg.clientNum ? "your swing" : "their blade", felt ? ", felt as they met" : "" );
 		}
+	} else if ( event == EV_SABER_BLOCK && es->generic1 == VR_EVENT_BOLT && es->otherEntityNum2 == cg.clientNum ) {
+		// your blade deflected a bolt (g_vrsaber.c VRS_DeflectBolt): a sharp
+		// tap in that hand - it comes a moment after it met it, so the blade
+		// has to be near it still
+		const int hand = ( CG_VRB_SaberHandNear( es->origin, 64.0f ) >= 0 ) ? CG_VRB_EventHand( es->weapon ) : -1;
+		if ( hand >= 0 ) {
+			CG_VRB_FeelBlade( hand, 0.8f, 25, 0.3f, 50, 0.0f );
+			CG_VRB_Log( "event: your blade deflected a bolt\n" );
+		}
 	}
 }
 

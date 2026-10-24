@@ -5552,6 +5552,10 @@ void WP_SaberStartMissileBlockCheck( gentity_t *self, usercmd_t *ucmd  )
 	{//can't block while gripping (FIXME: or should it break the grip?  Pain should break the grip, I think...)
 		doFullRoutine = qfalse;
 	}
+	else if ( G_VRSaberBolts( self ) )
+	{//OpenJK VR: their blade deflects what it meets (g_vrsaber.c) - no parry raised for a bolt coming
+		doFullRoutine = qfalse;
+	}
 
 	if (self->client->ps.weaponTime > 0)
 	{ //don't autoblock while busy with stuff

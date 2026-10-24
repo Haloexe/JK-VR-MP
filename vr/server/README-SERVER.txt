@@ -219,6 +219,16 @@ GOOD TO KNOW
   g_vrSaberUnlag, up to a quarter of a second back), so players further
   away still meet what they swing at; a server close to its players still
   plays best.
+* VR players deflect blaster bolts with their real blade only - where it
+  meets them, by its angle and their Saber Defense - and get no automatic
+  block against them (g_vrSaberBolts; the disruptor's beam is still
+  blocked automatically). With lag compensation (g_vrSaberUnlag 1), a
+  bolt that hits something near a VR player - them, a wall, someone
+  beside them - or bounces off it waits there for their moves of that
+  moment (a quarter of a second at most), in case their blade met it
+  first: players near them can see a bolt hang in the air for a moment.
+  g_vrSaberBolts 0: bolts are blocked for VR players automatically, as
+  for anyone, as before.
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).

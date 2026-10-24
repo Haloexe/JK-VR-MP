@@ -20,6 +20,10 @@ General Public License version 2, like the rest of OpenJK.
 #ifndef BG_VRSABER_H
 #define BG_VRSABER_H
 
+// EV_SABER_BLOCK's generic1: a VR blade deflected a bolt (g_vrsaber.c
+// VRS_BoltEvent; cg_vrbody.c feels it in the hand)
+#define VR_EVENT_BOLT	1
+
 typedef enum {
 	VR_FEEL_BLUE,		// the fast style (and Tavion's)
 	VR_FEEL_YELLOW,		// medium (and any other)
