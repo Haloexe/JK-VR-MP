@@ -236,14 +236,32 @@ GOOD TO KNOW
   within 10 degrees of that (Grip: 15), anywhere on them, whom it works on
   (never onto, or off, someone cloaked or mind-tricking them) - and
   everyone on this build sees them leave that hand ("vrForce 2" in the
-  server info; 1, the build before this one's). Each power keeps the
+  server info; 1, an earlier build's). Each power keeps the
   game's own levels and costs, and its reach - but Grip from the hand, a
   quarter further (320 units, about 9 m; the game's 256 for everyone
   else), catching nobody the game's hold would let go of at once (out of
   sight of where they stand). g_vrForce 0: the game's own aim and reach,
   where they look.
+  Whom a VR player's Grip holds at level 2 or 3 moves with their hand
+  (g_vrGripMove 1, and the player's own Grip Moves): level 3 anywhere
+  in its reach - swung round, lifted, drawn in to about 2 m or sent out
+  to about 8 m - level 2 only lifted and lowered; walls stop them, the
+  server steers them no faster than the game's own level 3 floats them
+  (700 units a second), never further from the gripper than the Grip
+  reaches, and let go of with the hand moving they fly on as it moved
+  them (a fling throws them, one out to a limit too - off the ground, as
+  a Push lifts; falls hurt as ever, a deadly one is the gripper's), with
+  it still they drop; the gripper flung off them, or carrying them along,
+  throws no one. A Push on them while held has them till it's over, and
+  one landing as they're let go of has them too. The gripper's hand lost
+  a moment (tracking), whom it holds stays held where it put them, as far
+  as its Grip reaches. Players gripping each other round in a ring, how
+  long a Grip holds, its cost and what it does to them are the game's.
+  g_vrGripMove 0: lifted at level 2 and floated in front of them at level
+  3, as before.
   games.log says where each came from (g_vrSaberLog: Lightning's and
-  Drain's aim at most four times a second).
+  Drain's aim at most four times a second), and whom a Grip moved with
+  the hand, how far and how fast they were going when let go.
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).

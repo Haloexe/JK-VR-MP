@@ -12,7 +12,13 @@ off, the Force grip's):
   Push              a thump
   Pull              a tug
   a quick squeeze   a tick (Use Force: the power picked)
-  Grip              a rough strain while you hold someone
+  Grip              a rough strain while you hold someone, heavier the
+                    faster they're moved (with your hand: g_vrforce.c) -
+                    carried along as you go, or you going off from them,
+                    it's as still
+  a throw           a swoosh as whom you held is let go of flying (as fast
+                    as a throw, and as fast from you: running with them,
+                    no - nor you flung off from them)
   Lightning         a crackle while it's going
   Drain             a steady pull while it's going
 
@@ -76,6 +82,9 @@ typedef struct {
 #define CGF_AIM_FRESH	100		// ms: where your Force hand aimed this long ago is where it aims (its effects, the glow)
 #define CGF_CAUGHT_MS	1000	// ms: your Grip going, whom its aim went at this lately is whom it caught
 #define CGF_GRIP_WAIT	3000	// ms: a Grip over, no other for this long (WP_ForcePowerStop: forceGripUseTime)
+#define CGF_STRAIN		0.35f	// Grip's strain, whom it holds still...
+#define CGF_STRAIN_MOST	0.8f	// ...going this fast or faster...
+#define CGF_STRAIN_FULL	400.0f	// ...(units a second)
 
 // Where your Force hand aims, and what's become of your squeeze and your Grip
 // (CG_VRF_Track).
@@ -86,8 +95,10 @@ static struct {
 	int			sqPushes, sqPulls;	// ...(the engine's counts as it was)
 	qboolean	gripping;			// your Grip going (the game's word), as last seen...
 	int			caught;				// ...whom it caught, as near as this can tell (-1: not known)...
-	int			gripOver;			// ...when one last ended (as the game begins: long enough ago)
-} cgfa = { { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, -1, 0, qfalse, 0, 0, qfalse, -1, -CGF_GRIP_WAIT };
+	int			gripOver;			// ...when one last ended (as the game begins: long enough ago)...
+	int			letGoTime;			// ...when that was seen (CG_VR_ForceFrame feels it: 0, felt)...
+	float		letGoSpeed;			// ...how fast whom it caught was moved then (CG_VRF_Speed: units a second)
+} cgfa = { { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, -1, 0, qfalse, 0, 0, qfalse, -1, -CGF_GRIP_WAIT, 0, 0.0f };
 
 // Whether you're watching, not playing: following someone (the player state's
 // theirs), spectating, a demo - no Force of your own to feel or pick. (cg.snap:
@@ -120,12 +131,33 @@ static qboolean CG_VRF_ThrowWorks( const playerState_t *ps, int power ) {
 		( ps->forceHandExtend == HANDEXTEND_KNOCKDOWN && !BG_InKnockDownOnly( ps->legsAnim ) ) );
 }
 
+// How fast someone else is moved, as the snapshot your own state comes from has
+// them (CG_PredictPlayerState: the next, if it predicted from that one - its
+// time cg.physicsTime - else the one it's at), so as your Grip's seen over
+// they're seen as it let them go: as fast as they go, or as fast from you,
+// whichever's less - carried along as you go, as still; you flung off from
+// them, as still too (units a second). 0: not known (nobody, not in it).
+static float CG_VRF_Speed( int n ) {
+	const snapshot_t *snap = ( cg.nextSnap && cg.physicsTime == cg.nextSnap->serverTime ) ? cg.nextSnap : cg.snap;
+	int i;
+
+	for ( i = 0; snap && i < snap->numEntities; i++ ) {
+		if ( snap->entities[i].number == n ) {
+			vec3_t v;
+			VectorSubtract( snap->entities[i].pos.trDelta, snap->ps.velocity, v );
+			return Q_min( VectorLength( snap->entities[i].pos.trDelta ), VectorLength( v ) );
+		}
+	}
+	return 0.0f;
+}
+
 // Your squeeze and your Grip as this frame has them (CG_VR_ForceAim's and
 // CG_VR_ForceFrame's, whichever comes first - twice is once): the Force grip
 // held, a Push, a Pull, Lightning or Drain since it was spends it - no Grip of
 // it (the gestures', and the server's: g_vrforce.c's vrGripSpent) till it's
 // squeezed afresh; your Grip going (the game's word), whom it caught - whom
-// Grip's aim went at lately - and when it's over (its wait).
+// Grip's aim went at lately - and when it's over (its wait), whom it caught
+// going how fast then.
 static void CG_VRF_Track( const vrClientState_t *vr, const playerState_t *ps ) {
 	const qboolean gripping = (qboolean)( ( ps->fd.forcePowersActive & ( 1 << FP_GRIP ) ) != 0 );
 
@@ -140,7 +172,8 @@ static void CG_VRF_Track( const vrClientState_t *vr, const playerState_t *ps ) {
 	if ( gripping && !cgfa.gripping ) {
 		cgfa.caught = ( cg.time - cgfa.gripTime >= 0 && cg.time - cgfa.gripTime <= CGF_CAUGHT_MS ) ? cgfa.gripWho : -1;
 	} else if ( !gripping && cgfa.gripping ) {
-		cgfa.gripOver = cg.time;
+		cgfa.gripOver = cgfa.letGoTime = cg.time;
+		cgfa.letGoSpeed = CG_VRF_Speed( cgfa.caught );
 	}
 	cgfa.gripping = gripping;
 }
@@ -278,11 +311,19 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 		cgf.held = vr->force.held;
 	}
 
-	// what's going (the game's word)
+	// what's going (the game's word) - Grip's strain heavier the faster whom it
+	// holds goes (moved with your hand), and whom it held let go of flying, a
+	// swoosh
 	active = ps->fd.forcePowersActive & ( ( 1 << FP_GRIP ) | ( 1 << FP_LIGHTNING ) | ( 1 << FP_DRAIN ) );
 	if ( active & ( 1 << FP_GRIP ) ) {
-		CG_VR_FeelSteady( h, 0.35f, 0.6f );
+		CG_VR_FeelSteady( h, CGF_STRAIN + ( CGF_STRAIN_MOST - CGF_STRAIN ) * Com_Clamp( 0.0f, 1.0f, CG_VRF_Speed( cgfa.caught ) / CGF_STRAIN_FULL ),
+			0.6f );
 	}
+	if ( cgfa.letGoTime == cg.time && cgfa.letGoSpeed >= VR_FORCE_GRIP_THROWN ) {
+		CG_VR_Feel( h, 0.7f, 30, 0.3f, 180 );
+		CG_VR_Log( "force: Grip let %i go flying, at %.0f a second\n", cgfa.caught, cgfa.letGoSpeed );
+	}
+	cgfa.letGoTime = 0;
 	if ( active & ( 1 << FP_LIGHTNING ) ) {
 		CG_VR_FeelSteady( h, Q_flrand( 0.35f, 0.9f ), 0.5f );
 	}

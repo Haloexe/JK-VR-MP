@@ -35,9 +35,11 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   and goes where it points - or where your hand is as you see it: put it over
   them - (or the way you thrust), snapping onto someone within 10 degrees
   (Grip: 15, and reaching a quarter further), whoever your Grip's aimed at
-  glowing, and the controller thumps, tugs, strains and crackles with it. Or
-  push and pull with an open hand, or turn the gestures off, under VR Force in
-  Setup > Controls.
+  glowing, and the controller thumps, tugs, strains and crackles with it.
+  Whoever your Grip holds moves with your hand - swing them round, lift them,
+  draw them in or push them away (level 3; level 2 lifts and lowers), and
+  fling them as you let go to throw them. Or push and pull with an open hand,
+  or turn the gestures off, under VR Force in Setup > Controls.
 - **Saber colours:** any RGB colour for each of your sabers, and a black core
   inside the coloured glow, picked on the RGB Colors page (Profile >
   Lightsaber, or Setup > VR) with sliders or a hex code while a preview shows

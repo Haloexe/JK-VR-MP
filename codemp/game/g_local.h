@@ -1534,9 +1534,13 @@ void		G_VRForceDrop( int clientNum );
 void		G_VRForceTake( gentity_t *ent, vrAvatar_t *a, const vrUserPose_t *pose );
 void		G_VRForceCmdDone( gentity_t *ent );
 qboolean	G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir );
-qboolean	G_VRForceHand( gentity_t *self, vec3_t start, vec3_t dir );
+qboolean	G_VRForceHand( gentity_t *self, gentity_t *gripEnt, vec3_t start, vec3_t dir );
+float		G_VRForceGripReach( gentity_t *self, gentity_t *gripEnt );
 qboolean	G_VRForceGripSpent( gentity_t *self );
 qboolean	G_VRForceGripHolds( gentity_t *self, gentity_t *ent );
+void		G_VRForceUserinfo( gentity_t *ent, const char *userinfo );
+qboolean	G_VRForceGripMove( gentity_t *self, gentity_t *gripEnt, int gripLevel );
+void		G_VRForceGripDone( gentity_t *self );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //

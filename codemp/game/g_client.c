@@ -2140,6 +2140,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 	else				client->pers.predictItemPickup = qtrue;
 
 	G_VRHolsterUserinfo( ent, userinfo );	// OpenJK VR: what's in a VR player's holsters ("vrh": g_vrholster.c)
+	G_VRForceUserinfo( ent, userinfo );		// OpenJK VR: whether their Grip moves whom it holds with their hand (g_vrforce.c)
 
 	// set name
 	Q_strncpyz( oldname, client->pers.netname, sizeof( oldname ) );
@@ -3933,8 +3934,7 @@ void ClientDisconnect( int clientNum ) {
 		return;
 	}
 
-	G_VRSaberClientReset( clientNum );	// OpenJK VR: their VR saber and avatar go with them
-	G_RPClientDisconnect( clientNum );	// OpenJK VR: and their roleplay login
+	G_RPClientDisconnect( clientNum );	// OpenJK VR: their roleplay login goes with them
 
 	i = 0;
 
@@ -3946,6 +3946,9 @@ void ClientDisconnect( int clientNum ) {
 		}
 		i++;
 	}
+
+	G_VRSaberClientReset( clientNum );	// OpenJK VR: and their VR saber and avatar (after their powers stop: whom their Grip
+										// moved with their hand let go of as ever - g_vrforce.c)
 
 	i = TRACK_CHANNEL_1;
 

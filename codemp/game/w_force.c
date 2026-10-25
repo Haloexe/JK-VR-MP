@@ -3785,6 +3785,7 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 		}
 		break;
 	case FP_GRIP:
+		G_VRForceGripDone( self );	// OpenJK VR: whom a VR player's hand moved, let go of (g_vrforce.c)
 		self->client->ps.fd.forceGripUseTime = level.time + 3000;
 		if (self->client->ps.fd.forcePowerLevel[FP_GRIP] > FORCE_LEVEL_1 &&
 			g_entities[self->client->ps.fd.forceGripEntityNum].client &&
@@ -3915,16 +3916,17 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 		return;
 	}
 
-	// OpenJK VR: a VR player's Force hand holds them - from it, where it points (g_vrforce.c), as far as it reaches
+	// OpenJK VR: a VR player's Force hand holds them - from it, where it points (g_vrforce.c), as far as it reaches (gone a while
+	// it moves them with the hand: as it last was)
 	VectorCopy( self->client->ps.origin, gripFrom );
 	VectorCopy( self->client->ps.viewangles, gripAngles );
-	byHand = G_VRForceHand( self, gripFrom, gripDir );
+	byHand = G_VRForceHand( self, gripEnt, gripFrom, gripDir );
 	if ( byHand )
 	{
 		vectoangles( gripDir, gripAngles );
 	}
 
-	if (VectorLength(a) > ( byHand ? VR_FORCE_GRIP_REACH : MAX_GRIP_DISTANCE ))
+	if (VectorLength(a) > ( byHand ? G_VRForceGripReach( self, gripEnt ) : MAX_GRIP_DISTANCE ))	// OpenJK VR: (moved with the hand: as far as it holds them, and room for them to lag)
 	{
 		WP_ForcePowerStop(self, forcePower);
 		return;
@@ -3954,6 +3956,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 
 	if (gripLevel == FORCE_LEVEL_1)
 	{
+		G_VRForceGripMove( self, gripEnt, gripLevel );	// OpenJK VR: (whom a VR player's hand moved at level 2 or 3 - their Grip's level brought down since - the game's own from here, from rest: g_vrforce.c)
 		gripEnt->client->ps.fd.forceGripBeingGripped = level.time + 1000;
 
 		if ((level.time - gripEnt->client->ps.fd.forceGripStarted) > 5000)
@@ -3967,7 +3970,10 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 	{
 		gripEnt->client->ps.fd.forceGripBeingGripped = level.time + 1000;
 
-		if (gripEnt->client->ps.forceGripMoveInterval < level.time)
+		if ( G_VRForceGripMove( self, gripEnt, gripLevel ) )
+		{ // OpenJK VR: lifted and lowered with a VR player's hand (g_vrforce.c)
+		}
+		else if (gripEnt->client->ps.forceGripMoveInterval < level.time)
 		{
 			gripEnt->client->ps.velocity[2] = 30;
 
@@ -4013,7 +4019,10 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 
 		gripEnt->client->ps.forceGripChangeMovetype = PM_FLOAT;
 
-		if (gripEnt->client->ps.forceGripMoveInterval < level.time)
+		if ( G_VRForceGripMove( self, gripEnt, gripLevel ) )
+		{ // OpenJK VR: moved anywhere in reach with a VR player's hand (g_vrforce.c)
+		}
+		else if (gripEnt->client->ps.forceGripMoveInterval < level.time)
 		{
 			float nvLen = 0;
 

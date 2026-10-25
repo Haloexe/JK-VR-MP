@@ -52,9 +52,13 @@ them again. The page is otherwise left as it is.
     Thrust Speed      how fast a thrust (Push) or a yank   vr_forceThrust
                       (Pull) goes, 0.8-3 m/s
     Aim Glow          whom Grip's aimed at glows           cg_vrForceGlow Yes/No
+    Grip Moves        whom your Grip holds moves with your cg_vrGripMove Yes/No
+                      hand (a server of this build's:
+                      game/g_vrforce.c)
 
-They're the engine's settings (but Always Run and Aim Glow, the game's: Aim
-Glow made here, as it comes, before the game's there - vrcCvars): all there
+They're the engine's settings (but Always Run, Aim Glow and Grip Moves, the
+game's: Aim Glow and Grip Moves made here, as they come, before the game's
+there - vrcCvars - Grip Moves in your userinfo, for the server): all there
 before the menus load, and taking effect at once - but Resolution, which
 the headset's picture takes when it's made. (The menus set it as they set
 any: at once - the engine's latching only holds back the console's - and
@@ -95,6 +99,7 @@ static const struct {
 	uint32_t	flags;
 } vrcCvars[] = {
 	{ "cg_vrForceGlow",		"1",	CVAR_ARCHIVE },
+	{ "cg_vrGripMove",		"1",	CVAR_ARCHIVE | CVAR_USERINFO },
 };
 
 static const struct {
@@ -111,7 +116,7 @@ static const struct {
 	{ "vr_controls_view", "vrview", "vrviewbutton", "vrviewbutton_glow", "vrview_highlight", "VR View",
 		"Your view in VR: head movement, the HUD, the menu screen, gun aim, resolution" },
 	{ "vr_controls_force", "vrforce", "vrforcebutton", "vrforcebutton_glow", "vrforce_highlight", "VR Force",
-		"Your Force hand in VR: gestures for Push, Pull, Grip, Lightning and Drain, and its aim" },
+		"Your Force hand in VR: its gestures, its aim, and moving whom your Grip holds" },
 };
 
 /*

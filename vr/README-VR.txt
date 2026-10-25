@@ -18,7 +18,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * VR controllers: thumbstick movement, snap/smooth turning, buttons;
     the comfort settings in Setup > Controls (VR MOVEMENT, VR VIEW AND
     VR FORCE)
-  * The Force in your hand: thrust to Push, yank to Pull, point to Grip,
+  * The Force in your hand: thrust to Push, yank to Pull, point to Grip
+    and move whoever you hold with your hand (fling them to throw them),
     the trigger for Lightning and Drain (see THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
@@ -216,6 +217,10 @@ stick up or down on a slider to move it a step.
                      they don't come, higher if they come by accident
     Aim Glow         whoever your Grip is aimed at glows while you hold
                      the Force grip out (Yes, as it comes)
+    Grip Moves       whoever your Grip holds moves with your hand, and a
+                     fling throws them (Yes, as it comes; THE FORCE,
+                     below); No: lifted at level 2 and floated in front of
+                     you at level 3, as before
 Each is a console setting as well (SETTINGS, below).
 
 YOUR HEIGHT. Until the game knows your height, your view goes up and down
@@ -814,15 +819,52 @@ glows - someone you can't see from where you stand (over a low wall,
 say), or high over you with your hand off to their side - and from your
 hand it won't catch them at all (the game would let go of them at once,
 your Force spent and the wait begun). Once you hold someone, the Grip
-follows your hand along whichever of the two lines holds them. Grip from your hand reaches a quarter
-further than the game's (320 units: about 9 m, 7.5 m before). A server running the build before this one ("vrForce
-1") takes your Force from your hand as well, but there it goes where the
-controller points, and nobody glows. On other servers the gestures still
-work, but every power aims where you look (with a gun out, where it
-points), as in the normal game - and a Grip that's caught nobody, held on
-through a Push or a Pull, can still catch whom you look at after it. The
-Force Gestures, Thrust Speed and Aim Glow settings are under VR Force
-(above).
+follows your hand along whichever of the two lines holds them. Grip from
+your hand reaches a quarter further than the game's (320 units: about 9 m,
+7.5 m before). A server running an earlier build ("vrForce 1") takes your
+Force from your hand as well, but there it goes where the controller
+points, and nobody glows. On other servers the gestures still work, but
+every power aims where you look (with a gun out, where it points), as in
+the normal game - and a Grip that's caught nobody, held on through a Push
+or a Pull, can still catch whom you look at after it. The Force Gestures,
+Thrust Speed, Aim Glow and Grip Moves settings are under VR Force (above).
+Whoever your Grip holds moves with your hand, on a server running this
+build (Grip Moves, as it comes) - as if on the end of a long stick your
+hand swings. At level 3, sweep your hand round and they swing round you,
+raise or lower it and they rise or sink, pull it back from them (in to
+your chest, say) and they come closer, push it toward them and they go
+further: about a third of a metre of your hand takes them from 2 m away
+to 8 m (a push or a pull doesn't swing them; a move more across the way
+to them than toward or away from them is a sweep, wherever your hand
+is), and never further from you than the Grip reaches (or than you
+caught them). Level 2 only lifts and lowers them - they stay where you
+caught them, any move of your hand up or down lifts or lowers them (not
+out of the Grip's reach: caught at its very edge, as high as you are,
+they can't be lifted), and you still point at them to hold them. Walls,
+floors and ceilings stop them as they would anyone, and nobody goes
+faster than the game's own level 3 floats them. Let go of the Force grip
+with your hand moving and they fly on the way you were moving them -
+thrown out to the 8 m limit (or as far as the Grip reaches), in to the
+2 m one, or up to the top, with your hand still going, they fly on past
+it - up off the ground as a Push lifts whoever it shoves (a swoosh in
+the controller says so; falls hurt as they always do, and one that kills
+them is yours); let go with your hand still and they drop where they
+are - carried along as you run, they keep going with you, and if you're
+the one knocked or flung away as the Grip ends, they aren't thrown.
+Turning your head doesn't move them; turning with the stick - snap or
+smooth - swings them round with you, and walking, leaning, crouching or
+stepping takes them along. If your controller loses tracking for a
+moment, they stay where you last put them, and when it's back they move
+on from there. While you hold the Force grip, your body doesn't lean in
+to reach further (a reach right out falls a little short). The strain in
+the controller gets heavier the faster you move them, and a VR player
+you move about sees their Comfort Vignette (if they use it) as for any
+other motion. Level 1 holds them as the game does, and so do Grips on
+each other that come back round to you (yours on someone gripping you,
+or on someone whose Grip holds someone gripping you). Grip Moves: No, or
+a server with g_vrGripMove 0, gives the Grip from your hand as before:
+lifted at level 2, and at level 3 floated to just in front of you where
+your hand points.
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
@@ -1224,7 +1266,8 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
                          game (not as they really move)
   cg_vrBodyBack 4        how far (units) the body stands behind your eyes;
                          smaller = closer to you, but you may see the neck
-                         when looking straight down
+                         when looking straight down (the server's told it
+                         too: where your neck is, for your Grip)
   cg_vrBodyTwist 45      how far you can turn your head before the torso
                          follows (degrees; with Body Bends, the chest -
                          up to 70, the furthest the neck turns - the hips
@@ -1257,6 +1300,9 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
   cg_vrForceGlow 1       0 = no glow on whom your Grip's aimed at (the tick
                          as it lands on someone still comes; Setup,
                          Controls, VR Force: Aim Glow)
+  cg_vrGripMove 1        0 = whom your Grip holds doesn't move with your
+                         hand: lifted at level 2, floated in front of you
+                         at level 3 (Setup, Controls, VR Force: Grip Moves)
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
@@ -1330,11 +1376,23 @@ KNOWN LIMITATIONS
     blade, a Force Push) can't be met where it was before that.
   * Guns are held in your gun hand only (the right; the left,
     left-handed); only sabers can be held with both hands.
-  * The Force: Grip holds someone as the game does - lifted at level 2,
-    floated to just in front of you, where your hand points, at level 3 -
-    your hand doesn't carry them about yet. Only the Force grip's hand is
-    the Force hand: with your saber in that hand (and the other one empty),
-    there's none (switch vr_leftHanded).
+  * The Force: whom your Grip moves goes where your hand takes them as the
+    server sees your hand - with lag, a moment behind it. Your shoulders
+    aren't tracked: the game puts them where your body faces as it
+    follows your head, so turning your body round (not with the stick)
+    swings whom you hold a little more or less than you turned, depending
+    where your arm points. The server has your head where your body's
+    eyes are drawn, so as the game's animation bobs them - walking,
+    landing - whom you hold far out bobs a little with them. A push or a
+    pull is told from a sweep by which way your hand moves - toward whom
+    you hold, back from them, or across - not by where your arm points:
+    a swing of your arm that takes your hand mostly toward them (up from
+    hanging at your side, or up at someone held high above you) pushes
+    them on rather than swinging them. With your hand right by your
+    shoulder, a small move of it swings them further than the same move
+    with your arm out.
+    Only the Force grip's hand is the Force hand: with your saber in that
+    hand (and the other one empty), there's none (switch vr_leftHanded).
   * Fingers: the game's skeleton moves three fingers a hand - the thumb,
     the index finger, and the other three together - and each follows
     only what your controller can feel (see YOUR FINGERS).

@@ -352,6 +352,8 @@ numbers on both sides.
 										// MAX_GRIP_DISTANCE: 256) - and holds them
 #define VR_FORCE_GRIP_FRONT		0.9f	// a Grip below level 3 holds them while where it points is this near them, side to
 										// side (DoGripAction's InFront) - none's aimed at whom it wouldn't hold
+#define VR_FORCE_GRIP_THROWN	250.0f	// units a second: whom a Grip moved with the hand, let go of going this fast, is thrown
+										// - tossed up off the ground (game/g_vrforce.c), a swoosh in the hand (cg_vrforce.c)
 #define VR_FORCE_BODY_FOOT		6.0f	// someone's body, where the Force aimed at them goes: the line up through the middle
 #define VR_FORCE_BODY_HEAD		2.0f	// of their box, from this far above its bottom to this far below its top
 

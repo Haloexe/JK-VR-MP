@@ -176,6 +176,7 @@ XCVAR_DEF( g_userinfoValidate,			"25165823",		NULL,						CVAR_ARCHIVE,									q
 XCVAR_DEF( g_useWhileThrowing,			"1",			NULL,						CVAR_NONE,										qtrue )
 XCVAR_DEF( g_voteDelay,					"3000",			NULL,						CVAR_NONE,										qfalse )
 XCVAR_DEF( g_vrForce,					"1",			CVU_VRForce,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' Force from their Force hand (g_vrforce.c); 0: where they look
+XCVAR_DEF( g_vrGripMove,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: whom a VR player's Grip holds moves with their hand (g_vrforce.c); 0: as the game has it
 XCVAR_DEF( g_vrHolsters,				"1",			CVU_VRHolsters,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaber,					"1",			CVU_VRSaber,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberRGB,				"1",			CVU_VRSaberRGB,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: saber colours of players' own and black cores passed on (g_vrcolor.c)

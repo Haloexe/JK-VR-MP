@@ -4709,6 +4709,25 @@ static void CG_VRB_UpdateLean( vrbArmResult_t res[2], float bodyYaw ) {
 	vrb.leanTarget = ( want > -1e5f ) ? Com_Clamp( 0.0f, Q_max( 0.0f, cg_vrBodyBack.value ), vrb.lean + want ) : 0.0f;
 }
 
+// Leaning in eases toward what the arms asked for last frame (as far as the
+// time since the frame before takes it: the second eye's, none; not drawn for a
+// while, upright again) - but where the server has your head is what it
+// measures your Grip's hand from (game/g_vrforce.c): the Force grip held,
+// upright again (as a Grip catches someone - held still a moment, VRF_GRIP_MS
+// - it is), and while your Grip holds someone, as it is (a far reach falls a
+// little short meanwhile).
+static void CG_VRB_EaseLean( const vrClientState_t *vr ) {
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.leanTime ) * 0.001f );
+
+	if ( cg.time - vrb.leanTime > 500 || cg.time < vrb.leanTime ) {
+		vrb.lean = vrb.leanTarget = 0.0f;
+	}
+	if ( !( cg.predictedPlayerState.fd.forcePowersActive & ( 1 << FP_GRIP ) ) ) {
+		vrb.lean += ( ( vr && vr->force.reaching ) ? -vrb.lean : vrb.leanTarget - vrb.lean ) * ( 1.0f - expf( -dt / 0.08f ) );
+	}
+	vrb.leanTime = cg.time;
+}
+
 // The log, now and then: how your arms were drawn - for working out what
 // looks wrong. Per arm: the elbow's height (above the shoulder, in upper arm
 // lengths), how your real hand is turned against the forearm drawn (wrist
@@ -6176,15 +6195,7 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 	// feet stay put instead - where they'd be with your head at the view's
 	// own place - and it bends to put its eyes there (CG_VRB_Bend).
 	haveEyes = CG_VRB_Eyes( cent, eyes );
-	// (leaning in eases toward what the arms asked for last frame)
-	if ( vrb.leanTime != cg.time ) {
-		const float dt = Com_Clamp( 0.0f, 0.1f, ( cg.time - vrb.leanTime ) * 0.001f );
-		if ( cg.time - vrb.leanTime > 500 || cg.time < vrb.leanTime ) {
-			vrb.lean = vrb.leanTarget = 0.0f;
-		}
-		vrb.lean += ( vrb.leanTarget - vrb.lean ) * ( 1.0f - expf( -dt / 0.08f ) );
-		vrb.leanTime = cg.time;
-	}
+	CG_VRB_EaseLean( vr );
 	if ( haveEyes && CG_VR_HeadPose( head, headAxis ) ) {
 		const float w = CG_VRB_BendWeight( cg.predictedPlayerState.groundEntityNum != ENTITYNUM_NONE );
 		vec3_t full, stand;
