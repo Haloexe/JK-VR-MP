@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-14"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-15"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -45,6 +45,8 @@ General Public License version 2, like the rest of OpenJK.
 												// -14: vrClientState_t.force (the Force hand: Force
 												//     gestures), vrAvatar_t.forceValid, forceHand,
 												//     forceDir, vrUserPose_t.thrust (VR_POSE_PROTOCOL 7)
+												// -15: vrForceState_t.casts, cast, place (the Force
+												//     hand's places: Body Gestures)
 
 // ext.VR_SetEyeDrop( drop, flags ): flags
 #define VR_EYES_POSED			( 1 << 0 )	// in a pose (getting down into it, or up out of it: bg_vrpose.c)
@@ -253,6 +255,10 @@ typedef struct vrForceState_s {
 	int			pulls;		// one more done (the engine's count, from when it started)
 	int			taps;
 	float		speed;		// the last Push's or Pull's speed (metres a second)
+	int			casts;		// the places' powers it's cast (Body Gestures), counted the same...
+	int			cast;		// ...the last one (FP_*; -1: none yet)
+	int			place;		// the place it's held still in now, one with a power of yours there (VRF_PLACE_*,
+							// qcommon/vr_force.h; 0: none)
 } vrForceState_t;
 
 typedef struct vrClientState_s {

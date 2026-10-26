@@ -49,6 +49,13 @@ them again. The page is otherwise left as it is.
     Force Gestures    your Force hand's: while the Force   vr_forceGestures 1/2/0
                       grip's held, with the hand open too
                       (Push and Pull), or off
+    Body Gestures     the places: your Force hand held     vr_forceBody Yes/No
+                      still by your body casts Heal,
+                      Protect, Absorb, Seeing, Team Heal
+                      (its trigger there, Rage and Team
+                      Energize)
+    Hold Time         how long it's held still there,      vr_forceHold
+                      0.3-0.8 s
     Thrust Speed      how fast a thrust (Push) or a yank   vr_forceThrust
                       (Pull) goes, 0.8-3 m/s
     Aim Glow          whom Grip's aimed at glows           cg_vrForceGlow Yes/No

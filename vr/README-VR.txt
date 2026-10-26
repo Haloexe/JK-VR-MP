@@ -20,7 +20,10 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     VR FORCE)
   * The Force in your hand: thrust to Push, yank to Pull, point to Grip
     and move whoever you hold with your hand (fling them to throw them),
-    the trigger for Lightning and Drain (see THE FORCE)
+    the trigger for Lightning and Drain, your hand held still on your
+    chest, before your face, at your belly, at your temple or over your
+    head for Heal, Protect, Absorb, Seeing and Team Heal - the trigger on
+    your chest for Rage, over your head for Team Energize (see THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
@@ -102,7 +105,9 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        holds your weapon: your saber in your left hand, the
                        left one
   Left trigger         alternate attack (the other trigger) - but while
-                       you hold the Force grip, Lightning (THE FORCE, below)
+                       you hold the Force grip, Lightning (on your chest,
+                       Rage; over your head, Team Energize: THE FORCE,
+                       below)
   Right grip           use (doors, switches, pick-ups), squeezed most of
                        the way (Setup > VR: Grip Press, 85%) - a lighter
                        squeeze only closes your character's fingers; at a
@@ -111,12 +116,13 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        - no use meanwhile; let go and it's back in its
                        holster
   Left grip            the Force grip: hold it and your empty hand reaches
-                       out with the Force - thrust, yank, point, the trigger
-                       (THE FORCE, below); a quick squeeze uses the selected
-                       Force power - squeezed as far as Use (or, at your
-                       saber's hilt, take hold of it with both hands; at a
-                       holster, take out or put away; holding a saber
-                       (Saber Grip: Hold), it holds it - no Force meanwhile)
+                       out with the Force - thrust, yank, point, the
+                       trigger, held still by your body (THE FORCE, below);
+                       a quick squeeze uses the selected Force power -
+                       squeezed as far as Use (or, at your saber's hilt,
+                       take hold of it with both hands; at a holster, take
+                       out or put away; holding a saber (Saber Grip:
+                       Hold), it holds it - no Force meanwhile)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
@@ -212,6 +218,14 @@ stick up or down on a slider to move it a step.
                      off by accident in a fight; Off: no gestures - the
                      Force grip uses the power picked as long as you hold
                      it, as in the normal game
+    Body Gestures    your Force hand held still by your body casts Heal,
+                     Protect, Absorb, Seeing and Team Heal, and its trigger
+                     there Rage and Team Energize (Yes, as it comes; THE
+                     FORCE, below); No: only Push, Pull, Grip, Lightning
+                     and Drain come from your hand, as before
+    Hold Time        how long your hand must stay still in a place for its
+                     power: 0.3 to 0.8 seconds (0.4 as it comes) - longer
+                     if they come by accident, shorter to be quicker
     Thrust Speed     how fast a thrust or a yank must be for Push and Pull:
                      0.8 to 3 metres a second (1.6 as it comes) - lower if
                      they don't come, higher if they come by accident
@@ -765,8 +779,10 @@ console), and the stock g_dismember 100 if you want limbs to come off.
 THE FORCE: your Force hand - the left (the right, left-handed), whenever
 it's empty - reaches out with the Force while you hold its grip (the Force
 grip, squeezed as far as Use):
-  Push             thrust it out, fast and far (from near your chest):
-                   Push goes the way you thrust
+  Push             thrust it out, fast and far (from near your chest - with
+                   Body Gestures, not steeply up: a hand raised fast to
+                   your face or over your head isn't a Push): Push goes
+                   the way you thrust
   Pull             reach out (not fast: a quick thrust out is a Push),
                    then yank it back toward you in one go: Pull goes
                    toward where you yanked it from
@@ -783,6 +799,50 @@ grip, squeezed as far as Use):
   a quick squeeze  any other power: the one picked on the wheel's Force
                    ring (Heal, Speed, Protect, Absorb, Mind Trick, Seeing,
                    Rage, the team powers) or with X and Y
+and, held still close in by you for a moment (Hold Time: 0.4 seconds as it
+comes) - or with its trigger pulled there (Body Gestures):
+  Heal             on your chest, your palm toward you
+  Rage             the same place, the trigger pulled there
+  Protect          up before your face, your palm out (the trigger there
+                   is Lightning, as anywhere you point)
+  Absorb           at your belly, your palm turned up (the trigger there
+                   is Drain, as with your palm up anywhere)
+  Seeing           at your temple, beside your eye
+  Team Heal        raised high over your head
+  Team Energize    the same place, the trigger pulled there
+Holding still casts the light (or neutral) power of a place; pulling the
+trigger there casts its dark twin at once - Heal and Rage, Team Heal and
+Team Energize, Absorb and Drain, Protect and Lightning each share a spot,
+and the trigger tells them apart, so a character with both sides' powers
+has a gesture for each of them. Only your own powers count: a place with
+none of yours does nothing (and the trigger there is Lightning, as
+anywhere); one with only its trigger's power (Rage, say: a dark-sider's
+chest) does that alone. Your hand must stay still there - passing through
+a place, or drifting slowly across it, does nothing, nor does a hand the
+headset has lost sight of - and a place's power spends the squeeze: let
+go and squeeze again for anything else (no Push, Pull, Grip or Lightning
+after it), as after a Push, a Pull, the trigger or a Grip no place casts
+till you squeeze again. A soft tick says your hand has settled in a place
+with a power of yours; keep still and its power comes (or, where the
+trigger's is your only one, pull the trigger): two slow pulses for Heal, a
+deep rumble for Rage, a firm press for Protect (and a faint hum while it
+lasts), a rising buzz for Absorb, a soft ping for Seeing, two quick pulses
+for the team powers - or a short, dull buzz if the game won't (no Force
+left, still waiting, nothing to heal; the team powers are felt whenever
+you cast them in a team game - your game can't tell whether a teammate
+near you needed one). Cast Protect, Absorb, Rage or Seeing again while
+it's going and it's turned off (a soft release), as in the game - though
+not in the second and a half after one of them, Speed or Mind Trick
+starts: the game won't then (the dull buzz). Places are measured from
+your eyes the way your head faces: your chest about 25 to 45 cm below
+your eyes and up to 25 cm in front, your face 15 to 35 cm in front of
+them, your belly 45 to 65 cm below, your temple 8 to 22 cm out to your
+Force hand's side (your hand beside your headset), over your head at
+least 20 cm above them. A hand held over your head never Grips; nor does
+one held still in a place of yours.
+The VR log (cg_vrLog) says where your hand was in each place - and where
+it was held still close in by you but in none of them - which helps
+fitting the places to you.
 While a Grip holds someone, or Lightning or Drain is going, a thrust or a
 yank does nothing (as in the game) - and after a Push, a Pull or the
 trigger, let go and squeeze again to Grip. Squeeze the Force grip first,
@@ -1297,6 +1357,12 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
                          too, 0 = off (the Force grip uses the power picked)
   vr_forceThrust 1.6     how fast a thrust or yank must be for Push and Pull
                          (metres a second, 0.8 to 3)
+  vr_forceBody 1         0 = no places: your Force hand held still by your
+                         body (or its trigger there) casts nothing (Setup,
+                         Controls, VR Force: Body Gestures)
+  vr_forceHold 0.4       how long your Force hand must stay still in a place
+                         for its power (seconds, 0.3 to 0.8; Setup,
+                         Controls, VR Force: Hold Time)
   cg_vrForceGlow 1       0 = no glow on whom your Grip's aimed at (the tick
                          as it lands on someone still comes; Setup,
                          Controls, VR Force: Aim Glow)

@@ -200,6 +200,8 @@ static cvar_t *vr_leftHanded;
 static cvar_t *vr_gripPress;
 static cvar_t *vr_forceGestures;
 static cvar_t *vr_forceThrust;
+static cvar_t *vr_forceBody;
+static cvar_t *vr_forceHold;
 
 /*
 ================================================================================
@@ -539,6 +541,9 @@ typedef struct vrState_s {
 	int						forceTapUntil;	// a quick squeeze: Use Force held till then (Sys_Milliseconds; 0: not)
 	int						forcePushes, forcePulls, forceTaps;	// counted, for the cgame (vrForceState_t)
 	float					forceSpeed;		// the last Push's or Pull's speed (metres a second)
+	int						forceCasts;		// the places' powers cast, counted (vrForceState_t)...
+	int						forceCast;		// ...the last (FP_*; -1: none yet)
+	int						forcePlace;		// the place of yours the Force hand's held still in (VRF_PLACE_*)
 	qboolean				grabbing[2];	// the hand's grip is held as a grab, not its key
 	qboolean				gripFresh[2];	// the hand's grip let go since it was squeezed: squeezed now, it may grab
 	qboolean				grabHolds;		// ...and grabs hold what they've taken (VR_GRAB_HOLDS): let go of only well open
@@ -2303,8 +2308,11 @@ The Force hand
 Force gestures (vr_forceGestures, qcommon/vr_force.h): your Force hand - the
 hand whose grip is the Force grip, while it's empty - reaches out with the
 Force while its grip is held, and pushes, pulls, grips, shoots lightning or
-drains as it moves; a quick squeeze of it is Use Force (the power picked). What
-it does goes to the game as the game's own inputs (VR_FillCmdPose: generic
+drains as it moves; a quick squeeze of it is Use Force (the power picked). Held
+still in a place by your body - or its trigger pulled there - it casts that
+place's power (Body Gestures, vr_forceBody: Heal, Rage, Protect, Absorb,
+Seeing, Team Heal, Team Energize - yours, as the server last said). What it
+does goes to the game as the game's own inputs (VR_FillCmdPose: generic
 commands and buttons, Use Force held a moment), so it works on any server - and
 one running this build aims it from your hand: a Push's or Pull's way goes with
 its command (vrUserPose_t.thrust), where the hand points with the avatar (the
@@ -2384,11 +2392,43 @@ static void VR_ForceThrow( int genCmd, const vec3_t thrust, float speed ) {
 	vr.forceSpeed = speed;
 }
 
+// The game's generic command for a place's power (Body Gestures) - as the
+// console's force_heal, force_rage, force_protect, force_absorb, force_seeing,
+// force_healother and force_forcepowerother (0: none).
+static int VR_ForceCastCmd( int power ) {
+	switch ( power ) {
+	case FP_HEAL:		return GENCMD_FORCE_HEAL;
+	case FP_RAGE:		return GENCMD_FORCE_RAGE;
+	case FP_PROTECT:	return GENCMD_FORCE_PROTECT;
+	case FP_ABSORB:		return GENCMD_FORCE_ABSORB;
+	case FP_SEE:		return GENCMD_FORCE_SEEING;
+	case FP_TEAM_HEAL:	return GENCMD_FORCE_HEALOTHER;
+	case FP_TEAM_FORCE:	return GENCMD_FORCE_FORCEPOWEROTHER;
+	default:			return 0;
+	}
+}
+
+// A place's power: its generic command, queued with the cgame's (VR_FillCmdPose),
+// and counted for the cgame - it feels it. (Only ever from a Force hand: in a
+// game.)
+static void VR_ForceCast( int power ) {
+	const int genCmd = VR_ForceCastCmd( power );
+
+	if ( !genCmd || vr.numGenCmds >= (int)ARRAY_LEN( vr.genCmds ) ) {
+		return;	// (a full queue: it's lost - squeeze afresh)
+	}
+	vr.genThrown[vr.numGenCmds] = qfalse;
+	vr.genCmds[vr.numGenCmds++] = genCmd;
+	vr.forceCasts++;
+	vr.forceCast = power;
+}
+
 // Everything the Force hand does stops now (input lost, the session over),
 // and its grip held now counts no more till it's let go.
 static void VR_ForceDrop( void ) {
 	VRF_Clear( &vr.force );
 	vr.forceHeld = 0;
+	vr.forcePlace = VRF_PLACE_NONE;
 	if ( vr.forceGrip ) {
 		vr.forceGripDead = qtrue;
 	}
@@ -2440,13 +2480,19 @@ static void VR_ForcePoll( const float trigger[2], const float squeeze[2] ) {
 		// (OpenXR's grip pose: the left palm faces the controller's right, the
 		// right palm its left)
 		VR_QuatToAxis( &vr.gripPose[h].orientation, axis );
-		in.palmUp = ( h == VR_HAND_LEFT ) ? -axis[1][2] : axis[1][2];
+		VectorScale( axis[1], ( h == VR_HAND_LEFT ) ? -1.0f : 1.0f, in.palm );
+		in.palmUp = in.palm[2];
 		// (the Force grip held is this hand's: squeezed as the Force hand, made
 		// dead above as that changed; its trigger the gestures' till let go)
 		in.grip = (qboolean)( vr.forceGrip && !vr.forceGripDead );
 		in.trigger = vr.forceTrigger[h];
 		in.open = (qboolean)( squeeze[h] < VRF_OPEN && trigger[h] < VRF_OPEN );
 		in.thrust = vr_forceThrust ? vr_forceThrust->value : VRF_THRUST_DEFAULT;
+		// (the places: yours, as the server last said - a Force hand's in a
+		// game, your view yours)
+		in.body = (qboolean)( vr_forceBody && vr_forceBody->integer );
+		in.hold = vr_forceHold ? vr_forceHold->value : VRF_HOLD_DEFAULT;
+		in.known = cl.snap.valid ? cl.snap.ps.fd.forcePowersKnown : 0;
 	}
 	VRF_Update( &vr.force, &in, &out );
 	if ( out.events & VRF_TAP ) {
@@ -2458,7 +2504,11 @@ static void VR_ForcePoll( const float trigger[2], const float squeeze[2] ) {
 	if ( out.events & VRF_PULL ) {
 		VR_ForceThrow( GENCMD_FORCE_PULL, out.thrust, out.speed );
 	}
+	if ( out.events & VRF_CAST ) {
+		VR_ForceCast( out.cast );
+	}
 	vr.forceHeld = out.held;
+	vr.forcePlace = out.place;
 	VR_ForceTapRelease( qfalse );
 }
 
@@ -3970,6 +4020,9 @@ static void VR_UpdateTracking( void ) {
 	vrClient.force.pulls = vr.forcePulls;
 	vrClient.force.taps = vr.forceTaps;
 	vrClient.force.speed = vr.forceSpeed;
+	vrClient.force.casts = vr.forceCasts;
+	vrClient.force.cast = vr.forceCast;
+	vrClient.force.place = vr.forcePlace;
 	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
@@ -4751,8 +4804,13 @@ void VR_Init( void ) {
 		"to Push, reach out and yank it back to Pull, hold it out still to Grip, its trigger for Lightning (palm up: Drain), a quick squeeze "
 		"for the power picked; 2 = Open hand: Push and Pull with the hand open too; 0 = off (the Force grip uses the power picked)" );
 	vr_forceThrust		= Cvar_Get( "vr_forceThrust",		"1.6",	CVAR_ARCHIVE, "Force gestures: how fast a thrust (Push) or a yank (Pull) goes at least, in metres a second (0.8 to 3)" );
+	vr_forceBody		= Cvar_Get( "vr_forceBody",			"1",	CVAR_ARCHIVE, "Body Gestures: the Force grip held, your Force hand held still on your chest (palm "
+		"toward you) Heals, before your face (palm out) Protects, at your belly (palm up) Absorbs, at your temple is Seeing, over your head "
+		"Team Heal - its trigger on your chest is Rage, over your head Team Energize (0 = off)" );
+	vr_forceHold		= Cvar_Get( "vr_forceHold",			"0.4",	CVAR_ARCHIVE, "Body Gestures: how long your Force hand must stay still in a place for its power, in seconds (0.3 to 0.8)" );
 	vr.pointerLeft = vr_leftHanded->integer ? qtrue : qfalse;	// (the menu's pointer: the hand you use)
 	vr.forceHand = -1;	// (none yet)
+	vr.forceCast = -1;
 	VRF_Clear( &vr.force );
 
 	// tells a VR-aware cgame that trap->ext.VR_GetClientState exists

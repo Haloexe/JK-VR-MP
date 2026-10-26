@@ -644,6 +644,52 @@
 
 		itemDef
 		{
+			name			vrforce_body
+			group			vrforce
+			type			ITEM_TYPE_YESNO
+			text			"Body Gestures"
+			cvar			"vr_forceBody"
+			rect			260 202 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Your Force hand held still by your body casts Heal, Protect, Absorb, Seeing, Team Heal"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
+			name			vrforce_hold
+			group			vrforce
+			type			ITEM_TYPE_SLIDER
+			text			"Hold Time"
+			cvarfloat		"vr_forceHold" 0.4 0.3 0.8
+			showValue
+			valueStep		0.05
+			rect			260 216 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"How long your Force hand must stay still in a place to cast its power, in seconds"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vrforce_thrust
 			group			vrforce
 			type			ITEM_TYPE_SLIDER
@@ -651,7 +697,7 @@
 			cvarfloat		"vr_forceThrust" 1.6 0.8 3
 			showValue
 			valueStep		0.1
-			rect			260 202 340 14
+			rect			260 230 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -673,7 +719,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Aim Glow"
 			cvar			"cg_vrForceGlow"
-			rect			260 216 340 14
+			rect			260 244 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -695,7 +741,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Grip Moves"
 			cvar			"cg_vrGripMove"
-			rect			260 230 340 14
+			rect			260 258 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
