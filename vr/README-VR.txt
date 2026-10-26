@@ -805,8 +805,9 @@ comes) - or with its trigger pulled there (Body Gestures):
   Rage             the same place, the trigger pulled there
   Protect          up before your face, your palm out (the trigger there
                    is Lightning, as anywhere you point)
-  Absorb           at your belly, your palm turned up (the trigger there
-                   is Drain, as with your palm up anywhere)
+  Absorb           in front of your belly - or as high as your chest -
+                   your palm turned up (the trigger there is Drain, as
+                   with your palm up anywhere)
   Seeing           at your temple, beside your eye
   Team Heal        raised high over your head
   Team Energize    the same place, the trigger pulled there
@@ -819,30 +820,42 @@ none of yours does nothing (and the trigger there is Lightning, as
 anywhere); one with only its trigger's power (Rage, say: a dark-sider's
 chest) does that alone. Your hand must stay still there - passing through
 a place, or drifting slowly across it, does nothing, nor does a hand the
-headset has lost sight of - and a place's power spends the squeeze: let
-go and squeeze again for anything else (no Push, Pull, Grip or Lightning
-after it), as after a Push, a Pull, the trigger or a Grip no place casts
-till you squeeze again. A soft tick says your hand has settled in a place
-with a power of yours; keep still and its power comes (or, where the
-trigger's is your only one, pull the trigger): two slow pulses for Heal, a
-deep rumble for Rage, a firm press for Protect (and a faint hum while it
-lasts), a rising buzz for Absorb, a soft ping for Seeing, two quick pulses
-for the team powers - or a short, dull buzz if the game won't (no Force
-left, still waiting, nothing to heal; the team powers are felt whenever
-you cast them in a team game - your game can't tell whether a teammate
-near you needed one). Cast Protect, Absorb, Rage or Seeing again while
-it's going and it's turned off (a soft release), as in the game - though
-not in the second and a half after one of them, Speed or Mind Trick
-starts: the game won't then (the dull buzz). Places are measured from
-your eyes the way your head faces: your chest about 25 to 45 cm below
-your eyes and up to 25 cm in front, your face 15 to 35 cm in front of
-them, your belly 45 to 65 cm below, your temple 8 to 22 cm out to your
-Force hand's side (your hand beside your headset), over your head at
-least 20 cm above them. A hand held over your head never Grips; nor does
-one held still in a place of yours.
-The VR log (cg_vrLog) says where your hand was in each place - and where
-it was held still close in by you but in none of them - which helps
-fitting the places to you.
+headset has lost sight of - and a place's power spends the squeeze: let go
+and squeeze again for anything else (no Push, Pull, Grip or Lightning
+after it). After a Push, a Pull, the trigger or a Grip, holding still in a
+place casts nothing till you squeeze again - but its trigger still casts
+its dark twin (Lightning by a hair? Move in - the tick says you're there -
+and pull again for Rage; a Grip lets go for it). Once your hand's settled
+in a place, it stays there for a couple of centimetres more - trembling at
+its edge, or with the trigger's tug, it's still that place's - unless it's
+well inside another place of yours. A soft tick says your hand has settled
+in a place with a power of yours; keep still and its power comes (or,
+where the trigger's is your only one, pull the trigger): two slow pulses
+for Heal, a deep rumble for Rage, a firm press for Protect (and a faint
+hum while it lasts), a rising buzz for Absorb, a soft ping for Seeing, two
+quick pulses for the team powers - or a short, dull buzz if the game won't
+(no Force left, still waiting, nothing to heal; the team powers are felt
+whenever you cast them in a team game - your game can't tell whether a
+teammate near you needed one). Cast Protect, Absorb, Rage or Seeing again
+while it's going and it's turned off (a soft release), as in the game -
+though not in the second and a half after one of them, Speed or Mind Trick
+starts: the game won't then (the dull buzz). Places are measured from your
+eyes the way your head faces - as players held their hands: your chest 14
+to 44 cm below your eyes, from 10 cm behind them (look down at your hand
+and your eyes go over it) to 20 cm in front; your face 12 to 35 cm in
+front of them; a palm turned up 14 to 62 cm below them, from 20 cm behind
+to 25 cm in front; your temple 8 to 22 cm out to your Force hand's side
+(your hand beside your headset); over your head at least 20 cm above them.
+Your palm turned up 30 degrees or more is the belly's, not the chest's -
+and with it the trigger is Drain, wherever you are but over your head. A
+hand already settled on your chest stays on it till the palm's a little
+past 30 degrees (held still there, Heal); one settled at your belly stays
+there till it's back down a little under. A hand held over your head never
+Grips; nor does one held still in a place of yours.
+The VR log (cg_vrLog) says where your hand was in each place - where it
+was held still close in by you but in none of them, and where it was as
+you pulled the trigger close in for Lightning or Drain, with how far your
+head was tipped down - which helps fitting the places to you.
 While a Grip holds someone, or Lightning or Drain is going, a thrust or a
 yank does nothing (as in the game) - and after a Push, a Pull or the
 trigger, let go and squeeze again to Grip. Squeeze the Force grip first,
@@ -854,10 +867,10 @@ as you Push and a tug as you Pull (when the game does them), a strain
 while you Grip someone, a crackle with Lightning, a steady pull with
 Drain. Holding your hand out still before a yank grips instead of pulling:
 pull in one go - and before the trigger, it grips them first (the trigger
-then lets go for Lightning or Drain): for Lightning at once, pull the
-trigger before your hand settles. A hand holding a saber (two sabers, or
-both hands on one) holds it: its grip does what it always did. Force Jump
-is still A held.
+then lets go for Lightning or Drain, or a place's dark twin): for
+Lightning at once, pull the trigger before your hand settles. A hand
+holding a saber (two sabers, or both hands on one) holds it: its grip
+does what it always did. Force Jump is still A held.
 On a server running this build ("vrForce 2" in its server info) the Force
 comes out of your hand: Push and Pull go the way you thrust or yanked,
 Grip, Lightning and Drain where your hand points - where the controller

@@ -44,8 +44,9 @@ over, a swing going...: CG_VRF_ThrowWorks); Grip, Lightning and Drain while
 the game has them going (your player state), however you started them, and
 Protect's hum too - and none of it while you watch (following someone,
 spectating, a demo: their Force isn't yours). The log (cg_vrLog) says what
-the hand did - and where it was in a place, or held still close in by you
-but in none of them (for fitting the places to you).
+the hand did - and where it was in a place, held still close in by you but
+in none of them, or close in as its trigger was pulled for Lightning or
+Drain (for fitting the places to you).
 
 On a server that aims the Force from the hand ("vrForce" in its
 serverinfo: game/g_vrforce.c) it comes out of it, too: Lightning and
@@ -294,9 +295,8 @@ static qboolean CG_VRF_GripPose( const vrClientState_t *vr, int h ) {
 	int at;
 
 	CG_VRF_Input( vr, h, &in );
-	at = VRF_PlaceOf( &in );
-	return (qboolean)( CG_VRF_Out( &in ) && in.palmUp < VRF_PALM_UP && at != VRF_PLACE_OVERHEAD &&
-		!VRF_Has( &in, vrfPlaces[at].power ) && !VRF_Has( &in, vrfPlaces[at].twin ) );
+	at = VRF_PlaceOf( &in, vr->force.place );	// (the engine's: the one it's settled in kept)
+	return (qboolean)( CG_VRF_Out( &in ) && in.palmUp < VRF_PALM_UP && at != VRF_PLACE_OVERHEAD && !VRF_Mine( &in, at ) );
 }
 
 // The least Force a power costs, at any level (forcePowerNeeded: your level
@@ -434,14 +434,23 @@ static void CG_VRF_CastFeel( int h ) {
 	}
 }
 
+// A number for the log, to the nearest unit (0.01, 1) - never "-0" (-0.004 is
+// 0.00).
+static float CG_VRF_Round( float x, float unit ) {
+	return floorf( x / unit + 0.5f ) * unit;
+}
+
 // Where your Force hand is, for the log: from your eyes, the way your head
-// faces (VRF_FromEyes), and how its palm's turned.
-static const char *CG_VRF_Where( const vrfInput_t *in ) {
+// faces (VRF_FromEyes), how its palm's turned - and how far your head's
+// tipped down (looking down, your eyes go forward and down: the places, from
+// them, back and up).
+static const char *CG_VRF_Where( const vrClientState_t *vr, const vrfInput_t *in ) {
 	vec3_t e;
 
 	VRF_FromEyes( in, e );
-	return va( "%.2f m in front of your eyes, %.2f out to its side, %.2f up; its palm %.2f ahead, %.2f up", e[0] + 0.0f, e[1] + 0.0f,
-		e[2] + 0.0f, VRF_PalmAhead( in ) + 0.0f, in->palmUp + 0.0f );	// (+ 0: no "-0.00")
+	return va( "%.2f m in front of your eyes, %.2f out to its side, %.2f up; its palm %.2f ahead, %.2f up; your head %.0f degrees down",
+		CG_VRF_Round( e[0], 0.01f ), CG_VRF_Round( e[1], 0.01f ), CG_VRF_Round( e[2], 0.01f ), CG_VRF_Round( VRF_PalmAhead( in ), 0.01f ),
+		CG_VRF_Round( in->palmUp, 0.01f ), CG_VRF_Round( RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, -vr->headAxis[0][2] ) ) ), 1.0f ) );
 }
 
 // The Force grip held, nothing held down, your Force hand held still close in
@@ -456,7 +465,7 @@ static void CG_VRF_StillNowhere( const vrClientState_t *vr, int h ) {
 		return;
 	}
 	CG_VRF_Input( vr, h, &in );
-	if ( !in.body || CG_VRF_Out( &in ) || VRF_PlaceOf( &in ) != VRF_PLACE_NONE ) {
+	if ( !in.body || CG_VRF_Out( &in ) || VRF_PlaceOf( &in, vr->force.place ) != VRF_PLACE_NONE ) {
 		cgf.stillTime = 0;
 		return;
 	}
@@ -467,7 +476,7 @@ static void CG_VRF_StillNowhere( const vrClientState_t *vr, int h ) {
 		return;
 	}
 	if ( !cgf.stillSaid && cg.time - cgf.stillTime >= VRF_Hold( CG_VRF_Setting( "vr_forceHold", VRF_HOLD_DEFAULT ) ) ) {
-		CG_VR_Log( "force: held still close in, in no place - %s\n", CG_VRF_Where( &in ) );
+		CG_VR_Log( "force: held still close in, in no place - %s\n", CG_VRF_Where( vr, &in ) );
 		cgf.stillSaid = qtrue;
 	}
 }
@@ -561,7 +570,17 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 		cgf.taps = vr->force.taps;
 	}
 	if ( vr->force.held != cgf.held ) {
-		CG_VR_Log( "force: holding %s\n", CG_VRF_Held( vr->force.held ) );
+		// (the trigger close in by you - meant for a place's, maybe: where, for
+		// fitting the places to you)
+		char where[224] = "";
+		if ( ( vr->force.held & ~cgf.held & ( VR_FORCE_LIGHTNING | VR_FORCE_DRAIN ) ) && vr->force.hand == h && vr->handValid[h] ) {
+			vrfInput_t in;
+			CG_VRF_Input( vr, h, &in );
+			if ( in.body && !CG_VRF_Out( &in ) ) {
+				Com_sprintf( where, sizeof( where ), " - close in: %s", CG_VRF_Where( vr, &in ) );
+			}
+		}
+		CG_VR_Log( "force: holding %s%s\n", CG_VRF_Held( vr->force.held ), where );
 		cgf.held = vr->force.held;
 	}
 
@@ -579,7 +598,7 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 			vrfInput_t in;
 			CG_VRF_Input( vr, h, &in );
 			CG_VR_Feel( h, 0.15f, 10, 0.0f, 0 );
-			CG_VR_Log( "force: held still %s - %s\n", vrfPlaces[vr->force.place].name, CG_VRF_Where( &in ) );
+			CG_VR_Log( "force: held still %s - %s\n", vrfPlaces[vr->force.place].name, CG_VRF_Where( vr, &in ) );
 		}
 		cgf.place = vr->force.place;
 	}

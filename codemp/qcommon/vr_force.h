@@ -34,15 +34,26 @@ Each place is a box measured from your eyes the way your head faces
 (VRF_FromEyes, vrfPlaces), the hand turned as it says. Held still there -
 settled slower than VRF_STILL, never off more than VRF_PLACE_DRIFT from
 where it settled - for vr_forceHold seconds (VRF_HOLD_*), its power's cast;
-the trigger pulled there casts its dark twin at once (and not Lightning).
+the trigger pulled there casts its dark twin at once (and not Lightning) -
+though with the palm turned up (VRF_PALM_UP), the trigger's Drain, as
+anywhere but over your head. Settled in a place, the hand stays in it a
+little out of it (a tremble at its edge, the trigger's tug, the palm
+turned up a little on your chest: VRF_PLACE_KEEP, VRF_TURN_KEEP) - unless
+it's well in another of yours (VRF_PLACE_MARGIN, VRF_TURN_MARGIN: on your
+chest, the palm a little further up than VRF_PALM_UP, the belly's; at your
+belly, a little less, the chest's - no flicker where two meet).
 A place's power spends the squeeze: nothing more - no Push, Pull, Grip,
-trigger, nor another place - till it's squeezed afresh; and after a Push,
-a Pull, the trigger or Grip in a squeeze, no place casts in it. Only your
-powers count (vrfInput_t.known: the game's forcePowersKnown): a place with
-none of yours is no place - nothing's held there, and the trigger's
-Lightning there as anywhere; one with only its dark twin (Rage, say) is
-the trigger's alone. A place of yours, held still, is never a Grip, and a
-hand high over your head never is.
+trigger, nor another place - till it's squeezed afresh. After a Push, a
+Pull, the trigger or Grip in a squeeze, a place held still casts nothing
+in it - but its trigger still casts its twin, and the hand's still said
+to settle in a place with a twin of yours (Lightning there by a hair,
+say: moved in, it's settled - and pulled again, the twin); Grip gives way
+to it as it does to Lightning. Only your powers count (vrfInput_t.known:
+the game's forcePowersKnown): a place with none of yours is no place -
+nothing's held there, and the trigger's Lightning there as anywhere; one
+with only its dark twin (Rage, say) is the trigger's alone. A place of
+yours, held still, is never a Grip, and a hand high over your head never
+is.
 
 Grip comes only first thing in a squeeze (after a Push, a Pull or the
 trigger, squeeze afresh) - and while the game has someone gripped, or
@@ -134,8 +145,13 @@ General Public License version 2, like the rest of OpenJK.
 #define VRF_HOLD_MIN		0.3f	// (no shorter than a quick squeeze, VRF_TAP_MS: one held so long is a place's)
 #define VRF_HOLD_MAX		0.8f
 #define VRF_PLACE_DRIFT		0.06f	// held still in a place: never off further than this from where it settled (m)
-#define VRF_PALM_TURN		0.4f	// the palm turned out (ahead, the way your head faces) or back toward you this far
-										// (1: straight)
+#define VRF_PALM_TURN		0.4f	// the palm turned out (ahead, the way your head faces) this far (1: straight)...
+#define VRF_PALM_IN			0.5f	// ...or back toward you this far, and not up (VRF_PALM_UP: up, it's the belly's)
+#define VRF_PLACE_KEEP		0.03f	// the place it's settled in is kept while it's no further out of it than this (m)...
+#define VRF_TURN_KEEP		0.15f	// ...and its palm no further from turned as it wants than this...
+#define VRF_PLACE_MARGIN	0.01f	// ...unless it's in another of yours, this far in (m)...
+#define VRF_TURN_MARGIN		0.05f	// ...and its palm this much further up or down than that one wants (no flicker where
+											// the chest and the belly meet)
 #define VRF_TURN_ANY		0		// a place's hand turned (vrfPlace_t.turn) any way...
 #define VRF_TURN_OUT		1		// ...its palm out, ahead...
 #define VRF_TURN_IN			2		// ...back toward you...
@@ -183,7 +199,13 @@ typedef struct {
 // faces (VRF_FromEyes) - the hand in it turned as it says - and its powers.
 // Where the hand is, is where the controller's grip is: at your temple, beside
 // your headset (its side some 9 or 10 cm out from your eyes), that's 13 cm
-// out or more.
+// out or more. The boxes are as players held their hands in play (the VR
+// log's "held still" lines): on your chest the hand's hardly in front of your
+// eyes - looking down at it, they're over it - and a palm turned up is the
+// belly's from as high as your chest. The chest's box is in the belly's: how
+// the palm's turned tells them apart. No two places overlap otherwise (the
+// face's starts where the temple's ends, and below it the chest's and the
+// belly's).
 typedef struct {
 	const char	*name;		// where it is (the log's: "on your chest")
 	float		ahead[2];	// from..to (m): in front of your eyes...
@@ -196,9 +218,9 @@ typedef struct {
 
 static const vrfPlace_t vrfPlaces[VRF_PLACES] = {
 	{ "nowhere",		{ 0.0f, 0.0f },		{ 0.0f, 0.0f },		{ 0.0f, 0.0f },		VRF_TURN_ANY,	-1,				-1 },
-	{ "on your chest",	{ 0.05f, 0.25f },	{ -0.15f, 0.15f },	{ -0.45f, -0.25f },	VRF_TURN_IN,	FP_HEAL,		FP_RAGE },
-	{ "before your face",	{ 0.15f, 0.35f },	{ -0.15f, 0.15f },	{ -0.15f, 0.15f },	VRF_TURN_OUT,	FP_PROTECT,		-1 },
-	{ "at your belly",	{ 0.15f, 0.35f },	{ -0.20f, 0.20f },	{ -0.65f, -0.45f },	VRF_TURN_UP,	FP_ABSORB,		-1 },
+	{ "on your chest",	{ -0.10f, 0.20f },	{ -0.17f, 0.17f },	{ -0.44f, -0.14f },	VRF_TURN_IN,	FP_HEAL,		FP_RAGE },
+	{ "before your face",	{ 0.12f, 0.35f },	{ -0.15f, 0.15f },	{ -0.14f, 0.15f },	VRF_TURN_OUT,	FP_PROTECT,		-1 },
+	{ "at your belly",	{ -0.20f, 0.25f },	{ -0.20f, 0.20f },	{ -0.62f, -0.14f },	VRF_TURN_UP,	FP_ABSORB,		-1 },
 	{ "at your temple",	{ -0.10f, 0.12f },	{ 0.08f, 0.22f },	{ -0.10f, 0.10f },	VRF_TURN_ANY,	FP_SEE,			-1 },
 	{ "over your head",	{ -0.25f, 0.30f },	{ -0.35f, 0.35f },	{ 0.20f, 1.0f },	VRF_TURN_ANY,	FP_TEAM_HEAL,	FP_TEAM_FORCE },
 };
@@ -262,6 +284,12 @@ static inline qboolean VRF_Has( const vrfInput_t *in, int p ) {
 	return (qboolean)( p >= 0 && p < NUM_FORCE_POWERS && ( in->known & ( 1 << p ) ) );
 }
 
+// Whether place p (vrfPlaces) has a power of yours: held still there, or
+// its trigger's (a place with none of yours is no place).
+static inline qboolean VRF_Mine( const vrfInput_t *in, int p ) {
+	return (qboolean)( VRF_Has( in, vrfPlaces[p].power ) || VRF_Has( in, vrfPlaces[p].twin ) );
+}
+
 // Where the hand is from your eyes, the way your head faces: [0] in front,
 // [1] out to the hand's own side (the left hand's left, the right hand's
 // right), [2] up (m).
@@ -286,12 +314,43 @@ static inline float VRF_PalmAhead( const vrfInput_t *in ) {
 	return in->palm[0] * cosf( yaw ) + in->palm[1] * sinf( yaw );
 }
 
-// The place the hand's in (vrfPlaces: the box, the hand turned as it says),
-// whoever's powers are there - none with Body Gestures off, or the hand not
-// tracked now (no reading).
-static inline int VRF_PlaceOf( const vrfInput_t *in ) {
+// Whether the hand's in place p (from your eyes, e; its palm ahead): in its
+// box grown by grow (m), turned as it wants less ease. Both less than 0, well
+// in it: its box shrunk - and how far its palm's up stricter (where the
+// chest's and the belly's meet: the rest meet in their boxes). Back toward
+// you, the palm's not up: that's the belly's.
+static inline qboolean VRF_InPlace( const vrfInput_t *in, const vec3_t e, float ahead, int p, float grow, float ease ) {
+	const vrfPlace_t *pl = &vrfPlaces[p];
+
+	if ( e[0] < pl->ahead[0] - grow || e[0] > pl->ahead[1] + grow || e[1] < pl->side[0] - grow || e[1] > pl->side[1] + grow ||
+		e[2] < pl->up[0] - grow || e[2] > pl->up[1] + grow ) {
+		return qfalse;
+	}
+	switch ( pl->turn ) {
+	case VRF_TURN_OUT:
+		return (qboolean)( ahead >= VRF_PALM_TURN - Q_max( ease, 0.0f ) );
+	case VRF_TURN_IN:
+		return (qboolean)( ahead <= -( VRF_PALM_IN - Q_max( ease, 0.0f ) ) && in->palmUp < VRF_PALM_UP + ease );
+	case VRF_TURN_UP:
+		return (qboolean)( in->palmUp >= VRF_PALM_UP - ease );
+	default:
+		return qtrue;
+	}
+}
+
+// The place the hand's in (vrfPlaces), whoever's powers are there - keep, the
+// one it's settled in (VRF_PLACE_NONE: none), as long as it's near enough
+// (VRF_PLACE_KEEP, VRF_TURN_KEEP: a hand held at an edge, trembling, the
+// trigger pulled, stays in it) and not well in another place of yours
+// (VRF_PLACE_MARGIN, VRF_TURN_MARGIN: on your chest, the palm a little
+// further up than VRF_PALM_UP, the belly's; at your belly, a little less,
+// the chest's; where the face and the temple meet, or the face and the
+// chest and the belly, 1 cm in - none flickering into another). None with
+// Body Gestures off, or the hand not tracked now (no reading).
+static inline int VRF_PlaceOf( const vrfInput_t *in, int keep ) {
 	vec3_t e;
 	float ahead;
+	qboolean keeps;
 	int i;
 
 	if ( !in->body || !in->tracked ) {
@@ -299,19 +358,14 @@ static inline int VRF_PlaceOf( const vrfInput_t *in ) {
 	}
 	VRF_FromEyes( in, e );
 	ahead = VRF_PalmAhead( in );
+	keeps = (qboolean)( keep > VRF_PLACE_NONE && keep < VRF_PLACES && VRF_InPlace( in, e, ahead, keep, VRF_PLACE_KEEP, VRF_TURN_KEEP ) );
 	for ( i = VRF_PLACE_NONE + 1; i < VRF_PLACES; i++ ) {
-		const vrfPlace_t *p = &vrfPlaces[i];
-		if ( e[0] < p->ahead[0] || e[0] > p->ahead[1] || e[1] < p->side[0] || e[1] > p->side[1] ||
-			e[2] < p->up[0] || e[2] > p->up[1] ) {
-			continue;
+		if ( keeps ? ( VRF_Mine( in, i ) && VRF_InPlace( in, e, ahead, i, -VRF_PLACE_MARGIN, -VRF_TURN_MARGIN ) ) :
+			VRF_InPlace( in, e, ahead, i, 0.0f, 0.0f ) ) {
+			return i;
 		}
-		if ( ( p->turn == VRF_TURN_OUT && ahead < VRF_PALM_TURN ) || ( p->turn == VRF_TURN_IN && ahead > -VRF_PALM_TURN ) ||
-			( p->turn == VRF_TURN_UP && in->palmUp < VRF_PALM_UP ) ) {
-			continue;
-		}
-		return i;
 	}
-	return VRF_PLACE_NONE;
+	return keeps ? keep : VRF_PLACE_NONE;
 }
 
 // Where the hand's shoulder is: below your head, to its side.
@@ -374,7 +428,7 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 	vec3_t shoulder, way, v;
 	vrfSample_t *s;
 	float dist, speed = 0.0f;
-	qboolean known, reachingOut, mine;
+	qboolean known, reachingOut, mine, ready;
 	int at;
 
 	memset( out, 0, sizeof( *out ) );
@@ -421,9 +475,10 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 			}
 		}
 	}
-	// the place it's in (Body Gestures), and whether a power of yours is there
-	at = VRF_PlaceOf( in );
-	mine = (qboolean)( VRF_Has( in, vrfPlaces[at].power ) || VRF_Has( in, vrfPlaces[at].twin ) );
+	// the place it's in (Body Gestures) - the one it's settled in kept while it's
+	// near - and whether a power of yours is there
+	at = VRF_PlaceOf( in, st->place );
+	mine = VRF_Mine( in, at );
 
 	// the Force grip squeezed: reaching out. Let go: all it held goes - and,
 	// nothing done, let go quickly where it was squeezed, a quick squeeze; the
@@ -474,17 +529,20 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 	}
 
 	// the trigger pulled, reaching out: in a place with a dark twin of yours,
-	// that, at once - once a squeeze, nothing done in it yet (after anything,
-	// nothing there: squeeze afresh). Elsewhere, Lightning - with the palm up,
-	// Drain - held as long as it is (and Grip gives way to it). After a place's
-	// power, nothing.
+	// that, at once - whatever else the squeeze has done (Lightning there by a
+	// hair, say: the trigger's meant) - but with the palm turned up, not the
+	// chest's (kept there turned up a little: Drain, as come to so); kept in
+	// one with none (your belly, the palm come back toward you), the place
+	// it's in as it is. Elsewhere, Lightning - with the palm up, Drain - held
+	// as long as it is. Grip gives way to either. After a place's power,
+	// nothing.
 	if ( in->trigger && !st->triggerWas && st->reaching && !st->placed ) {
-		if ( VRF_Has( in, vrfPlaces[at].twin ) ) {
-			if ( !st->done ) {
-				out->events |= VRF_CAST;
-				out->cast = vrfPlaces[at].twin;
-				st->placed = qtrue;
-			}
+		const int twinAt = VRF_Has( in, vrfPlaces[at].twin ) ? at : VRF_PlaceOf( in, VRF_PLACE_NONE );
+		if ( VRF_Has( in, vrfPlaces[twinAt].twin ) && ( vrfPlaces[twinAt].turn != VRF_TURN_IN || in->palmUp < VRF_PALM_UP ) ) {
+			out->events |= VRF_CAST;
+			out->cast = vrfPlaces[twinAt].twin;
+			st->placed = qtrue;
+			st->held = 0;
 		} else {
 			st->held = ( in->palmUp >= VRF_PALM_UP ) ? VR_FORCE_DRAIN : VR_FORCE_LIGHTNING;
 		}
@@ -513,18 +571,22 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 		}
 	}
 
-	// a place of yours, held still - reaching out, nothing done yet this
-	// squeeze: settled there slower than VRF_STILL, staying while it's never off
-	// further than VRF_PLACE_DRIFT from where it settled (further, but slow: it
-	// settles afresh). Held so in->hold seconds (VRF_Hold), its power - if it's
-	// yours (one with only its twin is the trigger's). No reading: as it was -
-	// and nothing cast till there's one (the hand may be anywhere meanwhile).
-	if ( !st->reaching || st->done ) {
+	// a place of yours, held still - reaching out: settled there slower than
+	// VRF_STILL, staying while it's never off further than VRF_PLACE_DRIFT from
+	// where it settled (further, but slow: it settles afresh). Nothing done yet
+	// this squeeze, held so in->hold seconds (VRF_Hold), its power - if it's
+	// yours (one with only its twin is the trigger's). Something done (a Push,
+	// a Pull, the trigger, Grip), only a place with a twin of yours is settled
+	// in - for its trigger, its power not cast; a place's power cast, none. No
+	// reading: as it was - and nothing cast till there's one (the hand may be
+	// anywhere meanwhile).
+	ready = st->done ? VRF_Has( in, vrfPlaces[at].twin ) : mine;
+	if ( !st->reaching || st->placed ) {
 		st->place = VRF_PLACE_NONE;
 	} else if ( known ) {
-		if ( mine && st->place == at && Distance( in->pos, st->placePos ) <= VRF_PLACE_DRIFT ) {
+		if ( ready && st->place == at && Distance( in->pos, st->placePos ) <= VRF_PLACE_DRIFT ) {
 			;	// (still there)
-		} else if ( mine && speed < VRF_STILL ) {
+		} else if ( ready && speed < VRF_STILL ) {
 			st->place = at;
 			st->placeTime = in->time;
 			VectorCopy( in->pos, st->placePos );
@@ -532,7 +594,7 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 			st->place = VRF_PLACE_NONE;
 		}
 	}
-	if ( known && st->place && VRF_Has( in, vrfPlaces[st->place].power ) && in->time - st->placeTime >= VRF_Hold( in->hold ) ) {
+	if ( known && st->place && !st->done && VRF_Has( in, vrfPlaces[st->place].power ) && in->time - st->placeTime >= VRF_Hold( in->hold ) ) {
 		out->events |= VRF_CAST;
 		out->cast = vrfPlaces[st->place].power;
 		st->placed = st->done = qtrue;
