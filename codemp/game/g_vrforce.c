@@ -14,10 +14,10 @@ squeeze, a key:
   Push, Pull         the way the hand thrust it (a gesture's), else where
                      it points
   Mind Trick         level 1's: whoever the hand waved across (a gesture's
-                     wave: from their eyes through the hand halfway across,
-                     VR_FORCE_SNAP_WAVE degrees either side of that), else
-                     where it points (levels 2 and 3, the game's own: all
-                     round where they look)
+                     wave: level from their eyes toward the hand halfway
+                     across, VR_FORCE_SNAP_WAVE degrees either side of that),
+                     else where it points (levels 2 and 3, the game's own:
+                     all round where they look)
   Grip               whom it catches, where it points - from the hand,
                      VR_FORCE_GRIP_REACH (qcommon/vr_public.h: a quarter
                      further than the game's own), nobody further from them
@@ -95,7 +95,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #define VR_FORCE_FRESH		250		// ms: a Force hand not heard of for this long is gone
 #define VR_FORCE_SNAP_WAVE	20.0f	// degrees: someone this near the line a Mind Trick's wave's aimed along is whom it waved
-									// across (its 20 cm and more, before the face: 35 degrees or more side to side)
+									// across (its 20 cm and more: 20 degrees or more side to side, even at arm's length)
 #define VR_FORCE_LOG_MS		1000	// (the log: a power aimed at the same one again within this isn't said again...
 #define VR_FORCE_LOG_HELD_MS	250		// ...nor a held one - Lightning, Drain - aimed anew within this: its hand wavering)
 

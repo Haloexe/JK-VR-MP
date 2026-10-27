@@ -24,8 +24,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     chest, before your face, at your belly, at your temple or over your
     head for Heal, Protect, Absorb, Seeing and Team Heal - the trigger on
     your chest for Rage, over your head for Team Energize - a wave across
-    your face for Mind Trick, a swing back past your hip for Speed (see
-    THE FORCE)
+    your face or chest for Mind Trick, a swing back past your hip for
+    Speed (see THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
@@ -224,10 +224,10 @@ stick up or down on a slider to move it a step.
     Body Gestures    your Force hand held still by your body casts Heal,
                      Protect, Absorb, Seeing and Team Heal, and its trigger
                      there Rage and Team Energize; waved across before your
-                     face, Mind Trick; swung down and back past your hip,
-                     Speed (Yes, as it comes; THE FORCE, below); No: only
-                     Push, Pull, Grip, Lightning and Drain come from your
-                     hand, as before
+                     face or chest, Mind Trick; swung down and back past
+                     your hip, Speed (Yes, as it comes; THE FORCE, below);
+                     No: only Push, Pull, Grip, Lightning and Drain come
+                     from your hand, as before
     Hold Time        how long your hand must stay still in a place for its
                      power: 0.3 to 0.8 seconds (0.4 as it comes) - longer
                      if they come by accident, shorter to be quicker
@@ -862,14 +862,26 @@ past 30 degrees (held still there, Heal); one settled at your belly stays
 there till it's back down a little under. A hand held over your head never
 Grips; nor does one held still in a place of yours.
 And, moved so (Body Gestures too):
-  Mind Trick       wave it across before your face, side to side: 20 cm
-                   or more within half a second, never more than 15 cm
-                   above or below your eyes nor 45 cm in front of them
-                   (your arm held out, aiming, isn't waving), going in
-                   or out no more than 10 cm, your palm out ahead (the
-                   way you face) as it goes across - your hand itself
-                   moving across (turning your head isn't waving, nor is
-                   turning round or walking, the hand still)
+  Mind Trick       wave it across in front of you, side to side: 20 cm
+                   or more within half a second, anywhere from 15 cm
+                   above your eyes down to your chest (35 cm below
+                   them: at your chin is fine), up to 55 cm in front of
+                   them (your arm near straight is fine) but within 45
+                   somewhere as it goes, and not within half a second
+                   of your arm held out still further than that
+                   (aiming - for Grip, say - then swept across isn't
+                   waving; squeeze afresh with your hand brought in, 40
+                   cm or nearer, and it's forgotten), going in or out
+                   no more than 10 cm and up or down no more than 20,
+                   your palm out ahead (the way you face) as it goes
+                   across - in toward the middle, it's a wave once it's
+                   8 cm past it, as you face and as you faced halfway
+                   across (bringing your hand in to your face from your
+                   side, for Protect, isn't waving, your head turning
+                   or not; your head following your hand, wave further)
+                   - your hand itself moving across (turning your head
+                   isn't waving, nor is turning round or walking, the
+                   hand still)
   Speed            swing it down and back past your hip, fast: from your
                    side at your waist or above (no more than 25 cm in
                    front of your eyes: a hand held out in front, lowered,
@@ -885,22 +897,25 @@ release), as Protect is - and, as with it, not in the second and a half
 after one of them starts (after a level 1 trick of a player the game turns
 it off from a second on, though your hand still gets the dull buzz till
 the second and a half's up). Wave at once: your hand held still before
-your face first, as long as Hold Time, is Protect - and bring it up to
-your face for Protect, not across it: across, it's a wave. A thrust that
-may be a motion waits a moment for it: with Speed yours, a thrust back and
-down, low by your side, is Speed if it's the swing; with Mind Trick yours,
-a thrust or a yank across before your face is Mind Trick if it's the wave.
+your face first, as long as Hold Time, is Protect - and bring it in to
+your face for Protect, not across past it: across past the middle, it's a
+wave. A thrust that may be a motion waits a moment for it: with Speed
+yours, a thrust back and down, low by your side, is Speed if it's the
+swing; with Mind Trick yours, a thrust or a yank across in front of your
+face or chest is Mind Trick if it's the wave (one straight from your arm
+held out aiming can't be: it's the Push or the Pull at once).
 If not - your hand slows down, leaves where the motion goes, or a third of
 a second passes (out of sight of the headset a moment meanwhile, it waits
 on), or you pull the trigger or let go - it's the Push or the Pull it was,
 the way it went, a moment late. On a server running this build, a level 1
-Mind Trick goes at whoever your hand waved across - from your eyes through
-your hand halfway across, onto someone within 20 degrees of that - and
-from a quick squeeze or a key, where your hand points (within 10 degrees);
-at nobody there it does nothing (where you look, the game would hold your
-weapon and your hand a second for a trick at the floor or a wall). Levels
-2 and 3 trick everyone round where you look, as in the game. On other
-servers, every trick goes where you look.
+Mind Trick goes at whoever your hand waved across - level from your eyes
+toward your hand halfway across (however high or low you wave), onto
+someone within 20 degrees of that - and from a quick squeeze or a key,
+where your hand points (within 10 degrees); at nobody there it does
+nothing (where you look, the game would hold your weapon and your hand a
+second for a trick at the floor or a wall). Levels 2 and 3 trick everyone
+round where you look, as in the game. On other servers, every trick goes
+where you look.
 The VR log (cg_vrLog) says where your hand was in each place - where it
 was held still close in by you but in none of them, and where it was as
 you pulled the trigger close in for Lightning or Drain, with how far your

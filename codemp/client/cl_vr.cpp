@@ -2314,8 +2314,8 @@ drains as it moves; a quick squeeze of it is Use Force (the power picked). Held
 still in a place by your body - or its trigger pulled there - it casts that
 place's power (Body Gestures, vr_forceBody: Heal, Rage, Protect, Absorb,
 Seeing, Team Heal, Team Energize - yours, as the server last said); waved
-across before your face, Mind Trick; swung down and back past your hip,
-Speed. What it does goes to the game as the game's own inputs
+across before your face or chest, Mind Trick; swung down and back past your
+hip, Speed. What it does goes to the game as the game's own inputs
 (VR_FillCmdPose: generic commands and buttons, Use Force held a moment), so it
 works on any server - and one running this build aims it from your hand: a
 Push's or Pull's way goes with its command, and the way Mind Trick's wave is
