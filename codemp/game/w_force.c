@@ -2425,6 +2425,7 @@ qboolean ForceTelepathyCheckDirectNPCTarget( gentity_t *self, trace_t *tr, qbool
 {
 	gentity_t	*traceEnt;
 	qboolean	targetLive = qfalse;
+	qboolean	vrAimed = qfalse;
 	vec3_t		tfrom, tto, fwd;
 	float		radius = MAX_TRICK_DISTANCE;
 
@@ -2432,6 +2433,10 @@ qboolean ForceTelepathyCheckDirectNPCTarget( gentity_t *self, trace_t *tr, qbool
 	VectorCopy(self->client->ps.origin, tfrom);
 	tfrom[2] += self->client->ps.viewheight;
 	AngleVectors(self->client->ps.viewangles, fwd, NULL, NULL);
+	if ( self->client->ps.fd.forcePowerLevel[FP_TELEPATHY] == FORCE_LEVEL_1 )
+	{//OpenJK VR: a VR player's level 1 trick, from their Force hand: whoever its wave went across, or where it points (g_vrforce.c)
+		vrAimed = G_VRForceAim( self, FP_TELEPATHY, radius/2, tfrom, fwd );
+	}
 	tto[0] = tfrom[0] + fwd[0]*radius/2;
 	tto[1] = tfrom[1] + fwd[1]*radius/2;
 	tto[2] = tfrom[2] + fwd[2]*radius/2;
@@ -2444,6 +2449,12 @@ qboolean ForceTelepathyCheckDirectNPCTarget( gentity_t *self, trace_t *tr, qbool
 		|| tr->allsolid
 		|| tr->startsolid )
 	{
+		return qfalse;
+	}
+
+	if ( vrAimed && !g_entities[tr->entityNum].client )
+	{//OpenJK VR: from the hand, nobody there - a wall, the floor - is a trick at no one: nothing (where they look, the game's own
+	 //lock on their hand for a second)
 		return qfalse;
 	}
 

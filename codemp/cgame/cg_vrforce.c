@@ -32,11 +32,17 @@ and the places (Body Gestures, vr_forceBody: the engine's too):
   Seeing            one soft ping
   Team Heal, Team   two quick pulses
   Energize
+
+and the motions (Body Gestures too):
+
+  Mind Trick        a light flutter, as the wave goes across
+  Speed             one sharp kick
+
   one refused       one short, dull buzz (no Force left, still waiting,
                     nothing to heal...: CG_VRF_CastWorks)
-  one ended         a soft release (Protect, Absorb, Rage or Seeing going:
-                    cast again, it's turned off - but in the moment after
-                    one starts, the game won't: refused)
+  one ended         a soft release (Protect, Absorb, Rage, Seeing, Speed or
+                    Mind Trick going: cast again, it's turned off - but in
+                    the moment after one starts, the game won't: refused)
 
 Push and Pull are felt if the game would do them now (you know them; not
 with someone gripped, Lightning or Drain going, the last Push's wait not
@@ -46,7 +52,8 @@ Protect's hum too - and none of it while you watch (following someone,
 spectating, a demo: their Force isn't yours). The log (cg_vrLog) says what
 the hand did - and where it was in a place, held still close in by you but
 in none of them, or close in as its trigger was pulled for Lightning or
-Drain (for fitting the places to you).
+Drain, and where it went each time it moved 15 cm or more with the Force
+grip held (for fitting the places and the motions to you).
 
 On a server that aims the Force from the hand ("vrForce" in its
 serverinfo: game/g_vrforce.c) it comes out of it, too: Lightning and
@@ -107,7 +114,29 @@ static struct {
 #define CGF_PROTECT_HUM	0.05f	// Protect's hum while it lasts
 #define CGF_LOCKERS		( ( 1 << FP_SPEED ) | ( 1 << FP_TELEPATHY ) | ( 1 << FP_RAGE ) | ( 1 << FP_PROTECT ) | ( 1 << FP_ABSORB ) | \
 							( 1 << FP_SEE ) )	// one of these starting...
-#define CGF_LOCK_MS		1500	// ...the game won't turn Protect, Absorb, Rage or Seeing off for this long (ms)
+#define CGF_LOCK_MS		1500	// ...the game won't turn Protect, Absorb, Rage, Seeing, Speed or Mind Trick off for this long
+								// (ms)
+#define CGF_MOVE_FAST	0.5f	// m/s: your Force hand going this fast is moving (the log's: CG_VRF_Moves)...
+#define CGF_MOVE_REST	60		// ...till it's gone slower this long (ms)...
+#define CGF_MOVE_FAR	0.15f	// ...and it's said if it went this far, all told (m)
+
+// Your Force hand moving, the Force grip held (the log's: CG_VRF_Moves).
+static struct {
+	qboolean	seen;			// where it was last frame known...
+	vec3_t		was;			// ...there (from your head: the controllers' own, less your head's)...
+	vec3_t		wasEyes;		// ...from your eyes (VRF_FromEyes)...
+	int			wasTime;		// ...then (real time, ms: trap->Milliseconds - the game's clock can stand still a frame)
+	qboolean	moving;			// going faster than CGF_MOVE_FAST since...
+	int			fromTime;		// ...then...
+	vec3_t		from;			// ...from there (from your eyes)...
+	vec3_t		least, most;	// ...the least and the most it's been each way from your eyes since...
+	float		run;			// ...how far it's gone...
+	float		peak;			// ...as fast as this at most...
+	float		peakAhead, peakUp;	// ...its palm then (VRF_PalmAhead, how far up)...
+	vec3_t		to;				// ...where it went fast last, or slowed (from your eyes)...
+	int			toTime;			// ...then...
+	int			slowTime;		// ...and slower since (0: it isn't)
+} cgfm;
 
 // Where your Force hand aimed (CG_VR_ForceAim), a frame of it.
 typedef struct {
@@ -310,25 +339,33 @@ static int CG_VRF_LeastCost( int power ) {
 	return least;
 }
 
-// What a place's power (Body Gestures) does now, as far as your player state
-// says - the game's own reasons it does nothing (ForceHeal's, ForceRage's...,
-// WP_ForcePowerUsable's), as it has them: CGF_REFUSED - dead; going already
-// (Heal, the team powers - or Protect, Absorb, Rage or Seeing within 1.5 s of
-// one of them, Speed or Mind Trick starting: w_force.c's
+// What a place's or a motion's power (Body Gestures) does now, as far as your
+// player state says - the game's own reasons it does nothing (ForceHeal's,
+// ForceRage's..., WP_ForcePowerUsable's), as it has them: CGF_REFUSED - dead;
+// Mind Trick with your hand busy (a trick just done, a Push still out...), a
+// swing going, a flag carried (ForceTelepathy's own, before the rest); going
+// already (Heal, the team powers - or Protect, Absorb, Rage, Seeing, Speed or
+// Mind Trick within 1.5 s of one of them starting: w_force.c's
 // forceAllowDeactivateTime, not sent you - as your game saw it start,
-// CGF_LOCK_MS); not known, can't be used now (BG_CanUseFPNow: a ysalamiri, a
+// CGF_LOCK_MS; a level 1 trick of a player's doesn't hold it, but your level
+// isn't sent you either, and your hand's busy a second after it); not known, can't be used now (BG_CanUseFPNow: a ysalamiri, a
 // duel, a vehicle...; down; in a pose, but for Heal), not enough Force (the
 // least any level costs), nothing to heal, Rage's wait not over or your health
 // too low for it, the team powers out of a team game; CGF_ENDS - Protect,
-// Absorb, Rage or Seeing going, cast again: turned off, whatever else would
-// stop it starting; else CGF_WORKS (the team powers whether or not anyone
-// near you needs them: your game can't tell).
+// Absorb, Rage, Seeing, Speed or Mind Trick going, cast again: turned off,
+// whatever else would stop it starting; else CGF_WORKS (the team powers
+// whether or not anyone near you needs them, Mind Trick whether or not anyone's
+// there to trick: your game can't tell).
 static int CG_VRF_CastWorks( const playerState_t *ps, int power ) {
 	if ( power < 0 || power >= NUM_FORCE_POWERS || ps->stats[STAT_HEALTH] <= 0 ) {
 		return CGF_REFUSED;
 	}
+	if ( power == FP_TELEPATHY && ( ps->forceHandExtend != HANDEXTEND_NONE || ps->weaponTime > 0 || ps->powerups[PW_REDFLAG] ||
+		ps->powerups[PW_BLUEFLAG] ) ) {
+		return CGF_REFUSED;
+	}
 	if ( ps->fd.forcePowersActive & ( 1 << power ) ) {
-		if ( power != FP_PROTECT && power != FP_ABSORB && power != FP_RAGE && power != FP_SEE ) {
+		if ( power != FP_PROTECT && power != FP_ABSORB && power != FP_RAGE && power != FP_SEE && power != FP_SPEED && power != FP_TELEPATHY ) {
 			return CGF_REFUSED;
 		}
 		return ( cgf.lockStart && cg.time - cgf.lockStart >= 0 && cg.time - cgf.lockStart < CGF_LOCK_MS ) ? CGF_REFUSED : CGF_ENDS;
@@ -350,7 +387,7 @@ static int CG_VRF_CastWorks( const playerState_t *ps, int power ) {
 	}
 }
 
-// How a place's power was cast (the log's).
+// How a place's or a motion's power was cast (the log's).
 static const char *CG_VRF_CastHow( int power ) {
 	switch ( power ) {
 	case FP_HEAL:		return "held still on your chest";
@@ -360,12 +397,14 @@ static const char *CG_VRF_CastHow( int power ) {
 	case FP_SEE:		return "held still at your temple";
 	case FP_TEAM_HEAL:	return "held still over your head";
 	case FP_TEAM_FORCE:	return "the trigger over your head";
+	case FP_TELEPATHY:	return "a wave across your face";
+	case FP_SPEED:		return "a swing back past your hip";
 	default:			return "somehow";
 	}
 }
 
-// A place's power, cast (cgf.castPower): its feel, played out over the frames
-// after it - or, refused, a short dull buzz; ended, a soft release.
+// A place's or a motion's power, cast (cgf.castPower): its feel, played out over
+// the frames after it - or, refused, a short dull buzz; ended, a soft release.
 static void CG_VRF_CastFeel( int h ) {
 	const int t = cg.time - cgf.castStart;
 
@@ -429,6 +468,18 @@ static void CG_VRF_CastFeel( int h ) {
 			cgf.castStep = 2;
 		}
 		break;
+	case FP_TELEPATHY:	// a light flutter: three quick, light pulses
+		if ( cgf.castStep < 3 && t >= cgf.castStep * 60 ) {
+			CG_VR_Feel( h, 0.25f, 20, 0.0f, 0 );
+			cgf.castStep++;
+		}
+		break;
+	case FP_SPEED:		// one sharp kick
+		if ( cgf.castStep == 0 ) {
+			CG_VR_Feel( h, 1.0f, 30, 0.0f, 0 );
+			cgf.castStep = 1;
+		}
+		break;
 	default:
 		break;
 	}
@@ -481,6 +532,97 @@ static void CG_VRF_StillNowhere( const vrClientState_t *vr, int h ) {
 	}
 }
 
+// A move of your Force hand over (CG_VRF_Moves): in the log, if it went
+// CGF_MOVE_FAR or further - how far, how long, how fast at most and its palm
+// then; from where and to where, from your eyes, and the least and the most
+// it went each way.
+static void CG_VRF_MoveSaid( void ) {
+	if ( cgfm.moving && cgfm.run >= CGF_MOVE_FAR ) {
+		CG_VR_Log( "force: moved %.2f m in %.2f s, at most %.1f m/s, its palm %.2f ahead and %.2f up then - from %.2f m in front of "
+			"your eyes, %.2f out to its side, %.2f up to %.2f, %.2f, %.2f (%.2f to %.2f in front, %.2f to %.2f out, %.2f to %.2f up)\n",
+			CG_VRF_Round( cgfm.run, 0.01f ), ( cgfm.toTime - cgfm.fromTime ) * 0.001f, CG_VRF_Round( cgfm.peak, 0.1f ),
+			CG_VRF_Round( cgfm.peakAhead, 0.01f ), CG_VRF_Round( cgfm.peakUp, 0.01f ), CG_VRF_Round( cgfm.from[0], 0.01f ),
+			CG_VRF_Round( cgfm.from[1], 0.01f ), CG_VRF_Round( cgfm.from[2], 0.01f ), CG_VRF_Round( cgfm.to[0], 0.01f ),
+			CG_VRF_Round( cgfm.to[1], 0.01f ), CG_VRF_Round( cgfm.to[2], 0.01f ), CG_VRF_Round( cgfm.least[0], 0.01f ),
+			CG_VRF_Round( cgfm.most[0], 0.01f ), CG_VRF_Round( cgfm.least[1], 0.01f ), CG_VRF_Round( cgfm.most[1], 0.01f ),
+			CG_VRF_Round( cgfm.least[2], 0.01f ), CG_VRF_Round( cgfm.most[2], 0.01f ) );
+	}
+	cgfm.moving = qfalse;
+}
+
+// Where your Force hand goes as it moves, the Force grip held - nothing held
+// down, Body Gestures on (the motions'): from where it started going faster
+// than CGF_MOVE_FAST to where it slowed, once it's been slower CGF_MOVE_REST -
+// or as far as it got, the Force grip let go (CG_VRF_MoveSaid: in the log, for
+// fitting the motions to you - a wave, a swing). How far and how fast from
+// your head (the controllers' own, less your head's: the gestures' own, your
+// head still), in real time; where, from your eyes.
+static void CG_VRF_Moves( const vrClientState_t *vr, int h ) {
+	vrfInput_t in;
+	vec3_t e, rel;
+	float speed;
+	int now, dt, i;
+
+	if ( !cg_vrLog.integer || !vr->force.reaching || vr->force.held || vr->force.hand != h || !vr->handValid[h] ) {
+		CG_VRF_MoveSaid();
+		cgfm.seen = qfalse;
+		return;
+	}
+	CG_VRF_Input( vr, h, &in );
+	if ( !in.body ) {
+		CG_VRF_MoveSaid();
+		cgfm.seen = qfalse;
+		return;
+	}
+	now = trap->Milliseconds();
+	VRF_FromEyes( &in, e );
+	VectorSubtract( in.pos, in.head, rel );
+	dt = now - cgfm.wasTime;
+	if ( !cgfm.seen || dt < 0 ) {
+		cgfm.moving = qfalse;	// (the clock gone back: what it was doing isn't known)
+		dt = 0;
+	} else if ( !dt ) {
+		return;	// (no time gone: the same frame)
+	}
+	speed = dt ? Distance( rel, cgfm.was ) * 1000.0f / dt : 0.0f;
+	if ( !cgfm.moving && speed >= CGF_MOVE_FAST ) {
+		cgfm.moving = qtrue;
+		cgfm.fromTime = cgfm.wasTime;
+		VectorCopy( cgfm.wasEyes, cgfm.from );
+		VectorCopy( cgfm.wasEyes, cgfm.least );
+		VectorCopy( cgfm.wasEyes, cgfm.most );
+		cgfm.run = cgfm.peak = 0.0f;
+		cgfm.slowTime = 0;
+	}
+	if ( cgfm.moving ) {
+		cgfm.run += Distance( rel, cgfm.was );
+		for ( i = 0; i < 3; i++ ) {
+			cgfm.least[i] = Q_min( cgfm.least[i], e[i] );
+			cgfm.most[i] = Q_max( cgfm.most[i], e[i] );
+		}
+		if ( speed > cgfm.peak ) {
+			cgfm.peak = speed;
+			cgfm.peakAhead = VRF_PalmAhead( &in );
+			cgfm.peakUp = in.palmUp;
+		}
+		if ( speed >= CGF_MOVE_FAST || !cgfm.slowTime ) {
+			VectorCopy( e, cgfm.to );
+			cgfm.toTime = now;
+		}
+		if ( speed >= CGF_MOVE_FAST ) {
+			cgfm.slowTime = 0;
+		} else if ( !cgfm.slowTime ) {
+			cgfm.slowTime = now;
+		} else if ( now - cgfm.slowTime >= CGF_MOVE_REST ) {
+			CG_VRF_MoveSaid();
+		}
+	}
+	cgfm.seen = qtrue;
+	VectorCopy( rel, cgfm.was );
+	VectorCopy( e, cgfm.wasEyes );
+	cgfm.wasTime = now;
+}
+
 static const char *CG_VRF_Held( int held ) {
 	switch ( held ) {
 	case VR_FORCE_GRIP:			return "Grip";
@@ -514,6 +656,7 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 		cgf.castPower = -1;
 		cgf.ticked = -1;
 		cgf.lockActive = ps->fd.forcePowersActive & CGF_LOCKERS;	// (when they started isn't known)
+		memset( &cgfm, 0, sizeof( cgfm ) );
 		cgf.init = qtrue;
 	}
 	CG_VRF_Track( vr, ps );
@@ -585,10 +728,11 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	}
 
 	// the places (Body Gestures): held still in one with a power of yours there,
-	// a soft tick; a power cast there, its feel (CG_VRF_CastFeel) - and where
-	// the hand was, in the log (fitting the places to you). (Speed, Mind Trick,
-	// Rage, Protect, Absorb or Seeing starting: the game won't turn the places'
-	// ones off for a moment - CG_VRF_CastWorks.)
+	// a soft tick; a power cast there - or by a motion - its feel
+	// (CG_VRF_CastFeel); and where the hand was, and went, in the log (fitting
+	// the places and the motions to you). (Speed, Mind Trick, Rage, Protect,
+	// Absorb or Seeing starting: the game won't turn any of them off for a
+	// moment - CG_VRF_CastWorks.)
 	if ( ( ps->fd.forcePowersActive & CGF_LOCKERS ) & ~cgf.lockActive ) {
 		cgf.lockStart = cg.time;
 	}
@@ -613,15 +757,17 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	}
 	CG_VRF_CastFeel( h );
 	CG_VRF_StillNowhere( vr, h );
+	CG_VRF_Moves( vr, h );
 
 	// what's going (the game's word) - Grip's strain heavier the faster whom it
 	// holds goes (moved with your hand), and whom it held let go of flying, a
-	// swoosh; Protect's faint hum
+	// swoosh; Protect's faint hum; in the log, the places' and the motions'
+	// powers too
 	if ( ps->fd.forcePowersActive & ( 1 << FP_PROTECT ) ) {
 		CG_VR_FeelSteady( h, CGF_PROTECT_HUM, 0.2f );
 	}
 	active = ps->fd.forcePowersActive & ( ( 1 << FP_GRIP ) | ( 1 << FP_LIGHTNING ) | ( 1 << FP_DRAIN ) | ( 1 << FP_HEAL ) |
-		( 1 << FP_RAGE ) | ( 1 << FP_PROTECT ) | ( 1 << FP_ABSORB ) | ( 1 << FP_SEE ) );
+		( 1 << FP_RAGE ) | ( 1 << FP_PROTECT ) | ( 1 << FP_ABSORB ) | ( 1 << FP_SEE ) | ( 1 << FP_SPEED ) | ( 1 << FP_TELEPATHY ) );
 	if ( active & ( 1 << FP_GRIP ) ) {
 		CG_VR_FeelSteady( h, CGF_STRAIN + ( CGF_STRAIN_MOST - CGF_STRAIN ) * Com_Clamp( 0.0f, 1.0f, CG_VRF_Speed( cgfa.caught ) / CGF_STRAIN_FULL ),
 			0.6f );

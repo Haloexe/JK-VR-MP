@@ -5,13 +5,19 @@ OpenJK VR (multiplayer) - the Force hand, on the server.
 A VR player with Force gestures on (vr_forceGestures - the engine's,
 qcommon/vr_force.h) says with every command which hand their Force comes
 from and where it points (their avatar: vrAvatar_t.forceValid, forceHand,
-forceDir), and with a gesture's Push or Pull, the way it went
-(vrUserPose_t.thrust). With g_vrForce on, their Push, Pull, Grip,
-Lightning and Drain come from that hand, however they're used - a
-gesture, the Force grip's quick squeeze, a key:
+forceDir), and with a gesture's Push or Pull, the way it went - with its
+Mind Trick, the way its wave's aimed (vrUserPose_t.thrust). With g_vrForce
+on, their Push, Pull, Grip, Lightning, Drain and a level 1 Mind Trick come
+from that hand, however they're used - a gesture, the Force grip's quick
+squeeze, a key:
 
   Push, Pull         the way the hand thrust it (a gesture's), else where
                      it points
+  Mind Trick         level 1's: whoever the hand waved across (a gesture's
+                     wave: from their eyes through the hand halfway across,
+                     VR_FORCE_SNAP_WAVE degrees either side of that), else
+                     where it points (levels 2 and 3, the game's own: all
+                     round where they look)
   Grip               whom it catches, where it points - from the hand,
                      VR_FORCE_GRIP_REACH (qcommon/vr_public.h: a quarter
                      further than the game's own), nobody further from them
@@ -25,11 +31,12 @@ gesture, the Force grip's quick squeeze, a key:
                      where it points
   Lightning, Drain   where it points
 
-each snapped onto someone within VR_FORCE_SNAP degrees of that line
-(Grip, VR_FORCE_SNAP_GRIP) - anywhere on them, their body a line up
-through the middle of their box (VR_ForceBodyPoint) - the one nearest it,
-alive, in the power's reach and in sight of the hand (Grip's, as its catch
-sees: no player clip between), not on your side, the power working on them
+each snapped onto someone within VR_FORCE_SNAP degrees of that line (Grip,
+VR_FORCE_SNAP_GRIP; Mind Trick's wave, VR_FORCE_SNAP_WAVE) - anywhere on
+them, their body a line up through the middle of their box
+(VR_ForceBodyPoint) - the one nearest it, alive, in the power's reach and in
+sight of the hand (Grip's and Mind Trick's, as their own traces see: no
+player clip between), not on your side, the power working on them
 (ForcePowerUsableOn: not down, not your companion, not in a duel...; Drain,
 some Force in them) - but never onto, nor off, someone hidden from you
 (cloaked, or mind-tricking you, while your Seeing isn't going): nearest the
@@ -37,12 +44,11 @@ line, it stays as it is (as the game's own aim would have it, hitting them
 if it's on them). Their game picks whom it's aimed at (cg_vrforce.c: along
 where the controller points, or where their hand is as they see it) and
 points it straight at them; it draws it so too (CG_VR_ForceSnap). The rest
-of each power is the game's own
-(w_force.c): its levels, reach and cones, who it works on, what it
-costs. The hand is where the player's avatar has it (within reach of
-their eyes: g_vrsaber.c), from where they are now; a hand reaching
-into a wall, or into someone, gives way there. Their commands coming
-without an avatar, it's gone at once; not coming, VR_FORCE_FRESH on.
+of each power is the game's own (w_force.c): its levels, reach and cones,
+who it works on, what it costs. The hand is where the player's avatar has it
+(within reach of their eyes: g_vrsaber.c), from where they are now; a hand
+reaching into a wall, or into someone, gives way there. Their commands
+coming without an avatar, it's gone at once; not coming, VR_FORCE_FRESH on.
 
 Everyone else sees the Force come from that hand too: the avatar the
 server passes on keeps it (cg_vrforce.c draws it). g_vrForce 0: the game's
@@ -88,6 +94,8 @@ General Public License version 2, like the rest of OpenJK.
 #include "g_local.h"
 
 #define VR_FORCE_FRESH		250		// ms: a Force hand not heard of for this long is gone
+#define VR_FORCE_SNAP_WAVE	20.0f	// degrees: someone this near the line a Mind Trick's wave's aimed along is whom it waved
+									// across (its 20 cm and more, before the face: 35 degrees or more side to side)
 #define VR_FORCE_LOG_MS		1000	// (the log: a power aimed at the same one again within this isn't said again...
 #define VR_FORCE_LOG_HELD_MS	250		// ...nor a held one - Lightning, Drain - aimed anew within this: its hand wavering)
 
@@ -123,7 +131,8 @@ typedef struct {
 	int			hand;		// which (VR_HAND_*)
 	vec3_t		ofs;		// where it is, from the player's origin
 	vec3_t		dir;		// where it points (unit)
-	qboolean	thrown;		// this command's Push or Pull came from a gesture: the way it went...
+	qboolean	thrown;		// this command's Push or Pull came from a gesture: the way it went (its Mind Trick: the way
+							// its wave's aimed)...
 	vec3_t		thrust;		// ...(unit)
 	int			logPower, logOnto, logTime;	// (what the log said last, when)
 	vec3_t		head;		// their avatar's head (from the player's origin), how it's turned...
@@ -351,21 +360,20 @@ static void VRF_BodyPoint( const gentity_t *ent, const vec3_t from, const vec3_t
 		ent->r.currentOrigin[1] + ( ent->r.mins[1] + ent->r.maxs[1] ) * 0.5f, bottom, top, point );
 }
 
-// Someone the hand's line goes within VR_FORCE_SNAP degrees of (Grip:
-// VR_FORCE_SNAP_GRIP), anywhere on them (VRF_BodyPoint) - alive, a body in the
-// world, within range of it and in sight of it (Grip: as its catch sees,
-// MASK_PLAYERSOLID - player clips in the way, corpses not - and only if a Grip
-// along it would hold them, G_VRForceGripHolds and DoGripAction's InFront),
-// not on your side (Push and
-// Pull: never, friendly fire or not - ForceThrow's), the power working on them
-// (ForcePowerUsableOn; Grip: no one it can't catch now, nor further from you
-// than it reaches; Drain: some Force in them) - the one nearest that line: the
-// way to that point of them. Of them, someone hidden from you (cloaked, or
-// tricking you - your Seeing not going: it shows both) is never snapped onto,
-// nor off: nearest the line, the line stays as it is. (The line as it is:
-// nobody.)
-static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_t from, vec3_t dir ) {
-	const float least = cosf( DEG2RAD( ( power == FP_GRIP ) ? VR_FORCE_SNAP_GRIP : VR_FORCE_SNAP ) );
+// Someone the hand's line goes within snap degrees of, anywhere on them
+// (VRF_BodyPoint) - alive, a body in the world, within range of it and in sight
+// of it (Grip and Mind Trick: as their own traces see, MASK_PLAYERSOLID -
+// player clips in the way, corpses not - Grip only if a Grip along it would
+// hold them, G_VRForceGripHolds and DoGripAction's InFront), not on your side
+// (Push and Pull: never, friendly fire or not - ForceThrow's), the power
+// working on them (ForcePowerUsableOn; Grip: no one it can't catch now, nor
+// further from you than it reaches; Drain: some Force in them) - the one
+// nearest that line: the way to that point of them. Of them, someone hidden
+// from you (cloaked, or tricking you - your Seeing not going: it shows both) is
+// never snapped onto, nor off: nearest the line, the line stays as it is. (The
+// line as it is: nobody.)
+static gentity_t *VRF_Snap( gentity_t *self, int power, float range, float snap, const vec3_t from, vec3_t dir ) {
+	const float least = cosf( DEG2RAD( snap ) );
 	const qboolean seeing = (qboolean)( ( self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) ) != 0 );
 	int list[MAX_GENTITIES], n, i;
 	vec3_t mins, maxs, best, lineAngles;
@@ -409,9 +417,11 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, const vec3_
 		if ( dot <= bestDot ) {
 			continue;
 		}
-		trap->Trace( &tr, from, NULL, NULL, at, self->s.number, ( power == FP_GRIP ) ? MASK_PLAYERSOLID : MASK_SHOT, qfalse, 0, 0 );
+		trap->Trace( &tr, from, NULL, NULL, at, self->s.number, ( power == FP_GRIP || power == FP_TELEPATHY ) ? MASK_PLAYERSOLID : MASK_SHOT,
+			qfalse, 0, 0 );
 		if ( tr.fraction < 1.0f && tr.entityNum != ent->s.number ) {
-			continue;	// (out of sight of the hand - Grip's, as ForceGrip's catch sees: player clips in the way, not corpses)
+			continue;	// (out of sight of the hand - Grip's and Mind Trick's, as their own traces see: player clips in the way, not
+						// corpses)
 		}
 		if ( power == FP_GRIP && ( !InFront( ent->client->ps.origin, (float *)from, lineAngles, VR_FORCE_GRIP_FRONT ) ||
 			!G_VRForceGripHolds( self, ent ) ) ) {
@@ -435,15 +445,17 @@ static const char *VRF_PowerName( int power ) {
 	case FP_GRIP:		return "Grip";
 	case FP_LIGHTNING:	return "Lightning";
 	case FP_DRAIN:		return "Drain";
+	case FP_TELEPATHY:	return "Mind Trick";
 	default:			return "the Force";
 	}
 }
 
 // Where a power of a VR player's goes from - their Force hand - and which way
-// (w_force.c): Push and Pull the way a gesture thrust them, else (and the rest)
-// where it points, snapped onto someone within VR_FORCE_SNAP degrees of that
-// (Grip: VR_FORCE_SNAP_GRIP), in range of it. qfalse: no Force hand - start
-// and dir as they were (the game's own: their eyes, where they look).
+// (w_force.c): Push and Pull the way a gesture thrust them, Mind Trick the way
+// its wave's aimed, else (and the rest) where it points, snapped onto someone
+// within VR_FORCE_SNAP degrees of that (Grip: VR_FORCE_SNAP_GRIP; a wave:
+// VR_FORCE_SNAP_WAVE), in range of it. qfalse: no Force hand - start and dir as
+// they were (the game's own: their eyes, where they look).
 qboolean G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir ) {
 	vrForceHand_t *f = VRF_Hand( self );
 	const gentity_t *onto;
@@ -460,15 +472,17 @@ qboolean G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, ve
 		// through a thrust or a yank: that Grip's spent, G_VRForceGripSpent)
 		vrGripSpent[self->s.number] = qtrue;	// (VRF_Hand: a client's)
 	}
-	thrust = (qboolean)( ( power == FP_PUSH || power == FP_PULL ) && f->thrown );
+	thrust = (qboolean)( ( power == FP_PUSH || power == FP_PULL || power == FP_TELEPATHY ) && f->thrown );
 	VectorCopy( thrust ? f->thrust : f->dir, way );
-	onto = VRF_Snap( self, power, range, from, way );
+	onto = VRF_Snap( self, power, range, ( power == FP_GRIP ) ? VR_FORCE_SNAP_GRIP : ( thrust && power == FP_TELEPATHY ) ? VR_FORCE_SNAP_WAVE :
+		VR_FORCE_SNAP, from, way );
 	if ( g_vrSaberLog.integer ) {
 		const int who = onto ? onto->s.number : -1, since = level.time - f->logTime;
 		const qboolean held = (qboolean)( power == FP_LIGHTNING || power == FP_DRAIN );	// (Grip's aimed till it catches someone: said at once)
 		if ( since >= VR_FORCE_LOG_MS || ( ( power != f->logPower || who != f->logOnto ) && ( !held || since >= VR_FORCE_LOG_HELD_MS ) ) ) {
 			G_LogPrintf( "VRForce: %i's %s from the %s hand, %s%s\n", self->s.number, VRF_PowerName( power ),
-				f->hand == VR_HAND_RIGHT ? "right" : "left", thrust ? "the way it thrust" : "where it points",
+				f->hand == VR_HAND_RIGHT ? "right" : "left", !thrust ? "where it points" : ( power == FP_TELEPATHY ) ? "the way it waved" :
+				"the way it thrust",
 				onto ? va( " - onto %i", onto->s.number ) : "" );
 			f->logPower = power;
 			f->logOnto = who;

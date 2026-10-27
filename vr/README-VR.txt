@@ -23,7 +23,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     the trigger for Lightning and Drain, your hand held still on your
     chest, before your face, at your belly, at your temple or over your
     head for Heal, Protect, Absorb, Seeing and Team Heal - the trigger on
-    your chest for Rage, over your head for Team Energize (see THE FORCE)
+    your chest for Rage, over your head for Team Energize - a wave across
+    your face for Mind Trick, a swing back past your hip for Speed (see
+    THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot
   * Your own body in first person: it stands under you, turns with you,
@@ -117,12 +119,13 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        holster
   Left grip            the Force grip: hold it and your empty hand reaches
                        out with the Force - thrust, yank, point, the
-                       trigger, held still by your body (THE FORCE, below);
-                       a quick squeeze uses the selected Force power -
-                       squeezed as far as Use (or, at your saber's hilt,
-                       take hold of it with both hands; at a holster, take
-                       out or put away; holding a saber (Saber Grip:
-                       Hold), it holds it - no Force meanwhile)
+                       trigger, held still by your body, waved, swung (THE
+                       FORCE, below); a quick squeeze uses the selected
+                       Force power - squeezed as far as Use (or, at your
+                       saber's hilt, take hold of it with both hands; at a
+                       holster, take out or put away; holding a saber
+                       (Saber Grip: Hold), it holds it - no Force
+                       meanwhile)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
@@ -220,15 +223,18 @@ stick up or down on a slider to move it a step.
                      it, as in the normal game
     Body Gestures    your Force hand held still by your body casts Heal,
                      Protect, Absorb, Seeing and Team Heal, and its trigger
-                     there Rage and Team Energize (Yes, as it comes; THE
-                     FORCE, below); No: only Push, Pull, Grip, Lightning
-                     and Drain come from your hand, as before
+                     there Rage and Team Energize; waved across before your
+                     face, Mind Trick; swung down and back past your hip,
+                     Speed (Yes, as it comes; THE FORCE, below); No: only
+                     Push, Pull, Grip, Lightning and Drain come from your
+                     hand, as before
     Hold Time        how long your hand must stay still in a place for its
                      power: 0.3 to 0.8 seconds (0.4 as it comes) - longer
                      if they come by accident, shorter to be quicker
-    Thrust Speed     how fast a thrust or a yank must be for Push and Pull:
-                     0.8 to 3 metres a second (1.6 as it comes) - lower if
-                     they don't come, higher if they come by accident
+    Thrust Speed     how fast a thrust or a yank must be for Push and Pull,
+                     and a swing for Speed: 0.8 to 3 metres a second (1.6
+                     as it comes) - lower if they don't come, higher if
+                     they come by accident
     Aim Glow         whoever your Grip is aimed at glows while you hold
                      the Force grip out (Yes, as it comes)
     Grip Moves       whoever your Grip holds moves with your hand, and a
@@ -788,12 +794,13 @@ grip, squeezed as far as Use):
                    toward where you yanked it from
   Grip             hold it out still a moment (about a third of a second),
                    pointing at someone, first thing after you squeeze -
-                   not with your palm turned up (that's Drain coming):
-                   they stay held while you hold the Force grip, as long
-                   as the game holds a Grip (five seconds at level 1, four
-                   at levels 2 and 3 - still holding, it grips again three
-                   seconds on); below level 3, only while you point at them
-                   (within 25 degrees or so, side to side)
+                   not with your palm turned up (that's Drain coming); if
+                   Grip is yours, they stay held while you hold the Force
+                   grip, as long as the game holds a Grip (five seconds at
+                   level 1, four at levels 2 and 3 - still holding, it
+                   grips again three seconds on); below level 3, only
+                   while you point at them (within 25 degrees or so, side
+                   to side)
   Lightning        its trigger, pointing at them - as long as you hold it
   Drain            the same, your palm turned up
   a quick squeeze  any other power: the one picked on the wheel's Force
@@ -839,7 +846,9 @@ whenever you cast them in a team game - your game can't tell whether a
 teammate near you needed one). Cast Protect, Absorb, Rage or Seeing again
 while it's going and it's turned off (a soft release), as in the game -
 though not in the second and a half after one of them, Speed or Mind Trick
-starts: the game won't then (the dull buzz). Places are measured from your
+starts: the game won't then (the dull buzz). Readying Drain with your palm
+turned up close in by you? Pull the trigger before Hold Time - kept still
+there longer, it's Absorb, if that's yours. Places are measured from your
 eyes the way your head faces - as players held their hands: your chest 14
 to 44 cm below your eyes, from 10 cm behind them (look down at your hand
 and your eyes go over it) to 20 cm in front; your face 12 to 35 cm in
@@ -852,10 +861,54 @@ hand already settled on your chest stays on it till the palm's a little
 past 30 degrees (held still there, Heal); one settled at your belly stays
 there till it's back down a little under. A hand held over your head never
 Grips; nor does one held still in a place of yours.
+And, moved so (Body Gestures too):
+  Mind Trick       wave it across before your face, side to side: 20 cm
+                   or more within half a second, never more than 15 cm
+                   above or below your eyes nor 45 cm in front of them
+                   (your arm held out, aiming, isn't waving), going in
+                   or out no more than 10 cm, your palm out ahead (the
+                   way you face) as it goes across - your hand itself
+                   moving across (turning your head isn't waving, nor is
+                   turning round or walking, the hand still)
+  Speed            swing it down and back past your hip, fast: from your
+                   side at your waist or above (no more than 25 cm in
+                   front of your eyes: a hand held out in front, lowered,
+                   isn't a swing), 25 cm or more, all within 0.4
+                   seconds, going back as fast as a Push (Thrust Speed),
+                   to 8 cm or more behind your eyes and below your chest
+Like a place's, a motion's power comes only first thing in a squeeze, and
+spends it. A light flutter says Mind Trick's cast, one sharp kick Speed -
+or the dull buzz if the game won't (no Force left; Mind Trick with your
+hand busy - for a second after a trick, say - a swing going or a flag
+carried). Cast either again while it's going and it's turned off (the soft
+release), as Protect is - and, as with it, not in the second and a half
+after one of them starts (after a level 1 trick of a player the game turns
+it off from a second on, though your hand still gets the dull buzz till
+the second and a half's up). Wave at once: your hand held still before
+your face first, as long as Hold Time, is Protect - and bring it up to
+your face for Protect, not across it: across, it's a wave. A thrust that
+may be a motion waits a moment for it: with Speed yours, a thrust back and
+down, low by your side, is Speed if it's the swing; with Mind Trick yours,
+a thrust or a yank across before your face is Mind Trick if it's the wave.
+If not - your hand slows down, leaves where the motion goes, or a third of
+a second passes (out of sight of the headset a moment meanwhile, it waits
+on), or you pull the trigger or let go - it's the Push or the Pull it was,
+the way it went, a moment late. On a server running this build, a level 1
+Mind Trick goes at whoever your hand waved across - from your eyes through
+your hand halfway across, onto someone within 20 degrees of that - and
+from a quick squeeze or a key, where your hand points (within 10 degrees);
+at nobody there it does nothing (where you look, the game would hold your
+weapon and your hand a second for a trick at the floor or a wall). Levels
+2 and 3 trick everyone round where you look, as in the game. On other
+servers, every trick goes where you look.
 The VR log (cg_vrLog) says where your hand was in each place - where it
 was held still close in by you but in none of them, and where it was as
 you pulled the trigger close in for Lightning or Drain, with how far your
-head was tipped down - which helps fitting the places to you.
+head was tipped down - which helps fitting the places to you; and where it
+went each time it moved 15 cm or more with the Force grip held, nothing
+held down - from where to where, from your eyes, how long it took, how
+fast it went at most (from your head) and how your palm was turned then -
+which helps fitting the motions to you.
 While a Grip holds someone, or Lightning or Drain is going, a thrust or a
 yank does nothing (as in the game) - and after a Push, a Pull or the
 trigger, let go and squeeze again to Grip. Squeeze the Force grip first,
@@ -1027,11 +1080,11 @@ otherwise). cg_vrDuelSalute 0 turns the salute off.
 The wheel: hold Y, push the right stick toward a slot and let go of Y (a
 quick press of Y still picks the next Force power):
   up     Say...       the chat line, with the headset's keyboard
-  up and Force        pick a Force power that isn't a gesture - the ones you
-  right               know (Heal, Speed, Protect, Absorb, Mind Trick,
-                      Seeing, Rage, the team powers): a quick squeeze of the
-                      Force grip uses it (see THE FORCE; not while you
-                      spectate)
+  up and Force        pick a Force power for the Force grip's quick squeeze
+  right               - the ones you know but Push, Pull, Grip, Lightning
+                      and Drain (Heal, Speed, Protect, Absorb, Mind Trick,
+                      Seeing, Rage, the team powers): a quick squeeze uses
+                      it (see THE FORCE; not while you spectate)
   right  Poses        sit (on a chair or a bench: stand with your back to
                       it first), kneel, lie down, sit cross-legged
   down   Companions   orders to your companions (see COMPANIONS, under
@@ -1368,11 +1421,13 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
   vr_forceGestures 1     your Force hand's gestures: 1 = while the Force
                          grip's held, 2 = Push and Pull with an open hand
                          too, 0 = off (the Force grip uses the power picked)
-  vr_forceThrust 1.6     how fast a thrust or yank must be for Push and Pull
-                         (metres a second, 0.8 to 3)
-  vr_forceBody 1         0 = no places: your Force hand held still by your
-                         body (or its trigger there) casts nothing (Setup,
-                         Controls, VR Force: Body Gestures)
+  vr_forceThrust 1.6     how fast a thrust or yank must be for Push and
+                         Pull, or a swing for Speed (metres a second, 0.8
+                         to 3)
+  vr_forceBody 1         0 = no places or motions: your Force hand held
+                         still by your body (or its trigger there), waved
+                         or swung casts nothing (Setup, Controls, VR Force:
+                         Body Gestures)
   vr_forceHold 0.4       how long your Force hand must stay still in a place
                          for its power (seconds, 0.3 to 0.8; Setup,
                          Controls, VR Force: Hold Time)

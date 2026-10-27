@@ -192,8 +192,9 @@ typedef struct vrUserPose_s {
 	vrBladePose_t	blade[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
 	vrAvatar_t		avatar;		// the whole player, for everyone else (offsets from the camera)
 	// a Force gesture's Push or Pull goes with this command (its generic_cmd): the way the hand thrust it - for a
-	// Pull, back toward where it was yanked from (world axes, unit; the engine's: client/cl_vr.cpp). Only with the
-	// avatar, whose Force hand it came from; the server's game alone sees it.
+	// Pull, back toward where it was yanked from; or its Mind Trick's wave: the way it's aimed, from the eyes through
+	// the hand halfway across (world axes, unit; the engine's: client/cl_vr.cpp). Only with the avatar, whose Force
+	// hand it came from; the server's game alone sees it.
 	qboolean		thrustValid;
 	vec3_t			thrust;
 } vrUserPose_t;

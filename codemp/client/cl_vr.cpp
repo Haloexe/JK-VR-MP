@@ -528,8 +528,9 @@ typedef struct vrState_s {
 	int						cmdButtonsTime;	// ...as of this cls.realtime
 	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
 	int						numGenCmds;		// command that has none, in turn - and the Force gestures' Push and
-	qboolean				genThrown[4];	// Pull (VR_ForceThrow): which they are, and the way each went (VR render
-	vec3_t					genThrust[4];	// space: the controllers' axes)
+	qboolean				genThrown[4];	// Pull (VR_ForceThrow), and Mind Trick's wave (VR_ForceCast): which they
+	vec3_t					genThrust[4];	// are, and the way each went, or is aimed (VR render space: the
+											// controllers' axes)
 	// the Force hand (Force gestures: VR_ForcePoll, qcommon/vr_force.h)
 	vrfState_t				force;
 	int						forceHand;		// the Force hand, as the last poll found it (-1: none)
@@ -1441,6 +1442,7 @@ static int VR_GripHand( int key ) {
 
 static int VR_ForceHand( void );
 static void VR_ForceTapRelease( qboolean now );
+static float VR_PoseTurn( void );
 static void VR_ForceDrop( void );
 
 // Whether hand h's grip takes hold of something if squeezed now: the cgame
@@ -2311,12 +2313,14 @@ Force while its grip is held, and pushes, pulls, grips, shoots lightning or
 drains as it moves; a quick squeeze of it is Use Force (the power picked). Held
 still in a place by your body - or its trigger pulled there - it casts that
 place's power (Body Gestures, vr_forceBody: Heal, Rage, Protect, Absorb,
-Seeing, Team Heal, Team Energize - yours, as the server last said). What it
-does goes to the game as the game's own inputs (VR_FillCmdPose: generic
-commands and buttons, Use Force held a moment), so it works on any server - and
-one running this build aims it from your hand: a Push's or Pull's way goes with
-its command (vrUserPose_t.thrust), where the hand points with the avatar (the
-cgame's: vrAvatar_t.forceDir).
+Seeing, Team Heal, Team Energize - yours, as the server last said); waved
+across before your face, Mind Trick; swung down and back past your hip,
+Speed. What it does goes to the game as the game's own inputs
+(VR_FillCmdPose: generic commands and buttons, Use Force held a moment), so it
+works on any server - and one running this build aims it from your hand: a
+Push's or Pull's way goes with its command, and the way Mind Trick's wave is
+aimed with its (vrUserPose_t.thrust), where the hand points with the avatar
+(the cgame's: vrAvatar_t.forceDir).
 
 The Force grip's press goes to the gestures, not its key (VR_SetKey) - a grab's
 still a grab - and so does that hand's trigger pressed while it's held
@@ -2392,9 +2396,10 @@ static void VR_ForceThrow( int genCmd, const vec3_t thrust, float speed ) {
 	vr.forceSpeed = speed;
 }
 
-// The game's generic command for a place's power (Body Gestures) - as the
-// console's force_heal, force_rage, force_protect, force_absorb, force_seeing,
-// force_healother and force_forcepowerother (0: none).
+// The game's generic command for a place's power or a motion's (Body
+// Gestures) - as the console's force_heal, force_rage, force_protect,
+// force_absorb, force_seeing, force_healother, force_forcepowerother,
+// force_distract (Mind Trick) and force_speed (0: none).
 static int VR_ForceCastCmd( int power ) {
 	switch ( power ) {
 	case FP_HEAL:		return GENCMD_FORCE_HEAL;
@@ -2404,20 +2409,26 @@ static int VR_ForceCastCmd( int power ) {
 	case FP_SEE:		return GENCMD_FORCE_SEEING;
 	case FP_TEAM_HEAL:	return GENCMD_FORCE_HEALOTHER;
 	case FP_TEAM_FORCE:	return GENCMD_FORCE_FORCEPOWEROTHER;
+	case FP_TELEPATHY:	return GENCMD_FORCE_DISTRACT;
+	case FP_SPEED:		return GENCMD_FORCE_SPEED;
 	default:			return 0;
 	}
 }
 
-// A place's power: its generic command, queued with the cgame's (VR_FillCmdPose),
-// and counted for the cgame - it feels it. (Only ever from a Force hand: in a
-// game.)
-static void VR_ForceCast( int power ) {
+// A place's or a motion's power: its generic command, queued with the cgame's
+// (VR_FillCmdPose) - aimed (Mind Trick's wave), the way it's aimed with it, as
+// a Push's way goes - and counted for the cgame: it feels it. (Only ever from
+// a Force hand: in a game.)
+static void VR_ForceCast( int power, const float *aim ) {
 	const int genCmd = VR_ForceCastCmd( power );
 
 	if ( !genCmd || vr.numGenCmds >= (int)ARRAY_LEN( vr.genCmds ) ) {
 		return;	// (a full queue: it's lost - squeeze afresh)
 	}
-	vr.genThrown[vr.numGenCmds] = qfalse;
+	vr.genThrown[vr.numGenCmds] = aim ? qtrue : qfalse;
+	if ( aim ) {
+		VectorCopy( aim, vr.genThrust[vr.numGenCmds] );
+	}
 	vr.genCmds[vr.numGenCmds++] = genCmd;
 	vr.forceCasts++;
 	vr.forceCast = power;
@@ -2468,6 +2479,7 @@ static void VR_ForcePoll( const float trigger[2], const float squeeze[2] ) {
 	in.time = Sys_Milliseconds();
 	in.mode = vr_forceGestures ? vr_forceGestures->integer : VRF_MODE_OFF;
 	in.free = (qboolean)( h >= 0 );
+	in.turn = VR_PoseTurn();	// (a Push waiting for a motion goes the way it went in the world, whenever it's done)
 	if ( in.free ) {
 		const float pos[3] = { vr.gripPose[h].position.x, vr.gripPose[h].position.y, vr.gripPose[h].position.z };
 		const float head[3] = { vr.headPose.position.x, vr.headPose.position.y, vr.headPose.position.z };
@@ -2505,7 +2517,7 @@ static void VR_ForcePoll( const float trigger[2], const float squeeze[2] ) {
 		VR_ForceThrow( GENCMD_FORCE_PULL, out.thrust, out.speed );
 	}
 	if ( out.events & VRF_CAST ) {
-		VR_ForceCast( out.cast );
+		VR_ForceCast( out.cast, out.aimed ? out.thrust : NULL );
 	}
 	vr.forceHeld = out.held;
 	vr.forcePlace = out.place;
@@ -4206,6 +4218,7 @@ usercmd carries the latest report to the server (clc_moveVR, vr_net.h).
 
 static vrUserPose_t	vrUserPose;			// latest report from the cgame
 static int			vrUserPoseTime;		// cls.realtime of that report
+static float		vrPoseTurn;			// its trackYaw - kept while the cgame draws no VR body (VR_PoseTurn)
 
 void VR_SetUserPose( const vrUserPose_t *pose ) {
 	if ( !pose || ( !pose->valid && !pose->avatar.valid ) ) {
@@ -4214,6 +4227,15 @@ void VR_SetUserPose( const vrUserPose_t *pose ) {
 	}
 	vrUserPose = *pose;
 	vrUserPoseTime = cls.realtime;
+	vrPoseTurn = pose->trackYaw;
+}
+
+// How far the world's turned from your room, as the cgame last said (its
+// pose's trackYaw, degrees - the last it drew a VR body with): a Force
+// gesture's Push waiting for a motion goes the way it went in the world,
+// though you've turned since (VR_ForcePoll).
+static float VR_PoseTurn( void ) {
+	return vrPoseTurn;
 }
 
 // The trigger and the saber, where the server fights with your real blade:
@@ -4257,8 +4279,8 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 		cmd->generic_cmd = GENCMD_SABERSWITCH;
 		vrSaberSwitchQueued = qfalse;
 	}
-	// the cgame's own generic commands (and the Force gestures' Push and
-	// Pull), one to a command
+	// the cgame's own generic commands (and the Force gestures' Push, Pull and
+	// powers), one to a command
 	if ( vr.numGenCmds && !cmd->generic_cmd ) {
 		cmd->generic_cmd = (byte)vr.genCmds[0];
 		thrown = vr.genThrown[0];
@@ -4294,8 +4316,9 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 		out->valid = vrUserPose.valid;
 		out->trackYaw = vrUserPose.trackYaw;
 	}
-	// a Force gesture's Push or Pull in this command: the way it went, as the
-	// world has it (by the pose's yaw - its avatar's, whose Force hand it was)
+	// a Force gesture's Push or Pull in this command: the way it went - or its
+	// Mind Trick's wave: the way it's aimed - as the world has it (by the
+	// pose's yaw - its avatar's, whose Force hand it was)
 	out->thrustValid = qfalse;
 	VectorClear( out->thrust );
 	if ( thrown && out->avatar.valid ) {

@@ -12,7 +12,7 @@ out with the Force:
   reach out, yank it back in    Pull, toward where it was yanked from
   held out still a moment       Grip: whoever it points at, held as long
                                 as the grip is (not with the palm turned
-                                up: that's Drain coming)
+                                up: that's Drain coming) - if it's yours
   its trigger                   Lightning, where it points - with the palm
                                 turned up, Drain - as long as it's held
   a quick squeeze               the Force power picked (the wheel's Force
@@ -29,6 +29,13 @@ the rest of the Force powers you have (Body Gestures, vr_forceBody):
   at your temple                  Seeing
   high over your head             Team Heal; the trigger there, Team
                                   Energize
+
+and, moved so (Body Gestures too):
+
+  waved across before your face   Mind Trick (a server running this build:
+                                  level 1's at whoever it's waved across)
+  swung down and back past your   Speed
+  hip, fast
 
 Each place is a box measured from your eyes the way your head faces
 (VRF_FromEyes, vrfPlaces), the hand turned as it says. Held still there -
@@ -55,6 +62,25 @@ with only its dark twin (Rage, say) is the trigger's alone. A place of
 yours, held still, is never a Grip, and a hand high over your head never
 is.
 
+A wave (VRF_Wave): across before your face - no further in front of your
+eyes than VRF_WAVE_FAR, no further above or below them than VRF_WAVE_HIGH
+- VRF_WAVE_ACROSS side to side within VRF_WAVE_MS, nor much in or out
+(VRF_WAVE_DEPTH), the hand itself moving across (VRF_WAVE_MOVE: not your
+head turned, nor you turning round or walking, the hand still on you), its
+palm turned out at its middle (VRF_WAVE_PALM) - aimed from your eyes
+through the hand there. A swing (VRF_Swing): from your side at your waist
+or above (VRF_SWING_FRONT, VRF_SWING_TOP), down and back VRF_SWING_RUN, all
+within VRF_SWING_MS, as fast as a thrust on the way, to past your hip
+(VRF_SWING_PAST, VRF_SWING_LOW). A motion's power, as a place's, comes only
+first thing in a squeeze and spends it; a power you don't have, nothing.
+A thrust that may be one waits for it - with Speed yours, back and down,
+low by you (VRF_BACK, VRF_SWING_SINK); with Mind Trick yours, a thrust or a
+yank across before your face (VRF_WAVE_WAY): the motion, its power; not -
+the hand slowed, gone from where the motion goes, VRF_PEND_MS up (lost from
+sight a moment, it waits on), the trigger pulled, the Force grip let go -
+the Push or the Pull it was, then, the way it went in the world (the game
+turning you meanwhile: vrfInput_t.turn).
+
 Grip comes only first thing in a squeeze (after a Push, a Pull or the
 trigger, squeeze afresh) - and while the game has someone gripped, or
 Lightning or Drain going, its own rule has a Push or a Pull do nothing.
@@ -79,11 +105,12 @@ reads the controllers, and makes the game's own inputs of what it says,
 so they work on any server: Push and Pull its generic commands (as
 force_throw and force_pull), Grip, Lightning and Drain their buttons held
 (as +force_grip, +force_lightning, +force_drain), a quick squeeze Use
-Force held a moment (+useforce: VRF_TAP_HOLD_MS), a place's power its
-generic command (as force_heal, force_rage, force_protect, force_absorb,
-force_seeing, force_healother, force_forcepowerother). A server running
-this build aims them from the hand (game/g_vrforce.c): Push and Pull the
-way they went, the rest where it points.
+Force held a moment (+useforce: VRF_TAP_HOLD_MS), a place's or a motion's
+power its generic command (as force_heal, force_rage, force_protect,
+force_absorb, force_seeing, force_healother, force_forcepowerother,
+force_distract, force_speed). A server running this build aims them from
+the hand (game/g_vrforce.c): Push and Pull the way they went, a level 1
+Mind Trick the way the wave's aimed, the rest where it points.
 
 Positions are the controllers' own - in metres, on Quake's axes (x
 forward, y left, z up): the hand where it holds its controller, your head
@@ -130,7 +157,39 @@ General Public License version 2, like the rest of OpenJK.
 #define VRF_OPEN			0.3f	// Open hand: the grip squeezed less than this, the trigger pulled less
 #define VRF_SPEED_MS		40		// how fast the hand goes: over this long at least...
 #define VRF_SPEED_MAX_MS	150		// ...from no further back than this (else it isn't known)
-#define VRF_SAMPLES			64		// where it's been (VRF_RUN_MS of them, read as often as 200 times a second)
+#define VRF_SAMPLES			128		// where it's been (VRF_WAVE_MS of them, read as often as 250 times a second)
+
+// The motions (Body Gestures): a wave across before your face, Mind Trick
+// (VRF_Wave)...
+#define VRF_WAVE_ACROSS		0.20f	// m: the hand across this far, side to side...
+#define VRF_WAVE_MOVE		0.15f	// ...the hand itself moved across this far from your eyes, as your head faced when it
+									// set off (not your head turned, nor you turning round or walking, the hand still on you)...
+#define VRF_WAVE_MS			500		// ...within this long...
+#define VRF_WAVE_HIGH		0.15f	// ...never further above or below your eyes than this...
+#define VRF_WAVE_NEAR		0.12f	// ...in front of them at least this far...
+#define VRF_WAVE_FAR		0.45f	// ...and no further (your arm held out, aiming, isn't waving)...
+#define VRF_WAVE_WIDE		0.35f	// ...nor further to either side of them...
+#define VRF_WAVE_DEPTH		0.10f	// ...going in or out no more than this as it goes...
+#define VRF_WAVE_PALM		0.25f	// ...its palm turned out this far (ahead, the way your head faces) at its middle
+#define VRF_WAVE_WAY		0.7f	// a thrust or a yank this much across (1: straight across), the hand before your face:
+									// maybe a wave's - Mind Trick yours, with Body Gestures - it waits for it (VRF_PEND_MS)
+// ...and a swing down and back past your hip, Speed (VRF_Swing)
+#define VRF_SWING_RUN		0.25f	// m: down and back this far...
+#define VRF_SWING_BACK		0.15f	// ...of it, back at least this far, and down this far (not an arm swinging as you walk)...
+#define VRF_SWING_DROP		0.05f
+#define VRF_SWING_MS		400		// ...within this long - going as fast as a thrust (vr_forceThrust), back, on the way...
+#define VRF_SWING_TOP		-0.65f	// ...from no lower below your eyes than this (your waist, or above: not hanging down)...
+#define VRF_SWING_FRONT		0.25f	// ...nor further in front of them than this (from your side: not a hand held out, lowered)...
+#define VRF_SWING_EASE		0.01f	// ...setting off as it was last within this of there (a hand at rest sways a little)...
+#define VRF_SWING_LOW		-0.35f	// ...to below this (under your chest)...
+#define VRF_SWING_PAST		-0.08f	// ...behind this (past your hip: a hand hanging at your side is a few centimetres
+									// behind your eyes)...
+#define VRF_SWING_SIDE		-0.05f	// ...and out to the hand's own side this far at least (not across you)
+#define VRF_BACK			0.5f	// a thrust's way back this much, level (1: straight back)...
+#define VRF_SWING_SINK		0.1f	// ...and down this much (1: straight down), under your chest (VRF_SWING_LOW): maybe a
+									// swing - Speed yours, with Body Gestures - it waits for it...
+#define VRF_PEND_MS			300		// ...a Push or a Pull that may be a motion done the way it went, the motion not come:
+									// the hand slowed, gone from where the motion goes, or this long after
 
 // The places (Body Gestures, vr_forceBody: vrfPlaces) - and how long a hand
 // held still in one takes to cast its power (vr_forceHold, seconds)
@@ -173,6 +232,7 @@ typedef struct {
 	vec3_t		pos;		// where it is
 	vec3_t		head;		// where your head is...
 	float		headYaw;	// ...and which way it faces (degrees)
+	float		turn;		// how far the game's turned the world from your room (degrees: the pose's trackYaw)
 	float		palmUp;		// how far its palm faces up: -1 down .. 1 up
 	vec3_t		palm;		// which way its palm faces (unit: palm[2] is palmUp)
 	qboolean	grip;		// its grip held as the Force grip (the gestures' - not a grab)
@@ -187,10 +247,12 @@ typedef struct {
 // What's done now, and what's held.
 typedef struct {
 	int			events;		// VRF_PUSH, VRF_PULL, VRF_TAP, VRF_CAST
-	vec3_t		thrust;		// a Push's way, or a Pull's back toward where it was yanked from (unit)
+	vec3_t		thrust;		// a Push's way, or a Pull's back toward where it was yanked from (unit)...
 	float		speed;		// ...how fast it went (metres a second)
 	int			held;		// VR_FORCE_*: what's held down
-	int			cast;		// VRF_CAST: the power cast (FP_*)
+	int			cast;		// VRF_CAST: the power cast (FP_*)...
+	qboolean	aimed;		// ...aimed the way thrust says (Mind Trick's wave: from your eyes through the hand at its
+							// middle)
 	int			place;		// the place the hand's held still in now, one with a power of yours there (VRF_PLACE_*;
 							// VRF_PLACE_NONE: not)
 } vrfOutput_t;
@@ -228,7 +290,10 @@ static const vrfPlace_t vrfPlaces[VRF_PLACES] = {
 typedef struct {
 	int			time;
 	vec3_t		pos;
-	float		out;		// how far from its shoulder it was
+	float		out;		// how far from its shoulder it was...
+	vec3_t		eyes;		// ...where from your eyes, the way your head faced (VRF_FromEyes)...
+	float		yaw;		// ...which way that was (degrees)...
+	float		palm;		// ...and how far its palm faced out ahead (VRF_PalmAhead)
 } vrfSample_t;
 
 typedef struct {
@@ -247,10 +312,17 @@ typedef struct {
 								// or hanging down, slow) - bringing it back from a Push isn't a Pull
 	int			outTime;		// the hand last reaching out (ms; 0: not yet)
 	int			stillTime;		// held out still, reaching, since (ms; 0: not)
-	qboolean	placed;			// a place's power cast this squeeze: nothing more till it's squeezed afresh
+	qboolean	placed;			// a place's power (or a motion's) cast this squeeze: nothing more till it's squeezed afresh
 	int			place;			// the place of yours it's held still in (VRF_PLACE_*; VRF_PLACE_NONE: none)...
 	int			placeTime;		// ...since (ms)...
 	vec3_t		placePos;		// ...settled there
+	int			swingTime;		// the hand last going back as fast as a thrust (a swing's: ms; 0: not yet)
+	int			pending;		// a Push or a Pull waiting for the motion it may be (VRF_PUSH, VRF_PULL; 0: none)...
+	qboolean	pendWave;		// ...the wave (else the swing)...
+	int			pendTime;		// ...since (ms)...
+	vec3_t		pendWay;		// ...its way (vrfOutput_t.thrust's)...
+	float		pendTurn;		// ...as the game had turned you then (vrfInput_t.turn)...
+	float		pendSpeed;		// ...and how fast it went
 } vrfState_t;
 
 // Nothing going on (and nothing carried over).
@@ -423,6 +495,164 @@ static inline void VRF_OutRange( const vrfState_t *st, float *least, float *most
 	}
 }
 
+// Whether a hand there (from your eyes, e: VRF_FromEyes) is before your face,
+// as a wave goes: in front of your eyes, not far to either side, not far above
+// or below them.
+static inline qboolean VRF_WaveSpot( const vec3_t e ) {
+	return (qboolean)( e[0] >= VRF_WAVE_NEAR && e[0] <= VRF_WAVE_FAR && fabsf( e[1] ) <= VRF_WAVE_WIDE && fabsf( e[2] ) <= VRF_WAVE_HIGH );
+}
+
+// A wave across before your face, the hand there now (the newest reading):
+// before your face (VRF_WaveSpot) every reading back to one VRF_WAVE_ACROSS to
+// the side of it, within VRF_WAVE_MS and since the Force grip was squeezed
+// (st->reachTime) - never further in or out than VRF_WAVE_DEPTH as it went,
+// the hand itself moved across from your eyes VRF_WAVE_MOVE that way, as your
+// head faced then (your head turned, the hand held still, isn't a wave; nor
+// you turning round further than it, the hand going round with you; walking,
+// it goes along with you) - and its palm turned out (VRF_WAVE_PALM) halfway
+// across. qtrue, and where it's aimed (aim): from your eyes through the hand
+// there, halfway (unit).
+static inline qboolean VRF_Wave( const vrfState_t *st, const vrfInput_t *in, vec3_t aim ) {
+	const vrfSample_t *now = VRF_Sample( st, 0 ), *mid, *start;
+	float nearest, furthest, half, turned, moved;
+	int i, from = 0;
+
+	if ( !st->count ) {
+		return qfalse;
+	}
+	nearest = furthest = now->eyes[0];
+	for ( i = 0; i < st->count; i++ ) {
+		const vrfSample_t *s = VRF_Sample( st, i );
+		if ( now->time - s->time > VRF_WAVE_MS || s->time < st->reachTime || !VRF_WaveSpot( s->eyes ) ) {
+			break;
+		}
+		nearest = Q_min( nearest, s->eyes[0] );
+		furthest = Q_max( furthest, s->eyes[0] );
+		if ( furthest - nearest > VRF_WAVE_DEPTH ) {
+			break;
+		}
+		if ( fabsf( s->eyes[1] - now->eyes[1] ) >= VRF_WAVE_ACROSS ) {
+			from = i;
+			break;
+		}
+	}
+	if ( !from ) {
+		return qfalse;
+	}
+	start = VRF_Sample( st, from );
+	turned = DEG2RAD( now->yaw - start->yaw );
+	moved = ( ( in->hand == VR_HAND_RIGHT ) ? -now->eyes[0] : now->eyes[0] ) * sinf( turned ) + now->eyes[1] * cosf( turned ) - start->eyes[1];
+	if ( ( now->eyes[1] < start->eyes[1] ? -moved : moved ) < VRF_WAVE_MOVE ) {
+		return qfalse;
+	}
+	half = ( start->eyes[1] + now->eyes[1] ) * 0.5f;
+	mid = now;
+	for ( i = 1; i < from; i++ ) {
+		if ( fabsf( VRF_Sample( st, i )->eyes[1] - half ) < fabsf( mid->eyes[1] - half ) ) {
+			mid = VRF_Sample( st, i );
+		}
+	}
+	if ( mid->palm < VRF_WAVE_PALM ) {
+		return qfalse;
+	}
+	VectorSubtract( mid->pos, in->head, aim );
+	return (qboolean)( VectorNormalize( aim ) > 0.0f );
+}
+
+// A swing down and back past your hip, the hand there now (the newest reading):
+// past your hip - under your chest (VRF_SWING_LOW), behind VRF_SWING_PAST, not
+// across you (VRF_SWING_SIDE) - from where it was furthest forward since the
+// Force grip was squeezed, within VRF_SWING_MS before it last went back as fast
+// as a thrust (st->swingTime), that on the way: from your side at your waist or
+// above (VRF_SWING_TOP, VRF_SWING_FRONT: not a hand held out in front,
+// lowered), back at least VRF_SWING_BACK, down at least VRF_SWING_DROP,
+// VRF_SWING_RUN in all - within VRF_SWING_MS of setting off from there (last
+// near it, VRF_SWING_EASE, before going back fast).
+static inline qboolean VRF_Swing( const vrfState_t *st ) {
+	const vrfSample_t *now = VRF_Sample( st, 0 ), *top = now, *set;
+	vec3_t d;
+	int i, n;
+
+	if ( !st->count || now->eyes[2] > VRF_SWING_LOW || now->eyes[0] > VRF_SWING_PAST || now->eyes[1] < VRF_SWING_SIDE ) {
+		return qfalse;
+	}
+	for ( n = 1; n < st->count; n++ ) {
+		const vrfSample_t *s = VRF_Sample( st, n );
+		if ( st->swingTime - s->time > VRF_SWING_MS || s->time < st->reachTime ) {
+			break;
+		}
+		if ( s->eyes[0] > top->eyes[0] ) {
+			top = s;
+		}
+	}
+	set = top;
+	for ( i = 1; i < n; i++ ) {
+		const vrfSample_t *s = VRF_Sample( st, i );
+		if ( s->time <= st->swingTime && s->eyes[0] >= top->eyes[0] - VRF_SWING_EASE ) {
+			set = s;
+			break;
+		}
+	}
+	VectorSubtract( now->eyes, top->eyes, d );
+	return (qboolean)( st->swingTime >= top->time && now->time - set->time <= VRF_SWING_MS && top->eyes[2] >= VRF_SWING_TOP &&
+		top->eyes[0] <= VRF_SWING_FRONT && -d[0] >= VRF_SWING_BACK && -d[2] >= VRF_SWING_DROP && VectorLength( d ) >= VRF_SWING_RUN );
+}
+
+// How far a way goes back, level, the way your head faces (a unit way: 1,
+// straight back).
+static inline float VRF_Back( const vrfInput_t *in, const vec3_t way ) {
+	const float yaw = DEG2RAD( in->headYaw );
+
+	return -( way[0] * cosf( yaw ) + way[1] * sinf( yaw ) );
+}
+
+// Whether a thrust that way (unit) may be a swing's (Body Gestures): Speed
+// yours, back (VRF_BACK) and down (VRF_SWING_SINK) - the hand under your chest
+// (VRF_SWING_LOW: else it's no swing's, VRF_Update finds at once).
+static inline qboolean VRF_SwingWay( const vrfInput_t *in, const vec3_t dir ) {
+	return (qboolean)( VRF_Has( in, FP_SPEED ) && VRF_Back( in, dir ) >= VRF_BACK && dir[2] <= -VRF_SWING_SINK );
+}
+
+// Whether a thrust or a yank that way (unit), the hand where it is now (the
+// newest reading), may be a wave's (Body Gestures): Mind Trick yours, across
+// (VRF_WAVE_WAY, the way your head faces), the hand before your face
+// (VRF_WaveSpot).
+static inline qboolean VRF_WaveWay( const vrfState_t *st, const vrfInput_t *in, const vec3_t dir ) {
+	const float yaw = DEG2RAD( in->headYaw );
+
+	return (qboolean)( VRF_Has( in, FP_TELEPATHY ) && fabsf( dir[1] * cosf( yaw ) - dir[0] * sinf( yaw ) ) >= VRF_WAVE_WAY && st->count &&
+		VRF_WaveSpot( VRF_Sample( st, 0 )->eyes ) );
+}
+
+// A Push or a Pull (event: VRF_PUSH, VRF_PULL) done now, that way (unit), that
+// fast: the hand settled (VRF_SETTLE) and VRF_GAP_MS on before another, no
+// Grip, place's power or motion after it this squeeze - and after a Push,
+// bringing the hand back in isn't a Pull. Nothing's waiting for a motion then.
+static inline void VRF_Throw( vrfState_t *st, vrfOutput_t *out, int event, const vec3_t way, float speed, int time ) {
+	out->events |= event;
+	VectorCopy( way, out->thrust );
+	out->speed = speed;
+	if ( event == VRF_PUSH ) {
+		st->pullArmed = qfalse;
+	}
+	st->throwTime = time;
+	st->settled = qfalse;
+	st->done = qtrue;
+	st->pending = 0;
+}
+
+// The Push or the Pull waiting for a motion (st->pending) done now - the way it
+// went in the world (the game turning you meanwhile: in->turn), as fast.
+static inline void VRF_ThrowWaiting( vrfState_t *st, const vrfInput_t *in, vrfOutput_t *out ) {
+	const float a = DEG2RAD( st->pendTurn - in->turn ), c = cosf( a ), s = sinf( a );
+	vec3_t way;
+
+	way[0] = st->pendWay[0] * c - st->pendWay[1] * s;
+	way[1] = st->pendWay[0] * s + st->pendWay[1] * c;
+	way[2] = st->pendWay[2];
+	VRF_Throw( st, out, st->pending, way, st->pendSpeed, in->time );
+}
+
 // The Force hand read again: what it does.
 static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t *out ) {
 	vec3_t shoulder, way, v;
@@ -433,21 +663,27 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 
 	memset( out, 0, sizeof( *out ) );
 	if ( !in->free || in->mode <= VRF_MODE_OFF || in->mode > VRF_MODE_OPEN ) {
-		VRF_Clear( st );	// (all let go)
+		VRF_Clear( st );	// (all let go - a Push or a Pull waiting for a motion too: the menu's open, say, or the hand lost a while)
 		return;
 	}
 
 	// where it is: how far out from its shoulder, which way (a reading at the
-	// same time as the last replaces it; the clock gone back, the rest go). The
-	// hand not tracked now - where it was last seen isn't where it is - it's
-	// no reading: nothing's worked out from it (how fast it goes, whether it's
-	// out), the readings before kept - seen again, how fast it went meanwhile
-	// is from where it was last seen (no further back than VRF_SPEED_MAX_MS).
+	// same time as the last replaces it; the clock gone back, the rest go - and
+	// what was going on in them: a Push or a Pull waiting for a motion is done,
+	// none can come from them). The hand not tracked now - where it was last
+	// seen isn't where it is - it's no reading: nothing's worked out from it
+	// (how fast it goes, whether it's out), the readings before kept - seen
+	// again, how fast it went meanwhile is from where it was last seen (no
+	// further back than VRF_SPEED_MAX_MS).
 	VRF_Shoulder( in, shoulder );
 	VectorSubtract( in->pos, shoulder, way );
 	dist = VectorNormalize( way );
 	if ( st->count && in->time < VRF_Sample( st, 0 )->time ) {
+		if ( st->pending ) {
+			VRF_ThrowWaiting( st, in, out );
+		}
 		st->count = 0;
+		st->swingTime = 0;
 	}
 	if ( in->tracked ) {
 		if ( !st->count || in->time != VRF_Sample( st, 0 )->time ) {
@@ -460,6 +696,9 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 		s->time = in->time;
 		VectorCopy( in->pos, s->pos );
 		s->out = dist;
+		VRF_FromEyes( in, s->eyes );
+		s->yaw = in->headYaw;
+		s->palm = VRF_PalmAhead( in );
 	}
 	reachingOut = (qboolean)( in->tracked && dist >= VRF_REACH && way[2] > VRF_HANGING );
 	if ( reachingOut ) {
@@ -480,7 +719,8 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 	at = VRF_PlaceOf( in, st->place );
 	mine = VRF_Mine( in, at );
 
-	// the Force grip squeezed: reaching out. Let go: all it held goes - and,
+	// the Force grip squeezed: reaching out. Let go: all it held goes - a Push
+	// or a Pull waiting for a motion is done (no motion's coming now) - and,
 	// nothing done, let go quickly where it was squeezed, a quick squeeze; the
 	// squeeze over, a place's power cast in it no longer stops anything (Open
 	// hand's Push and Pull).
@@ -493,6 +733,9 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 		st->stillTime = 0;
 	} else if ( !in->grip && st->reaching ) {
 		st->reaching = qfalse;
+		if ( st->pending ) {
+			VRF_ThrowWaiting( st, in, out );
+		}
 		if ( !st->done && in->time - st->reachTime <= VRF_TAP_MS && Distance( in->pos, st->reachPos ) < VRF_TAP_MOVE ) {
 			out->events |= VRF_TAP;
 		}
@@ -502,29 +745,79 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 
 	// Push and Pull: reaching out - or, Open hand, the hand open - a thrust
 	// or a yank, fast and far enough, settled since the last (not after a
-	// place's power in the squeeze)
-	if ( known && speed >= VRF_Thrust( in->thrust ) && st->settled && !st->placed &&
+	// place's power in the squeeze); with Body Gestures, a thrust not steeply up
+	// (a hand raised to a place). One that may be a motion's - a swing's
+	// (VRF_SwingWay), a wave's (VRF_WaveWay) - reaching out, nothing done yet
+	// this squeeze, waits for it, the way it went then, how fast (below: Body
+	// Gestures off, no motion can come - it's done at once)
+	if ( known && speed >= VRF_Thrust( in->thrust ) && st->settled && !st->placed && !st->pending &&
 		( st->reaching || ( in->mode == VRF_MODE_OPEN && in->open ) ) &&
 		( !st->throwTime || in->time - st->throwTime >= VRF_GAP_MS ) ) {
-		vec3_t dir;
+		vec3_t dir, thrown;
 		float along, least, most;
+		int event = 0;
+		qboolean wave = qfalse, swing = qfalse;
 		VectorScale( v, 1.0f / speed, dir );
 		along = DotProduct( dir, way );
 		VRF_OutRange( st, &least, &most );
 		if ( along >= VRF_ALONG && dir[2] >= VRF_DOWN && ( !in->body || dir[2] <= VRF_UP ) && dist - least >= VRF_RUN ) {
-			out->events |= VRF_PUSH;
-			VectorCopy( dir, out->thrust );
-			st->pullArmed = qfalse;		// (bringing it back in isn't a Pull)
-		} else if ( along <= -VRF_ALONG && -dir[2] >= VRF_DOWN && most - dist >= VRF_RUN &&
-			st->pullArmed && st->outTime && in->time - st->outTime <= VRF_PULL_MS ) {
-			out->events |= VRF_PULL;
-			VectorScale( dir, -1.0f, out->thrust );
+			event = VRF_PUSH;
+			VectorCopy( dir, thrown );
+			swing = VRF_SwingWay( in, dir );
+			wave = VRF_WaveWay( st, in, dir );
+		} else if ( along <= -VRF_ALONG && -dir[2] >= VRF_DOWN && most - dist >= VRF_RUN && st->pullArmed && st->outTime &&
+			in->time - st->outTime <= VRF_PULL_MS ) {
+			event = VRF_PULL;
+			VectorScale( dir, -1.0f, thrown );
+			wave = VRF_WaveWay( st, in, dir );
 		}
-		if ( out->events & ( VRF_PUSH | VRF_PULL ) ) {
-			out->speed = speed;
-			st->throwTime = in->time;
-			st->settled = qfalse;
-			st->done = qtrue;
+		if ( event && st->reaching && !st->done && ( wave || swing ) ) {
+			st->pending = event;
+			st->pendWave = wave;
+			st->pendTime = in->time;
+			VectorCopy( thrown, st->pendWay );
+			st->pendTurn = in->turn;
+			st->pendSpeed = speed;
+		} else if ( event ) {
+			VRF_Throw( st, out, event, thrown, speed, in->time );
+		}
+	}
+
+	// the motions (Body Gestures): reaching out, nothing done yet this squeeze -
+	// in the readings it's had since it was squeezed - a wave across before your
+	// face, Mind Trick, aimed from your eyes through the hand halfway across
+	// (VRF_Wave); a swing down and back past your hip, Speed (VRF_Swing: going
+	// back as fast as a thrust on the way) - each if it's yours, spending the
+	// squeeze as a place's power does
+	if ( known && speed >= VRF_Thrust( in->thrust ) && VRF_Back( in, v ) >= VRF_BACK * speed ) {
+		st->swingTime = in->time;	// (before the squeeze, it's no swing's: VRF_Swing's from where it was since)
+	}
+	if ( in->body && st->reaching && !st->done ) {
+		if ( VRF_Has( in, FP_TELEPATHY ) && VRF_Wave( st, in, out->thrust ) ) {
+			out->events |= VRF_CAST;
+			out->cast = FP_TELEPATHY;
+			out->aimed = qtrue;
+			st->placed = st->done = qtrue;
+		} else if ( VRF_Has( in, FP_SPEED ) && VRF_Swing( st ) ) {
+			out->events |= VRF_CAST;
+			out->cast = FP_SPEED;
+			st->placed = st->done = qtrue;
+		}
+	}
+
+	// a Push or a Pull waiting for the motion it may be: the motion cast, it's
+	// gone; the motion not coming - Body Gestures off, the hand slowed down or
+	// gone from where the motion goes (before your face, a wave; under your
+	// chest, a swing), or VRF_PEND_MS up (the hand lost meanwhile, the wait
+	// goes on) - it's done now, the way it went (the Force grip let go or the
+	// trigger pulled, it's done then: there)
+	if ( st->pending ) {
+		if ( st->placed ) {
+			st->pending = 0;
+		} else if ( !in->body || ( known && speed < VRF_SETTLE ) ||
+			( st->pendWave ? !VRF_WaveSpot( VRF_Sample( st, 0 )->eyes ) : VRF_Sample( st, 0 )->eyes[2] > VRF_SWING_LOW ) ||
+			in->time - st->pendTime >= VRF_PEND_MS ) {
+			VRF_ThrowWaiting( st, in, out );
 		}
 	}
 
@@ -535,9 +828,13 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 	// one with none (your belly, the palm come back toward you), the place
 	// it's in as it is. Elsewhere, Lightning - with the palm up, Drain - held
 	// as long as it is. Grip gives way to either. After a place's power,
-	// nothing.
+	// nothing. A Push or a Pull waiting for a motion is done first (the game's
+	// Lightning, going, would stop it).
 	if ( in->trigger && !st->triggerWas && st->reaching && !st->placed ) {
 		const int twinAt = VRF_Has( in, vrfPlaces[at].twin ) ? at : VRF_PlaceOf( in, VRF_PLACE_NONE );
+		if ( st->pending ) {
+			VRF_ThrowWaiting( st, in, out );
+		}
 		if ( VRF_Has( in, vrfPlaces[twinAt].twin ) && ( vrfPlaces[twinAt].turn != VRF_TURN_IN || in->palmUp < VRF_PALM_UP ) ) {
 			out->events |= VRF_CAST;
 			out->cast = vrfPlaces[twinAt].twin;
@@ -553,11 +850,11 @@ static inline void VRF_Update( vrfState_t *st, const vrfInput_t *in, vrfOutput_t
 	}
 	st->triggerWas = in->trigger;
 
-	// Grip: reaching out, nothing done yet this squeeze (once a Push, a Pull or
-	// the trigger is, not till it's squeezed afresh), held out still a moment -
-	// the palm not turned up (Drain's to come), not in a place of yours, nor
-	// over your head - then held as long as the Force grip is
-	if ( st->reaching && !st->done ) {
+	// Grip, if it's yours: reaching out, nothing done yet this squeeze (once a
+	// Push, a Pull or the trigger is, not till it's squeezed afresh), held out
+	// still a moment - the palm not turned up (Drain's to come), not in a place
+	// of yours, nor over your head - then held as long as the Force grip is
+	if ( st->reaching && !st->done && VRF_Has( in, FP_GRIP ) ) {
 		if ( known && speed < VRF_STILL && reachingOut && in->palmUp < VRF_PALM_UP && !mine && at != VRF_PLACE_OVERHEAD ) {
 			if ( !st->stillTime ) {
 				st->stillTime = in->time;
