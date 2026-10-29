@@ -156,7 +156,7 @@ const int mindTrickTime[NUM_FORCE_POWER_LEVELS] =
 };
 
 void WP_InitForcePowers( gentity_t *ent ) {
-	int i, i_r, lastFPKnown = -1;
+	int i, i_r, lastFPKnown = -1, fpMay;
 	qboolean warnClient = qfalse, warnClientLimit = qfalse, didEvent = qfalse;
 	char userinfo[MAX_INFO_STRING], forcePowers[DEFAULT_FORCEPOWERS_LEN+1], readBuf[DEFAULT_FORCEPOWERS_LEN+1];
 
@@ -170,6 +170,7 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	if ( !ent || !ent->client )
 		return;
 
+	ent->client->pers.vrAllForce = qfalse;	// OpenJK VR: every power from give forcepowers over (WP_AllForcePowers)
 	ent->client->ps.fd.saberAnimLevel = ent->client->sess.saberLevel;
 
 	if ( ent->client->ps.fd.saberAnimLevel < FORCE_LEVEL_1 || ent->client->ps.fd.saberAnimLevel > FORCE_LEVEL_3 )
@@ -236,16 +237,19 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	if ( (ent->r.svFlags & SVF_BOT) && botstates[ent->s.number] )
 		Q_strncpyz( forcePowers, botstates[ent->s.number]->forceinfo, sizeof( forcePowers ) );
 
+	// OpenJK VR: a roleplay character the server lets be a Grey Jedi or a Force Master is set up as one (g_vrrp.c)
+	fpMay = G_RPForceMay( ent->s.number );
+
 	if ( g_forceBasedTeams.integer ) {
 		if ( ent->client->sess.sessionTeam == TEAM_RED )
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_DARKSIDE, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowersAs( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_DARKSIDE, level.gametype, g_forcePowerDisable.integer, fpMay ));
 		else if ( ent->client->sess.sessionTeam == TEAM_BLUE )
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_LIGHTSIDE, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowersAs( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_LIGHTSIDE, level.gametype, g_forcePowerDisable.integer, fpMay ));
 		else
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowersAs( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer, fpMay ));
 	}
 	else
-		warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer ));
+		warnClient = !(BG_LegalizedForcePowersAs( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer, fpMay ));
 
 	//rww - parse through the string manually and eat out all the appropriate data
 	i = 0;
@@ -419,6 +423,38 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	for ( /*i=0*/; i<NUM_FORCE_POWERS; i++ )
 		ent->client->ps.fd.forcePowerBaseLevel[i] = ent->client->ps.fd.forcePowerLevel[i];
 	ent->client->ps.fd.forceUsingAdded = 0;
+}
+
+// OpenJK VR: give forcepowers - a cheat (a roleplay admin's All Force Powers,
+// ui_vrrp.c): every Force power at level 3, as a roleplay Force Master's
+// (BG_ForceMasterLevels: those the server turns off, team powers and
+// Force-aligned teams as for anyone), till their powers are set up again -
+// their Force powers changed, a team joined, the map changed
+// (WP_InitForcePowers), an admin's cheats ended (g_vrrp.c). A Siege class
+// keeps its own. What came of it said (G_RPMessage: the Admin page shows it).
+void WP_AllForcePowers( gentity_t *ent ) {
+	int levels[NUM_FORCE_POWERS], i;
+	const int team = ent->client->sess.sessionTeam;
+	const int teamForce = !g_forceBasedTeams.integer ? 0 : ( team == TEAM_RED ) ? FORCE_DARKSIDE : ( team == TEAM_BLUE ) ? FORCE_LIGHTSIDE : 0;
+
+	if ( level.gametype == GT_SIEGE && ent->client->siegeClass != -1 ) {
+		G_RPMessage( ent-g_entities, "A Siege class keeps its own Force powers" );
+		return;
+	}
+	BG_ForceMasterLevels( levels, teamForce, level.gametype, g_forcePowerDisable.integer );
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+		ent->client->ps.fd.forcePowerBaseLevel[i] = ent->client->ps.fd.forcePowerLevel[i] = levels[i];	// (Enlightenment over: these too)
+		if ( levels[i] ) {
+			ent->client->ps.fd.forcePowersKnown |= ( 1 << i );
+		} else {
+			if ( ent->client->ps.fd.forcePowersActive & ( 1 << i ) )
+				WP_ForcePowerStop( ent, (forcePowers_t)i );
+			ent->client->ps.fd.forcePowersKnown &= ~( 1 << i );
+		}
+	}
+	ent->client->ps.fd.forceSide = teamForce ? teamForce : FORCE_GREYSIDE;	// (both sides': either Enlightenment)
+	ent->client->pers.vrAllForce = qtrue;
+	G_RPMessage( ent-g_entities, "Every Force power at level 3, till your Force powers are set up again" );
 }
 
 void WP_SpawnInitForcePowers( gentity_t *ent )
@@ -5065,6 +5101,20 @@ qboolean G_SpecialRollGetup(gentity_t *self)
 	return rolled;
 }
 
+// OpenJK VR: the sides whose powers Enlightenment lifts to level 3 (bits,
+// 1 << side; the neutral powers anyone's) - a player's own, as ever; a Grey
+// Jedi's (roleplay: g_vrrp.c), the side of each Enlightenment they have, as
+// they may take either (g_items.c). Never 0 under one: it marks powers lifted.
+static int WP_EnlightenedLift( const playerState_t *ps )
+{
+	if ( ps->fd.forceSide != FORCE_GREYSIDE )
+	{
+		return 1 << ps->fd.forceSide;
+	}
+	return ( ps->powerups[PW_FORCE_ENLIGHTENED_LIGHT] ? ( 1 << FORCE_LIGHTSIDE ) : 0 ) |
+		( ps->powerups[PW_FORCE_ENLIGHTENED_DARK] ? ( 1 << FORCE_DARKSIDE ) : 0 );
+}
+
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 {
 	int			i, holo, holoregen;
@@ -5294,6 +5344,10 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 
 	if (self->client->ps.powerups[PW_FORCE_ENLIGHTENED_LIGHT] || self->client->ps.powerups[PW_FORCE_ENLIGHTENED_DARK])
 	{ //enlightenment
+		// OpenJK VR: the sides it lifts, as bits (WP_EnlightenedLift: a Grey Jedi's, each pickup's), kept in forceUsingAdded - one
+		// more taken, its side's lifted too; one over, its side's powers back as they were
+		const int lift = WP_EnlightenedLift( &self->client->ps );
+
 		if (!self->client->ps.fd.forceUsingAdded)
 		{
 			i = 0;
@@ -5301,18 +5355,39 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 			while (i < NUM_FORCE_POWERS)
 			{
 				self->client->ps.fd.forcePowerBaseLevel[i] = self->client->ps.fd.forcePowerLevel[i];
+				i++;
+			}
+		}
 
+		if (self->client->ps.fd.forceUsingAdded != lift)
+		{
+			i = 0;
+
+			while (i < NUM_FORCE_POWERS)
+			{
 				if (!forcePowerDarkLight[i] ||
-					self->client->ps.fd.forceSide == forcePowerDarkLight[i])
+					(lift & (1 << forcePowerDarkLight[i])))
 				{
 					self->client->ps.fd.forcePowerLevel[i] = FORCE_LEVEL_3;
 					self->client->ps.fd.forcePowersKnown |= (1 << i);
+				}
+				else if (self->client->ps.fd.forceUsingAdded & (1 << forcePowerDarkLight[i]))
+				{
+					self->client->ps.fd.forcePowerLevel[i] = self->client->ps.fd.forcePowerBaseLevel[i];
+					if (!self->client->ps.fd.forcePowerLevel[i])
+					{
+						if (self->client->ps.fd.forcePowersActive & (1 << i))
+						{
+							WP_ForcePowerStop(self, i);
+						}
+						self->client->ps.fd.forcePowersKnown &= ~(1 << i);
+					}
 				}
 
 				i++;
 			}
 
-			self->client->ps.fd.forceUsingAdded = 1;
+			self->client->ps.fd.forceUsingAdded = lift;
 		}
 	}
 	else if (self->client->ps.fd.forceUsingAdded)

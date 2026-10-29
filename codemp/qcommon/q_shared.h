@@ -1048,6 +1048,7 @@ typedef enum {
 
 #define FORCE_LIGHTSIDE			1
 #define FORCE_DARKSIDE			2
+#define FORCE_GREYSIDE			3	// OpenJK VR: roleplay's Grey Jedi - both sides' powers (bg_misc.c: BG_LegalizedForcePowersAs)
 
 #define MAX_FORCE_RANK			7
 

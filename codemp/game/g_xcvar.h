@@ -134,6 +134,8 @@ XCVAR_DEF( g_rpTalkRange,				"510",			CVU_RPSettings,				CVAR_ARCHIVE,									q
 XCVAR_DEF( g_rpCompanions,				"2",			CVU_RPSettings,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: roleplay - companions each player has out, 0 to 2 (0: none; g_vrcomp.c)
 XCVAR_DEF( g_rpCompanionsMax,			"16",			CVU_RPSettings,				CVAR_ARCHIVE,									qtrue )	// (out on the whole server at once)
 XCVAR_DEF( g_rpCompanionModels,		"1",			CVU_RPSettings,				CVAR_ARCHIVE,									qtrue )	// (1: they may look like any player model the server has; 0: only as their type comes)
+XCVAR_DEF( g_rpForceMaster,				"0",			CVU_RPSettings,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: roleplay - Force Masters: 1, characters an admin made one; 0, none (g_vrrp.c)
+XCVAR_DEF( g_rpGrey,					"0",			CVU_RPSettings,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: roleplay - Grey Jedi: 1, any character; 2, those an admin made one; 0, none
 XCVAR_DEF( g_privateDuel,				"1",			CVU_PrivateDuel,			CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_randFix,					"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_restarted,					"0",			NULL,						CVAR_ROM,										qfalse )

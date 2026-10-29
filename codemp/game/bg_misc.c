@@ -415,6 +415,68 @@ force power selection anyway when force powers are disabled on the server.
 */
 qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled)
 {
+	return BG_LegalizedForcePowersAs( powerOut, powerOutSize, maxRank, freeSaber, teamForce, gametype, fpDisabled, 0 );
+}
+
+// OpenJK VR: the side most of a setup's points are on - what its light powers
+// cost against its dark ones, as a server sets powers up: those it turns off
+// (fpDisabled) and team powers outside team games not counted, as it drops
+// them; light, as many (or none) on each.
+int BG_ForceSideMost( const int *levels, int gametype, int fpDisabled )
+{
+	int points[FORCE_GREYSIDE] = { 0 }, i, l;
+
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ )
+	{
+		const int side = forcePowerDarkLight[i];
+		if ( ( side != FORCE_LIGHTSIDE && side != FORCE_DARKSIDE ) || ( fpDisabled & ( 1 << i ) ) ||
+			( gametype < GT_TEAM && ( i == FP_TEAM_HEAL || i == FP_TEAM_FORCE ) ) )
+		{
+			continue;
+		}
+		for ( l = FORCE_LEVEL_1; l <= Com_Clampi( FORCE_LEVEL_0, FORCE_LEVEL_3, levels[i] ); l++ )
+		{
+			points[side] += bgForcePowerCost[i][l];
+		}
+	}
+	return ( points[FORCE_DARKSIDE] > points[FORCE_LIGHTSIDE] ) ? FORCE_DARKSIDE : FORCE_LIGHTSIDE;
+}
+
+// OpenJK VR: a roleplay Force Master's levels - every power at 3, but those the
+// server turns off (jump then at 1, the saber's attack and defence at 3, as
+// any setup has them), team powers outside team games, and on Force-aligned
+// teams (teamForce: the team's side; 0, none) the other side's.
+void BG_ForceMasterLevels( int *levels, int teamForce, int gametype, int fpDisabled )
+{
+	int i;
+
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ )
+	{
+		levels[i] = FORCE_LEVEL_3;
+		if ( ( fpDisabled & ( 1 << i ) ) || ( teamForce && forcePowerDarkLight[i] && forcePowerDarkLight[i] != teamForce ) ||
+			( gametype < GT_TEAM && ( i == FP_TEAM_HEAL || i == FP_TEAM_FORCE ) ) )
+		{
+			levels[i] = FORCE_LEVEL_0;
+		}
+	}
+	if ( fpDisabled & ( 1 << FP_LEVITATION ) )
+		levels[FP_LEVITATION] = FORCE_LEVEL_1;
+	if ( fpDisabled & ( 1 << FP_SABER_OFFENSE ) )
+		levels[FP_SABER_OFFENSE] = FORCE_LEVEL_3;
+	if ( fpDisabled & ( 1 << FP_SABER_DEFENSE ) )
+		levels[FP_SABER_DEFENSE] = FORCE_LEVEL_3;
+}
+
+// OpenJK VR: BG_LegalizedForcePowers for roleplay's Grey Jedi and Force Masters
+// (may: BG_FORCE_*, what the server lets the character be - g_vrrp.c). A Grey
+// setup (side FORCE_GREYSIDE) keeps both sides' powers where it may be Grey,
+// its points counted as ever; where it may not, it counts as the side most of
+// its points are on (BG_ForceSideMost), the other side's powers out, as a
+// setup with the other side's always had them out. On Force-aligned teams
+// everyone plays their team's side, as ever. A Force Master has every power at
+// level 3 whatever the setup (BG_ForceMasterLevels), legal: nothing to spend.
+qboolean BG_LegalizedForcePowersAs(char *powerOut, size_t powerOutSize, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled, int may)
+{
 	char powerBuf[128];
 	char readBuf[128];
 	qboolean maintainsValidity = qtrue;
@@ -457,20 +519,11 @@ qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRan
 	final_Side = atoi(readBuf);
 
 	if (final_Side != FORCE_LIGHTSIDE &&
-		final_Side != FORCE_DARKSIDE)
+		final_Side != FORCE_DARKSIDE &&
+		final_Side != FORCE_GREYSIDE)	// OpenJK VR: a Grey Jedi's
 	{ //Not a valid side. You will be dark. Because I said so. (this is something that should never actually happen unless you purposely feed in an invalid config)
 		final_Side = FORCE_DARKSIDE;
 		maintainsValidity = qfalse;
-	}
-
-	if (teamForce)
-	{ //If we are under force-aligned teams, make sure we're on the right side.
-		if (final_Side != teamForce)
-		{
-			final_Side = teamForce;
-			//maintainsValidity = qfalse;
-			//Not doing this, for now. Let them join the team with their filtered powers.
-		}
 	}
 
 	//Now we have established a valid rank, and a valid side.
@@ -486,6 +539,29 @@ qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRan
 		i++;
 	}
 
+	if ( may & BG_FORCE_MASTER )
+	{ // OpenJK VR: a Force Master - every power, whatever the setup has
+		BG_ForceMasterLevels( final_Powers, teamForce, gametype, fpDisabled );
+		final_Side = teamForce ? teamForce : FORCE_GREYSIDE;
+		maintainsValidity = qtrue;
+		goto legalized;
+	}
+
+	if ( final_Side == FORCE_GREYSIDE && !( may & BG_FORCE_GREY ) )
+	{ // OpenJK VR: Grey where it may not be - the side most of its points are on
+		final_Side = BG_ForceSideMost( final_Powers, gametype, fpDisabled );
+	}
+
+	if (teamForce)
+	{ //If we are under force-aligned teams, make sure we're on the right side.
+		if (final_Side != teamForce)
+		{
+			final_Side = teamForce;
+			//maintainsValidity = qfalse;
+			//Not doing this, for now. Let them join the team with their filtered powers.
+		}
+	}
+
 	//final_Powers now contains all the stuff from the string
 	//Set the maximum allowed points used based on the max rank level, and count the points actually used.
 	allowedPoints = forceMasteryPoints[maxRank];
@@ -495,7 +571,8 @@ qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRan
 	{ //if this power doesn't match the side we're on, then 0 it now.
 		if (final_Powers[i] &&
 			forcePowerDarkLight[i] &&
-			forcePowerDarkLight[i] != final_Side)
+			forcePowerDarkLight[i] != final_Side &&
+			final_Side != FORCE_GREYSIDE)	// OpenJK VR: a Grey Jedi's both
 		{
 			final_Powers[i] = 0;
 			//This is only likely to happen with g_forceBasedTeams. Let it slide.
@@ -675,6 +752,7 @@ qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRan
 	//We finally have all the force powers legalized and stored locally.
 	//Put them all into the string and return the result. We already have
 	//the rank there, so print the side and the powers now.
+legalized:	// (OpenJK VR: a Force Master's, from above)
 	Q_strcat(powerOut, powerOutSize, va("%i-", final_Side));
 
 	i = strlen(powerOut);

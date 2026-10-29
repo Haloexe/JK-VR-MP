@@ -16,18 +16,25 @@ asked: "rpui <what>", run from here.
                feeder 65) - play one, stop, delete one (asked first), make
                one - log out, a new password
   Editor       the character you play: faction, description, bio (Save);
-               its Force - light or dark, as its setup has it - and Force
-               Powers, the game's Force menu (what's set there while you
-               play it is its own: g_vrrp.c), while the server keeps its
+               its Force - light, dark or Grey, as its setup has it (where
+               it may not be Grey, what that counts as), or a Force Master
+               - and Force Powers, the game's Force menu (what's set there
+               while you play it is its own: g_vrrp.c; Grey and a Force
+               Master's there: ui_vrforce.c), while the server keeps its
                setup with it (rpf, the game's: cg_vrrp.c); its look (the
                Profile), its companions (the Companions menu: ui_vrcomp.c)
   People       who's here (feeder 66), with their faction and description,
-               and the bio of the one picked
+               and the bio of the one picked; for an admin, on a server that
+               has them (its vrRP says), what their character is - a Grey
+               Jedi, a Force Master, or neither - and the buttons that make
+               it one (rp force)
   Chat & cards speech bubbles, cards, remembering your login; how chat goes
   Help
   Server       the owner's: roleplay on or off, characters per account, how
                far talk reaches, whether running out of health downs players
                - straight to the game you host, by rcon to another server;
+               Grey Jedi (off, any character, those an admin picks) and
+               Force Masters (off, those an admin picks);
                Companions: how many come out with a player, how many on the
                server at once, whether they may look as players make them;
                and Admins: an account made an admin, or not (rp admin: only
@@ -37,7 +44,9 @@ asked: "rpui <what>", run from here.
                server's rpadmin): every NPC and vehicle the game's files have
                (feeder 67, a box to find one) to spawn in front of you; kill
                those you spawned, or every NPC; god mode, no-clip, no target
-               (each as the server says it is); give all
+               (each as the server says it is); give all; All Force
+               Powers (every power at level 3: give forcepowers - on a
+               server that gives them, as it says)
 
 Also: Roleplay on Create game (g_rp, in a free row of its settings).
 
@@ -57,6 +66,8 @@ void			UI_ParseMenu( const char *menuFile );
 #define VRRP_TAB_ITEM		"vr_rp_tabbutton"
 #define VRRP_CREATE			"vr_rp_create"		// its items: on Create game
 #define VRRP_CREATE_ITEM	"vr_rp_createrow"
+#define VRRP_FORCE			"vr_rp_force"		// its items: on the game's Force menu (ui_vrforce.c)
+#define VRRP_FORCE_ITEM		"vrf_note"
 #define VRRP_CHARS_MAX		10
 #define VRRP_PEOPLE_AGAIN	8000	// while People's up, the cards asked for again this often (ms)
 #define VRRP_MESSAGE_TIME	10000	// a message (ui_rpMessage) shown this long (ms)
@@ -221,6 +232,7 @@ void UI_VRRP_AddMenus( void ) {
 	}
 	UI_VRRP_Move( VRRP_TAB, "ingame", VRRP_TAB_ITEM, qfalse );
 	UI_VRRP_Move( VRRP_CREATE, "createserver", VRRP_CREATE_ITEM, qtrue );
+	UI_VRRP_Move( VRRP_FORCE, "ingame_playerforce", VRRP_FORCE_ITEM, qfalse );	// (shown with both sides' powers: ui_vrforce.c)
 }
 
 // Whether the Force setup you have is the character's you play, the server
@@ -533,6 +545,8 @@ Every frame, while it's up: what's shown, as things stand
 --------------------------------------------------------------------------------
 */
 
+static qboolean UI_VRRP_ServerRoles( int *grey, int *master );
+
 // Whether an item of this group is shown now (-1: the group isn't one of
 // the pages', so whatever it is stays). Logging in, roleplay on or off (off:
 // it says so, above): it changes nothing else then, but an admin's cheats.
@@ -565,6 +579,10 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 	if ( !Q_stricmp( group, "rp_admin" ) ) {
 		return vrrp.page == RPP_ADMIN;	// (no longer an admin: another page - UI_VRRP_Frame)
 	}
+	if ( !Q_stricmp( group, "rp_admin_force" ) ) {	// (All Force Powers: a server that gives them)
+		int grey, master;
+		return vrrp.page == RPP_ADMIN && UI_VRRP_ServerRoles( &grey, &master );
+	}
 	if ( !Q_stricmp( group, "rp_in" ) ) {
 		return chars && in && !vrrp.password;
 	}
@@ -592,6 +610,10 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 	if ( !Q_stricmp( group, "rp_people" ) ) {
 		return vrrp.page == RPP_PEOPLE;
 	}
+	if ( !Q_stricmp( group, "rp_people_admin" ) ) {	// (making characters Grey Jedi, Force Masters: a server that has them)
+		int grey, master;
+		return vrrp.page == RPP_PEOPLE && admin && UI_VRRP_ServerRoles( &grey, &master );
+	}
 	if ( !Q_stricmp( group, "rp_chat" ) ) {
 		return vrrp.page == RPP_CHAT;
 	}
@@ -614,6 +636,94 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 		return vrrp.page == RPP_SERVER && vrrp.srvPart == RPS_COMPANIONS;
 	}
 	return 0;
+}
+
+// What the server you're on has of Grey Jedi (0 none, 1 any character, 2
+// those an admin picks) and Force Masters (0, 1), as its serverinfo says
+// (vrRP: g_vrrp.c). qfalse: a server older than them (none) - nor does it
+// give every Force power (give forcepowers).
+static qboolean UI_VRRP_ServerRoles( int *grey, int *master ) {
+	char info[MAX_INFO_STRING];
+	int v[9];
+
+	info[0] = '\0';
+	trap->GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
+	if ( sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d %d %d %d %d %d", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8] ) == 9 ) {
+		*grey = Com_Clampi( 0, 2, v[7] );
+		*master = v[8] ? 1 : 0;
+		return qtrue;
+	}
+	*grey = *master = 0;
+	return qfalse;
+}
+
+// The Editor's Force line (ui_rpEditForce): what the character's of - a Force
+// Master (the server says: ui_rpForceMay); its setup's side (forcepowers: the
+// character's own while you play one, as the server says - cg_vrrp.c), Grey,
+// or where it may not be Grey, what that counts as (5 light, 6 dark: as the
+// server has it, UI_VRForce_SideMost); light, as the Force menu takes one that
+// isn't a setup.
+static int UI_VRRP_ForceLine( void ) {
+	char setup[MAX_CVAR_VALUE_STRING];
+	int levels[NUM_FORCE_POWERS], i;
+	qboolean ended = qfalse;
+
+	if ( UI_VRForce_May() & BG_FORCE_MASTER ) {
+		return 4;
+	}
+	UI_VRRP_Str( "forcepowers", setup, sizeof( setup ) );
+	if ( !setup[0] || setup[1] != '-' || setup[3] != '-' || ( setup[2] != '0' + FORCE_DARKSIDE && setup[2] != '0' + FORCE_GREYSIDE ) ) {
+		return FORCE_LIGHTSIDE;
+	}
+	if ( setup[2] == '0' + FORCE_DARKSIDE ) {
+		return FORCE_DARKSIDE;
+	}
+	if ( UI_VRForce_May() & BG_FORCE_GREY ) {
+		return FORCE_GREYSIDE;
+	}
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+		const char c = ended ? '\0' : setup[4 + i];
+		ended = (qboolean)( ended || !c );
+		levels[i] = ( c >= '0' && c <= '3' ) ? c - '0' : 0;
+	}
+	return ( UI_VRForce_SideMost( levels ) == FORCE_DARKSIDE ) ? 6 : 5;
+}
+
+// The People page's Force line, for an admin (ui_rpPeopleForce): what an admin
+// made the character of the one picked, as their card says (ui_rpWhoR<client>:
+// sent an admin - cg_vrrp.c), and whether the server has that now.
+static void UI_VRRP_PeopleForce( void ) {
+	const int n = UI_VRRP_PickedPerson();
+	const char *line;
+	char role[16];
+	int grey, master;
+
+	if ( n < 0 ) {
+		trap->Cvar_Set( "ui_rpPeopleForce", "" );
+		return;
+	}
+	UI_VRRP_ServerRoles( &grey, &master );
+	UI_VRRP_Str( va( "ui_rpWhoR%i", vrrp.people[n] ), role, sizeof( role ) );
+	switch ( UI_VRRP_Who( vrrp.people[n], NULL, 0 ) ) {
+	case -1:
+		line = "Plays as themselves";
+		break;
+	case -2:
+		line = "Not known yet";
+		break;
+	default:
+		if ( !role[0] ) {
+			line = "Not known yet";
+		} else if ( atoi( role ) == 2 ) {
+			line = master ? "Now: Force Master" : "Now: Force Master (off here)";
+		} else if ( atoi( role ) == 1 ) {
+			line = ( grey == 2 ) ? "Now: Grey Jedi" : ( grey == 1 ) ? "Now: Grey Jedi (any may be here)" : "Now: Grey Jedi (off here)";
+		} else {
+			line = "Now: Light or Dark";
+		}
+		break;
+	}
+	trap->Cvar_Set( "ui_rpPeopleForce", line );
 }
 
 // The lines of text the menu shows (ui_rp... cvars), as things stand.
@@ -668,12 +778,9 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	}
 	trap->Cvar_Set( "ui_rpCountLine", most > 0 ? va( "%i of %i characters", count, most ) : va( "%i characters", count ) );
 	trap->Cvar_Set( "ui_rpEditLine", va( "Playing %s", playing ) );
-	{	// the Force the character's of: its setup's side (forcepowers - the character's own while you play one, as the
-		// server says: cg_vrrp.c; light, as the Force menu takes one that isn't a setup)
-		char setup[MAX_CVAR_VALUE_STRING];
-		UI_VRRP_Str( "forcepowers", setup, sizeof( setup ) );
-		trap->Cvar_Set( "ui_rpEditForce", ( setup[0] && setup[1] == '-' && setup[2] == '0' + FORCE_DARKSIDE && setup[3] == '-' ) ?
-			va( "%i", FORCE_DARKSIDE ) : va( "%i", FORCE_LIGHTSIDE ) );
+	trap->Cvar_Set( "ui_rpEditForce", va( "%i", UI_VRRP_ForceLine() ) );
+	if ( vrrp.page == RPP_PEOPLE && admin ) {
+		UI_VRRP_PeopleForce();
 	}
 	trap->Cvar_Set( "ui_rpServerLine", server == 2 ? "Roleplay is on here" : server == 1 ? "Roleplay is off here" :
 		server == 3 ? "Roleplay isn't working here: rp/server.txt can't be read (see the console)" : "This server doesn't have roleplay" );
@@ -805,12 +912,13 @@ static void UI_VRRP_LocalKeep( const char *cvar, const char *setting, const char
 // set here last, or the defaults.
 static void UI_VRRP_FromServer( void ) {
 	char info[MAX_INFO_STRING];
-	int on, chars, range, downed, comps, compsMax, models;
+	int on, chars, range, downed, comps, compsMax, models, grey, master;
 	int got;
 
 	info[0] = 0;
 	trap->GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
-	got = sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d %d %d %d", &on, &chars, &range, &downed, &comps, &compsMax, &models );
+	got = sscanf( Info_ValueForKey( info, "vrRP" ), "%d %d %d %d %d %d %d %d %d", &on, &chars, &range, &downed, &comps, &compsMax, &models,
+		&grey, &master );
 	if ( got >= 4 ) {
 		trap->Cvar_Set( "ui_rpSrvChars", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, chars ) ) );
 		trap->Cvar_Set( "ui_rpSrvRange", va( "%i", range ) );
@@ -820,7 +928,7 @@ static void UI_VRRP_FromServer( void ) {
 		UI_VRRP_Keep( "ui_rpSrvRange", "510" );
 		UI_VRRP_Keep( "ui_rpSrvDowned", "1" );
 	}
-	if ( got == 7 ) {
+	if ( got >= 7 ) {
 		trap->Cvar_Set( "ui_rpSrvComps", va( "%i", Com_Clampi( 0, RP_COMP_OUT_MAX, comps ) ) );
 		trap->Cvar_Set( "ui_rpSrvCompsMax", va( "%i", Com_Clampi( 0, VRRP_COMPS_MOST, compsMax ) ) );
 		trap->Cvar_Set( "ui_rpSrvCompModels", models ? "1" : "0" );
@@ -828,6 +936,13 @@ static void UI_VRRP_FromServer( void ) {
 		UI_VRRP_Keep( "ui_rpSrvComps", "2" );
 		UI_VRRP_Keep( "ui_rpSrvCompsMax", "16" );
 		UI_VRRP_Keep( "ui_rpSrvCompModels", "1" );
+	}
+	if ( got == 9 ) {
+		trap->Cvar_Set( "ui_rpSrvGrey", va( "%i", Com_Clampi( 0, 2, grey ) ) );
+		trap->Cvar_Set( "ui_rpSrvMaster", master ? "1" : "0" );
+	} else {
+		UI_VRRP_Keep( "ui_rpSrvGrey", "0" );
+		UI_VRRP_Keep( "ui_rpSrvMaster", "0" );
 	}
 }
 
@@ -856,6 +971,8 @@ static void UI_VRRP_Page( int page ) {
 			UI_VRRP_LocalKeep( "ui_rpSrvComps", "g_rpCompanions", "2", 0, RP_COMP_OUT_MAX );
 			UI_VRRP_LocalKeep( "ui_rpSrvCompsMax", "g_rpCompanionsMax", "16", 0, VRRP_COMPS_MOST );
 			UI_VRRP_LocalKeep( "ui_rpSrvCompModels", "g_rpCompanionModels", "1", 0, 1 );
+			UI_VRRP_LocalKeep( "ui_rpSrvGrey", "g_rpGrey", "0", 0, 2 );
+			UI_VRRP_LocalKeep( "ui_rpSrvMaster", "g_rpForceMaster", "0", 0, 1 );
 		} else {
 			UI_VRRP_FromServer();	// (another server's: as its serverinfo has them)
 		}
@@ -1039,6 +1156,8 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 			UI_VRRP_ServerSet( "g_rpCharacters", va( "%i", Com_Clampi( 1, VRRP_CHARS_MAX, UI_VRRP_Int( "ui_rpSrvChars" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpTalkRange", va( "%i", Com_Clampi( 0, 100000, UI_VRRP_Int( "ui_rpSrvRange" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpDowned", UI_VRRP_Int( "ui_rpSrvDowned" ) ? "1" : "0" );
+			UI_VRRP_ServerSet( "g_rpGrey", va( "%i", Com_Clampi( 0, 2, UI_VRRP_Int( "ui_rpSrvGrey" ) ) ) );
+			UI_VRRP_ServerSet( "g_rpForceMaster", UI_VRRP_Int( "ui_rpSrvMaster" ) ? "1" : "0" );
 		} else if ( !Q_stricmp( how, "compApply" ) ) {
 			UI_VRRP_ServerSet( "g_rpCompanions", va( "%i", Com_Clampi( 0, RP_COMP_OUT_MAX, UI_VRRP_Int( "ui_rpSrvComps" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpCompanionsMax", va( "%i", Com_Clampi( 0, VRRP_COMPS_MOST, UI_VRRP_Int( "ui_rpSrvCompsMax" ) ) ) );
@@ -1065,8 +1184,20 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 	} else if ( !Q_stricmp( what, "admin" ) ) {
 		const char *how;
 		if ( String_Parse( args, &how ) && ( !Q_stricmp( how, "killmine" ) || !Q_stricmp( how, "killall" ) || !Q_stricmp( how, "god" ) ||
-			!Q_stricmp( how, "noclip" ) || !Q_stricmp( how, "notarget" ) || !Q_stricmp( how, "give" ) ) ) {
+			!Q_stricmp( how, "noclip" ) || !Q_stricmp( how, "notarget" ) || !Q_stricmp( how, "give" ) || !Q_stricmp( how, "forcepowers" ) ) ) {
 			UI_VRRP_Exec( va( "rpui admin %s\n", how ) );
+		}
+	} else if ( !Q_stricmp( what, "people" ) ) {
+		// an admin's: the character of the one picked a Grey Jedi, a Force Master, or neither (rp force)
+		const char *how;
+		if ( String_Parse( args, &how ) && ( !Q_stricmp( how, "grey" ) || !Q_stricmp( how, "master" ) || !Q_stricmp( how, "normal" ) ) ) {
+			if ( ( n = UI_VRRP_PickedPerson() ) < 0 ) {
+				trap->Cvar_Set( "ui_rpMessage", "No one's here" );
+			} else if ( UI_VRRP_Who( vrrp.people[n], NULL, 0 ) == -1 ) {
+				trap->Cvar_Set( "ui_rpMessage", va( "%s" S_COLOR_WHITE " plays as themselves: no character to make one", vrrp.names[n] ) );
+			} else {
+				UI_VRRP_Exec( va( "rpui admin force %i %s\n", vrrp.people[n], how ) );
+			}
 		}
 	}
 	return qtrue;

@@ -75,6 +75,17 @@ void		UI_VRRP_Move( const char *from, const char *to, const char *first, qboolea
 void		UI_VRRP_Open( int page );
 void		UI_VRRP_ForceOwnBack( void );
 
+// ui_vrforce.c (OpenJK VR: the game's Force menu for roleplay's Grey Jedi and Force Masters)
+int			UI_VRForce_May( void );
+qboolean	UI_VRForce_Locked( void );
+int			UI_VRForce_SideMax( void );
+int			UI_VRForce_SideMost( const int *levels );
+int			UI_VRForce_Counted( void );
+int			UI_VRForce_Shown( int power, qboolean *dim );
+const char	*UI_VRForce_SideText( void );
+qboolean	UI_VRForce_Layout( menuDef_t *menu, int side );
+void		UI_VRForce_MenusReset( void );
+
 // ui_vrcolor.c (OpenJK VR: the Saber Colour page - any colour, a black core)
 void		UI_VRColor_AddMenus( void );
 void		UI_VRColor_Frame( void );

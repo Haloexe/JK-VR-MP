@@ -511,6 +511,7 @@ typedef struct clientPersistant_s {
 	int			vrSwapTime, vrSwapCount;	// ...this second (from level.time then), this often
 	int			vrGenCmdTime;		// the command (its serverTime) a holsters' generic command was last done for
 	int			vrOneStyle;			// the single style of one of two sabers in hand, lit (0: fast)
+	qboolean	vrAllForce;			// OpenJK VR (w_force.c): every Force power, from give forcepowers - till their powers are set up again
 
 	int			vote, teamvote; // 0 = none, 1 = yes, 2 = no
 
@@ -1106,11 +1107,13 @@ qboolean	G_RPConsoleCommand( void );
 void		Cmd_VRRP_f( gentity_t *ent );
 int			G_RPFaction( int clientNum );
 qboolean	G_RPCapable( int clientNum );
+void		G_RPMessage( int clientNum, const char *text );
 qboolean	G_RPAdmin( int clientNum );
 qboolean	G_RPCheatAllowed( gentity_t *ent );
 void		G_RPAdminCheat( gentity_t *ent );
 void		G_RPFrame( void );
 void		G_RPForceSetup( int clientNum, char *forcePowers, int size );
+int			G_RPForceMay( int clientNum );
 qboolean	G_RPForceChanged( gentity_t *ent );
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
@@ -1600,6 +1603,7 @@ void WP_SaberPositionUpdate( gentity_t *self, usercmd_t *ucmd );
 int WP_SaberCanBlock(gentity_t *self, vec3_t point, int dflags, int mod, qboolean projectile, int attackStr);
 void WP_SaberInitBladeData( gentity_t *ent );
 void WP_InitForcePowers( gentity_t *ent );
+void WP_AllForcePowers( gentity_t *ent );	// OpenJK VR: give forcepowers
 void WP_SpawnInitForcePowers( gentity_t *ent );
 void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd );
 int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forcePower);

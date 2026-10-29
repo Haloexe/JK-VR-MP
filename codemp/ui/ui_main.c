@@ -1419,6 +1419,13 @@ qboolean Load_Menu(int handle) {
 	return qfalse;
 }
 
+// OpenJK VR: the menus let go of - and what the game's Force menu noted of its
+// items with them (ui_vrforce.c)
+static void UI_MenuReset( void ) {
+	Menu_Reset();
+	UI_VRForce_MenusReset();
+}
+
 void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	pc_token_t token;
 	int handle;
@@ -1436,7 +1443,7 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	}
 
 	if (reset) {
-		Menu_Reset();
+		UI_MenuReset();	// OpenJK VR
 	}
 
 	while ( 1 ) {
@@ -1797,6 +1804,7 @@ static void UI_DrawForceSide(rectDef_t *rect, float scale, vec4_t color, int tex
 {
 	char s[256];
 	menuDef_t *menu;
+	const char *vrText;	// OpenJK VR
 
 	char info[MAX_INFO_VALUE];
 
@@ -1822,6 +1830,15 @@ static void UI_DrawForceSide(rectDef_t *rect, float scale, vec4_t color, int tex
 		default:
 			break;
 		}
+	}
+
+	// OpenJK VR: a roleplay Grey Jedi or Force Master (ui_vrforce.c) - the in-game menu's rows laid out for both sides
+	UI_VRForce_Layout( Menus_FindByName( "ingame_playerforce" ), val );
+	vrText = UI_VRForce_SideText();
+	if (vrText)
+	{
+		Text_Paint(rect->x, rect->y, ( strlen( vrText ) > 6 ) ? scale * 0.8f : scale, color, vrText, 0, 0, textStyle, iMenuFont);
+		return;
 	}
 
 	if (val == FORCE_LIGHTSIDE)
@@ -2628,7 +2645,11 @@ static int UI_OwnerDrawWidth(int ownerDraw, float scale) {
 			i = 1;
 		}
 
-		if (i == FORCE_LIGHTSIDE)
+		if ( UI_VRForce_SideText() )
+		{ // OpenJK VR: Grey, a Force Master (ui_vrforce.c)
+			s = (char *)UI_VRForce_SideText();
+		}
+		else if (i == FORCE_LIGHTSIDE)
 		{
 //			s = "Light";
 			s = (char *)UI_GetStringEdString("MENUS", "FORCEDESC_LIGHT");
@@ -3036,7 +3057,7 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
       UI_DrawJediNonJedi(&rect, scale, color, textStyle, uiJediNonJedi, 0, 1, iMenuFont);
       break;
     case UI_FORCE_POINTS:
-      UI_DrawGenericNum(&rect, scale, color, textStyle, uiForceAvailable, 1, forceMasteryPoints[MAX_FORCE_RANK], ownerDraw,iMenuFont);
+      UI_DrawGenericNum(&rect, scale, color, textStyle, UI_VRForce_Locked() ? 0 : uiForceAvailable, 1, forceMasteryPoints[MAX_FORCE_RANK], ownerDraw,iMenuFont);	// OpenJK VR: a Force Master's, nothing to spend
       break;
 	case UI_FORCE_MASTERY_SET:
       UI_DrawForceMastery(&rect, scale, color, textStyle, uiForceRank, 0, MAX_FORCE_RANK, iMenuFont);
@@ -3079,21 +3100,31 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 
 		findex = (ownerDraw - UI_FORCE_RANK)-1;
 		//this will give us the index as long as UI_FORCE_RANK is always one below the first force rank index
-		if (uiForcePowerDarkLight[findex] && uiForceSide != uiForcePowerDarkLight[findex])
-		{
-			color[0] *= 0.5;
-			color[1] *= 0.5;
-			color[2] *= 0.5;
-		}
+		{ // OpenJK VR: as the side has it - a Grey Jedi's both, a Force Master's every power at 3 (ui_vrforce.c); a row that can't be set
+		  // dimmed, its stars too (the game dimmed only the colour, which they don't use)
+			static const vec4_t dimStars = { 0.5f, 0.5f, 0.5f, 0.8f };
+			qboolean dim;
+			drawRank = UI_VRForce_Shown( findex, &dim );
+			if (dim)
+			{
+				color[0] *= 0.5;
+				color[1] *= 0.5;
+				color[2] *= 0.5;
+				trap->R_SetColor( dimStars );
+			}
 /*		else if (uiForceRank < UI_ForceColorMinRank[bgForcePowerCost[findex][FORCE_LEVEL_1]])
 		{
 			color[0] *= 0.5;
 			color[1] *= 0.5;
 			color[2] *= 0.5;
 		}
-*/		drawRank = uiForcePowersRank[findex];
-
-		UI_DrawForceStars(&rect, scale, color, textStyle, findex, drawRank, 0, NUM_FORCE_POWER_LEVELS-1);
+*/
+			UI_DrawForceStars(&rect, scale, color, textStyle, findex, drawRank, 0, NUM_FORCE_POWER_LEVELS-1);
+			if (dim)
+			{
+				trap->R_SetColor( NULL );
+			}
+		}
 		break;
     case UI_EFFECTS:
       break;
@@ -4195,7 +4226,7 @@ static qboolean UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, 
       return UI_SkinColor_HandleKey(flags, special, key, uiSkinColor, TEAM_FREE, TEAM_BLUE, ownerDraw);
       break;
     case UI_FORCE_SIDE:
-      return UI_ForceSide_HandleKey(flags, special, key, uiForceSide, 1, 2, ownerDraw);
+      return UI_ForceSide_HandleKey(flags, special, key, uiForceSide, 1, UI_VRForce_SideMax(), ownerDraw);	// OpenJK VR: Grey, where the character may be (ui_vrforce.c)
       break;
     case UI_JEDI_NONJEDI:
       return UI_JediNonJedi_HandleKey(flags, special, key, uiJediNonJedi, 0, 1, ownerDraw);
@@ -10735,7 +10766,7 @@ Q_EXPORT uiExport_t* QDECL GetModuleAPI( int apiVersion, uiImport_t *import )
 	uie.SetActiveMenu		= UI_SetActiveMenu;
 	uie.ConsoleCommand		= UI_ConsoleCommand;
 	uie.DrawConnectScreen	= UI_DrawConnectScreen;
-	uie.MenuReset			= Menu_Reset;
+	uie.MenuReset			= UI_MenuReset;	// OpenJK VR
 
 	return &uie;
 }
@@ -10788,7 +10819,7 @@ Q_EXPORT intptr_t vmMain( int command, intptr_t arg0, intptr_t arg1, intptr_t ar
 		return 0;
 
 	case UI_MENU_RESET:
-		Menu_Reset();
+		UI_MenuReset();	// OpenJK VR
 		return 0;
 	}
 

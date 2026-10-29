@@ -29,8 +29,11 @@ ADMINS. An account the server's owner made an admin (rcon rp admin) can
 use every cheat there, cheats on or off: the server says so (rpadmin),
 and the Roleplay menu shows its Admin page - spawn an NPC or a vehicle
 (tagged as the admin's: vra_<account>), kill those or every NPC, god
-mode, no-clip, no target, give all. They're the game's own cheat
-commands, which the server lets an admin use.
+mode, no-clip, no target, give all, every Force power (give forcepowers).
+They're the game's own cheat commands, which the server lets an admin use.
+On the People page an admin makes the character of whoever's picked a Grey
+Jedi or a Force Master, or neither (rp force: the server's answer to their
+card says which it is).
 
 THE MENUS read where things stand in ui_rp* cvars, and ask for things
 with "rpui <what>" (below).
@@ -49,6 +52,9 @@ set in the Force menu while you play a character - forcepowers, in your
 userinfo too - it takes as that character's. (Not a command: a server may
 drop one, sent hard on others.) Yours comes back by itself as this game
 starts and stops (on another server, say, or after playing one to the end).
+It also says what the character may be (ui_rpForceMay, BG_FORCE_*: a Grey
+Jedi - the Force menu offers Grey - or a Force Master: ui_vrforce.c), under
+the same number again as only that changes.
 
 SPEECH BUBBLES. With roleplay on, what someone near you says, and their
 /me, shows over their head for 6 seconds (cg_rpBubbles).
@@ -71,7 +77,7 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			6		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions, 6 a character's Force setup)
+#define RP_PROTOCOL			7		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions, 6 a character's Force setup, 7 Grey and Force Masters)
 
 // what the server says of an admin (rpadmin; as g_vrrp.c's)
 #define RPA_ADMIN			1
@@ -1038,6 +1044,9 @@ rpui admin <what>: the Admin page's buttons, the game's own cheat commands
   killmine, killall            the NPCs spawned here with your tag / every one
   god, noclip, notarget        on or off
   give                         give all
+  forcepowers                  give forcepowers: every Force power at level 3
+  force <client> grey|master|normal   rp force: whoever's picked on the
+                               People page - their character
 */
 static void CG_RP_Admin( void ) {
 	char what[32];
@@ -1069,6 +1078,19 @@ static void CG_RP_Admin( void ) {
 	} else if ( !Q_stricmp( what, "give" ) ) {
 		CG_RP_Send( "give all" );
 		trap->Cvar_Set( "ui_rpMessage", "Every weapon and item, full ammo, health and armor" );
+	} else if ( !Q_stricmp( what, "forcepowers" ) ) {
+		CG_RP_Send( "give forcepowers" );
+		trap->Cvar_Set( "ui_rpMessage", "" );	// (what came of it, as the server says: rpmsg - a Siege class keeps its own)
+	} else if ( !Q_stricmp( what, "force" ) ) {
+		char who[16], how[16];
+		int n;
+		trap->Cmd_Argv( 3, who, sizeof( who ) );
+		trap->Cmd_Argv( 4, how, sizeof( how ) );
+		n = atoi( who );	// (a client's number, as the People page has it: nothing else)
+		if ( who[0] && strlen( who ) <= 2 && strspn( who, "0123456789" ) == strlen( who ) && n < MAX_CLIENTS && cgs.clientinfo[n].infoValid &&
+			( !Q_stricmp( how, "grey" ) || !Q_stricmp( how, "master" ) || !Q_stricmp( how, "normal" ) ) ) {
+			CG_RP_Send( va( "rp force %i %s", n, how ) );	// (the server says what came of it: rpmsg, and their card)
+		}
 	}
 }
 
@@ -1261,7 +1283,9 @@ static void CG_RP_CharCmd( void ) {
 	}
 }
 
-// rpcard <client> <faction|-1> "<desc>"
+// rpcard <client> <faction|-1> "<desc>" [<role>]: to an admin, what an admin
+// made the character (0 neither, 1 a Grey Jedi, 2 a Force Master - the People
+// page's Force line: ui_rpWhoR<client>, "" not said)
 static void CG_RP_CardCmd( void ) {
 	const int n = atoi( CG_Argv( 1 ) );
 	char desc[RP_DESC_MAX * 2], plain[RP_DESC_MAX * 2];
@@ -1282,6 +1306,7 @@ static void CG_RP_CardCmd( void ) {
 	c->time = cg.time ? cg.time : 1;
 	trap->Cvar_Set( va( "ui_rpWhoF%i", n ), va( "%i", c->faction ) );	// (the menu's People page)
 	trap->Cvar_Set( va( "ui_rpWhoD%i", n ), plain );
+	trap->Cvar_Set( va( "ui_rpWhoR%i", n ), ( trap->Cmd_Argc() > 4 ) ? va( "%i", Com_Clampi( 0, 2, atoi( CG_Argv( 4 ) ) ) ) : "" );
 }
 
 // rpbio <client> "<bio>": for the menu's People page, or the card
@@ -1358,12 +1383,12 @@ static void CG_RP_FailCmd( void ) {
 
 // Whether s is a Force setup as the forcepowers cvar has one (as the server
 // takes one: g_vrrp.c's G_RP_ForceOk) - "<rank>-<side>-" and a level for
-// each power: a rank of 0 to 7, light or dark, levels of 0 to 3.
+// each power: a rank of 0 to 7, light, dark or Grey, levels of 0 to 3.
 static qboolean CG_RP_ForceOk( const char *s ) {
 	int i;
 
 	if ( strlen( s ) != DEFAULT_FORCEPOWERS_LEN || s[0] < '0' || s[0] > '0' + FORCE_MASTERY_JEDI_MASTER || s[1] != '-' ||
-		( s[2] != '0' + FORCE_LIGHTSIDE && s[2] != '0' + FORCE_DARKSIDE ) || s[3] != '-' ) {
+		s[2] < '0' + FORCE_LIGHTSIDE || s[2] > '0' + FORCE_GREYSIDE || s[3] != '-' ) {
 		return qfalse;
 	}
 	for ( i = 4; i < DEFAULT_FORCEPOWERS_LEN; i++ ) {
@@ -1376,6 +1401,7 @@ static qboolean CG_RP_ForceOk( const char *s ) {
 
 // Your own Force setup back, where a character's was (put by in
 // cg_rpOwnForce while you played it); and your userinfo says it's yours (rpf).
+// Yours is Light or Dark, as ever (ui_rpForceMay).
 static void CG_RP_ForceOwnBack( void ) {
 	char own[MAX_CVAR_VALUE_STRING];
 
@@ -1385,16 +1411,20 @@ static void CG_RP_ForceOwnBack( void ) {
 		trap->Cvar_Set( "cg_rpOwnForce", "" );
 	}
 	trap->Cvar_Set( "rpf", "" );
+	trap->Cvar_Set( "ui_rpForceMay", "0" );
 }
 
-// rpforce <number> <setup | ->: the Force setup this game's to have - the
-// character's you play (yours put by till you're yourself again), or "-":
+// rpforce <number> <setup | -> <may>: the Force setup this game's to have -
+// the character's you play (yours put by till you're yourself again), or "-":
 // yours back. Your userinfo says which it has (rpf "<number> <yours>": the
 // server takes what's in forcepowers then - set anew in the Force menu, say -
-// as the character's; "": yours).
+// as the character's; "": yours). And what the character may be, for the
+// Force menu (ui_rpForceMay: BG_FORCE_*) - under the number this game has,
+// only that: what's in forcepowers is the character's still, set since maybe.
 static void CG_RP_ForceCmd( void ) {
-	char number[32], setup[MAX_CVAR_VALUE_STRING], own[MAX_CVAR_VALUE_STRING];
+	char number[32], setup[MAX_CVAR_VALUE_STRING], own[MAX_CVAR_VALUE_STRING], rpf[MAX_CVAR_VALUE_STRING];
 	unsigned n;
+	const int may = atoi( CG_Argv( 3 ) ) & ( BG_FORCE_GREY | BG_FORCE_MASTER );
 
 	trap->Cmd_Argv( 1, number, sizeof( number ) );
 	trap->Cmd_Argv( 2, setup, sizeof( setup ) );
@@ -1405,6 +1435,11 @@ static void CG_RP_ForceCmd( void ) {
 	n = (unsigned)strtoul( number, NULL, 10 );
 	if ( !n || !CG_RP_ForceOk( setup ) ) {
 		return;
+	}
+	trap->Cvar_Set( "ui_rpForceMay", va( "%i", may ) );
+	trap->Cvar_VariableStringBuffer( "rpf", rpf, sizeof( rpf ) );
+	if ( rpf[0] && (unsigned)strtoul( rpf, NULL, 10 ) == n ) {
+		return;	// (the setup this game has: only what it may be changed)
 	}
 	trap->Cvar_VariableStringBuffer( "cg_rpOwnForce", own, sizeof( own ) );
 	if ( !own[0] ) {	// (yours, put by - not another character's)
@@ -1908,6 +1943,7 @@ static void CG_RP_UIClear( void ) {
 	for ( i = 0; i < MAX_CLIENTS; i++ ) {
 		trap->Cvar_Set( va( "ui_rpWhoF%i", i ), "" );
 		trap->Cvar_Set( va( "ui_rpWhoD%i", i ), "" );
+		trap->Cvar_Set( va( "ui_rpWhoR%i", i ), "" );
 	}
 	for ( i = 0; i < (int)ARRAY_LEN( cvars ); i++ ) {
 		trap->Cvar_Set( cvars[i], "" );

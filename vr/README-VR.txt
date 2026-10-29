@@ -1167,6 +1167,31 @@ powers wait. A character made before characters kept their powers takes
 yours the first time you play it. The server still holds every setup to
 its own rank and rules. An older OpenJK VR, or this one on an older
 server, keeps one setup for everything, as the game always has.
+  GREY JEDI AND FORCE MASTERS: where the server's owner allows them (the
+Server page's Grey Jedi and Force Masters rows), a character can be more
+than Light or Dark. A Grey Jedi has powers from both sides, bought with
+the same points as anyone's - at Jedi Master that's 100, and one whole
+side at level 3 already costs 156, so a Grey Jedi still has to choose. In
+the Force menu, Grey comes after Light and Dark; with it, the dark side's
+powers show on the left under a heading, the light side's where they
+always are, nothing dimmed. Either any character may be Grey, or only
+those an admin picks. A Force Master has every power at level 3, with
+nothing to spend; only an admin makes one. Its Force menu shows every
+power at 3 and changes nothing - the setup you had is kept for when it's
+put back. Where a character may not be Grey (any more), its Grey setup
+counts as the side most of its points are on (those on powers the server
+has): the Force menu says so and dims the other side's powers, and its
+powers are set once you pick Light or Dark. You're told as what your
+character may be changes, and its powers follow - where you stand once
+you're out of a fight, or as you respawn. The Editor's Force line says
+Grey or Force Master too. On Force-aligned teams everyone plays their
+team's side, Grey or not, and the Force menu opened there makes a setup
+that side's - a Grey one too. A Grey Jedi may take either Enlightenment
+pickup. The wheel's Force ring has room for seven
+powers and Back: with more (a Grey Jedi's, a Force Master's), the first
+six and More >, where the rest are (Force > goes back). An older OpenJK VR
+doesn't offer Grey; on it a Grey character counts as the side most of
+its points are on.
   Your password never leaves your PC: the game makes a key of it and logs
 in with that. Remember me keeps the key (never the password) and logs you
 in on that server by itself next time; Log out forgets it. A forgotten
@@ -1218,9 +1243,15 @@ its log; not while you're down. An Admin button shows at the top of the
 Roleplay menu (only to you): its page lists every NPC and vehicle the
 game has - Find narrows it - and Spawn puts the one picked in front of
 you; Kill my NPCs (the ones you spawned there), Kill all NPCs; God mode,
-No-clip and No target, each saying whether it's on; Give all. The console
-cheats work too (npc spawn <name>, god, noclip...). Nobody else is shown
-who's an admin; logging out ends your god mode, no-clip and no target.
+No-clip and No target, each saying whether it's on; Give all; All Force
+Powers (every power at level 3 till you change them or the map changes:
+give forcepowers). On the People page, with someone picked, an admin
+sees what their character is and makes it a Grey Jedi, a Force Master or
+Normal again (logged like a cheat; rp force <player> grey|master|normal;
+it stays so till an admin or the owner changes it). The console cheats
+work too (npc spawn <name>, god, noclip...). Nobody else is shown who's
+an admin; logging out ends your god mode, no-clip, no target and All
+Force Powers.
 Only the server's owner makes admins - at its console, or by rcon with
 its rcon password (on a game you host from your PC, you're the server:
 your Server page does it straight away - and rcon reaches it too while

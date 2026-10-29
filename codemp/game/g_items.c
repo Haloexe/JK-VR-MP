@@ -2433,7 +2433,8 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 		return;		// dead people can't pickup
 
 	if (ent->item->giType == IT_POWERUP &&
-		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK))
+		(ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || ent->item->giTag == PW_FORCE_ENLIGHTENED_DARK) &&
+		other->client->ps.fd.forceSide != FORCE_GREYSIDE)	// OpenJK VR: a Grey Jedi (roleplay) may take either
 	{
 		if (ent->item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{

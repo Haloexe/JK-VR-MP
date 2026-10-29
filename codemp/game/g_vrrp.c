@@ -6,10 +6,11 @@ accounts and logins, characters and factions, and roleplay chat.
 THE SWITCH. g_rp 1 turns roleplay on and 0 off, at any time, with no map
 change; the serverinfo "vrRP" says which (and, there at all, that this
 server knows roleplay): "<on> <g_rpCharacters> <g_rpTalkRange>
-<g_rpDowned> <g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels>"
-("0": not ready), games reading the first (atoi, older builds too), the
-Roleplay menu's Server page the rest (ui_vrrp.c). Off, the game plays as
-before; nothing is lost.
+<g_rpDowned> <g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels>
+<g_rpGrey> <g_rpForceMaster>" ("0": not ready), games reading the first
+(atoi, older builds too), the Roleplay menu's Server page the rest
+(ui_vrrp.c: a server with the last two has Grey Jedi and Force Masters).
+Off, the game plays as before; nothing is lost.
 
 ACCOUNTS. A player makes one with /new <name> <password> and logs in with
 /login <name> <password>. Their game (cg_vrrp.c) turns the password into a
@@ -59,6 +60,20 @@ they respawn; one the server would cut down, once they set it anew - and
 they're told so (G_RP_ForceFrame). A game older than this keeps none: its
 own setup, as ever.
 
+GREY JEDI AND FORCE MASTERS: what an admin makes a character (rp force, or
+the People page; rcon too), kept with it, counting while roleplay's on and
+it's played. A Grey Jedi has powers from both sides, bought with the same
+points as anyone's: g_rpGrey 1, any character may be one, 2, those an admin
+made one (and Force Masters), 0 (as it comes) none - its player picks Grey
+in the Force menu, a setup of side 3; where it may not be Grey, that counts
+as the side most of its points are on. A Force Master (g_rpForceMaster 1;
+0, as it comes, none) has every power at level 3, nothing to spend - its own
+setup kept for when it's put back. Its powers are set up so
+(BG_LegalizedForcePowersAs: G_RPForceMay), and its game's told what it may
+be with rpforce, as it changes; a game too old to offer Grey has a Grey
+setup as the side it counts as, and isn't Grey here. Off, out of character
+or with roleplay off, everyone's Light or Dark, as ever.
+
 DOWN, NOT DEAD (g_rpDowned): running out of health downs a player playing a
 character until someone of their faction gets them up or they give up; and
 NPCs take sides by faction - g_vrdown.c.
@@ -79,19 +94,23 @@ Client commands (most sent by the cgame or the menus, not typed):
                             later: it takes rpadmin; 5: rpcmps, rpcmp; 6:
                             rpforce, and says what it has in its userinfo -
                             rpf "<number> <own>" (or "": its own) - and the
-                            number of the rpforce it has here (0: none)
+                            number of the rpforce it has here (0: none); 7:
+                            what the character may be with rpforce, and Grey
   rpnew <account> <key>     make an account (key: 64 hex digits)
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
   rplogout
   rp new|play|faction|desc|bio|delete|list|look|giveup ...
+  rp force <client> grey|master|normal   an admin's: a Grey Jedi, a Force
+                            Master, or neither (G_RP_ForceRole)
   rpcard <client> [<client>...], rpbio <client>   what a character's card
                             shows (a server before several took the first)
   rpcomp list|set|del|out|order ...  companions (G_RP_Comp; 5 and later)
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
 <most> <1: this answers a login or a new account | 0> then rpchar <i>
-<faction> "name" "desc" "bio" each, rpcard, rpbio, rpmsg; rppassok, or
+<faction> "name" "desc" "bio" each, rpcard <client> <faction> "desc" (to an
+admin, and <RPR_*: what an admin made it>), rpbio, rpmsg; rppassok, or
 rpfail <1: the name or password was wrong | 0>, to end a request made
 with a key. A new password's proof is over "password <its key>". An
 admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
@@ -99,11 +118,15 @@ admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
 protocol 5 or later: rpcmps <count | -1: no character> <how many may come
 out>, then rpcmp <slot> <out> <seconds before it can come again> "name"
 "type" "look" <r> <g> <b> each - the character's companions. To a game of
-protocol 6 or later, as it changes: rpforce <number> <setup | -> - the Force
-setup it's to have: the character's, or "-": its player's own.
+protocol 6 or later, as it changes: rpforce <number> <setup | -> <may> - the
+Force setup it's to have: the character's, or "-": its player's own; and
+what the character may be (BG_FORCE_*: 1 a Grey Jedi, 2 a Force Master),
+which a game before 7 doesn't read - to one of 7 or later, under the same
+number again as only that changes.
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
-rp password <account> <temporary>, rp admin <account> [on|off], rp admins.
+rp password <account> <temporary>, rp admin <account> [on|off], rp admins,
+rp force <account> <character> grey|master|normal.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -120,13 +143,24 @@ extern void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chat
 
 static int G_RP_ClientArg( const char *arg );
 static void G_RP_ForceTell( int clientNum );
+struct rpChar_s;
+static void G_RP_ForceMaySay( int clientNum, const struct rpChar_s *ch, int was, int now );
 
 #define RP_PROTOCOL			3		// (2: rpacct says when it answers a login; a new password's proof is over its key;
 									// 3: down, not dead - rpdn, rpup, rp giveup, the pose: g_vrdown.c)
 #define RP_PROTOCOL_ADMIN	4		// a game this new takes rpadmin (one between, as ever, plays roleplay)
 #define RP_PROTOCOL_COMP	5		// a game this new takes rpcmps, rpcmp - companions (g_vrcomp.c)
 #define RP_PROTOCOL_FORCE	6		// a game this new keeps each character's Force setup with it: rpforce, and its userinfo's rpf
+#define RP_PROTOCOL_GREY	7		// a game this new reads what the character may be with rpforce, and offers Grey
 #define RP_FORCE_GAP		1000	// a character's setup taken from their game's word (and saved) no more often than this
+
+// what an admin made a character (rp force): RPR_GREY a Grey Jedi, where only those may be (g_rpGrey 2); RPR_MASTER a
+// Force Master (g_rpForceMaster) - and, Force Masters off, Grey as those an admin made Grey are
+enum { RPR_NORMAL, RPR_GREY, RPR_MASTER, RPR_NUM };
+static const char *rpRoleNames[RPR_NUM] = { "normal", "grey", "master" };	// (rp force's words; the account's file's)
+static const char *rpRoleTitles[RPR_NUM] = { "Light or Dark, as the game has it", "a Grey Jedi", "a Force Master" };
+#define RPG_ANY				1		// g_rpGrey: any character may be a Grey Jedi...
+#define RPG_PICKED			2		// ...or those an admin made one (0, and anything else: none)
 
 // what an admin's game is told (rpadmin)
 #define RPA_ADMIN			1
@@ -166,7 +200,7 @@ static const char *rpLookKeys[] = { "model", "color1", "color2", "char_color_red
 #define RP_LOOK_KEYS	( (int)ARRAY_LEN( rpLookKeys ) )
 #define RP_LOOK_RGB		6	// (where the saber colours of their own start: their pairs, as color1 and color2)
 
-typedef struct {
+typedef struct rpChar_s {
 	char	name[RP_NAME_BUF];
 	int		faction;
 	char	desc[RP_DESC_MAX + 1];
@@ -175,6 +209,7 @@ typedef struct {
 	int		numComps;
 	rpComp_t	comps[RP_COMP_MAX];		// its companions (g_vrcomp.c brings them out)
 	char	force[DEFAULT_FORCEPOWERS_LEN + 1];	// its Force setup, as the forcepowers cvar has one ("": none yet)
+	int		role;		// RPR_*: what an admin made it
 } rpChar_t;
 
 typedef struct {
@@ -189,6 +224,7 @@ typedef struct {
 typedef struct {
 	qboolean	capable;			// runs this build (sent rpver)
 	int			protocol;			// the one it said (0: not yet)
+	int			protocolWas;		// the one it said before the map changed (0: none, or not known) - till it says again
 	int			adminTold;			// what rpadmin last told it (RPA_*; 0: nothing, or not an admin)
 	char		challenge[VRRP_CHALLENGE_HEX + 1];
 	qboolean	loggedIn;
@@ -209,11 +245,14 @@ typedef struct {
 	qboolean	forceGame;			// its game keeps characters' Force setups (protocol 6 or later; kept over a map change)
 	char		forceTold[DEFAULT_FORCEPOWERS_LEN + 1];	// what rpforce last told it ("-": its own; "": nothing yet)...
 	int			forceGen;			// ...for which character (playGen then)...
-	unsigned	forceSeq;			// ...and its number, which its game's word on its setup goes with (userinfo rpf)
+	unsigned	forceSeq;			// ...and its number, which its game's word on its setup goes with (userinfo rpf)...
+	int			forceMayTold;		// ...and what it said the character may be (BG_FORCE_*: G_RP_ForceMay)
 	char		forceOwn[DEFAULT_FORCEPOWERS_LEN + 1];	// the player's own setup, as their game says it ("": not heard yet)
-	char		forceUsed[DEFAULT_FORCEPOWERS_LEN + 1];	// what their powers were last set up from (WP_InitForcePowers; "": not yet)
+	char		forceUsed[DEFAULT_FORCEPOWERS_LEN + 1];	// what their powers were last set up from (WP_InitForcePowers; "": not yet)...
+	int			forceUsedMay;		// ...as what (BG_FORCE_*: a Grey Jedi, a Force Master)
 	qboolean	forceNow;			// they're to have another since: where they stand, once out of a fight (or as they spawn)...
-	char		forceSaid[DEFAULT_FORCEPOWERS_LEN + 1];	// ...and what they were told of the setup it's from ("": nothing)
+	char		forceSaid[DEFAULT_FORCEPOWERS_LEN + 1];	// ...and what they were told of the setup it's from ("": nothing)...
+	int			forceSaidMay;		// ...as what
 	int			forceTaken;			// when a character's setup was last taken from their game's word (saved)
 } rpClient_t;
 
@@ -509,13 +548,13 @@ static const char *G_RP_AccountPath( const char *name ) {
 }
 
 // Whether s is a Force setup as the forcepowers cvar has one: "<rank>-<side>-"
-// and a level for each power - a rank of 0 to 7, light or dark, levels of 0
-// to 3.
+// and a level for each power - a rank of 0 to 7, light, dark or Grey, levels
+// of 0 to 3.
 static qboolean G_RP_ForceOk( const char *s ) {
 	int i;
 
 	if ( !s || strlen( s ) != DEFAULT_FORCEPOWERS_LEN || s[0] < '0' || s[0] > '0' + FORCE_MASTERY_JEDI_MASTER || s[1] != '-' ||
-		( s[2] != '0' + FORCE_LIGHTSIDE && s[2] != '0' + FORCE_DARKSIDE ) || s[3] != '-' ) {
+		s[2] < '0' + FORCE_LIGHTSIDE || s[2] > '0' + FORCE_GREYSIDE || s[3] != '-' ) {
 		return qfalse;
 	}
 	for ( i = 4; i < DEFAULT_FORCEPOWERS_LEN; i++ ) {
@@ -544,6 +583,9 @@ static void G_RP_SaveAccount( const rpAccount_t *acc ) {
 		}
 		if ( ch->force[0] ) {
 			Q_strcat( text, sizeof( text ), va( "force \"%s\"\n", ch->force ) );
+		}
+		if ( ch->role > RPR_NORMAL && ch->role < RPR_NUM ) {
+			Q_strcat( text, sizeof( text ), va( "forcerole %s\n", rpRoleNames[ch->role] ) );
 		}
 		for ( k = 0; k < ch->numComps; k++ ) {
 			const rpComp_t *cp = &ch->comps[k];
@@ -654,6 +696,14 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 			tok = COM_ParseExt( &p, qfalse );
 			if ( G_RP_ForceOk( tok ) ) {	// (one that isn't: none, as one made before characters kept them)
 				Q_strncpyz( ch->force, tok, sizeof( ch->force ) );
+			}
+		} else if ( ch && !Q_stricmp( tok, "forcerole" ) ) {
+			int r;
+			tok = COM_ParseExt( &p, qfalse );
+			for ( r = RPR_NORMAL; r < RPR_NUM; r++ ) {
+				if ( !Q_stricmp( tok, rpRoleNames[r] ) ) {
+					ch->role = r;	// (a word it doesn't know: as it was - normal)
+				}
 			}
 		} else {
 			SkipRestOfLine( &p );
@@ -881,15 +931,23 @@ static void G_RP_SendAccount( int clientNum ) {
 	G_RPSendComps( clientNum );
 }
 
+// A client's game's protocol as it last said it - after a map change, before
+// it says again, as it said before (0: not known).
+static int G_RP_Protocol( const rpClient_t *c ) {
+	return c->protocol ? c->protocol : c->protocolWas;
+}
+
 // The login a client keeps across a map change (the game restarts, they
 // don't), and that their game runs this build: it says so again, a moment
 // in, but it's known from the start - they go down, not die, from the first;
 // and whether it keeps characters' Force setups - their powers are the
-// character's from the first ("<account> <active> <capable> <forceGame>").
+// character's from the first - and its protocol, so a Grey Jedi's are too
+// ("<account> <active> <capable> <forceGame> <protocol>").
 static void G_RP_WriteSession( int clientNum ) {
 	const rpClient_t *c = &rpc[clientNum];
 
-	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i %i %i", c->acc.name, c->active, c->capable ? 1 : 0, c->forceGame ? 1 : 0 ) : "" );
+	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i %i %i %i", c->acc.name, c->active, c->capable ? 1 : 0, c->forceGame ? 1 : 0,
+		G_RP_Protocol( c ) ) : "" );
 }
 
 /*
@@ -921,6 +979,15 @@ int G_RPFaction( int clientNum ) {
 // Whether a client's game runs this build (it said rpver).
 qboolean G_RPCapable( int clientNum ) {
 	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].capable );
+}
+
+// A word to a player, in their console - and, their game this build's, on
+// the Roleplay menu's status line (G_RP_Msg): what a cheat did (w_force.c's
+// give forcepowers, the Admin page's All Force Powers).
+void G_RPMessage( int clientNum, const char *text ) {
+	if ( clientNum >= 0 && clientNum < MAX_CLIENTS ) {
+		G_RP_Msg( clientNum, text );
+	}
 }
 
 // A companion of the character a client plays (NULL: no such one, no
@@ -1126,9 +1193,43 @@ static const char *G_RP_ForceUse( int clientNum ) {
 	return ( ch && G_RP_ForceOk( ch->force ) ) ? ch->force : c->forceOwn;
 }
 
+// What the character a client plays may be here (BG_FORCE_*): a Grey Jedi where
+// the server lets it be one (g_rpGrey: any character, or those an admin made
+// one - or a Force Master) and its game offers Grey (RP_PROTOCOL_GREY); a Force
+// Master where the server has them (g_rpForceMaster) and an admin made it one.
+// Nothing out of character, with roleplay off, or for a game that keeps no
+// setups with characters (as its powers aren't set up from them).
+static int G_RP_ForceMay( int clientNum ) {
+	const rpClient_t *c = &rpc[clientNum];
+	const rpChar_t *ch = G_RP_Active( clientNum );
+	int may = 0;
+
+	if ( !ch || !c->forceGame ) {
+		return 0;
+	}
+	if ( G_RP_Protocol( c ) >= RP_PROTOCOL_GREY && ( g_rpGrey.integer == RPG_ANY || ( g_rpGrey.integer == RPG_PICKED && ch->role != RPR_NORMAL ) ) ) {
+		may |= BG_FORCE_GREY;
+	}
+	if ( g_rpForceMaster.integer && ch->role == RPR_MASTER ) {
+		may |= BG_FORCE_MASTER;
+	}
+	return may;
+}
+
+// WP_InitForcePowers: what a client's powers are set up as (BG_LegalizedForcePowersAs).
+int G_RPForceMay( int clientNum ) {
+	return ( clientNum >= 0 && clientNum < MAX_CLIENTS ) ? G_RP_ForceMay( clientNum ) : 0;
+}
+
+// What may (BG_FORCE_*) makes of a setup's powers: a Force Master's, whatever
+// it is; a Grey Jedi's, only a Grey one's.
+static int G_RP_ForceMayFor( const char *setup, int may ) {
+	return ( may & BG_FORCE_MASTER ) | ( ( setup && setup[0] && setup[1] == '-' && setup[2] == '0' + FORCE_GREYSIDE ) ? ( may & BG_FORCE_GREY ) : 0 );
+}
+
 // WP_InitForcePowers: forcePowers holds their userinfo's setup, and becomes
 // what roleplay keeps for them (G_RP_ForceUse); what their powers are set up
-// from is noted.
+// from, and as what, is noted.
 void G_RPForceSetup( int clientNum, char *forcePowers, int size ) {
 	const char *use;
 
@@ -1140,8 +1241,20 @@ void G_RPForceSetup( int clientNum, char *forcePowers, int size ) {
 		Q_strncpyz( forcePowers, use, size );
 	}
 	Q_strncpyz( rpc[clientNum].forceUsed, forcePowers, sizeof( rpc[0].forceUsed ) );
+	rpc[clientNum].forceUsedMay = G_RP_ForceMayFor( forcePowers, G_RP_ForceMay( clientNum ) );
 	rpc[clientNum].forceNow = qfalse;	// (set up from what's theirs now: nothing waits)
 	rpc[clientNum].forceSaid[0] = '\0';
+}
+
+// Whether a client's powers, set up from setup as may has it, would be as
+// they were set up last (G_RPForceSetup) - or as they were told of last
+// (said: G_RP_ForceSay).
+static qboolean G_RP_ForceAsUsed( const rpClient_t *c, const char *setup, int may ) {
+	return (qboolean)( G_RP_ForceSame( setup, c->forceUsed ) && G_RP_ForceMayFor( setup, may ) == c->forceUsedMay );
+}
+
+static qboolean G_RP_ForceAsSaid( const rpClient_t *c, const char *setup, int may ) {
+	return (qboolean)( G_RP_ForceSame( setup, c->forceSaid ) && G_RP_ForceMayFor( setup, may ) == c->forceSaidMay );
 }
 
 // A character without a Force setup of its own yet (made before characters
@@ -1162,10 +1275,11 @@ static void G_RP_ForceFill( int clientNum ) {
 	G_RP_SaveAccount( &c->acc );
 }
 
-// A client's powers to be set up from another setup than they were: where they
-// stand, as soon as they can be (G_RP_ForceFrame), and as they next spawn; one
-// back to what they have, nothing waits. (Not set up yet: when they are, it's
-// from what's theirs then.)
+// A client's powers to be set up from another setup than they were, or as
+// another character may be (a Grey Jedi, a Force Master): where they stand,
+// as soon as they can be (G_RP_ForceFrame), and as they next spawn; one back to
+// what they have, nothing waits. (Not set up yet: when they are, it's from
+// what's theirs then.)
 static void G_RP_ForceChange( int clientNum ) {
 	rpClient_t *c = &rpc[clientNum];
 	gentity_t *ent = &g_entities[clientNum];
@@ -1173,7 +1287,7 @@ static void G_RP_ForceChange( int clientNum ) {
 	if ( !ent->client || !c->forceUsed[0] ) {
 		return;
 	}
-	c->forceNow = (qboolean)!G_RP_ForceSame( G_RP_ForceUse( clientNum ), c->forceUsed );
+	c->forceNow = (qboolean)!G_RP_ForceAsUsed( c, G_RP_ForceUse( clientNum ), G_RP_ForceMay( clientNum ) );
 	if ( c->forceNow ) {
 		ent->client->ps.fd.forceDoInit = 1;
 	} else {
@@ -1181,33 +1295,72 @@ static void G_RP_ForceChange( int clientNum ) {
 	}
 }
 
+// The setup a client's game is to have (into out): the character's they play
+// - to a game too old to offer Grey (before RP_PROTOCOL_GREY), a Grey setup as
+// the side most of its points are on, the other side's powers out, as it
+// counts for them (G_RP_ForceMay: never Grey) - or "-": their own.
+static void G_RP_ForceWant( int clientNum, const rpChar_t *ch, char *out, int size ) {
+	int levels[NUM_FORCE_POWERS], side, i;
+
+	Q_strncpyz( out, ch ? ch->force : "-", size );
+	if ( !ch || G_RP_Protocol( &rpc[clientNum] ) >= RP_PROTOCOL_GREY || !G_RP_ForceOk( out ) || out[2] != '0' + FORCE_GREYSIDE ) {
+		return;
+	}
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+		levels[i] = out[4 + i] - '0';
+	}
+	side = BG_ForceSideMost( levels, level.gametype, g_forcePowerDisable.integer );
+	out[2] = '0' + side;
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+		if ( forcePowerDarkLight[i] && forcePowerDarkLight[i] != side ) {
+			out[4 + i] = '0';
+		}
+	}
+}
+
 // A client's game told the Force setup it's to have, as that changes - the
 // character's they play (one it hasn't yet, made), or "-": its player's own
-// (rpforce <number> <setup | ->) - and another for every character taken up or
-// put down, so what the game says of one it had before is known for that
-// (G_RP_ForceHeard). Their powers follow.
+// (rpforce <number> <setup | -> <may>) - and another for every character taken
+// up or put down, so what the game says of one it had before is known for that
+// (G_RP_ForceHeard); and what the character may be (G_RP_ForceMay), under the
+// same number again as only that changes, so what it's set meanwhile counts.
+// Their powers follow.
 static void G_RP_ForceTell( int clientNum ) {
 	rpClient_t *c = &rpc[clientNum];
 	const gentity_t *ent = &g_entities[clientNum];
 	const rpChar_t *ch;
-	const char *want;
+	char want[DEFAULT_FORCEPOWERS_LEN + 1];
+	int may;
 
 	if ( !c->forceGame || !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
 		return;
 	}
 	G_RP_ForceFill( clientNum );
 	ch = G_RP_Active( clientNum );
-	want = ch ? ch->force : "-";
+	G_RP_ForceWant( clientNum, ch, want, sizeof( want ) );
+	may = G_RP_ForceMay( clientNum );
 	if ( !strcmp( want, c->forceTold ) && c->forceGen == c->playGen ) {
+		if ( may != c->forceMayTold ) {
+			const int was = c->forceMayTold;
+			c->forceMayTold = may;
+			if ( G_RP_Protocol( c ) >= RP_PROTOCOL_GREY ) {
+				trap->SendServerCommand( clientNum, va( "rpforce %u %s %i", c->forceSeq, want, may ) );
+			}
+			G_RP_ForceChange( clientNum );
+			if ( ch ) {
+				G_RP_ForceMaySay( clientNum, ch, was, may );
+			}
+		}
 		return;
 	}
 	Q_strncpyz( c->forceTold, want, sizeof( c->forceTold ) );
 	c->forceGen = c->playGen;
+	c->forceMayTold = may;
 	if ( !++rp.forceSeq ) {
 		rp.forceSeq++;	// (never 0: a game that's been told nothing)
 	}
 	c->forceSeq = rp.forceSeq;
-	trap->SendServerCommand( clientNum, va( "rpforce %u %s", c->forceSeq, want ) );
+	trap->SendServerCommand( clientNum, va( "rpforce %u %s %i", c->forceSeq, want, may ) );
 	G_RP_ForceChange( clientNum );
 }
 
@@ -1245,7 +1398,8 @@ static int G_RP_ForceFits( int clientNum, const char *setup ) {
 		side = ( cl->sess.sessionTeam == TEAM_RED ) ? FORCE_DARKSIDE : ( cl->sess.sessionTeam == TEAM_BLUE ) ? FORCE_LIGHTSIDE : 0;
 	}
 	Q_strncpyz( legal, setup, sizeof( legal ) );
-	if ( !BG_LegalizedForcePowers( legal, sizeof( legal ), rank, HasSetSaberOnly(), side, level.gametype, g_forcePowerDisable.integer ) ) {
+	if ( !BG_LegalizedForcePowersAs( legal, sizeof( legal ), rank, HasSetSaberOnly(), side, level.gametype, g_forcePowerDisable.integer,
+		G_RP_ForceMay( clientNum ) ) ) {
 		return RP_FORCE_CUT;
 	}
 	if ( level.gametype == GT_HOLOCRON || level.gametype == GT_JEDIMASTER ) {
@@ -1306,8 +1460,9 @@ static qboolean G_RP_ForceNowOk( int clientNum ) {
 // one the server would cut down, that it's to be set anew (setting powers up
 // would send them to spectate for it: not given) - their menus told the rank,
 // as setting powers up tells them (started over since, they may not know it).
-// Noted, so it's said once.
-static void G_RP_ForceSay( int clientNum, const char *setup ) {
+// Noted, so it's said once. (lead: what changed, said first - NULL, their
+// powers.)
+static void G_RP_ForceSay( int clientNum, const char *setup, const char *lead ) {
 	rpClient_t *c = &rpc[clientNum];
 	const gentity_t *ent = &g_entities[clientNum];
 	const gclient_t *cl = ent->client;
@@ -1335,15 +1490,55 @@ static void G_RP_ForceSay( int clientNum, const char *setup ) {
 	} else {
 		Q_strncpyz( when, "change as you respawn", sizeof( when ) );
 	}
-	G_RP_Msg( clientNum, ch ? va( "%s" S_COLOR_WHITE "'s Force powers %s", ch->name, when ) : va( "Your Force powers %s", when ) );
+	if ( lead ) {
+		G_RP_Msg( clientNum, va( "%s - its powers %s", lead, when ) );
+	} else {
+		G_RP_Msg( clientNum, ch ? va( "%s" S_COLOR_WHITE "'s Force powers %s", ch->name, when ) : va( "Your Force powers %s", when ) );
+	}
 	Q_strncpyz( c->forceSaid, setup, sizeof( c->forceSaid ) );
+	c->forceSaidMay = G_RP_ForceMayFor( setup, G_RP_ForceMay( clientNum ) );
+}
+
+// A client told what the character they play may be now, as that changes for
+// it (an admin, the server's settings) - the change that matters most - and,
+// if their powers can't change as it does, when they will (G_RP_ForceSay).
+static void G_RP_ForceMaySay( int clientNum, const rpChar_t *ch, int was, int now ) {
+	const rpClient_t *c = &rpc[clientNum];
+	const int gone = was & ~now, came = now & ~was;
+	const char *from;
+	char lead[MAX_STRING_CHARS];
+
+	if ( came & BG_FORCE_MASTER ) {
+		Com_sprintf( lead, sizeof( lead ), "%s" S_COLOR_WHITE " is a Force Master here: every Force power at level 3", ch->name );
+	} else if ( gone & BG_FORCE_MASTER ) {
+		Com_sprintf( lead, sizeof( lead ), "%s" S_COLOR_WHITE " is no longer a Force Master here: its Force powers are as you set them", ch->name );
+	} else if ( came & BG_FORCE_GREY ) {
+		Com_sprintf( lead, sizeof( lead ), "%s" S_COLOR_WHITE " %s", ch->name, ( ch->force[2] == '0' + FORCE_GREYSIDE ) ?
+			"is a Grey Jedi here: its powers from both sides, as you set them" : "may be a Grey Jedi here: pick Grey in the Force menu" );
+	} else if ( ( gone & BG_FORCE_GREY ) && ch->force[2] == '0' + FORCE_GREYSIDE ) {
+		int levels[NUM_FORCE_POWERS], i;
+		for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+			levels[i] = ch->force[4 + i] - '0';
+		}
+		Com_sprintf( lead, sizeof( lead ), "%s" S_COLOR_WHITE " may no longer be Grey here: its Force counts as the %s side", ch->name,
+			( BG_ForceSideMost( levels, level.gametype, g_forcePowerDisable.integer ) == FORCE_DARKSIDE ) ? "dark" : "light" );
+	} else {
+		return;
+	}
+	from = G_RP_ForceUse( clientNum );
+	if ( c->forceNow && from && !( G_RP_ForceNowOk( clientNum ) && G_RP_ForceFits( clientNum, from ) == RP_FORCE_HERE ) ) {
+		G_RP_ForceSay( clientNum, from, lead );	// (not where they stand now: when)
+	} else {
+		G_RP_Msg( clientNum, lead );
+	}
 }
 
 // Each frame: their game's word on its Force setup (G_RP_ForceRead). Set anew
 // in the Force menu while they play a character, under the rpforce last told
 // them for it, it's the character's - saved, once a second at most - and their
 // powers follow (G_RP_ForceFrame), as they're told. Under another number, or
-// none, it isn't for what they play now.
+// none, it isn't for what they play now; nor what it was told, the setup a
+// game too old to offer Grey was told for a Grey one (G_RP_ForceWant).
 static void G_RP_ForceHeard( int clientNum ) {
 	rpClient_t *c = &rpc[clientNum];
 	rpChar_t *ch;
@@ -1352,7 +1547,8 @@ static void G_RP_ForceHeard( int clientNum ) {
 
 	G_RP_ForceRead( clientNum, setup, sizeof( setup ), &number );
 	ch = G_RP_Active( clientNum );
-	if ( !ch || !c->forceTold[0] || number != c->forceSeq || c->forceGen != c->playGen || !G_RP_ForceOk( setup ) || !strcmp( setup, ch->force ) ) {
+	if ( !ch || !c->forceTold[0] || number != c->forceSeq || c->forceGen != c->playGen || !G_RP_ForceOk( setup ) || !strcmp( setup, ch->force ) ||
+		!strcmp( setup, c->forceTold ) ) {
 		return;
 	}
 	if ( c->forceTaken && level.time - c->forceTaken >= 0 && level.time - c->forceTaken < RP_FORCE_GAP ) {
@@ -1368,7 +1564,7 @@ static void G_RP_ForceHeard( int clientNum ) {
 	}
 	G_RP_ForceChange( clientNum );
 	if ( c->forceNow ) {
-		G_RP_ForceSay( clientNum, setup );
+		G_RP_ForceSay( clientNum, setup, NULL );
 	}
 }
 
@@ -1379,12 +1575,12 @@ static void G_RP_ForceHeard( int clientNum ) {
 // that changes what spawning gives them, roleplay respawns them for then, as
 // switching characters does - and no sooner again. Waiting, they're told so,
 // once (G_RP_ForceSay: what they were told of the setup it's from, its rank
-// aside).
+// aside, and as what - a Grey Jedi, a Force Master - G_RP_ForceAsSaid).
 static void G_RP_ForceFrame( int clientNum ) {
 	rpClient_t *c = &rpc[clientNum];
 	gentity_t *ent = &g_entities[clientNum];
 	const char *from;
-	int fits;
+	int fits, may;
 
 	if ( !c->forceGame ) {
 		return;
@@ -1395,7 +1591,8 @@ static void G_RP_ForceFrame( int clientNum ) {
 		return;
 	}
 	from = G_RP_ForceUse( clientNum );
-	if ( G_RP_ForceSame( from, c->forceUsed ) ) {
+	may = G_RP_ForceMay( clientNum );
+	if ( G_RP_ForceAsUsed( c, from, may ) ) {
 		c->forceNow = qfalse;	// (set up from it since: spawning)
 		c->forceSaid[0] = '\0';
 		return;
@@ -1405,15 +1602,15 @@ static void G_RP_ForceFrame( int clientNum ) {
 		G_RP_ForceNow( ent );
 		c->forceNow = qfalse;
 	} else if ( G_RP_ForceNowOk( clientNum ) && fits == RP_FORCE_SPAWN && G_RPOn() ) {
-		if ( !G_RP_ForceSame( c->forceSaid, from ) ) {
-			G_RP_ForceSay( clientNum, from );
+		if ( !G_RP_ForceAsSaid( c, from, may ) ) {
+			G_RP_ForceSay( clientNum, from, NULL );
 		}
 		c->switchTime = level.time ? level.time : 1;
 		ent->client->ps.fd.forceDoInit = 1;
 		ClientSpawn( ent );	// (set up as they spawn: G_RPForceSetup)
 		c->forceNow = qfalse;
-	} else if ( !G_RP_ForceSame( c->forceSaid, from ) && G_RP_InPlay( ent ) ) {
-		G_RP_ForceSay( clientNum, from );
+	} else if ( !G_RP_ForceAsSaid( c, from, may ) && G_RP_InPlay( ent ) ) {
+		G_RP_ForceSay( clientNum, from, NULL );
 	}
 }
 
@@ -1438,8 +1635,9 @@ qboolean G_RPAdmin( int clientNum ) {
 	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rp.ready && rpc[clientNum].loggedIn && rpc[clientNum].acc.admin );
 }
 
-// Someone who's no longer an admin: what their cheats left on ends - unless
-// cheats are on for everyone, when anyone may have it.
+// Someone who's no longer an admin: what their cheats left on ends - every
+// Force power (give forcepowers) too, their own set up again where they stand
+// - unless cheats are on for everyone, when anyone may have it.
 static void G_RP_AdminOff( int clientNum ) {
 	gentity_t *ent = &g_entities[clientNum];
 
@@ -1448,6 +1646,9 @@ static void G_RP_AdminOff( int clientNum ) {
 	}
 	ent->flags &= ~( FL_GODMODE | FL_NOTARGET );
 	ent->client->noclip = qfalse;
+	if ( ent->client->pers.vrAllForce ) {
+		G_RP_ForceNow( ent );
+	}
 }
 
 // What an admin's game is told (RPA_*; 0: not an admin).
@@ -1940,6 +2141,95 @@ static void G_RP_DeleteChar( rpAccount_t *acc, int index ) {
 	}
 }
 
+// A role as rp force names one (RPR_*; -1: none).
+static int G_RP_RoleNamed( const char *name ) {
+	int r;
+
+	for ( r = RPR_NORMAL; r < RPR_NUM; r++ ) {
+		if ( !Q_stricmp( name, rpRoleNames[r] ) ) {
+			return r;
+		}
+	}
+	return -1;
+}
+
+// What a role makes of a character on this server as it's set now: "" if
+// that counts, else why not.
+static const char *G_RP_RoleOff( int role ) {
+	if ( role == RPR_GREY && g_rpGrey.integer == RPG_ANY ) {
+		return " (any character may be Grey on this server)";
+	}
+	if ( role == RPR_GREY && g_rpGrey.integer != RPG_PICKED ) {
+		return " (Grey Jedi are off on this server: the Server page has them)";
+	}
+	if ( role == RPR_MASTER && !g_rpForceMaster.integer ) {
+		return " (Force Masters are off on this server: the Server page has them)";
+	}
+	return "";
+}
+
+// A character made a Grey Jedi or a Force Master, or neither (role: RPR_*), its
+// account's file saved and the log told (by: who did). Whoever plays it is
+// told as that counts, and their powers follow (G_RP_ForceTell).
+static void G_RP_SetRole( rpAccount_t *acc, rpChar_t *ch, int role, const char *by ) {
+	char who[MAX_STRING_CHARS];
+
+	Q_strncpyz( who, by, sizeof( who ) );	// (by may be va()'s, which saving the file uses again)
+	ch->role = role;
+	G_RP_SaveAccount( acc );
+	G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " (account %s) made %s by %s\n", ch->name, acc->name, rpRoleTitles[role], who );
+}
+
+// rpcard <client> <faction> "<desc>" [<role>]: what someone's card shows,
+// sent to a client - with what an admin made the character, to an admin
+// (for the People page's Force line).
+static void G_RP_SendCard( int to, int target ) {
+	const rpChar_t *ch = G_RP_Active( target );
+
+	if ( G_RPAdmin( to ) ) {
+		trap->SendServerCommand( to, va( "rpcard %i %i \"%s\" %i", target, ch ? ch->faction : -1, ch ? ch->desc : "", ch ? ch->role : RPR_NORMAL ) );
+	} else {
+		trap->SendServerCommand( to, va( "rpcard %i %i \"%s\"", target, ch ? ch->faction : -1, ch ? ch->desc : "" ) );
+	}
+}
+
+// rp force <client> grey|master|normal: an admin makes the character someone
+// plays a Grey Jedi or a Force Master, or neither - logged, as an admin's
+// cheats are; told the card again (the People page).
+static void G_RP_ForceRole( gentity_t *ent ) {
+	const int clientNum = ent - g_entities;
+	char arg[MAX_TOKEN_CHARS], how[16];
+	rpChar_t *ch;
+	int target, role;
+
+	if ( !G_RPAdmin( clientNum ) ) {
+		G_RP_Msg( clientNum, "Only an admin makes characters Grey Jedi or Force Masters" );
+		return;
+	}
+	trap->Argv( 2, arg, sizeof( arg ) );
+	trap->Argv( 3, how, sizeof( how ) );
+	target = arg[0] ? G_RP_ClientArg( arg ) : -1;
+	role = G_RP_RoleNamed( how );
+	if ( target < 0 || role < 0 ) {
+		G_RP_Print( clientNum, "rp force <player name or number> grey|master|normal" );
+		return;
+	}
+	ch = G_RP_Active( target );
+	if ( !ch ) {
+		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " isn't playing a character", g_entities[target].client->pers.netname ) );
+		return;
+	}
+	if ( ch->role == role ) {
+		G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " is %s already%s", ch->name, rpRoleTitles[role], G_RP_RoleOff( role ) ) );
+		G_RP_SendCard( clientNum, target );
+		return;
+	}
+	G_RPAdminCheat( ent );	// (in the log, as an admin's cheats are)
+	G_RP_SetRole( &rpc[target].acc, ch, role, va( "admin %s (client %i)", rpc[clientNum].acc.name, clientNum ) );
+	G_RP_Msg( clientNum, va( "%s" S_COLOR_WHITE " is %s now%s", ch->name, rpRoleTitles[role], G_RP_RoleOff( role ) ) );
+	G_RP_SendCard( clientNum, target );
+}
+
 static void G_RP_Rp( gentity_t *ent ) {
 	const int clientNum = ent - g_entities;
 	rpClient_t *c = &rpc[clientNum];
@@ -1984,6 +2274,10 @@ static void G_RP_Rp( gentity_t *ent ) {
 	}
 	if ( !c->loggedIn ) {
 		G_RP_Msg( clientNum, "Log in first: /login <account> <password>, or /new <account> <password> for a new one" );
+		return;
+	}
+	if ( !Q_stricmp( sub, "force" ) ) {
+		G_RP_ForceRole( ent );	// (an admin's: a Grey Jedi, a Force Master)
 		return;
 	}
 	if ( !Q_stricmp( sub, "list" ) || !sub[0] ) {
@@ -2297,7 +2591,7 @@ static void G_RP_Card( gentity_t *ent, qboolean bio ) {
 		if ( bio ) {
 			trap->SendServerCommand( clientNum, va( "rpbio %i \"%s\"", target, ch ? ch->bio : "" ) );
 		} else {
-			trap->SendServerCommand( clientNum, va( "rpcard %i %i \"%s\"", target, ch ? ch->faction : -1, ch ? ch->desc : "" ) );
+			G_RP_SendCard( clientNum, target );
 		}
 	}
 }
@@ -2649,6 +2943,10 @@ void G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 		active = atoi( COM_Parse( &p ) );
 		c->capable = (qboolean)( atoi( COM_Parse( &p ) ) == 1 );	// (an older server's session doesn't say: its hello will)
 		c->forceGame = (qboolean)( atoi( COM_Parse( &p ) ) == 1 );	// (nor this)
+		c->protocolWas = atoi( COM_Parse( &p ) );	// (nor this)
+		if ( !c->capable || c->protocolWas < 0 ) {
+			c->protocolWas = 0;
+		}
 		if ( G_RP_LoadAccount( name, &acc ) ) {
 			c->loggedIn = qtrue;
 			c->acc = acc;
@@ -2669,18 +2967,22 @@ void G_RPClientDisconnect( int clientNum ) {
 }
 
 // The serverinfo "vrRP": "0" - roleplay not ready here - or whether it's
-// on, and the settings the Roleplay menu's Server page shows.
+// on, and the settings the Roleplay menu's Server page shows (Grey Jedi: 0
+// none, RPG_ANY, RPG_PICKED; Force Masters: 0 or 1).
 static void G_RP_ServerInfo( void ) {
 	if ( !rp.ready ) {
 		trap->Cvar_Set( "vrRP", "0" );	// (not ready: off, whatever g_rp says)
 		return;
 	}
-	trap->Cvar_Set( "vrRP", va( "%i %i %i %i %i %i %i", g_rp.integer ? 1 : 0, G_RP_MostChars(), g_rpTalkRange.integer,
+	trap->Cvar_Set( "vrRP", va( "%i %i %i %i %i %i %i %i %i", g_rp.integer ? 1 : 0, G_RP_MostChars(), g_rpTalkRange.integer,
 		g_rpDowned.integer ? 1 : 0, Com_Clampi( 0, RP_COMP_OUT_MAX, g_rpCompanions.integer ), Q_max( 0, g_rpCompanionsMax.integer ),
-		g_rpCompanionModels.integer ? 1 : 0 ) );
+		g_rpCompanionModels.integer ? 1 : 0, ( g_rpGrey.integer == RPG_ANY || g_rpGrey.integer == RPG_PICKED ) ? g_rpGrey.integer : 0,
+		g_rpForceMaster.integer ? 1 : 0 ) );
 }
 
-// g_rpCharacters, g_rpTalkRange or g_rpDowned changed: the serverinfo follows.
+// g_rpCharacters, g_rpTalkRange, g_rpDowned, the companions', g_rpGrey or
+// g_rpForceMaster changed: the serverinfo follows (and powers, as what the
+// characters played may be changes: G_RP_ForceFrame).
 void G_RPPublishSettings( void ) {
 	G_RP_ServerInfo();
 }
@@ -2808,7 +3110,7 @@ qboolean G_RPConsoleCommand( void ) {
 
 	trap->Argv( 1, sub, sizeof( sub ) );
 	if ( !rp.ready && ( !Q_stricmp( sub, "list" ) || !Q_stricmp( sub, "rename" ) || !Q_stricmp( sub, "delete" ) || !Q_stricmp( sub, "password" ) ||
-		!Q_stricmp( sub, "admin" ) || !Q_stricmp( sub, "admins" ) ) ) {
+		!Q_stricmp( sub, "admin" ) || !Q_stricmp( sub, "admins" ) || !Q_stricmp( sub, "force" ) ) ) {
 		trap->Print( "Roleplay isn't working: %s couldn't be read (mend it, or delete it to start over)\n", RP_SERVER_FILE );
 		return qtrue;	// (a key made now would be over no salt)
 	}
@@ -2820,8 +3122,9 @@ qboolean G_RPConsoleCommand( void ) {
 				continue;
 			}
 			ch = ( rpc[i].loggedIn && rpc[i].active >= 0 && rpc[i].active < rpc[i].acc.numChars ) ? &rpc[i].acc.chars[rpc[i].active] : NULL;
-			trap->Print( "%3i  %-20s  %-20s  %s (%s)%s\n", i, rpc[i].playerName[0] ? rpc[i].playerName : g_entities[i].client->pers.netname,
-				rpc[i].loggedIn ? rpc[i].acc.name : "-", ch ? ch->name : "-", ch ? rpFactions[ch->faction] : "", G_RPAdmin( i ) ? "  - an admin" : "" );
+			trap->Print( "%3i  %-20s  %-20s  %s (%s%s)%s\n", i, rpc[i].playerName[0] ? rpc[i].playerName : g_entities[i].client->pers.netname,
+				rpc[i].loggedIn ? rpc[i].acc.name : "-", ch ? ch->name : "-", ch ? rpFactions[ch->faction] : "",
+				( ch && ch->role > RPR_NORMAL && ch->role < RPR_NUM ) ? va( ", %s", rpRoleTitles[ch->role] ) : "", G_RPAdmin( i ) ? "  - an admin" : "" );
 		}
 		trap->Print( "Roleplay is %s; %i characters on this server\n", G_RPOn() ? "on" : "off", rpIndexCount );
 		return qtrue;
@@ -2980,6 +3283,39 @@ qboolean G_RPConsoleCommand( void ) {
 		}
 		trap->Print( "%i admin%s (rp admin <account> on|off)\n", n, n == 1 ? "" : "s" );
 		return qtrue;
+	}
+	if ( !Q_stricmp( sub, "force" ) ) {
+		// rp force <account> <character> grey|master|normal: the character's name is what's between (spaces and all)
+		rpAccount_t *acc;
+		char how[16], name[MAX_TOKEN_CHARS];
+		const int argc = trap->Argc();
+		int who, role;
+		trap->Argv( 2, arg, sizeof( arg ) );
+		trap->Argv( argc - 1, how, sizeof( how ) );
+		role = ( argc >= 5 ) ? G_RP_RoleNamed( how ) : -1;
+		acc = ( role >= 0 && arg[0] ) ? G_RP_AccountAnywhere( arg, &who ) : NULL;
+		if ( !acc ) {
+			trap->Print( "usage: rp force <account> <character> grey|master|normal%s\n", ( role >= 0 && arg[0] ) ? va( " (no account %s)", arg ) : "" );
+			return qtrue;
+		}
+		name[0] = '\0';
+		for ( n = 3; n < argc - 1; n++ ) {
+			char word[MAX_TOKEN_CHARS];
+			trap->Argv( n, word, sizeof( word ) );
+			Q_strcat( name, sizeof( name ), va( "%s%s", ( n > 3 ) ? " " : "", word ) );
+		}
+		i = G_RP_FindChar( acc, name );
+		if ( i < 0 ) {
+			trap->Print( "%s has no character by that name\n", acc->name );
+			return qtrue;
+		}
+		if ( acc->chars[i].role == role ) {
+			trap->Print( "%s is %s already%s\n", acc->chars[i].name, rpRoleTitles[role], G_RP_RoleOff( role ) );
+			return qtrue;
+		}
+		G_RP_SetRole( acc, &acc->chars[i], role, "rcon" );
+		trap->Print( "%s is %s now%s\n", acc->chars[i].name, rpRoleTitles[role], G_RP_RoleOff( role ) );
+		return qtrue;	// (whoever plays it is told, and their powers follow: G_RP_ForceTell)
 	}
 	return qfalse;	// (on a listen server the host's own rp commands go on to the game as a client's)
 }

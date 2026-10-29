@@ -20,7 +20,10 @@ one. Out of the middle:
                          works either way)
   up and  Force >        the Force powers that aren't gestures, those you
   right                  know (cg_vrforce.c): the one picked is what the
-                         Force grip's quick squeeze uses (as X and Y pick)
+                         Force grip's quick squeeze uses (as X and Y pick);
+                         more than seven (a Grey Jedi's, a Force Master's,
+                         both sides' in a team game), six and More >, the
+                         rest there
 
 Resting on a ring (>) for a moment opens it; Back, up and to the left,
 goes back. A ring that opens waits for the stick to move before it picks
@@ -64,7 +67,7 @@ enum {
 	PWA_FORCE		// a Force power picked (arg: FP_*)
 };
 
-enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_FORCE, PW_RINGS };
+enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_FORCE, PW_FORCE_MORE, PW_RINGS };
 
 typedef struct {
 	int			way;		// 0 up, 1 up and right, 2 right... 7 up and left
@@ -105,9 +108,13 @@ static const pwSlot_t pwRoleplay[] = {
 	{ 7, "Back",			PWA_BACK,		0 },
 };
 
-// the Force ring: the powers you know, made as it opens (CG_PW_ForceSlots)
-#define PW_FORCE_MAX	7
-static pwSlot_t pwForce[PW_FORCE_MAX + 1];
+// the Force ring: the powers you know, made as it opens (CG_PW_ForceSlots) -
+// more than its ways have room for beside Back, the first six and More, the
+// rest on More's ring (with Force, back to the first)
+#define PW_FORCE_WAYS	7	// (Back the eighth)
+#define PW_FORCE_MAX	9	// (cg_vrforce.c's ring: every power there)
+static pwSlot_t pwForce[PW_FORCE_WAYS + 1];
+static pwSlot_t pwForceMore[PW_FORCE_WAYS + 1];
 
 static const struct {
 	const char		*title;
@@ -119,36 +126,50 @@ static const struct {
 	{ "Companions",	pwCompanions,	(int)ARRAY_LEN( pwCompanions ) },
 	{ "Roleplay",	pwRoleplay,		(int)ARRAY_LEN( pwRoleplay ) },
 	{ "Force",		pwForce,		0 },
+	{ "Force",		pwForceMore,	0 },
 };
-static int pwForceCount;	// (the Force ring's, as it opened)
+static int pwForceCount, pwForceMoreCount;	// (the Force ring's and More's, as one opened)
 
 // The slots a ring has.
 static int CG_PW_Count( int ring ) {
-	return ( ring == PW_FORCE ) ? pwForceCount : pwRings[ring].count;
+	return ( ring == PW_FORCE ) ? pwForceCount : ( ring == PW_FORCE_MORE ) ? pwForceMoreCount : pwRings[ring].count;
 }
 
 static const pwSlot_t *CG_PW_At( int ring, int i ) {
 	return &pwRings[ring].slot[i];
 }
 
+// A slot of the Force ring.
+static void CG_PW_ForceSlot( pwSlot_t *slot, int way, const char *label, int action, int arg ) {
+	slot->way = way;
+	slot->label = label;
+	slot->action = action;
+	slot->arg = arg;
+}
+
 // The Force ring's slots: the powers you know of those it has (cg_vrforce.c),
-// round it - four or fewer, up, right, down and left - and Back.
+// round it - four or fewer, up, right, down and left - and Back; more than
+// seven, the first six, More (way 6) and Back, and More's: the rest (up,
+// right, down) and Force (back to the first).
 static void CG_PW_ForceSlots( void ) {
 	static const int fourWays[4] = { 0, 2, 4, 6 };
-	int powers[PW_FORCE_MAX], n, i;
+	int powers[PW_FORCE_MAX], n, first, i;
 
 	n = CG_VR_ForceRingPowers( powers, PW_FORCE_MAX );
-	for ( i = 0; i < n; i++ ) {
-		pwForce[i].way = ( n <= 4 ) ? fourWays[i] : i;
-		pwForce[i].label = CG_VR_ForcePowerName( powers[i] );
-		pwForce[i].action = PWA_FORCE;
-		pwForce[i].arg = powers[i];
+	first = ( n > PW_FORCE_WAYS ) ? PW_FORCE_WAYS - 1 : n;
+	for ( i = 0; i < first; i++ ) {
+		CG_PW_ForceSlot( &pwForce[i], ( n <= 4 ) ? fourWays[i] : i, CG_VR_ForcePowerName( powers[i] ), PWA_FORCE, powers[i] );
 	}
-	pwForce[n].way = 7;
-	pwForce[n].label = "Back";
-	pwForce[n].action = PWA_BACK;
-	pwForce[n].arg = 0;
-	pwForceCount = n + 1;
+	pwForceCount = first;
+	pwForceMoreCount = 0;
+	if ( n > first ) {
+		CG_PW_ForceSlot( &pwForce[pwForceCount++], PW_FORCE_WAYS - 1, "More", PWA_RING, PW_FORCE_MORE );
+		for ( i = first; i < n; i++ ) {
+			CG_PW_ForceSlot( &pwForceMore[pwForceMoreCount++], fourWays[i - first], CG_VR_ForcePowerName( powers[i] ), PWA_FORCE, powers[i] );
+		}
+		CG_PW_ForceSlot( &pwForceMore[pwForceMoreCount++], 7, "Force", PWA_RING, PW_FORCE );
+	}
+	CG_PW_ForceSlot( &pwForce[pwForceCount++], 7, "Back", PWA_BACK, 0 );
 }
 
 static struct {
@@ -210,7 +231,7 @@ static const char *CG_PW_Why( const pwSlot_t *slot ) {
 		if ( slot->arg == PW_COMPANIONS ) {
 			return CG_RP_CompsWhy();
 		}
-		if ( slot->arg == PW_FORCE ) {
+		if ( slot->arg == PW_FORCE || slot->arg == PW_FORCE_MORE ) {
 			return CG_VR_ForceRingWhy( -1 );	// (spectating, or none of its powers known: cg_vrforce.c)
 		}
 		return NULL;
@@ -254,7 +275,7 @@ static void CG_PW_Close( void ) {
 // Another ring: what the stick points at in it now isn't picked until it
 // moves off it (the mouse starts again from the middle).
 static void CG_PW_Ring( int ring ) {
-	if ( ring == PW_FORCE ) {
+	if ( ring == PW_FORCE || ring == PW_FORCE_MORE ) {
 		CG_PW_ForceSlots();
 	}
 	pw.ring = ring;

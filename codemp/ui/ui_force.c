@@ -445,12 +445,13 @@ void UpdateForceUsed()
 			uiForcePowersRank[FP_SABER_DEFENSE]=0;
 			uiForcePowersRank[FP_SABERTHROW]=0;
 			if (menu)
-			{
-				Menu_ShowItemByName(menu, "setfp_saberdefend", qfalse);
-				Menu_ShowItemByName(menu, "setfp_saberthrow", qfalse);
-				Menu_ShowItemByName(menu, "effectentry", qfalse);
-				Menu_ShowItemByName(menu, "effectfield", qfalse);
-				Menu_ShowItemByName(menu, "nosaber", qtrue);
+			{ // OpenJK VR: a roleplay Force Master has the saber's three at 3 whatever its setup has (ui_vrforce.c)
+				const qboolean master = UI_VRForce_Locked();
+				Menu_ShowItemByName(menu, "setfp_saberdefend", master);
+				Menu_ShowItemByName(menu, "setfp_saberthrow", master);
+				Menu_ShowItemByName(menu, "effectentry", master);
+				Menu_ShowItemByName(menu, "effectfield", master);
+				Menu_ShowItemByName(menu, "nosaber", !master);
 			}
 		}
 		else
@@ -556,7 +557,10 @@ void UI_ReadLegalForce(void)
 		}
 	}
 	//Second, legalize them.
-	if (!BG_LegalizedForcePowers(fcfString, sizeof (fcfString), uiMaxRank, ui_freeSaber.integer, forceTeam, atoi( Info_ValueForKey( info, "g_gametype" )), 0))
+	// OpenJK VR: a roleplay Grey Jedi's kept Grey (its points counted) - where it isn't allowed, the server has it count as a side,
+	// and the menu shows it so till Light or Dark's picked (ui_vrforce.c)
+	if (!BG_LegalizedForcePowersAs(fcfString, sizeof (fcfString), uiMaxRank, ui_freeSaber.integer, forceTeam, atoi( Info_ValueForKey( info, "g_gametype" )), 0,
+		( uiForceSide == FORCE_GREYSIDE ) ? BG_FORCE_GREY : 0))
 	{ //if they were illegal, we should refresh them.
 		updateForceLater = qtrue;
 	}
@@ -597,7 +601,8 @@ void UI_ReadLegalForce(void)
 	uiForceSide = atoi(singleBuf);
 
 	if (uiForceSide != FORCE_LIGHTSIDE &&
-		uiForceSide != FORCE_DARKSIDE)
+		uiForceSide != FORCE_DARKSIDE &&
+		uiForceSide != FORCE_GREYSIDE)	// OpenJK VR
 	{
 		uiForceSide = FORCE_LIGHTSIDE;
 		return;
@@ -631,7 +636,8 @@ void UI_ReadLegalForce(void)
 			continue;  // skip this power
 		}
 
-		if (uiForcePowerDarkLight[c] && uiForcePowerDarkLight[c] != uiForceSide)
+		if (uiForcePowerDarkLight[c] && uiForcePowerDarkLight[c] != uiForceSide &&
+			uiForceSide != FORCE_GREYSIDE)	// OpenJK VR: a roleplay Grey Jedi's both
 		{ //Apparently the user has crafted a force config that has powers that don't fit with the config's side.
 			continue;  // skip this power
 		}
@@ -870,6 +876,11 @@ qboolean UI_ForceSide_HandleKey(int flags, float *special, int key, int num, int
 		int i = num;
 		int x = 0;
 
+		if ( UI_VRForce_Locked() )
+		{ // OpenJK VR: a roleplay Force Master's - nothing to set (ui_vrforce.c)
+			return qtrue;
+		}
+
 		//update the feeder item selection, it might be different depending on side
 		Menu_SetFeederSelection(NULL, FEEDER_FORCECFG, 0, NULL);
 
@@ -898,7 +909,8 @@ qboolean UI_ForceSide_HandleKey(int flags, float *special, int key, int num, int
 		// Resetting power ranks based on if light or dark side is chosen
 		while (x < NUM_FORCE_POWERS)
 		{
-			if (uiForcePowerDarkLight[x] && uiForceSide != uiForcePowerDarkLight[x])
+			if (uiForcePowerDarkLight[x] && uiForceSide != uiForcePowerDarkLight[x] &&
+				uiForceSide != FORCE_GREYSIDE)	// OpenJK VR: a roleplay Grey Jedi's both (ui_vrforce.c)
 			{
 				uiForcePowersRank[x] = 0;
 			}
@@ -1049,8 +1061,14 @@ qboolean UI_ForcePowerRank_HandleKey(int flags, float *special, int key, int num
 			return qtrue;
 		}
 
+		if ( UI_VRForce_Locked() )
+		{ // OpenJK VR: a roleplay Force Master's - nothing to spend (ui_vrforce.c)
+			return qtrue;
+		}
+
 		// If we are not on the same side as a power, or if we are not of any rank at all.
-		if (uiForcePowerDarkLight[forcepower] && uiForceSide != uiForcePowerDarkLight[forcepower])
+		if (uiForcePowerDarkLight[forcepower] && uiForceSide != uiForcePowerDarkLight[forcepower] &&
+			UI_VRForce_Counted() != FORCE_GREYSIDE)	// OpenJK VR: a roleplay Grey Jedi's both (ui_vrforce.c)
 		{
 			return qtrue;
 		}

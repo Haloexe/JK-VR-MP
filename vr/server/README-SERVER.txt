@@ -159,6 +159,24 @@ they attack one. Nobody's NPCs, turrets or sentries harm someone down.
   g_rpCompanionsMax 16      companions out on the whole server at once
   g_rpCompanionModels 1     1: they may look like any player model the
                             server has; 0: only as their NPC types come
+  g_rpGrey 0                Grey Jedi: 0 none; 1 any character may be
+                            one; 2 the characters an admin picks (and
+                            Force Masters)
+  g_rpForceMaster 0         Force Masters: 0 none; 1 the characters an
+                            admin picks
+A Grey Jedi has powers from both sides, bought with the same points as
+anyone's (the server checks them as ever); its player picks Grey in the
+Force menu. A Force Master has every power at level 3, nothing to spend.
+Each counts only while roleplay's on and someone plays the character;
+where Grey isn't allowed, a Grey setup counts as the side most of its
+points are on (those on powers the server has: not g_forcePowerDisable's,
+nor team powers outside team games). On Force-aligned teams everyone
+plays their team's side (the Force menu opened there makes a setup that
+side's, a Grey one too). A Grey Jedi may take either Enlightenment
+pickup. An older OpenJK VR isn't offered Grey. Admins pick characters on
+the Roleplay menu's People page, or rp force; each is logged ("Roleplay:
+... made a Grey Jedi by"), and stays so till an admin or you change it -
+an admin made no longer one too (rp list shows which are which).
 Companions: each character keeps up to 6 NPCs of its own, made in the
 Profile menu's Companions page (a name, the NPC type it fights as - one
 of the people, no droids, beasts or vehicles - and a look), and up to
@@ -177,8 +195,8 @@ The log says who went down, by whom, who got whom up and who gave up,
 and which companions came out and were knocked out (lines starting
 "Roleplay:"). The serverinfo's "vrRP" says whether roleplay's on, and
 these settings: "<on> <g_rpCharacters> <g_rpTalkRange> <g_rpDowned>
-<g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels>" ("0":
-roleplay isn't ready here - see the console).
+<g_rpCompanions> <g_rpCompanionsMax> <g_rpCompanionModels> <g_rpGrey>
+<g_rpForceMaster>" ("0": roleplay isn't ready here - see the console).
   rp list                   who plays which character, on which account
   rp rename <player> <name> give someone's character another name
   rp delete <account> <character>   delete a character (online or not)
@@ -187,15 +205,22 @@ roleplay isn't ready here - see the console).
   rp admin <account> on|off make an account an admin, or not (without on
                             or off: whether it is one)
   rp admins                 the admin accounts, and which are here
+  rp force <account> <character> grey|master|normal   make a character a
+                            Grey Jedi or a Force Master, or neither
+                            (online or not)
 Admins: a player logged in to an admin account - roleplay on or off - can
 use every cheat command with sv_cheats 0 (npc spawn and npc kill, god,
-noclip, notarget, give and the rest), for themselves, and the log has
-each one (lines starting "Admin:", with the account). Nobody uses a cheat
-while down. Nobody else is shown who's an admin. Logging out, or rp admin
-off, ends their god mode, no-clip and no target. In the Roleplay menu an
+noclip, notarget, give and the rest - give forcepowers: every Force power
+at level 3, till their powers are set up again), for themselves, though
+not while down; and they make characters Grey Jedi or Force Masters (the
+People page, or rp force <player> grey|master|normal). The log has each
+one (lines starting "Admin:", with the account). Nobody else is shown
+who's an admin. Logging out, or rp admin off, ends their god mode,
+no-clip, no target and every Force power given. In the Roleplay menu an
 admin has an Admin page (spawn any NPC or vehicle in front of them, kill
-the ones they spawned or every NPC, switch the cheats); the Server page's
-Admins makes or unmakes them (by rcon on a server you don't host).
+the ones they spawned or every NPC, switch the cheats, All Force Powers);
+the Server page's Admins makes or unmakes them (by rcon on a server you
+don't host).
 Only the server's own console makes admins (its window, where it has
 one), or rcon with the rconpassword. A player typing rp admin is turned
 away, and the log says who tried ("typed rp admin - refused"); a vote

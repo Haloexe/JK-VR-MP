@@ -11,7 +11,8 @@
 //	Companions opens the Companions menu (vr_comp.menu); the Server page's Companions, their settings.
 //
 //	vr_rp_tab and vr_rp_create are never shown themselves: their items go on the in-game bar
-//	(under it) and on Create game's settings (a free row), where the menus have room for them.
+//	(under it) and on Create game's settings (a free row), where the menus have room for them;
+//	vr_rp_force's on the game's Force menu, for a Grey Jedi or a Force Master (ui_vrforce.c).
 //
 //	feeder 65:	your characters		feeder 66:	the people here		feeder 67:	NPCs and vehicles (Admin)
 //	"password" (an edit field): what's typed shows as *s
@@ -1366,8 +1367,8 @@
 			}
 		}
 
-		// its Force, as its setup has it (ui_rpEditForce: the side), and the game's Force menu, where it's set - while the server keeps
-		// its setup with it (rp_edit_kept: ui_vrrp.c)
+		// its Force, as its setup has it (ui_rpEditForce: the side - Grey, or what a Grey setup counts as where it may not be -
+		// or a Force Master), and the game's Force menu, where it's set - while the server keeps its setup with it (rp_edit_kept: ui_vrrp.c)
 		itemDef
 		{
 			name            rp_edit_force
@@ -1379,7 +1380,7 @@
 			cvar            "ui_rpEditForce"
 			cvarFloatList
 			{
-				"Light side" 1 "Dark side" 2
+				"Light side" 1 "Dark side" 2 "Grey" 3 "Force Master" 4 "Grey: counts as Light here" 5 "Grey: counts as Dark here" 6
 			}
 			font            2
 			textscale       0.8
@@ -1785,7 +1786,7 @@
 			group           rp_people
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
-			rect            40 286 530 70
+			rect            40 286 530 46
 			cvar            "ui_rpBioRead"
 			font            4
 			textscale       1
@@ -1797,6 +1798,128 @@
 			forecolor       .85 .85 .9 1
 			backcolor       0 0 0 .35
 			visible         1
+		}
+
+		// an admin's: the character of whoever's picked a Grey Jedi or a Force Master, or neither (rp force) - and which it is
+		itemDef
+		{
+			name            rp_people_force
+			group           rp_people_admin
+			rect            40 339 232 18
+			cvar            "ui_rpPeopleForce"
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_people_grey
+			group           rp_people_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            280 336 90 22
+			text            "Grey Jedi"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      45
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Their character may be Grey: both sides' powers, the same points (Server page: Grey Jedi)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP people grey ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_people_grey backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_people_grey backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_people_master
+			group           rp_people_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            376 336 110 22
+			text            "Force Master"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Their character has every Force power at level 3 (Server page: Force Masters)"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP people master ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_people_master backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_people_master backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_people_normal
+			group           rp_people_admin
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            492 336 78 22
+			text            "Normal"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      39
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Neither: Light or Dark, as the game has it"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP people normal ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_people_normal backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_people_normal backcolor 0 0 .3 .7
+			}
 		}
 
 		//------------------------------------------------------------------------------------------
@@ -1933,7 +2056,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 84 545 136
-			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one; what you wear and set in the Force menu stays with it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one; what you wear and set in the Force menu stays with it - Grey too, where the server allows it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -1953,7 +2076,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 222 545 136
-			text            "DOWN: out of health, you go down instead of dying (pits, lava and the like still kill). Your faction gets you up: looking at you, holding use (the right grip) for 3 s. To respawn, hold attack (the trigger) for 1.5 s, or Give up on the wheel. A duel's loser goes down.\nNPCS: the light side's are with the Heroes, the dark side's with the Villains; Neutral are left alone until they attack one. Nobody harms someone down.\nSERVER: its owner turns roleplay on and off there.\nADMINS: an admin's cheats work here even with cheats off; their Admin page (top right) spawns NPCs."
+			text            "DOWN: out of health, you go down instead of dying (pits, lava and the like still kill). Your faction gets you up: looking at you, holding use (the right grip) for 3 s. To respawn, hold attack (the trigger) for 1.5 s, or Give up on the wheel. A duel's loser goes down.\nNPCS: the light side's are with the Heroes, the dark side's with the Villains; Neutral are left alone until they attack one. Nobody harms someone down.\nSERVER: its owner turns roleplay on and off there.\nADMINS: an admin's cheats work here even with cheats off; their Admin page (top right) spawns NPCs; on People they make characters Grey Jedi or Force Masters."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT
@@ -2139,7 +2262,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 236 520 22
+			rect            40 230 400 22
 			text            "Characters per account:"
 			cvar            "ui_rpSrvChars"
 			cvarFloatList
@@ -2149,7 +2272,7 @@
 			font            2
 			textscale       0.8
 			textalign       ITEM_ALIGN_RIGHT
-			textalignx      230
+			textalignx      210
 			textaligny      1
 			forecolor       1 1 1 1
 			backcolor       0 0 0 .4
@@ -2176,7 +2299,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 262 520 22
+			rect            40 254 400 22
 			text            "Talk reaches:"
 			cvar            "ui_rpSrvRange"
 			cvarFloatList
@@ -2186,7 +2309,7 @@
 			font            2
 			textscale       0.8
 			textalign       ITEM_ALIGN_RIGHT
-			textalignx      230
+			textalignx      210
 			textaligny      1
 			forecolor       1 1 1 1
 			backcolor       0 0 0 .4
@@ -2213,7 +2336,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 288 520 22
+			rect            40 278 400 22
 			text            "When health runs out:"
 			cvar            "ui_rpSrvDowned"
 			cvarFloatList
@@ -2223,7 +2346,7 @@
 			font            2
 			textscale       0.8
 			textalign       ITEM_ALIGN_RIGHT
-			textalignx      230
+			textalignx      210
 			textaligny      1
 			forecolor       1 1 1 1
 			backcolor       0 0 0 .4
@@ -2247,35 +2370,77 @@
 
 		itemDef
 		{
-			name            rp_srv_apply
+			name            rp_srv_grey
 			group           rp_srv_set
-			type            ITEM_TYPE_BUTTON
+			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 322 110 24
-			text            "Apply"
+			rect            40 302 400 22
+			text            "Grey Jedi:"
+			cvar            "ui_rpSrvGrey"
+			cvarFloatList
+			{
+				"Off" 0 "Any character" 1 "Characters an admin picks" 2
+			}
 			font            2
 			textscale       0.8
-			textstyle       3
-			textalign       ITEM_ALIGN_CENTER
-			textalignx      55
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      210
 			textaligny      1
-			forecolor       1 .682 0 1
-			backcolor       0 0 .3 .7
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
 			border          1
-			bordercolor     .35 .45 .8 .9
+			bordercolor     .35 .45 .8 .5
 			visible         1
+			descText        "Powers from both sides, the same points: picked in the Force menu (admins pick on the People page)"
 			action
 			{
-				play		"sound/interface/button1.wav" ;
-				uiScript		vrRP server apply ;
+				play		"sound/interface/button1.wav"
 			}
 			mouseEnter
 			{
-				setitemcolor	rp_srv_apply backcolor .2 .45 .85 .9
+				setitemcolor	rp_srv_grey bordercolor 1 .682 0 1
 			}
 			mouseExit
 			{
-				setitemcolor	rp_srv_apply backcolor 0 0 .3 .7
+				setitemcolor	rp_srv_grey bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_master
+			group           rp_srv_set
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 326 400 22
+			text            "Force Masters:"
+			cvar            "ui_rpSrvMaster"
+			cvarFloatList
+			{
+				"Off" 0 "Characters an admin picks" 1
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      210
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Every Force power at level 3, nothing to spend (admins pick on the People page)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_master bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_master bordercolor .35 .45 .8 .5
 			}
 		}
 
@@ -2285,13 +2450,13 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            170 322 130 24
+			rect            450 230 120 22
 			text            "Admins"
 			font            2
 			textscale       0.8
 			textstyle       3
 			textalign       ITEM_ALIGN_CENTER
-			textalignx      65
+			textalignx      60
 			textaligny      1
 			forecolor       1 .682 0 1
 			backcolor       0 0 .3 .7
@@ -2320,13 +2485,13 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            320 322 150 24
+			rect            450 254 120 22
 			text            "Companions"
 			font            2
 			textscale       0.8
 			textstyle       3
 			textalign       ITEM_ALIGN_CENTER
-			textalignx      75
+			textalignx      60
 			textaligny      1
 			forecolor       1 .682 0 1
 			backcolor       0 0 .3 .7
@@ -2346,6 +2511,40 @@
 			mouseExit
 			{
 				setitemcolor	rp_srv_comps backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_srv_apply
+			group           rp_srv_set
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            450 326 120 22
+			text            "Apply"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      60
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP server apply ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_apply backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_apply backcolor 0 0 .3 .7
 			}
 		}
 
@@ -3089,13 +3288,13 @@
 			group           rp_admin
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            350 324 220 24
+			rect            350 324 90 24
 			text            "Give all"
 			font            2
 			textscale       0.8
 			textstyle       3
 			textalign       ITEM_ALIGN_CENTER
-			textalignx      110
+			textalignx      45
 			textaligny      1
 			forecolor       1 .682 0 1
 			backcolor       0 0 .3 .7
@@ -3115,6 +3314,41 @@
 			mouseExit
 			{
 				setitemcolor	rp_adm_give backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_force
+			group           rp_admin_force
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            446 324 124 24
+			text            "All Force Powers"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      62
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Every Force power at level 3, till you change them or the map changes"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP admin forcepowers ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_force backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_force backcolor 0 0 .3 .7
 			}
 		}
 
@@ -3273,6 +3507,54 @@
 			{
 				hide		vr_rp_createback
 			}
+		}
+
+	}
+
+	//------------------------------------------------------------------------------------------
+	// On the game's Force menu (its items go on "ingame_playerforce", at 105 40: where they show
+	// there, as on the screen): with both sides' powers - Grey, a Force Master - the dark side's
+	// rows go on the left, under a heading (the light side's keep their place, their names blue as
+	// ever: there's no room over them for one), and a note takes the templates' place, above the
+	// heading (ui_vrforce.c shows them)
+	//------------------------------------------------------------------------------------------
+	menuDef
+	{
+		name				"vr_rp_force"
+		visible				0
+		rect				0 0 640 480
+
+		itemDef
+		{
+			name            vrf_note
+			group           vrf_note
+			rect            121 146 205 96
+			cvar            "ui_vrfNote"
+			autowrapped
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .549 .854 1 1
+			visible         0
+			decoration
+		}
+
+		itemDef
+		{
+			name            vrf_dark
+			group           vrf_both
+			rect            113 245 175 16
+			text            "Dark side"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      88
+			textaligny      0
+			forecolor       1 .45 .45 1
+			visible         0
+			decoration
 		}
 
 	}

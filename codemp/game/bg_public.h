@@ -1687,6 +1687,13 @@ typedef struct saberInfo_s {
 bgEntity_t *PM_BGEntForNum( int num );
 qboolean BG_KnockDownable(playerState_t *ps);
 qboolean BG_LegalizedForcePowers(char *powerOut, size_t powerOutSize, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled);
+// OpenJK VR: what a roleplay character may be, as the server says (g_vrrp.c; the menus as it tells the game: cg_vrrp.c,
+// ui_vrforce.c) - BG_LegalizedForcePowersAs's may
+#define BG_FORCE_GREY		1	// a Grey Jedi: a Grey setup (side FORCE_GREYSIDE) keeps both sides' powers, its points counted as ever
+#define BG_FORCE_MASTER		2	// a Force Master: every power at level 3, nothing to spend (BG_ForceMasterLevels)
+qboolean BG_LegalizedForcePowersAs(char *powerOut, size_t powerOutSize, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled, int may);
+int BG_ForceSideMost( const int *levels, int gametype, int fpDisabled );
+void BG_ForceMasterLevels( int *levels, int teamForce, int gametype, int fpDisabled );
 
 
 // given a boltmatrix, return in vec a normalised vector for the axis requested in flags

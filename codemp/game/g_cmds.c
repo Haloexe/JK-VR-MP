@@ -289,6 +289,12 @@ void G_Give( gentity_t *ent, const char *name, const char *args, int argc )
 			return;
 	}
 
+	if ( !give_all && !Q_stricmp( name, "forcepowers" ) )
+	{ // OpenJK VR: every Force power at level 3, till they're set up again (w_force.c)
+		WP_AllForcePowers( ent );
+		return;
+	}
+
 	if ( !give_all && !Q_stricmp( name, "weaponnum" ) )
 	{
 		const int weapon = atoi( args );

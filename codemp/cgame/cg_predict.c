@@ -637,7 +637,8 @@ static void CG_TouchItem( centity_t *cent ) {
 	}
 
 	if (item->giType == IT_POWERUP &&
-		(item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || item->giTag == PW_FORCE_ENLIGHTENED_DARK))
+		(item->giTag == PW_FORCE_ENLIGHTENED_LIGHT || item->giTag == PW_FORCE_ENLIGHTENED_DARK) &&
+		cg.predictedPlayerState.fd.forceSide != FORCE_GREYSIDE)	// OpenJK VR: a Grey Jedi (roleplay) may take either (g_items.c)
 	{
 		if (item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{
