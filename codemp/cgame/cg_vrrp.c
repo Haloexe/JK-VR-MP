@@ -12,8 +12,18 @@ new account sends the server its key, and a login only proves the key
 against the one-time challenge the server sent. Remember me
 (cg_rpRemember) keeps the key, never the password, in rp/remember.txt
 with the server's address and salt, and logs in with it there once a
-visit, roleplay on or off (an admin's cheats don't wait for it); /logout
-forgets it, and so does the server saying it's wrong.
+visit - again if the server didn't answer, three times at most - roleplay
+on or off (an admin's cheats don't wait for it); /logout forgets it, and
+so does the server saying it's wrong.
+
+COMMANDS. A dedicated server takes only so many commands from a player at
+once, then one more a period, and drops the rest (its flood protection:
+sv_floodProtect, in the serverinfo; a listen server has none). What this
+game asks by itself - cards, as you look at someone and for the menu's
+People page (several in one request there), and a login Remember me kept -
+waits till the server's allowance is whole again after the commands it
+sent, a period for each (CG_RP_Room), leaving room in it for what the
+player sends: chat, the menus (a server that takes a few at once has it).
 
 ADMINS. An account the server's owner made an admin (rcon rp admin) can
 use every cheat there, cheats on or off: the server says so (rpadmin),
@@ -36,8 +46,8 @@ character's you play - it goes in forcepowers, what the Force menu sets, with
 your own put by in cg_rpOwnForce - or "-": yours back. Your userinfo tells
 the server which it has (rpf: "<number> <yours>", or "": yours), so what you
 set in the Force menu while you play a character - forcepowers, in your
-userinfo too - it takes as that character's. (Not a command: one sent within
-a second of another is dropped.) Yours comes back by itself as this game
+userinfo too - it takes as that character's. (Not a command: a server may
+drop one, sent hard on others.) Yours comes back by itself as this game
 starts and stops (on another server, say, or after playing one to the end).
 
 SPEECH BUBBLES. With roleplay on, what someone near you says, and their
@@ -85,7 +95,12 @@ qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y 
 #define RP_HELLO_FIRST		500		// after the first snapshot, hello...
 #define RP_HELLO_AGAIN		3000	// ...again after this long without an answer...
 #define RP_HELLO_TRIES		5		// ...this many times at most
-#define RP_ASK_WAIT			15000	// a request with no answer this long is given up
+#define RP_ASK_WAIT			15000	// a request with no answer this long is given up...
+#define RP_AUTO_WAIT		5000	// ...a login Remember me kept, this long - and tried again...
+#define RP_AUTO_TRIES		3		// ...this many times in all, at most
+#define RP_FLOOD_SPARE		100		// (ms) more than the server's flood protection's period: commands this far apart reach it so
+#define RP_FLOOD_MAX		60000	// (ms) the period, at the most (as the server's engine takes it)
+#define RP_FLOOD_OWED		5		// periods' worth this game reckons it can owe the server at most (as its engine starts: sv_floodProtectBurst)
 
 #define RP_BUBBLE_TIME		6000
 #define RP_BUBBLE_FADE		1000	// (the end of it)
@@ -103,7 +118,9 @@ qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y 
 #define RP_BIO_WIDTH		640.0f
 #define RP_BIO_TIME			20000
 #define RP_PEOPLE_TIME		15000	// the menu's People page: everyone's card asked for this long...
-#define RP_PEOPLE_GAP		170		// ...one at a time, this far apart (the server takes 10 a second)
+#define RP_PEOPLE_ONE		170		// ...one at a time, this far apart (the server answers 10 a second) - or, with flood protection...
+#define RP_PEOPLE_ASK		8		// ...this many in one request (of its 10: some left for the card of whoever you look at)...
+#define RP_PEOPLE_GAP		1200	// ...this far apart at least (more than its second)
 #define RP_NOTICE_WIDTH		900.0f
 #define RP_NOTICE_TIME		5000
 
@@ -152,6 +169,8 @@ static struct {
 	qboolean	working;		// ...that works (a lone "0": its rp/server.txt can't be read)...
 	qboolean	on;				// ...and it's on
 	int			compsAllowed;	// companions a player may have out there (vrRP; 0: none, or a server before them)
+	int			floodPeriod;	// its flood protection's period (ms; 0: none - off, or this PC's own server)
+	int			floodWhole;		// when its allowance is whole again, as far as this game's commands go (CG_RP_Send)
 	char		address[MAX_QPATH];
 	int			firstSnap;
 	int			helloTime, helloTries;
@@ -166,7 +185,8 @@ static struct {
 	int			active;			// the character played (-1: none)
 	int			numChars, most;
 	rpChar_t	chars[RP_CHARS_MAX];
-	qboolean	autoTried;		// logged in with what this PC kept (once a visit)
+	qboolean	autoTried;		// logged in with what this PC kept (once a visit; again if unanswered)...
+	int			autoTries;		// ...this many times
 	int			admin;			// what the server says of us (rpadmin: RPA_*; 0: not an admin)
 
 	struct {
@@ -205,6 +225,36 @@ Small things
 
 // A line for the player, a moment on the screen (and in the console: print).
 static void CG_RP_Show( const char *text, qboolean print );
+
+// What this game reckons it owes the server's allowance: no more than it can
+// be owed (its engine drops what's beyond it; and a period cut since owes less).
+static void CG_RP_FloodCap( void ) {
+	const int most = RP_FLOOD_OWED * ( cgrp.floodPeriod + RP_FLOOD_SPARE );
+
+	if ( cgrp.floodWhole - cg.time > most ) {
+		cgrp.floodWhole = cg.time + most;
+	}
+}
+
+// A command to the server from roleplay here: sent, and the server's
+// allowance reckoned with it - a period (and a bit) more before it's whole
+// again (CG_RP_Room).
+void CG_RP_Send( const char *cmd ) {
+	trap->SendClientCommand( cmd );
+	if ( cgrp.floodPeriod ) {
+		cgrp.floodWhole = ( ( cgrp.floodWhole - cg.time > 0 ) ? cgrp.floodWhole : cg.time ) + cgrp.floodPeriod + RP_FLOOD_SPARE;
+		CG_RP_FloodCap();
+	}
+}
+
+// Whether what this game asks by itself - a card, a login Remember me kept -
+// can go now: once the server's flood protection has its allowance whole
+// again after the commands this game sent, a period (and a bit) for each, so
+// it leaves room there for what the player sends - chat, the menus - when
+// the server takes a few at once (one at a time, the old way, it can't).
+static qboolean CG_RP_Room( void ) {
+	return (qboolean)( !cgrp.floodPeriod || cgrp.floodWhole - cg.time <= 0 );
+}
 
 // Text as a bubble or a card shows it: colours, quotes and control characters out.
 static void CG_RP_Plain( const char *in, char *out, int size ) {
@@ -575,20 +625,20 @@ static void CG_RP_AskSend( void ) {
 	switch ( cgrp.ask.kind ) {
 	case RPASK_NEW:
 		VRC_ToHex( cgrp.ask.key, VRRP_KEY_LEN, hex );
-		trap->SendClientCommand( va( "rpnew %s %s", cgrp.ask.account, hex ) );
+		CG_RP_Send( va( "rpnew %s %s", cgrp.ask.account, hex ) );
 		break;
 	case RPASK_LOGIN:
 	case RPASK_AUTO:
 		VRRP_LoginProof( cgrp.ask.key, "login", cgrp.challenge, cgrp.ask.account, proof );
 		VRC_ToHex( proof, sizeof( proof ), hex );
-		trap->SendClientCommand( va( "rplogin %s %s", cgrp.ask.account, hex ) );
+		CG_RP_Send( va( "rplogin %s %s", cgrp.ask.account, hex ) );
 		cgrp.challengeUsed = qtrue;
 		break;
 	case RPASK_PASSWORD:
 		VRC_ToHex( cgrp.ask.key, VRRP_KEY_LEN, hex2 );
 		VRRP_LoginProof( cgrp.ask.oldKey, va( "password %s", hex2 ), cgrp.challenge, cgrp.ask.account, proof );	// (the new key's part of it)
 		VRC_ToHex( proof, sizeof( proof ), hex );
-		trap->SendClientCommand( va( "rppass %s %s", hex, hex2 ) );
+		CG_RP_Send( va( "rppass %s %s", hex, hex2 ) );
 		cgrp.challengeUsed = qtrue;
 		break;
 	}
@@ -723,7 +773,7 @@ static void CG_RP_LogOut( void ) {
 	}
 	// (the server's told even when it isn't known yet whether it has us logged
 	// in, or a login's on its way: it takes them in turn, and ends logged out)
-	trap->SendClientCommand( "rplogout" );
+	CG_RP_Send( "rplogout" );
 }
 
 /*
@@ -790,21 +840,28 @@ static const rpCard_t *CG_RP_Card( int n ) {
 	return ( c->time && c->faction >= 0 && !strcmp( c->name, cgs.clientinfo[n].name ) ) ? c : NULL;
 }
 
-static void CG_RP_AskCard( int n ) {
-	rpCard_t *c;
+// Whether a player's card is to be asked for: not known lately (by the name
+// they go by now), nor asked for lately.
+static qboolean CG_RP_CardDue( int n ) {
+	const rpCard_t *c = &rpCards[n];
 
+	if ( c->time && cg.time - c->time < RP_CARD_KEEP && !strcmp( c->name, cgs.clientinfo[n].name ) ) {
+		return qfalse;
+	}
+	return (qboolean)!( c->asked && cg.time - c->asked < RP_CARD_ASK_GAP );
+}
+
+// Their card asked for, if it's due and there's room (if not, it's asked
+// for as it's looked at again).
+static void CG_RP_AskCard( int n ) {
 	if ( n < 0 || n >= MAX_CLIENTS ) {
 		return;	// (a companion's card is made here)
 	}
-	c = &rpCards[n];
-	if ( c->time && cg.time - c->time < RP_CARD_KEEP && !strcmp( c->name, cgs.clientinfo[n].name ) ) {
+	if ( !CG_RP_CardDue( n ) || !CG_RP_Room() ) {
 		return;
 	}
-	if ( c->asked && cg.time - c->asked < RP_CARD_ASK_GAP ) {
-		return;
-	}
-	c->asked = cg.time ? cg.time : 1;
-	trap->SendClientCommand( va( "rpcard %i", n ) );
+	rpCards[n].asked = cg.time ? cg.time : 1;
+	CG_RP_Send( va( "rpcard %i", n ) );
 }
 
 // Where you look from, and which way (the headset: where it faces).
@@ -872,7 +929,7 @@ void CG_RP_ReadBio( void ) {
 	}
 	cgrp.bioWho = cgrp.target;
 	cgrp.bioTime = 0;
-	trap->SendClientCommand( va( "rpbio %i", cgrp.target ) );
+	CG_RP_Send( va( "rpbio %i", cgrp.target ) );
 }
 
 /*
@@ -998,19 +1055,19 @@ static void CG_RP_Admin( void ) {
 			trap->Cvar_Set( "ui_rpMessage", "Pick one in the list first" );
 			return;
 		}
-		trap->SendClientCommand( va( "npc spawn %s%s " RP_ADMIN_TAG "%s", !Q_stricmp( kind, "vehicle" ) ? "vehicle " : "", name, cgrp.account ) );
+		CG_RP_Send( va( "npc spawn %s%s " RP_ADMIN_TAG "%s", !Q_stricmp( kind, "vehicle" ) ? "vehicle " : "", name, cgrp.account ) );
 		trap->Cvar_Set( "ui_rpMessage", va( "%s, in front of you", name ) );
 	} else if ( !Q_stricmp( what, "killmine" ) ) {
-		trap->SendClientCommand( va( "npc kill " RP_ADMIN_TAG "%s", cgrp.account ) );
+		CG_RP_Send( va( "npc kill " RP_ADMIN_TAG "%s", cgrp.account ) );
 		trap->Cvar_Set( "ui_rpMessage", "The NPCs you spawned here: killed" );
 	} else if ( !Q_stricmp( what, "killall" ) ) {
-		trap->SendClientCommand( "npc kill all" );
+		CG_RP_Send( "npc kill all" );
 		trap->Cvar_Set( "ui_rpMessage", "Every NPC here: killed" );
 	} else if ( !Q_stricmp( what, "god" ) || !Q_stricmp( what, "noclip" ) || !Q_stricmp( what, "notarget" ) ) {
-		trap->SendClientCommand( what );	// (on or off: the page shows it as the server says - rpadmin)
+		CG_RP_Send( what );	// (on or off: the page shows it as the server says - rpadmin)
 		trap->Cvar_Set( "ui_rpMessage", "" );
 	} else if ( !Q_stricmp( what, "give" ) ) {
-		trap->SendClientCommand( "give all" );
+		CG_RP_Send( "give all" );
 		trap->Cvar_Set( "ui_rpMessage", "Every weapon and item, full ammo, health and armor" );
 	}
 }
@@ -1046,21 +1103,21 @@ static void CG_RP_UI_f( void ) {
 		const char *arg = CG_Argv( 2 );
 		const int n = atoi( arg );
 		if ( !arg[0] || n < 0 ) {
-			trap->SendClientCommand( "rp play none" );
+			CG_RP_Send( "rp play none" );
 		} else if ( n < cgrp.numChars ) {
-			trap->SendClientCommand( va( "rp play %i", n + 1 ) );
+			CG_RP_Send( va( "rp play %i", n + 1 ) );
 		}
 	} else if ( !Q_stricmp( what, "delete" ) ) {
 		const char *arg = CG_Argv( 2 );
 		const int n = atoi( arg );
 		if ( arg[0] && n >= 0 && n < cgrp.numChars ) {
-			trap->SendClientCommand( va( "rp delete %i", n + 1 ) );
+			CG_RP_Send( va( "rp delete %i", n + 1 ) );
 		}
 	} else if ( !Q_stricmp( what, "newchar" ) ) {
 		char name[MAX_CVAR_VALUE_STRING];
 		CG_RP_Take( "ui_rpNewName", name, sizeof( name ) );
 		if ( name[0] ) {
-			trap->SendClientCommand( va( "rp new %s", name ) );
+			CG_RP_Send( va( "rp new %s", name ) );
 		} else {
 			CG_RP_Show( "Type a name for the character", qfalse );
 		}
@@ -1083,15 +1140,15 @@ static void CG_RP_UI_f( void ) {
 			trap->Cvar_VariableStringBuffer( "ui_rpEditFaction", text, sizeof( text ) );
 			faction = atoi( text );
 			if ( text[0] && faction >= 0 && faction < RPF_NUM && faction != ch->faction ) {
-				trap->SendClientCommand( va( "rp faction %s", rpFactions[faction] ) );
+				CG_RP_Send( va( "rp faction %s", rpFactions[faction] ) );
 			}
 			trap->Cvar_VariableStringBuffer( "ui_rpEditDesc", text, sizeof( text ) );
 			if ( strcmp( text, ch->desc ) ) {
-				trap->SendClientCommand( va( "rp desc %s", text ) );
+				CG_RP_Send( va( "rp desc %s", text ) );
 			}
 			trap->Cvar_VariableStringBuffer( "ui_rpEditBio", text, sizeof( text ) );
 			if ( strcmp( text, ch->bio ) ) {
-				trap->SendClientCommand( va( "rp bio %s", text ) );
+				CG_RP_Send( va( "rp bio %s", text ) );
 			}
 		}
 	} else if ( !Q_stricmp( what, "bio" ) ) {
@@ -1101,10 +1158,10 @@ static void CG_RP_UI_f( void ) {
 			CG_RP_ReadBio();	// (whom you look at)
 		} else if ( n >= 0 && n < MAX_CLIENTS && cgs.clientinfo[n].infoValid ) {
 			cgrp.menuBio = n;	// (someone in the menu's list)
-			trap->SendClientCommand( va( "rpbio %i", n ) );
+			CG_RP_Send( va( "rpbio %i", n ) );
 		}
 	} else if ( !Q_stricmp( what, "people" ) ) {
-		cgrp.peopleUntil = cg.time + RP_PEOPLE_TIME;	// (everyone's card, one at a time: CG_RP_People)
+		cgrp.peopleUntil = cg.time + RP_PEOPLE_TIME;	// (everyone's card: CG_RP_People)
 	} else if ( !Q_stricmp( what, "admin" ) ) {
 		CG_RP_Admin();
 	} else if ( !Q_stricmp( what, "comp" ) ) {
@@ -1441,47 +1498,52 @@ static void CG_RP_Hello( void ) {
 	}
 	// (with the number of the rpforce whose Force setup this game has - 0: yours - so the server tells it again what it hasn't)
 	trap->Cvar_VariableStringBuffer( "rpf", rpf, sizeof( rpf ) );
-	trap->SendClientCommand( va( "rpver %i %u", RP_PROTOCOL, (unsigned)strtoul( rpf, NULL, 10 ) ) );
+	CG_RP_Send( va( "rpver %i %u", RP_PROTOCOL, (unsigned)strtoul( rpf, NULL, 10 ) ) );
 	cgrp.helloTime = cg.time ? cg.time : 1;
 	cgrp.helloTries++;
 }
 
-// The menu's People page is up: everyone's card asked for, one at a time.
+// The menu's People page is up: everyone's card asked for - one at a time, as
+// ever; with flood protection, several in one request (a server before that
+// answers the first: the rest are asked again).
 static void CG_RP_People( void ) {
-	int i;
+	const int from = cgrp.peopleCursor, most = cgrp.floodPeriod ? RP_PEOPLE_ASK : 1;
+	char ask[MAX_STRING_CHARS];
+	int i, n = 0;
 
-	if ( !cgrp.on || cg.time - cgrp.peopleUntil >= 0 || cg.time - cgrp.peopleNext < 0 ) {
+	if ( !cgrp.on || cg.time - cgrp.peopleUntil >= 0 || cg.time - cgrp.peopleNext < 0 || !CG_RP_Room() ) {
 		return;
 	}
-	for ( i = 0; i < MAX_CLIENTS; i++ ) {
-		const int n = ( cgrp.peopleCursor + i ) % MAX_CLIENTS;
-		const rpCard_t *c = &rpCards[n];
-		if ( !cgs.clientinfo[n].infoValid ) {
+	Q_strncpyz( ask, "rpcard", sizeof( ask ) );
+	for ( i = 0; i < MAX_CLIENTS && n < most; i++ ) {
+		const int k = ( from + i ) % MAX_CLIENTS;
+		if ( !cgs.clientinfo[k].infoValid || !CG_RP_CardDue( k ) ) {
 			continue;
 		}
-		if ( c->time && cg.time - c->time < RP_CARD_KEEP && !strcmp( c->name, cgs.clientinfo[n].name ) ) {
-			continue;	// (known lately)
-		}
-		if ( c->asked && cg.time - c->asked < RP_CARD_ASK_GAP ) {
-			continue;
-		}
-		CG_RP_AskCard( n );
-		cgrp.peopleCursor = n + 1;
-		cgrp.peopleNext = cg.time + RP_PEOPLE_GAP;
-		return;
+		rpCards[k].asked = cg.time ? cg.time : 1;
+		Q_strcat( ask, sizeof( ask ), va( " %i", k ) );
+		cgrp.peopleCursor = k + 1;	// (the next request goes on from there)
+		n++;
+	}
+	if ( n ) {
+		CG_RP_Send( ask );
+		cgrp.peopleNext = cg.time + ( cgrp.floodPeriod ? RP_PEOPLE_GAP : RP_PEOPLE_ONE );
 	}
 }
 
 // Not logged in, roleplay on or off: what this PC kept for this server, once a
 // visit (logged out by the server - the account logged in somewhere else -
-// it isn't tried again: no taking turns with that other place).
+// it isn't tried again: no taking turns with that other place); again if the
+// server didn't answer (CG_RP_Frame). With room for it, after the hello.
 static void CG_RP_AutoLogin( void ) {
 	int n, i;
 
-	if ( !cgrp.server || !cgrp.hello || !cgrp.known || cgrp.account[0] || cgrp.autoTried || cgrp.ask.kind != RPASK_NONE ) {
+	if ( !cgrp.server || !cgrp.hello || !cgrp.known || cgrp.account[0] || cgrp.autoTried || cgrp.ask.kind != RPASK_NONE ||
+		!CG_RP_Room() ) {
 		return;
 	}
 	cgrp.autoTried = qtrue;
+	cgrp.autoTries++;
 	n = CG_RP_ReadSaved();
 	i = CG_RP_FindSaved( n );
 	if ( i >= 0 && VRC_FromHex( rpSaved[i].key, cgrp.ask.key, VRRP_KEY_LEN ) ) {
@@ -1500,10 +1562,13 @@ void CG_RP_Frame( void ) {
 		return;
 	}
 	CG_RP_Hello();
-	if ( cgrp.ask.kind != RPASK_NONE && cg.time - cgrp.ask.time > RP_ASK_WAIT ) {
-		// no answer: given up; and hello again, for a challenge that's good for sure
+	if ( cgrp.ask.kind != RPASK_NONE && cg.time - cgrp.ask.time > ( cgrp.ask.kind == RPASK_AUTO ? RP_AUTO_WAIT : RP_ASK_WAIT ) ) {
+		// no answer: given up; and hello again, for a challenge that's good for sure (a login
+		// Remember me kept is tried again after it - unless its answer says it got there after all)
 		if ( cgrp.ask.kind != RPASK_AUTO ) {
 			CG_RP_Show( "The server didn't answer: try again", qtrue );
+		} else if ( cgrp.autoTries < RP_AUTO_TRIES ) {
+			cgrp.autoTried = qfalse;
 		}
 		CG_RP_AskOver();
 		cgrp.hello = qfalse;
@@ -1802,6 +1867,15 @@ void CG_RP_ServerInfo( const char *info ) {
 		int fields[7] = { 0, 0, 0, 0, 0, 0, 0 };
 		const int n = sscanf( value, "%d %d %d %d %d %d %d", &fields[0], &fields[1], &fields[2], &fields[3], &fields[4], &fields[5], &fields[6] );
 		cgrp.compsAllowed = ( n >= 5 ) ? Com_Clampi( 0, RP_COMP_OUT_MAX, fields[4] ) : 0;	// (a server before companions: none)
+	}
+	{	// its flood protection's period (sv_floodProtect: 1 a second, more: that many ms; CG_RP_Room) - none on
+		// this PC's own server; not there, as on (a serverinfo too long goes without some of its keys)
+		const char *value = Info_ValueForKey( info, "sv_floodProtect" );
+		const int flood = value[0] ? atoi( value ) : 1;
+		char running[16];
+		trap->Cvar_VariableStringBuffer( "sv_running", running, sizeof( running ) );
+		cgrp.floodPeriod = ( flood <= 0 || atoi( running ) ) ? 0 : ( flood == 1 ) ? 1000 : Q_min( flood, RP_FLOOD_MAX );
+		CG_RP_FloodCap();	// (a period cut: less owed)
 	}
 	CG_RP_UIServer();
 }

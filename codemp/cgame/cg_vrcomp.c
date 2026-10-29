@@ -225,7 +225,7 @@ const char *CG_RP_CompOrderWhy( int order ) {
 
 void CG_RP_CompOrder( int order ) {
 	if ( order >= 0 && order < (int)ARRAY_LEN( rpcOrders ) ) {
-		trap->SendClientCommand( va( "rpcomp order %s", rpcOrders[order] ) );
+		CG_RP_Send( va( "rpcomp order %s", rpcOrders[order] ) );
 	}
 }
 
@@ -360,14 +360,14 @@ void CG_RP_CompUI( void ) {
 			trap->Cvar_Set( "ui_rpMessage", "Choose what it fights as" );
 			return;
 		}
-		trap->SendClientCommand( va( "rpcomp set %i \"%s\" \"%s\" \"%s\" %i %i %i", slot + 1, name, type, look, rgb[0], rgb[1], rgb[2] ) );
+		CG_RP_Send( va( "rpcomp set %i \"%s\" \"%s\" \"%s\" %i %i %i", slot + 1, name, type, look, rgb[0], rgb[1], rgb[2] ) );
 	} else if ( !Q_stricmp( what, "del" ) ) {
 		if ( slot < cgc.count ) {
-			trap->SendClientCommand( va( "rpcomp del %i", slot + 1 ) );
+			CG_RP_Send( va( "rpcomp del %i", slot + 1 ) );
 		}
 	} else if ( !Q_stricmp( what, "out" ) ) {
 		if ( slot < cgc.count ) {
-			trap->SendClientCommand( va( "rpcomp out %i %i", slot + 1, atoi( CG_Argv( 4 ) ) ? 1 : 0 ) );
+			CG_RP_Send( va( "rpcomp out %i %i", slot + 1, atoi( CG_Argv( 4 ) ) ? 1 : 0 ) );
 		}
 	}
 }

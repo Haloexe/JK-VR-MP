@@ -1993,6 +1993,7 @@ void		CG_RP_Init( void );
 void		CG_RP_Shutdown( void );
 void		CG_RP_Restart( void );
 void		CG_RP_ServerInfo( const char *info );
+void		CG_RP_Send( const char *cmd );
 qboolean	CG_RP_ServerCommand( const char *cmd );
 qboolean	CG_RP_ConsoleCommand( const char *cmd );
 void		CG_RP_AddCommands( void );

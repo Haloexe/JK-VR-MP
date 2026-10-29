@@ -34,6 +34,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #endif
 
 #include "server/sv_gameapi.h"
+#include "server/sv_flood.h"
 #include "qcommon/vr_net.h"
 
 static void SV_CloseDownload( client_t *cl );
@@ -1248,6 +1249,58 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK ) {
 		Com_DPrintf( "client text ignored for %s: %s\n", cl->name, Cmd_Argv(0) );
 }
 
+#define SV_FLOOD_TELL_GAP	5000	// OpenJK VR: a player told no more often than this that a command was dropped
+
+/*
+==================
+SV_EngineCommand
+
+OpenJK VR: whether a client's command is one the engine takes itself
+(ucmds: userinfo, a download's...) - never passed to the game.
+==================
+*/
+static qboolean SV_EngineCommand( const char *s ) {
+	const ucmd_t *u;
+
+	Cmd_TokenizeString( s );
+	for ( u = ucmds; u->name; u++ ) {
+		if ( !strcmp( Cmd_Argv( 0 ), u->name ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+==================
+SV_FloodTake
+
+OpenJK VR: a command out of the client's allowance (sv_flood.h):
+sv_floodProtectBurst at once, one more each sv_floodProtect period after;
+sv_floodProtectSlow as ever. qtrue: taken.
+==================
+*/
+static qboolean SV_FloodTake( client_t *cl ) {
+	return SV_FloodAllow( &cl->floodWhole, svs.time, SV_FloodPeriod( sv_floodProtect->integer ), sv_floodProtectBurst->integer,
+		(qboolean)( sv_floodProtectSlow->integer != 0 ) );
+}
+
+/*
+==================
+SV_FloodTell
+
+OpenJK VR: a command of theirs was dropped: the player's told (not each
+time a flood is), rather than it lost without a word.
+==================
+*/
+static void SV_FloodTell( client_t *cl ) {
+	if ( cl->floodToldTime && svs.time - cl->floodToldTime < SV_FLOOD_TELL_GAP ) {
+		return;
+	}
+	cl->floodToldTime = svs.time ? svs.time : 1;
+	SV_SendServerCommand( cl, "print \"Too many commands at once: one was dropped - wait a moment, then send it again\n\"" );
+}
+
 /*
 ===============
 SV_ClientCommand
@@ -1283,22 +1336,19 @@ static qboolean SV_ClientCommand( client_t *cl, msg_t *msg ) {
 	// but not other people
 	// We don't do this when the client hasn't been active yet since its
 	// normal to spam a lot of commands when downloading
+	// OpenJK VR: out of an allowance (SV_FloodTake); not the commands the
+	// engine takes itself (userinfo...): taken whatever this says, as ever,
+	// they'd only use up what the game's have. One dropped is said.
 	if ( !com_cl_running->integer &&
 		cl->state >= CS_ACTIVE &&
-		sv_floodProtect->integer )
+		sv_floodProtect->integer > 0 &&
+		!SV_EngineCommand( s ) &&
+		!SV_FloodTake( cl ) )
 	{
-		const int floodTime = (sv_floodProtect->integer == 1) ? 1000 : sv_floodProtect->integer;
-		if ( svs.time < (cl->lastReliableTime + floodTime) ) {
-			// ignore any other text messages from this client but let them keep playing
-			// TTimo - moved the ignored verbose to the actual processing in SV_ExecuteClientCommand, only printing if the core doesn't intercept
-			clientOk = qfalse;
-		}
-		else {
-			cl->lastReliableTime = svs.time;
-		}
-		if ( sv_floodProtectSlow->integer ) {
-			cl->lastReliableTime = svs.time;
-		}
+		// ignore any other text messages from this client but let them keep playing
+		// TTimo - moved the ignored verbose to the actual processing in SV_ExecuteClientCommand, only printing if the core doesn't intercept
+		clientOk = qfalse;
+		SV_FloodTell( cl );
 	}
 
 	SV_ExecuteClientCommand( cl, s, clientOk );

@@ -47,8 +47,9 @@ A CHARACTER'S FORCE SETUP: what's set in the Force menu while playing it
 (rank, side, powers: the forcepowers cvar's) is kept with it too, and their
 game's told it as they take it up (rpforce), their own put by till they're
 themselves again; their powers are set up from it (G_RPForceSetup). What
-their game has, and their own, the server hears in their userinfo (rpf: a
-command could be dropped, coming within a second of another). Taken up or
+their game has, and their own, the server hears in their userinfo (rpf: no
+command, which a server - one before the engine's allowance, or flooded -
+could drop; the engine never counts a userinfo). Taken up or
 put down without respawning (logging in or out, roleplay turned on or off),
 or set anew while playing it, it takes hold where they stand as soon as
 they're out of a fight - unless it changes what spawning gives them (their
@@ -84,7 +85,8 @@ Client commands (most sent by the cgame or the menus, not typed):
   rppass <proof> <newkey>   change the password
   rplogout
   rp new|play|faction|desc|bio|delete|list|look|giveup ...
-  rpcard <client>, rpbio <client>    what a character's card shows
+  rpcard <client> [<client>...], rpbio <client>   what a character's card
+                            shows (a server before several took the first)
   rpcomp list|set|del|out|order ...  companions (G_RP_Comp; 5 and later)
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
@@ -199,7 +201,8 @@ typedef struct {
 	int			newTime;			// the last account made from here
 	int			switchTime;			// the last switch of characters (respawning them)
 	qboolean	answering;			// the next rpacct answers their login or new account
-	int			cardTime, cards;	// card requests this second
+	int			cardTime, cards;	// card requests this second...
+	int			bioTime, bios;		// ...and bios, apart: one clicked is answered whatever the People page asks
 	qboolean	toldOld;			// told their build is older than this server's roleplay
 	int			playGen;			// counts the characters taken up and put down: whose companions are out (g_vrcomp.c)
 	int			compEditTime, compEdits;	// companions changed lately
@@ -2258,34 +2261,44 @@ static void G_RP_Comp( gentity_t *ent ) {
 	G_RPSendComps( clientNum );
 }
 
-// what a character's card shows: rpcard <client>
-static qboolean G_RP_CardAllowed( int clientNum ) {
+// what characters' cards show: rpcard <client> [<client>...] - each one, as many
+// a second as RP_CARDS_PER_SEC (the menu's People page asks for several at once:
+// the server takes a player's commands a few at a time); rpbio <client>, as many
+// again, apart
+static qboolean G_RP_CardAllowed( int clientNum, qboolean bio ) {
 	rpClient_t *c = &rpc[clientNum];
+	int *time = bio ? &c->bioTime : &c->cardTime, *count = bio ? &c->bios : &c->cards;
 
-	if ( level.time - c->cardTime >= 1000 ) {
-		c->cardTime = level.time;
-		c->cards = 0;
+	if ( level.time - *time >= 1000 ) {
+		*time = level.time;
+		*count = 0;
 	}
-	return (qboolean)( ++c->cards <= RP_CARDS_PER_SEC );
+	return (qboolean)( ++*count <= RP_CARDS_PER_SEC );
 }
 
 static void G_RP_Card( gentity_t *ent, qboolean bio ) {
 	const int clientNum = ent - g_entities;
+	const int args = bio ? 2 : Q_min( trap->Argc(), MAX_CLIENTS + 1 );
 	char arg[16];
-	int target;
-	const rpChar_t *ch;
+	int i;
 
-	trap->Argv( 1, arg, sizeof( arg ) );
-	target = atoi( arg );
-	if ( !arg[0] || target < 0 || target >= MAX_CLIENTS || !g_entities[target].inuse || !g_entities[target].client ||
-		!G_RP_CardAllowed( clientNum ) ) {
-		return;
-	}
-	ch = G_RP_Active( target );
-	if ( bio ) {
-		trap->SendServerCommand( clientNum, va( "rpbio %i \"%s\"", target, ch ? ch->bio : "" ) );
-	} else {
-		trap->SendServerCommand( clientNum, va( "rpcard %i %i \"%s\"", target, ch ? ch->faction : -1, ch ? ch->desc : "" ) );
+	for ( i = 1; i < args; i++ ) {
+		const rpChar_t *ch;
+		int target;
+		trap->Argv( i, arg, sizeof( arg ) );
+		target = atoi( arg );
+		if ( !arg[0] || target < 0 || target >= MAX_CLIENTS || !g_entities[target].inuse || !g_entities[target].client ) {
+			continue;
+		}
+		if ( !G_RP_CardAllowed( clientNum, bio ) ) {
+			return;	// (none more this second: those left are asked for again)
+		}
+		ch = G_RP_Active( target );
+		if ( bio ) {
+			trap->SendServerCommand( clientNum, va( "rpbio %i \"%s\"", target, ch ? ch->bio : "" ) );
+		} else {
+			trap->SendServerCommand( clientNum, va( "rpcard %i %i \"%s\"", target, ch ? ch->faction : -1, ch ? ch->desc : "" ) );
+		}
 	}
 }
 

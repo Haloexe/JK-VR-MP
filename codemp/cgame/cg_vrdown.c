@@ -352,6 +352,6 @@ int CG_RP_NPCSide( void ) {
 // The wheel's Give up.
 void CG_RP_GiveUp( void ) {
 	if ( CG_RP_IsDown() ) {
-		trap->SendClientCommand( "rp giveup" );
+		CG_RP_Send( "rp giveup" );
 	}
 }

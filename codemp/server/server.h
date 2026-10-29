@@ -171,7 +171,8 @@ typedef struct client_s {
 	int				downloadSendTime;	// time we last got an ack from the client
 
 	int				deltaMessage;		// frame last client usercmd message
-	int				lastReliableTime;	// svs.time when reliable command was last received
+	int				floodWhole;			// OpenJK VR: svs.time its allowance of commands is whole again (SV_FloodTake)
+	int				floodToldTime;		// OpenJK VR: svs.time it was last told a command of its was dropped (0: never)
 	int				lastPacketTime;		// svs.time when packet was last received
 	int				lastConnectTime;	// svs.time when connection started
 	int				nextSnapshotTime;	// send another snapshot when svs.time >= nextSnapshotTime
@@ -290,6 +291,7 @@ extern	cvar_t	*sv_gametype;
 extern	cvar_t	*sv_pure;
 extern	cvar_t	*sv_floodProtect;
 extern	cvar_t	*sv_floodProtectSlow;
+extern	cvar_t	*sv_floodProtectBurst;	// OpenJK VR: commands a client may send at once (SV_FloodTake)
 extern	cvar_t	*sv_lanForceRate;
 extern	cvar_t	*sv_needpass;
 extern	cvar_t	*sv_filterCommands;

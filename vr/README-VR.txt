@@ -1073,7 +1073,13 @@ your PC. To see VR players as they move, the others need this build too:
 give them this whole OpenJK-VR folder (it goes in their own GameData
 folder, as above). A server that runs on its own, for others to join
 whenever (on this PC or a rented Linux server): "Launch OpenJK VR
-Server.bat", see README-SERVER.txt.
+Server.bat", see README-SERVER.txt. Such a server takes each player's
+commands - chat, what the menus ask for - five at once, then one more a
+second, against floods (sv_floodProtectBurst, sv_floodProtect); one sent
+sooner is dropped, and you're told. What this build asks by itself
+(roleplay's cards, a remembered login) waits till the server has room for
+it after what it sent before, so it leaves room for yours. A game you host
+from the menu takes them all.
 
 Duels: the Duel game type is the simplest way to fight one at a time. In
 Free For All you can also challenge someone to a private duel the Jedi

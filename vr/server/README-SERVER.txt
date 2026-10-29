@@ -88,6 +88,20 @@ A password-protected server: g_password in server.cfg. Players type
   password <it>
 in the console (Shift+~) before joining.
 
+Flood protection: the server takes each player's commands - chat, what
+the menus ask for - five at once, then one more a second, and drops any
+that come sooner (the player is told). sv_floodProtectBurst is how many at
+once (1: one a second, the old game's way, where a menu that sends a few
+together loses all but the first); sv_floodProtect is the time (1: a
+second; more: that many milliseconds; 0: no limit, so anyone could flood
+the chat). With sv_floodProtectSlow 1, someone who keeps sending too fast
+gets nothing through until they stop for a moment. Players on this build
+ask the server for things by themselves (roleplay's cards, a remembered
+login) only once what they sent before is made up, which leaves room for
+what they type when the server takes five at once (with 1, a card asked
+for as they look at someone can still take the place of a line said just
+after it).
+
 
 COMMANDS
 --------
