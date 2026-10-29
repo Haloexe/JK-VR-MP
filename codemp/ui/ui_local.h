@@ -73,6 +73,7 @@ qboolean	UI_VRRP_FeederSelection( int feeder, int index );
 qboolean	UI_VRRP_Script( const char *name, char **args );
 void		UI_VRRP_Move( const char *from, const char *to, const char *first, qboolean free );
 void		UI_VRRP_Open( int page );
+void		UI_VRRP_ForceOwnBack( void );
 
 // ui_vrcolor.c (OpenJK VR: the Saber Colour page - any colour, a black core)
 void		UI_VRColor_AddMenus( void );

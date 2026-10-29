@@ -225,6 +225,7 @@ void WP_InitForcePowers( gentity_t *ent ) {
 		trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
 
 	Q_strncpyz( forcePowers, Info_ValueForKey( userinfo, "forcepowers" ), sizeof( forcePowers ) );
+	G_RPForceSetup( ent->s.number, forcePowers, sizeof( forcePowers ) );	// OpenJK VR: a roleplay character's own setup (g_vrrp.c)
 
 	if ( strlen( forcePowers ) != DEFAULT_FORCEPOWERS_LEN ) {
 		Q_strncpyz( forcePowers, DEFAULT_FORCEPOWERS, sizeof( forcePowers ) );

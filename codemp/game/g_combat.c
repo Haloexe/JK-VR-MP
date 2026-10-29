@@ -5229,6 +5229,9 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		client->damage_blood += take;
 		if ( take + asave > 0 ) {
 			client->rpHurtTime = level.time;	// OpenJK VR: roleplay waits on fighting (g_vrrp.c)
+			if ( attacker && attacker != targ && attacker->client && mod != MOD_TELEFRAG ) {
+				attacker->client->rpFightTime = level.time;	// (and on doing someone damage - not spawning on them: a character's Force setup)
+			}
 		}
 		client->damage_knockback += knockback;
 		if ( dir ) {

@@ -1297,6 +1297,10 @@ void Cmd_ForceChanged_f( gentity_t *ent )
 		WP_InitForcePowers( ent );
 		goto argCheck;
 	}
+	if ( G_RPForceChanged( ent ) )
+	{ // OpenJK VR: a roleplay character's setup - where they stand once out of a fight, as the server hears it in their userinfo (g_vrrp.c)
+		goto argCheck;
+	}
 
 	buf = G_GetStringEdString("MP_SVGAME", "FORCEPOWERCHANGED");
 

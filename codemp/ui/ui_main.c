@@ -9922,6 +9922,9 @@ void UI_Init( qboolean inGameLoad ) {
 
 	UI_SiegeInit();
 
+	if ( !inGameLoad ) {
+		UI_VRRP_ForceOwnBack();	// OpenJK VR: yours, if the game stopped with a roleplay character's (ui_vrrp.c)
+	}
 	UI_UpdateForcePowers();
 
 	UI_RegisterCvars();
@@ -10129,6 +10132,8 @@ void UI_Refresh( int realtime )
 	trap->G2API_SetTime(realtime, 0);
 	trap->G2API_SetTime(realtime, 1);
 	//ghoul2 timer must be explicitly updated during ui rendering.
+
+	UI_ForceFollow();	// OpenJK VR: forcepowers put there from outside the menus (a roleplay character's: cg_vrrp.c) shown, kept
 
 	uiInfo.uiDC.frameTime = realtime - uiInfo.uiDC.realTime;
 	uiInfo.uiDC.realTime = realtime;

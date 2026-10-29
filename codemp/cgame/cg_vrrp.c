@@ -30,6 +30,16 @@ DOWN, NOT DEAD: being down, getting someone up, giving up - cg_vrdown.c.
 COMPANIONS: yours for the Companions page, whose others are, stand-ins
 for models this PC hasn't got - cg_vrcomp.c.
 
+A CHARACTER'S FORCE SETUP. The server keeps one with each character, and
+says which this game is to have (rpforce <number> <setup | ->): the
+character's you play - it goes in forcepowers, what the Force menu sets, with
+your own put by in cg_rpOwnForce - or "-": yours back. Your userinfo tells
+the server which it has (rpf: "<number> <yours>", or "": yours), so what you
+set in the Force menu while you play a character - forcepowers, in your
+userinfo too - it takes as that character's. (Not a command: one sent within
+a second of another is dropped.) Yours comes back by itself as this game
+starts and stops (on another server, say, or after playing one to the end).
+
 SPEECH BUBBLES. With roleplay on, what someone near you says, and their
 /me, shows over their head for 6 seconds (cg_rpBubbles).
 
@@ -51,7 +61,7 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			5		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions)
+#define RP_PROTOCOL			6		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions, 6 a character's Force setup)
 
 // what the server says of an admin (rpadmin; as g_vrrp.c's)
 #define RPA_ADMIN			1
@@ -1108,11 +1118,18 @@ From the server
 ================================================================================
 */
 
-// rpch <salt> <challenge>
+// rpch <salt> <challenge> - an answer to this game's hello. One that comes
+// before it's said hello answers another's: the game before a vid_restart -
+// its hello said what that one had of its Force setup, not what this one has
+// (its own, put back): this one says hello itself, and the server answers it
+// with the same challenge.
 static void CG_RP_ChallengeCmd( void ) {
 	char salt[64], challenge[64];
 	byte check[VRRP_SALT_HEX / 2];
 
+	if ( !cgrp.helloTime ) {
+		return;
+	}
 	trap->Cmd_Argv( 1, salt, sizeof( salt ) );
 	trap->Cmd_Argv( 2, challenge, sizeof( challenge ) );
 	if ( !VRC_FromHex( salt, check, sizeof( check ) ) || !VRC_FromHex( challenge, check, VRRP_CHALLENGE_HEX / 2 ) ) {
@@ -1282,6 +1299,68 @@ static void CG_RP_FailCmd( void ) {
 	}
 }
 
+// Whether s is a Force setup as the forcepowers cvar has one (as the server
+// takes one: g_vrrp.c's G_RP_ForceOk) - "<rank>-<side>-" and a level for
+// each power: a rank of 0 to 7, light or dark, levels of 0 to 3.
+static qboolean CG_RP_ForceOk( const char *s ) {
+	int i;
+
+	if ( strlen( s ) != DEFAULT_FORCEPOWERS_LEN || s[0] < '0' || s[0] > '0' + FORCE_MASTERY_JEDI_MASTER || s[1] != '-' ||
+		( s[2] != '0' + FORCE_LIGHTSIDE && s[2] != '0' + FORCE_DARKSIDE ) || s[3] != '-' ) {
+		return qfalse;
+	}
+	for ( i = 4; i < DEFAULT_FORCEPOWERS_LEN; i++ ) {
+		if ( s[i] < '0' || s[i] > '0' + FORCE_LEVEL_3 ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// Your own Force setup back, where a character's was (put by in
+// cg_rpOwnForce while you played it); and your userinfo says it's yours (rpf).
+static void CG_RP_ForceOwnBack( void ) {
+	char own[MAX_CVAR_VALUE_STRING];
+
+	trap->Cvar_VariableStringBuffer( "cg_rpOwnForce", own, sizeof( own ) );
+	if ( own[0] ) {
+		trap->Cvar_Set( "forcepowers", own );
+		trap->Cvar_Set( "cg_rpOwnForce", "" );
+	}
+	trap->Cvar_Set( "rpf", "" );
+}
+
+// rpforce <number> <setup | ->: the Force setup this game's to have - the
+// character's you play (yours put by till you're yourself again), or "-":
+// yours back. Your userinfo says which it has (rpf "<number> <yours>": the
+// server takes what's in forcepowers then - set anew in the Force menu, say -
+// as the character's; "": yours).
+static void CG_RP_ForceCmd( void ) {
+	char number[32], setup[MAX_CVAR_VALUE_STRING], own[MAX_CVAR_VALUE_STRING];
+	unsigned n;
+
+	trap->Cmd_Argv( 1, number, sizeof( number ) );
+	trap->Cmd_Argv( 2, setup, sizeof( setup ) );
+	if ( !strcmp( setup, "-" ) ) {
+		CG_RP_ForceOwnBack();
+		return;
+	}
+	n = (unsigned)strtoul( number, NULL, 10 );
+	if ( !n || !CG_RP_ForceOk( setup ) ) {
+		return;
+	}
+	trap->Cvar_VariableStringBuffer( "cg_rpOwnForce", own, sizeof( own ) );
+	if ( !own[0] ) {	// (yours, put by - not another character's)
+		trap->Cvar_VariableStringBuffer( "forcepowers", own, sizeof( own ) );
+		if ( !own[0] ) {
+			Q_strncpyz( own, DEFAULT_FORCEPOWERS, sizeof( own ) );
+		}
+		trap->Cvar_Set( "cg_rpOwnForce", own );
+	}
+	trap->Cvar_Set( "forcepowers", setup );
+	trap->Cvar_Set( "rpf", va( "%u %s", n, CG_RP_ForceOk( own ) ? own : "-" ) );
+}
+
 qboolean CG_RP_ServerCommand( const char *cmd ) {
 	if ( !Q_stricmp( cmd, "rpch" ) ) {
 		CG_RP_ChallengeCmd();
@@ -1309,6 +1388,8 @@ qboolean CG_RP_ServerCommand( const char *cmd ) {
 		CG_RP_CompsCmd();	// (your character's companions: cg_vrcomp.c)
 	} else if ( !Q_stricmp( cmd, "rpcmp" ) ) {
 		CG_RP_CompCmd();
+	} else if ( !Q_stricmp( cmd, "rpforce" ) ) {
+		CG_RP_ForceCmd();	// (your character's Force setup)
 	} else {
 		return qfalse;
 	}
@@ -1347,6 +1428,8 @@ Every frame
 */
 
 static void CG_RP_Hello( void ) {
+	char rpf[MAX_CVAR_VALUE_STRING];
+
 	if ( !cgrp.server || cgrp.hello || cgrp.helloTries >= RP_HELLO_TRIES ) {
 		return;
 	}
@@ -1356,7 +1439,9 @@ static void CG_RP_Hello( void ) {
 	if ( cg.time - cgrp.firstSnap < RP_HELLO_FIRST || ( cgrp.helloTime && cg.time - cgrp.helloTime < RP_HELLO_AGAIN ) ) {
 		return;
 	}
-	trap->SendClientCommand( va( "rpver %i", RP_PROTOCOL ) );
+	// (with the number of the rpforce whose Force setup this game has - 0: yours - so the server tells it again what it hasn't)
+	trap->Cvar_VariableStringBuffer( "rpf", rpf, sizeof( rpf ) );
+	trap->SendClientCommand( va( "rpver %i %u", RP_PROTOCOL, (unsigned)strtoul( rpf, NULL, 10 ) ) );
 	cgrp.helloTime = cg.time ? cg.time : 1;
 	cgrp.helloTries++;
 }
@@ -1768,6 +1853,8 @@ void CG_RP_Init( void ) {
 	CG_RP_DownInit();
 	CG_RP_CompInit();
 	CG_RP_UIClear();	// (another server's)
+	trap->Cvar_Register( NULL, "rpf", "", CVAR_USERINFO | CVAR_TEMP );	// (the Force setup you have: yours, or a character's - CG_RP_ForceCmd)
+	CG_RP_ForceOwnBack();	// (your own Force setup, wherever this is: a server playing a character says so - rpforce)
 	trap->Cvar_VariableStringBuffer( "cl_currentServerIP", cgrp.address, sizeof( cgrp.address ) );
 	if ( !cgrp.address[0] ) {
 		trap->Cvar_VariableStringBuffer( "cl_currentServerAddress", cgrp.address, sizeof( cgrp.address ) );
@@ -1798,6 +1885,7 @@ void CG_RP_Shutdown( void ) {
 	CG_RP_UIAdmin();
 	CG_RP_UIClear();
 	CG_RP_CompInit();
+	CG_RP_ForceOwnBack();	// (yours again, out of the game too)
 }
 
 // For the wheel: roleplay's on here.

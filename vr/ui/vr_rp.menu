@@ -1366,13 +1366,76 @@
 			}
 		}
 
+		// its Force, as its setup has it (ui_rpEditForce: the side), and the game's Force menu, where it's set - while the server keeps
+		// its setup with it (rp_edit_kept: ui_vrrp.c)
+		itemDef
+		{
+			name            rp_edit_force
+			group           rp_edit_kept
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 138 380 22
+			text            "Force:"
+			cvar            "ui_rpEditForce"
+			cvarFloatList
+			{
+				"Light side" 1 "Dark side" 2
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      130
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_edit_forcego
+			group           rp_edit_kept
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            430 138 140 22
+			text            "Force Powers"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      70
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "The Force menu: what you set there while playing it is the character's"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP force ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_edit_forcego backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_edit_forcego backcolor 0 0 .3 .7
+			}
+		}
+
 		itemDef
 		{
 			name            rp_edit_desc
 			group           rp_edit
 			type            ITEM_TYPE_EDITFIELD
 			style           WINDOW_STYLE_FILLED
-			rect            40 138 520 22
+			rect            40 164 520 22
 			text            "Description:"
 			cvar            "ui_rpEditDesc"
 			maxChars        60
@@ -1404,7 +1467,7 @@
 			group           rp_edit
 			type            ITEM_TYPE_EDITFIELD
 			style           WINDOW_STYLE_FILLED
-			rect            40 164 520 22
+			rect            40 190 520 22
 			text            "Bio:"
 			cvar            "ui_rpEditBio"
 			maxChars        250
@@ -1436,7 +1499,7 @@
 			group           rp_edit
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
-			rect            40 190 530 88
+			rect            40 216 530 62
 			cvar            "ui_rpEditBio"
 			font            4
 			textscale       1
@@ -1591,7 +1654,39 @@
 		itemDef
 		{
 			name            rp_edit_l1
-			group           rp_edit
+			group           rp_edit_kept
+			rect            40 320 530 18
+			text            "What you wear (model, colours) and the Force powers you set while playing it"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_edit_l2
+			group           rp_edit_kept
+			rect            40 338 530 18
+			text            "are kept with the character: switch characters, and your powers switch too."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_edit_lone
+			group           rp_edit_lone
 			rect            40 320 530 18
 			text            "What you wear while playing it (model, colours) is kept with the character."
 			font            4
@@ -1838,7 +1933,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 84 545 136
-			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one there; what you wear while playing it stays with it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one; what you wear and set in the Force menu stays with it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT

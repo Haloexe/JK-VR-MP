@@ -56,13 +56,13 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Proximity voice chat: talk to the players near you and hear them from
     where they are; pick your microphone in Setup > Sound (see VOICE CHAT)
   * Roleplay on servers that switch it on: an account, characters of your
-    own (a name, a faction, a description and a bio), talk that reaches
-    only those near you with speech bubbles over their heads, /me and
-    out-of-character chat, and character cards; down instead of dead,
-    until someone of your faction gets you up; NPCs that take sides by
-    faction; companions of your own - up to 6 a character, 2 out with you -
-    that follow you, fight for you, get you up and take orders from the
-    wheel (see ROLEPLAY)
+    own (a name, a faction, a description and a bio, and each its own look
+    and Force powers), talk that reaches only those near you with speech
+    bubbles over their heads, /me and out-of-character chat, and character
+    cards; down instead of dead, until someone of your faction gets you
+    up; NPCs that take sides by faction; companions of your own - up to 6
+    a character, 2 out with you - that follow you, fight for you, get you
+    up and take orders from the wheel (see ROLEPLAY)
   * A keyboard in the headset for typing in menus, chat and the console
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
@@ -1140,6 +1140,27 @@ stays with that character. An account keeps up to 5 characters (the
 server's g_rpCharacters). Switching characters respawns you, so it waits
 until you're out of a duel and haven't been hurt for 10 s. With roleplay
 off the game plays as before, and nothing is lost.
+  FORCE POWERS: each character keeps its own, as it keeps its look: what
+you set in the game's Force menu while you play it (rank, side and
+powers) is that character's, so switching from your Jedi to your Sith
+switches your powers too, and your own setup comes back when you log out,
+delete the one you play or roleplay goes off. The Editor's Force line
+shows its side (Light or Dark), and Force Powers beside it opens the Force
+menu. Powers set there, or that come with logging in or out, take hold
+where you stand once you're out of a fight - as switching characters
+waits: out of a duel, not down, not carrying a flag or riding anything,
+neither hurt nor hurting anyone for 10 s (in Duel, Power Duel and Siege,
+out of the round) - or as you respawn. One that would give you a saber or
+take yours (saber offence or none) respawns you then instead, as
+switching characters does, and no more often (with roleplay off, it waits
+for your next respawn). One the server would cut down to its rank waits
+for you to set it anew in the Force menu - a respawn before then cuts it
+down and sends you to spectate to set it (unless the server puts you
+straight back in), as the game always has. In play, you're told when your
+powers wait. A character made before characters kept their powers takes
+yours the first time you play it. The server still holds every setup to
+its own rank and rules. An older OpenJK VR, or this one on an older
+server, keeps one setup for everything, as the game always has.
   Your password never leaves your PC: the game makes a key of it and logs
 in with that. Remember me keeps the key (never the password) and logs you
 in on that server by itself next time; Log out forgets it. A forgotten

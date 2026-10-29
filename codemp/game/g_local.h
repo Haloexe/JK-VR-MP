@@ -811,6 +811,7 @@ struct gclient_s {
 	float		vrPoseYaw;			// OpenJK VR (g_vrpose.c): which way they faced going into their pose...
 	int			vrPoseTime;			// ...then (level.time)
 	int			rpHurtTime;			// OpenJK VR (g_vrrp.c): level.time they last took damage
+	int			rpFightTime;		// OpenJK VR (g_vrrp.c): level.time they last did someone damage
 
 	// OpenJK VR (g_vrdown.c): roleplay - down, not dead (ps: VRPOSE_DOWNED); NPCs' sides
 	qboolean	rpDowned;			// down, until helped up or they give up
@@ -1109,6 +1110,8 @@ qboolean	G_RPAdmin( int clientNum );
 qboolean	G_RPCheatAllowed( gentity_t *ent );
 void		G_RPAdminCheat( gentity_t *ent );
 void		G_RPFrame( void );
+void		G_RPForceSetup( int clientNum, char *forcePowers, int size );
+qboolean	G_RPForceChanged( gentity_t *ent );
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
 qboolean	G_RPDowned( const gentity_t *ent );

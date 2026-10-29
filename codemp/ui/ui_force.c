@@ -188,9 +188,35 @@ void UI_DrawForceStars(rectDef_t *rect, float scale, vec4_t color, int textStyle
 	}
 }
 
+// OpenJK VR: the forcepowers the menus last read or wrote. Another there now
+// was put there from outside them - a roleplay character's own, by the game
+// (cg_vrrp.c), or typed - and is read, not written over with what they had.
+static char uiForceKnown[MAX_CVAR_VALUE_STRING];
+
+// OpenJK VR: forcepowers changed from outside the menus since they last read
+// or wrote it: read again (qtrue: it had), what was picked in them before
+// (on the setup that was there) let go.
+qboolean UI_ForceFollow( void )
+{
+	char now[MAX_CVAR_VALUE_STRING];
+
+	trap->Cvar_VariableStringBuffer( "forcepowers", now, sizeof( now ) );
+	if ( !strcmp( now, uiForceKnown ) )
+	{
+		return qfalse;
+	}
+	gTouchedForce = qfalse;
+	UI_UpdateForcePowers();
+	return qtrue;
+}
+
 // Set the client's force power layout.
 void UI_UpdateClientForcePowers(const char *teamArg)
 {
+	if ( UI_ForceFollow() )
+	{ // OpenJK VR: another setup was put there from outside the menus: that one, not what they had
+		return;
+	}
 	trap->Cvar_Set( "forcepowers", va("%i-%i-%i%i%i%i%i%i%i%i%i%i%i%i%i%i%i%i%i%i",
 		uiForceRank, uiForceSide, uiForcePowersRank[0], uiForcePowersRank[1],
 		uiForcePowersRank[2], uiForcePowersRank[3], uiForcePowersRank[4],
@@ -199,6 +225,7 @@ void UI_UpdateClientForcePowers(const char *teamArg)
 		uiForcePowersRank[11], uiForcePowersRank[12], uiForcePowersRank[13],
 		uiForcePowersRank[14], uiForcePowersRank[15], uiForcePowersRank[16],
 		uiForcePowersRank[17]) );
+	trap->Cvar_VariableStringBuffer( "forcepowers", uiForceKnown, sizeof( uiForceKnown ) );	// OpenJK VR
 
 	if (gTouchedForce)
 	{
@@ -652,6 +679,7 @@ void UI_UpdateForcePowers()
 	char readBuf[256];
 	int i = 0, i_f = 0, i_r = 0;
 
+	Q_strncpyz( uiForceKnown, forcePowers, sizeof( uiForceKnown ) );	// OpenJK VR: read (UI_ForceFollow)
 	uiForceSide = 0;
 
 	if (forcePowers && forcePowers[0])

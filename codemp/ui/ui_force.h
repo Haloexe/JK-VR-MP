@@ -48,6 +48,7 @@ void UI_DrawForceStars(rectDef_t *rect, float scale, vec4_t color, int textStyle
 void UI_UpdateClientForcePowers(const char *teamArg);
 void UI_SaveForceTemplate();
 void UI_UpdateForcePowers();
+qboolean UI_ForceFollow( void );	// OpenJK VR
 qboolean UI_SkinColor_HandleKey(int flags, float *special, int key, int num, int min, int max, int type);
 qboolean UI_ForceSide_HandleKey(int flags, float *special, int key, int num, int min, int max, int type);
 qboolean UI_JediNonJedi_HandleKey(int flags, float *special, int key, int num, int min, int max, int type);

@@ -16,8 +16,11 @@ asked: "rpui <what>", run from here.
                feeder 65) - play one, stop, delete one (asked first), make
                one - log out, a new password
   Editor       the character you play: faction, description, bio (Save);
-               its look (the Profile), its companions (the Companions menu:
-               ui_vrcomp.c)
+               its Force - light or dark, as its setup has it - and Force
+               Powers, the game's Force menu (what's set there while you
+               play it is its own: g_vrrp.c), while the server keeps its
+               setup with it (rpf, the game's: cg_vrrp.c); its look (the
+               Profile), its companions (the Companions menu: ui_vrcomp.c)
   People       who's here (feeder 66), with their faction and description,
                and the bio of the one picked
   Chat & cards speech bubbles, cards, remembering your login; how chat goes
@@ -218,6 +221,28 @@ void UI_VRRP_AddMenus( void ) {
 	}
 	UI_VRRP_Move( VRRP_TAB, "ingame", VRRP_TAB_ITEM, qfalse );
 	UI_VRRP_Move( VRRP_CREATE, "createserver", VRRP_CREATE_ITEM, qtrue );
+}
+
+// Whether the Force setup you have is the character's you play, the server
+// keeping it with the character (rpf: cg_vrrp.c).
+static qboolean UI_VRRP_ForceKept( void ) {
+	char rpf[MAX_CVAR_VALUE_STRING];
+
+	UI_VRRP_Str( "rpf", rpf, sizeof( rpf ) );
+	return (qboolean)( rpf[0] != '\0' );
+}
+
+// The menus started, not in a game (ui_main.c): your own Force setup back, if
+// the game last stopped playing a roleplay character's - the game puts it back
+// as it stops (cg_vrrp.c), but that isn't saved when you quit, or crash.
+void UI_VRRP_ForceOwnBack( void ) {
+	char own[MAX_CVAR_VALUE_STRING];
+
+	UI_VRRP_Str( "cg_rpOwnForce", own, sizeof( own ) );
+	if ( own[0] ) {
+		trap->Cvar_Set( "forcepowers", own );
+		trap->Cvar_Set( "cg_rpOwnForce", "" );
+	}
 }
 
 // The Roleplay menu opened (on a page: -1, the one it was on).
@@ -558,6 +583,12 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 	if ( !Q_stricmp( group, "rp_edit_none" ) ) {
 		return vrrp.page == RPP_EDIT && !playing;
 	}
+	if ( !Q_stricmp( group, "rp_edit_kept" ) ) {	// (its Force setup kept with it: the one you have - cg_vrrp.c)
+		return vrrp.page == RPP_EDIT && playing && UI_VRRP_ForceKept();
+	}
+	if ( !Q_stricmp( group, "rp_edit_lone" ) ) {	// (not: roleplay off, or an older server)
+		return vrrp.page == RPP_EDIT && playing && !UI_VRRP_ForceKept();
+	}
 	if ( !Q_stricmp( group, "rp_people" ) ) {
 		return vrrp.page == RPP_PEOPLE;
 	}
@@ -637,6 +668,13 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	}
 	trap->Cvar_Set( "ui_rpCountLine", most > 0 ? va( "%i of %i characters", count, most ) : va( "%i characters", count ) );
 	trap->Cvar_Set( "ui_rpEditLine", va( "Playing %s", playing ) );
+	{	// the Force the character's of: its setup's side (forcepowers - the character's own while you play one, as the
+		// server says: cg_vrrp.c; light, as the Force menu takes one that isn't a setup)
+		char setup[MAX_CVAR_VALUE_STRING];
+		UI_VRRP_Str( "forcepowers", setup, sizeof( setup ) );
+		trap->Cvar_Set( "ui_rpEditForce", ( setup[0] && setup[1] == '-' && setup[2] == '0' + FORCE_DARKSIDE && setup[3] == '-' ) ?
+			va( "%i", FORCE_DARKSIDE ) : va( "%i", FORCE_LIGHTSIDE ) );
+	}
 	trap->Cvar_Set( "ui_rpServerLine", server == 2 ? "Roleplay is on here" : server == 1 ? "Roleplay is off here" :
 		server == 3 ? "Roleplay isn't working here: rp/server.txt can't be read (see the console)" : "This server doesn't have roleplay" );
 	if ( vrrp.deleting >= 0 ) {
@@ -976,6 +1014,9 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 	} else if ( !Q_stricmp( what, "look" ) ) {
 		Menus_CloseByName( VRRP_MENU );	// (to the game's own player menu)
 		Menus_ActivateByName( "ingame_player" );
+	} else if ( !Q_stricmp( what, "force" ) ) {
+		Menus_CloseByName( VRRP_MENU );	// (to the game's own Force menu: what's set there while playing one is the character's)
+		Menus_ActivateByName( "ingame_playerforce" );
 	} else if ( !Q_stricmp( what, "companions" ) ) {
 		Menus_CloseByName( VRRP_MENU );	// (to the Companions menu: its Back comes here)
 		UI_VRComp_Open( 1 );

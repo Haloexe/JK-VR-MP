@@ -43,6 +43,21 @@ respawns them, and waits until they're out of a duel and unhurt for 10 s
 (and not carrying a flag, in a vehicle or, in Siege and the duel game
 types, in the round), at most every 10 s.
 
+A CHARACTER'S FORCE SETUP: what's set in the Force menu while playing it
+(rank, side, powers: the forcepowers cvar's) is kept with it too, and their
+game's told it as they take it up (rpforce), their own put by till they're
+themselves again; their powers are set up from it (G_RPForceSetup). What
+their game has, and their own, the server hears in their userinfo (rpf: a
+command could be dropped, coming within a second of another). Taken up or
+put down without respawning (logging in or out, roleplay turned on or off),
+or set anew while playing it, it takes hold where they stand as soon as
+they're out of a fight - unless it changes what spawning gives them (their
+saber, say): then a respawn, as switching characters does and no more often
+(down rather than dead, one may be long in coming), or with roleplay off as
+they respawn; one the server would cut down, once they set it anew - and
+they're told so (G_RP_ForceFrame). A game older than this keeps none: its
+own setup, as ever.
+
 DOWN, NOT DEAD (g_rpDowned): running out of health downs a player playing a
 character until someone of their faction gets them up or they give up; and
 NPCs take sides by faction - g_vrdown.c.
@@ -59,8 +74,11 @@ tell is as it was. Our clients get the speaker and the kind of line with
 each, for speech bubbles; other clients see plain chat.
 
 Client commands (most sent by the cgame or the menus, not typed):
-  rpver <protocol>          this client runs this build (cg_vrrp.c); 4 and
-                            later: it takes rpadmin; 5: rpcmps, rpcmp
+  rpver <protocol> <number> this client runs this build (cg_vrrp.c); 4 and
+                            later: it takes rpadmin; 5: rpcmps, rpcmp; 6:
+                            rpforce, and says what it has in its userinfo -
+                            rpf "<number> <own>" (or "": its own) - and the
+                            number of the rpforce it has here (0: none)
   rpnew <account> <key>     make an account (key: 64 hex digits)
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
@@ -78,7 +96,9 @@ admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
 4 no-clip, 8 no target; 0: not an admin>. With the account, to a game of
 protocol 5 or later: rpcmps <count | -1: no character> <how many may come
 out>, then rpcmp <slot> <out> <seconds before it can come again> "name"
-"type" "look" <r> <g> <b> each - the character's companions.
+"type" "look" <r> <g> <b> each - the character's companions. To a game of
+protocol 6 or later, as it changes: rpforce <number> <setup | -> - the Force
+setup it's to have: the character's, or "-": its player's own.
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
 rp password <account> <temporary>, rp admin <account> [on|off], rp admins.
@@ -97,11 +117,14 @@ extern char *ConcatArgs( int start );
 extern void G_Say( gentity_t *ent, gentity_t *target, int mode, const char *chatText );
 
 static int G_RP_ClientArg( const char *arg );
+static void G_RP_ForceTell( int clientNum );
 
 #define RP_PROTOCOL			3		// (2: rpacct says when it answers a login; a new password's proof is over its key;
 									// 3: down, not dead - rpdn, rpup, rp giveup, the pose: g_vrdown.c)
 #define RP_PROTOCOL_ADMIN	4		// a game this new takes rpadmin (one between, as ever, plays roleplay)
 #define RP_PROTOCOL_COMP	5		// a game this new takes rpcmps, rpcmp - companions (g_vrcomp.c)
+#define RP_PROTOCOL_FORCE	6		// a game this new keeps each character's Force setup with it: rpforce, and its userinfo's rpf
+#define RP_FORCE_GAP		1000	// a character's setup taken from their game's word (and saved) no more often than this
 
 // what an admin's game is told (rpadmin)
 #define RPA_ADMIN			1
@@ -149,6 +172,7 @@ typedef struct {
 	char	look[RP_LOOK_KEYS][MAX_QPATH];	// "" for what it doesn't set
 	int		numComps;
 	rpComp_t	comps[RP_COMP_MAX];		// its companions (g_vrcomp.c brings them out)
+	char	force[DEFAULT_FORCEPOWERS_LEN + 1];	// its Force setup, as the forcepowers cvar has one ("": none yet)
 } rpChar_t;
 
 typedef struct {
@@ -179,6 +203,15 @@ typedef struct {
 	qboolean	toldOld;			// told their build is older than this server's roleplay
 	int			playGen;			// counts the characters taken up and put down: whose companions are out (g_vrcomp.c)
 	int			compEditTime, compEdits;	// companions changed lately
+	qboolean	forceGame;			// its game keeps characters' Force setups (protocol 6 or later; kept over a map change)
+	char		forceTold[DEFAULT_FORCEPOWERS_LEN + 1];	// what rpforce last told it ("-": its own; "": nothing yet)...
+	int			forceGen;			// ...for which character (playGen then)...
+	unsigned	forceSeq;			// ...and its number, which its game's word on its setup goes with (userinfo rpf)
+	char		forceOwn[DEFAULT_FORCEPOWERS_LEN + 1];	// the player's own setup, as their game says it ("": not heard yet)
+	char		forceUsed[DEFAULT_FORCEPOWERS_LEN + 1];	// what their powers were last set up from (WP_InitForcePowers; "": not yet)
+	qboolean	forceNow;			// they're to have another since: where they stand, once out of a fight (or as they spawn)...
+	char		forceSaid[DEFAULT_FORCEPOWERS_LEN + 1];	// ...and what they were told of the setup it's from ("": nothing)
+	int			forceTaken;			// when a character's setup was last taken from their game's word (saved)
 } rpClient_t;
 
 static struct {
@@ -188,6 +221,7 @@ static struct {
 	byte		secret[32];
 	uint32_t	counter;
 	int			bootTime;
+	unsigned	forceSeq;			// the last rpforce's number (on from the last map's: vrrpForce)
 } rp;
 
 static rpClient_t rpc[MAX_CLIENTS];
@@ -471,6 +505,24 @@ static const char *G_RP_AccountPath( const char *name ) {
 	return va( RP_ACCOUNT_DIR "/%s.txt", name );
 }
 
+// Whether s is a Force setup as the forcepowers cvar has one: "<rank>-<side>-"
+// and a level for each power - a rank of 0 to 7, light or dark, levels of 0
+// to 3.
+static qboolean G_RP_ForceOk( const char *s ) {
+	int i;
+
+	if ( !s || strlen( s ) != DEFAULT_FORCEPOWERS_LEN || s[0] < '0' || s[0] > '0' + FORCE_MASTERY_JEDI_MASTER || s[1] != '-' ||
+		( s[2] != '0' + FORCE_LIGHTSIDE && s[2] != '0' + FORCE_DARKSIDE ) || s[3] != '-' ) {
+		return qfalse;
+	}
+	for ( i = 4; i < DEFAULT_FORCEPOWERS_LEN; i++ ) {
+		if ( s[i] < '0' || s[i] > '0' + FORCE_LEVEL_3 ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
 static void G_RP_SaveAccount( const rpAccount_t *acc ) {
 	static char text[RP_FILE_MAX];
 	char hex[VRRP_KEY_LEN * 2 + 1];
@@ -486,6 +538,9 @@ static void G_RP_SaveAccount( const rpAccount_t *acc ) {
 			if ( ch->look[k][0] ) {
 				Q_strcat( text, sizeof( text ), va( "look %s \"%s\"\n", rpLookKeys[k], ch->look[k] ) );
 			}
+		}
+		if ( ch->force[0] ) {
+			Q_strcat( text, sizeof( text ), va( "force \"%s\"\n", ch->force ) );
 		}
 		for ( k = 0; k < ch->numComps; k++ ) {
 			const rpComp_t *cp = &ch->comps[k];
@@ -591,6 +646,11 @@ static qboolean G_RP_LoadAccount( const char *name, rpAccount_t *acc ) {
 			tok = COM_ParseExt( &p, qfalse );
 			if ( k >= 0 ) {
 				G_RP_CleanText( tok, ch->look[k], sizeof( ch->look[k] ) );
+			}
+		} else if ( ch && !Q_stricmp( tok, "force" ) ) {
+			tok = COM_ParseExt( &p, qfalse );
+			if ( G_RP_ForceOk( tok ) ) {	// (one that isn't: none, as one made before characters kept them)
+				Q_strncpyz( ch->force, tok, sizeof( ch->force ) );
 			}
 		} else {
 			SkipRestOfLine( &p );
@@ -820,11 +880,13 @@ static void G_RP_SendAccount( int clientNum ) {
 
 // The login a client keeps across a map change (the game restarts, they
 // don't), and that their game runs this build: it says so again, a moment
-// in, but it's known from the start - they go down, not die, from the first.
+// in, but it's known from the start - they go down, not die, from the first;
+// and whether it keeps characters' Force setups - their powers are the
+// character's from the first ("<account> <active> <capable> <forceGame>").
 static void G_RP_WriteSession( int clientNum ) {
 	const rpClient_t *c = &rpc[clientNum];
 
-	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i %i", c->acc.name, c->active, c->capable ? 1 : 0 ) : "" );
+	trap->Cvar_Set( va( "vrrp%i", clientNum ), c->loggedIn ? va( "%s %i %i %i", c->acc.name, c->active, c->capable ? 1 : 0, c->forceGame ? 1 : 0 ) : "" );
 }
 
 /*
@@ -948,6 +1010,7 @@ static void G_RP_Play( int clientNum, int index, qboolean respawn ) {
 	c->playGen++;	// (another character's companions, or none: g_vrcomp.c)
 	c->acc.last = index;
 	G_RP_RememberLook( clientNum );
+	G_RP_ForceTell( clientNum );	// (its Force setup - one it hadn't, made - their powers' from respawning, or where they stand)
 	G_RP_SaveAccount( &c->acc );
 	G_RP_WriteSession( clientNum );
 	G_RP_Refresh( clientNum );
@@ -999,6 +1062,366 @@ static const char *G_RP_BusyReason( int clientNum, qboolean switching ) {
 		}
 	}
 	return NULL;
+}
+
+/*
+================================================================================
+A character's Force setup: what's set in the Force menu while playing it
+================================================================================
+*/
+
+// Whether two setups are the same as this server sets powers up from them: the
+// side and the powers (the rank is the server's own - BG_LegalizedForcePowers
+// - and the menus put theirs in as they please).
+static qboolean G_RP_ForceSame( const char *a, const char *b ) {
+	return (qboolean)( ( a[0] && b[0] ) ? !strcmp( a + 1, b + 1 ) : !strcmp( a, b ) );
+}
+
+// What a client's game says of its Force setup, in their userinfo (the way
+// that reaches the server however much they send: a command's dropped if it
+// comes within a second of another): forcepowers, and rpf - "" while that's
+// their own, "<number> <own>" while it's the setup of the character they play
+// that the rpforce of that number told it (set anew in the Force menu since,
+// maybe), with their own put by ("-": none that's a setup). Their own is known
+// from it: the game's default if theirs isn't a setup, as setting powers up
+// makes one that isn't. (setup: forcepowers, cut short past a setup's length
+// and one; number: rpf's, 0 if it has none.)
+static void G_RP_ForceRead( int clientNum, char *setup, int size, unsigned *number ) {
+	rpClient_t *c = &rpc[clientNum];
+	char userinfo[MAX_INFO_STRING], rpf[MAX_INFO_VALUE], *own;
+
+	trap->GetUserinfo( clientNum, userinfo, sizeof( userinfo ) );
+	Q_strncpyz( setup, Info_ValueForKey( userinfo, "forcepowers" ), size );
+	Q_strncpyz( rpf, Info_ValueForKey( userinfo, "rpf" ), sizeof( rpf ) );
+	*number = 0;
+	own = setup;
+	if ( rpf[0] ) {
+		*number = (unsigned)strtoul( rpf, &own, 10 );
+		while ( *own == ' ' ) {
+			own++;
+		}
+	}
+	Q_strncpyz( c->forceOwn, G_RP_ForceOk( own ) ? own : DEFAULT_FORCEPOWERS, sizeof( c->forceOwn ) );
+}
+
+// What a client's powers are set up from, if roleplay keeps it (their game
+// does: 6 or later): the character's they play (one it hasn't yet takes up
+// their own: G_RP_ForceFill); out of character, their own, as their game says
+// it now (heard each frame, and now: set while they're dead, it's what they
+// spawn with, as ever). NULL: their userinfo's, as ever.
+static const char *G_RP_ForceUse( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	const rpChar_t *ch;
+	char setup[DEFAULT_FORCEPOWERS_LEN + 2];
+	unsigned number;
+
+	if ( !c->forceGame ) {
+		return NULL;
+	}
+	G_RP_ForceRead( clientNum, setup, sizeof( setup ), &number );
+	ch = G_RP_Active( clientNum );
+	return ( ch && G_RP_ForceOk( ch->force ) ) ? ch->force : c->forceOwn;
+}
+
+// WP_InitForcePowers: forcePowers holds their userinfo's setup, and becomes
+// what roleplay keeps for them (G_RP_ForceUse); what their powers are set up
+// from is noted.
+void G_RPForceSetup( int clientNum, char *forcePowers, int size ) {
+	const char *use;
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return;
+	}
+	use = G_RP_ForceUse( clientNum );
+	if ( use ) {
+		Q_strncpyz( forcePowers, use, size );
+	}
+	Q_strncpyz( rpc[clientNum].forceUsed, forcePowers, sizeof( rpc[0].forceUsed ) );
+	rpc[clientNum].forceNow = qfalse;	// (set up from what's theirs now: nothing waits)
+	rpc[clientNum].forceSaid[0] = '\0';
+}
+
+// A character without a Force setup of its own yet (made before characters
+// kept one, or played only from an older game) takes up its player's own, as
+// their game says it now (G_RP_ForceRead) - never what they have, which may be
+// another character's.
+static void G_RP_ForceFill( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	rpChar_t *ch = G_RP_Active( clientNum );
+	char setup[DEFAULT_FORCEPOWERS_LEN + 2];
+	unsigned number;
+
+	if ( !ch || G_RP_ForceOk( ch->force ) ) {
+		return;
+	}
+	G_RP_ForceRead( clientNum, setup, sizeof( setup ), &number );
+	Q_strncpyz( ch->force, c->forceOwn, sizeof( ch->force ) );
+	G_RP_SaveAccount( &c->acc );
+}
+
+// A client's powers to be set up from another setup than they were: where they
+// stand, as soon as they can be (G_RP_ForceFrame), and as they next spawn; one
+// back to what they have, nothing waits. (Not set up yet: when they are, it's
+// from what's theirs then.)
+static void G_RP_ForceChange( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	gentity_t *ent = &g_entities[clientNum];
+
+	if ( !ent->client || !c->forceUsed[0] ) {
+		return;
+	}
+	c->forceNow = (qboolean)!G_RP_ForceSame( G_RP_ForceUse( clientNum ), c->forceUsed );
+	if ( c->forceNow ) {
+		ent->client->ps.fd.forceDoInit = 1;
+	} else {
+		c->forceSaid[0] = '\0';	// (nothing waits: what they were told of, if it's theirs again, they're told again)
+	}
+}
+
+// A client's game told the Force setup it's to have, as that changes - the
+// character's they play (one it hasn't yet, made), or "-": its player's own
+// (rpforce <number> <setup | ->) - and another for every character taken up or
+// put down, so what the game says of one it had before is known for that
+// (G_RP_ForceHeard). Their powers follow.
+static void G_RP_ForceTell( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	const gentity_t *ent = &g_entities[clientNum];
+	const rpChar_t *ch;
+	const char *want;
+
+	if ( !c->forceGame || !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
+		return;
+	}
+	G_RP_ForceFill( clientNum );
+	ch = G_RP_Active( clientNum );
+	want = ch ? ch->force : "-";
+	if ( !strcmp( want, c->forceTold ) && c->forceGen == c->playGen ) {
+		return;
+	}
+	Q_strncpyz( c->forceTold, want, sizeof( c->forceTold ) );
+	c->forceGen = c->playGen;
+	if ( !++rp.forceSeq ) {
+		rp.forceSeq++;	// (never 0: a game that's been told nothing)
+	}
+	c->forceSeq = rp.forceSeq;
+	trap->SendServerCommand( clientNum, va( "rpforce %u %s", c->forceSeq, want ) );
+	G_RP_ForceChange( clientNum );
+}
+
+// How a client's powers can be set up from a setup, as spawning would set them
+// up from it: RP_FORCE_HERE where they stand - a spectator's, or a Siege
+// player's (their class's powers), any; RP_FORCE_SPAWN by a respawn: the saber
+// given or taken (spawning gives it with saber offence - against what they
+// have, not the saber offence they have now: Enlightenment raises that), or
+// Jedi vs Merc (who's which, spawning sorts out); RP_FORCE_CUT not as it is: a
+// setup this server would cut down (setting powers up sends them to spectate,
+// to set it anew - as spawning may), or their first.
+#define RP_FORCE_HERE	0
+#define RP_FORCE_SPAWN	1
+#define RP_FORCE_CUT	2
+
+// The rank this server allows, as setting powers up has it (none, or past the
+// ranks: a Jedi Master's).
+static int G_RP_ForceRank( void ) {
+	return ( g_maxForceRank.integer <= 0 || g_maxForceRank.integer >= NUM_FORCE_MASTERY_LEVELS ) ? FORCE_MASTERY_JEDI_MASTER : g_maxForceRank.integer;
+}
+
+static int G_RP_ForceFits( int clientNum, const char *setup ) {
+	const gclient_t *cl = g_entities[clientNum].client;
+	const int rank = G_RP_ForceRank();
+	char legal[DEFAULT_FORCEPOWERS_LEN + 1];
+	int side = 0;
+
+	if ( cl->sess.sessionTeam == TEAM_SPECTATOR || level.gametype == GT_SIEGE ) {
+		return RP_FORCE_HERE;
+	}
+	if ( !cl->sess.setForce ) {
+		return RP_FORCE_CUT;
+	}
+	if ( g_forceBasedTeams.integer ) {
+		side = ( cl->sess.sessionTeam == TEAM_RED ) ? FORCE_DARKSIDE : ( cl->sess.sessionTeam == TEAM_BLUE ) ? FORCE_LIGHTSIDE : 0;
+	}
+	Q_strncpyz( legal, setup, sizeof( legal ) );
+	if ( !BG_LegalizedForcePowers( legal, sizeof( legal ), rank, HasSetSaberOnly(), side, level.gametype, g_forcePowerDisable.integer ) ) {
+		return RP_FORCE_CUT;
+	}
+	if ( level.gametype == GT_HOLOCRON || level.gametype == GT_JEDIMASTER ) {
+		return RP_FORCE_HERE;	// (the game type's say, the saber and the Force)
+	}
+	return ( !g_jediVmerc.integer && ( legal[4 + FP_SABER_OFFENSE] > '0' ) == ( ( cl->ps.stats[STAT_WEAPONS] & ( 1 << WP_SABER ) ) != 0 ) ) ?
+		RP_FORCE_HERE : RP_FORCE_SPAWN;
+}
+
+// A player's powers set up again where they stand (as spawning sets them up,
+// but in place): what's running stops first (a spectator's are whom they
+// follow, if anyone's). Their saber style stays - setting powers up takes the
+// session's, not a staff's or two sabers', and spawning sorts that out after,
+// which this isn't - within the saber offence they have now, as spawning keeps
+// it.
+static void G_RP_ForceNow( gentity_t *ent ) {
+	gclient_t *cl = ent->client;
+	const int style = cl->ps.fd.saberAnimLevel;
+	int i;
+
+	if ( cl->sess.sessionTeam != TEAM_SPECTATOR ) {
+		for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+			if ( cl->ps.fd.forcePowersActive & ( 1 << i ) ) {
+				WP_ForcePowerStop( ent, (forcePowers_t)i );
+			}
+		}
+	}
+	WP_InitForcePowers( ent );
+	cl->ps.fd.forceDoInit = 0;
+	cl->ps.fd.saberAnimLevel = style;
+	if ( level.gametype != GT_SIEGE && style >= SS_FAST && style <= SS_STRONG && style > cl->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] ) {
+		cl->ps.fd.saberAnimLevelBase = cl->ps.fd.saberAnimLevel = cl->ps.fd.saberDrawAnimLevel = cl->sess.saberLevel =
+			Q_max( SS_FAST, cl->ps.fd.forcePowerLevel[FP_SABER_OFFENSE] );
+	}
+}
+
+// Whether a client's powers can be set up again where they stand now: a
+// spectator's, or a player's out of a fight - as switching characters waits,
+// and not having hurt anyone for as long.
+static qboolean G_RP_ForceNowOk( int clientNum ) {
+	const gentity_t *ent = &g_entities[clientNum];
+	const gclient_t *cl = ent->client;
+
+	if ( cl->sess.sessionTeam == TEAM_SPECTATOR ) {
+		return qtrue;
+	}
+	return (qboolean)( G_RP_InPlay( ent ) && !G_RP_BusyReason( clientNum, qtrue ) &&
+		!( cl->rpFightTime && level.time - cl->rpFightTime < RP_HURT_WAIT ) );
+}
+
+// Tells a client when their powers are set up from setup, the character's they
+// play or their own: where they stand now; once they're out of the fight - or,
+// waiting on what isn't a fight (switching characters' wait, a flag), as soon
+// as they can - or as they respawn (dead, as they respawn); one that changes
+// what spawning gives them (their saber, say), with a respawn roleplay gives
+// them - now, or as soon as it can - as switching characters does (down rather
+// than dead, one may be long in coming), or, roleplay off, as they respawn; and
+// one the server would cut down, that it's to be set anew (setting powers up
+// would send them to spectate for it: not given) - their menus told the rank,
+// as setting powers up tells them (started over since, they may not know it).
+// Noted, so it's said once.
+static void G_RP_ForceSay( int clientNum, const char *setup ) {
+	rpClient_t *c = &rpc[clientNum];
+	const gentity_t *ent = &g_entities[clientNum];
+	const gclient_t *cl = ent->client;
+	const rpChar_t *ch = G_RP_Active( clientNum );
+	const int fits = G_RP_ForceFits( clientNum, setup );
+	const qboolean now = G_RP_ForceNowOk( clientNum );
+	const qboolean fighting = (qboolean)( cl->rpDowned || cl->ps.duelInProgress || ( cl->rpHurtTime && level.time - cl->rpHurtTime < RP_HURT_WAIT ) ||
+		( cl->rpFightTime && level.time - cl->rpFightTime < RP_HURT_WAIT ) );
+	const char *until = fighting ? "once you're out of the fight" : "as soon as they can";
+	char when[128];
+
+	if ( fits == RP_FORCE_CUT ) {
+		Q_strncpyz( when, "are more than this server allows: set them anew in the Force menu", sizeof( when ) );
+		trap->SendServerCommand( clientNum, va( "nfr %i 0 %i", G_RP_ForceRank(), cl->sess.sessionTeam ) );
+	} else if ( fits == RP_FORCE_HERE && now ) {
+		Q_strncpyz( when, "are set", sizeof( when ) );
+	} else if ( !G_RP_InPlay( ent ) ) {
+		Q_strncpyz( when, "change as you respawn", sizeof( when ) );
+	} else if ( fits == RP_FORCE_HERE ) {
+		Com_sprintf( when, sizeof( when ), "change %s, or as you respawn", until );
+	} else if ( G_RPOn() && now ) {
+		Q_strncpyz( when, "are set: you respawn with them", sizeof( when ) );
+	} else if ( G_RPOn() ) {
+		Com_sprintf( when, sizeof( when ), "change %s: you respawn with them", until );
+	} else {
+		Q_strncpyz( when, "change as you respawn", sizeof( when ) );
+	}
+	G_RP_Msg( clientNum, ch ? va( "%s" S_COLOR_WHITE "'s Force powers %s", ch->name, when ) : va( "Your Force powers %s", when ) );
+	Q_strncpyz( c->forceSaid, setup, sizeof( c->forceSaid ) );
+}
+
+// Each frame: their game's word on its Force setup (G_RP_ForceRead). Set anew
+// in the Force menu while they play a character, under the rpforce last told
+// them for it, it's the character's - saved, once a second at most - and their
+// powers follow (G_RP_ForceFrame), as they're told. Under another number, or
+// none, it isn't for what they play now.
+static void G_RP_ForceHeard( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	rpChar_t *ch;
+	char setup[DEFAULT_FORCEPOWERS_LEN + 2], was[DEFAULT_FORCEPOWERS_LEN + 1];
+	unsigned number;
+
+	G_RP_ForceRead( clientNum, setup, sizeof( setup ), &number );
+	ch = G_RP_Active( clientNum );
+	if ( !ch || !c->forceTold[0] || number != c->forceSeq || c->forceGen != c->playGen || !G_RP_ForceOk( setup ) || !strcmp( setup, ch->force ) ) {
+		return;
+	}
+	if ( c->forceTaken && level.time - c->forceTaken >= 0 && level.time - c->forceTaken < RP_FORCE_GAP ) {
+		return;	// (a frame after)
+	}
+	Q_strncpyz( was, ch->force, sizeof( was ) );
+	Q_strncpyz( ch->force, setup, sizeof( ch->force ) );
+	Q_strncpyz( c->forceTold, setup, sizeof( c->forceTold ) );	// (its game has it: nothing to tell it)
+	c->forceTaken = level.time ? level.time : 1;
+	G_RP_SaveAccount( &c->acc );
+	if ( G_RP_ForceSame( setup, was ) ) {
+		return;	// (only the rank the menus put in)
+	}
+	G_RP_ForceChange( clientNum );
+	if ( c->forceNow ) {
+		G_RP_ForceSay( clientNum, setup );
+	}
+}
+
+// Each frame, for a game that keeps them: its word on its Force setup heard; it
+// told the setup it's to have, as that changes; and powers to be set up from
+// another (G_RP_ForceChange) are, where they stand, as soon as they can be
+// (G_RP_ForceNowOk, G_RP_ForceFits) - not while dead: they'll spawn so. One
+// that changes what spawning gives them, roleplay respawns them for then, as
+// switching characters does - and no sooner again. Waiting, they're told so,
+// once (G_RP_ForceSay: what they were told of the setup it's from, its rank
+// aside).
+static void G_RP_ForceFrame( int clientNum ) {
+	rpClient_t *c = &rpc[clientNum];
+	gentity_t *ent = &g_entities[clientNum];
+	const char *from;
+	int fits;
+
+	if ( !c->forceGame ) {
+		return;
+	}
+	G_RP_ForceHeard( clientNum );
+	G_RP_ForceTell( clientNum );
+	if ( !c->forceNow ) {
+		return;
+	}
+	from = G_RP_ForceUse( clientNum );
+	if ( G_RP_ForceSame( from, c->forceUsed ) ) {
+		c->forceNow = qfalse;	// (set up from it since: spawning)
+		c->forceSaid[0] = '\0';
+		return;
+	}
+	fits = G_RP_ForceFits( clientNum, from );
+	if ( G_RP_ForceNowOk( clientNum ) && fits == RP_FORCE_HERE ) {
+		G_RP_ForceNow( ent );
+		c->forceNow = qfalse;
+	} else if ( G_RP_ForceNowOk( clientNum ) && fits == RP_FORCE_SPAWN && G_RPOn() ) {
+		if ( !G_RP_ForceSame( c->forceSaid, from ) ) {
+			G_RP_ForceSay( clientNum, from );
+		}
+		c->switchTime = level.time ? level.time : 1;
+		ent->client->ps.fd.forceDoInit = 1;
+		ClientSpawn( ent );	// (set up as they spawn: G_RPForceSetup)
+		c->forceNow = qfalse;
+	} else if ( !G_RP_ForceSame( c->forceSaid, from ) && G_RP_InPlay( ent ) ) {
+		G_RP_ForceSay( clientNum, from );
+	}
+}
+
+// Cmd_ForceChanged_f, the Force menu applied (not by a spectator): qtrue if it's
+// a roleplay character's setup (their game keeps them) - it takes hold as
+// the server hears it (G_RP_ForceHeard), not as they next spawn, nor with the
+// game's word that it will.
+qboolean G_RPForceChanged( gentity_t *ent ) {
+	const int clientNum = (int)( ent - g_entities );
+
+	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].forceGame && G_RP_Active( clientNum ) );
 }
 
 /*
@@ -1072,7 +1495,7 @@ void G_RPAdminCheat( gentity_t *ent ) {
 
 // Each frame: an admin's game told what its Admin page shows as it changes
 // (rpadmin), and one no longer an admin told so once (a game too old for
-// it, never).
+// it, never); a character's Force setup (G_RP_ForceFrame).
 void G_RPFrame( void ) {
 	int i;
 
@@ -1080,7 +1503,11 @@ void G_RPFrame( void ) {
 		rpClient_t *c = &rpc[i];
 		const gentity_t *ent = &g_entities[i];
 		int bits;
-		if ( !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED || c->protocol < RP_PROTOCOL_ADMIN ) {
+		if ( !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
+			continue;
+		}
+		G_RP_ForceFrame( i );
+		if ( c->protocol < RP_PROTOCOL_ADMIN ) {
 			continue;
 		}
 		bits = G_RP_AdminBits( i );
@@ -1173,6 +1600,7 @@ static void G_RP_LogOut( int clientNum, const char *why ) {
 	G_RP_WriteSession( clientNum );
 	G_RP_Refresh( clientNum );
 	G_RP_SendAccount( clientNum );
+	G_RP_ForceTell( clientNum );	// (their own Force setup again)
 	if ( why ) {
 		G_RP_Msg( clientNum, why );
 	}
@@ -1218,6 +1646,16 @@ static void G_RP_Hello( gentity_t *ent ) {
 	c->capable = qtrue;
 	c->protocol = atoi( arg );
 	c->adminTold = 0;	// (a game started over - a vid_restart - knows nothing yet: told again)
+	c->forceGame = (qboolean)( c->protocol >= RP_PROTOCOL_FORCE );
+	trap->Argv( 2, arg, sizeof( arg ) );
+	if ( c->forceTold[0] && strcmp( c->forceTold, "-" ) && (unsigned)strtoul( arg, NULL, 10 ) != c->forceSeq ) {
+		// (the Force setup it's to have: a game that hasn't the character's it
+		// was told last - the hello says the number of the one it has: it
+		// started over, a vid_restart, its player's own put back - told it
+		// again; one that has it, not, so its userinfo doesn't change again for
+		// nothing - the engine passes three changes in six seconds)
+		c->forceTold[0] = '\0';
+	}
 	if ( c->challenge[0] ) {
 		// a hello again (one lost, or its answer late): the same challenge, so
 		// the answer to either does, until it's used
@@ -1227,6 +1665,7 @@ static void G_RP_Hello( gentity_t *ent ) {
 	}
 	G_RP_SendAccount( clientNum );
 	G_RPDownHello( clientNum );	// (who's down: g_vrdown.c)
+	G_RP_ForceTell( clientNum );
 }
 
 // A client's address, without the port (accounts made from it are counted).
@@ -1605,6 +2044,7 @@ static void G_RP_Rp( gentity_t *ent ) {
 		G_RP_WriteSession( clientNum );
 		G_RP_Refresh( clientNum );
 		G_RP_SendAccount( clientNum );
+		G_RP_ForceTell( clientNum );	// (the one played gone: their own Force setup again)
 		return;
 	}
 
@@ -2195,6 +2635,7 @@ void G_RPClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 		Q_strncpyz( name, COM_Parse( &p ), sizeof( name ) );
 		active = atoi( COM_Parse( &p ) );
 		c->capable = (qboolean)( atoi( COM_Parse( &p ) ) == 1 );	// (an older server's session doesn't say: its hello will)
+		c->forceGame = (qboolean)( atoi( COM_Parse( &p ) ) == 1 );	// (nor this)
 		if ( G_RP_LoadAccount( name, &acc ) ) {
 			c->loggedIn = qtrue;
 			c->acc = acc;
@@ -2252,6 +2693,7 @@ void G_RPPublish( void ) {
 		}
 		ClientUserinfoChanged( i );
 		G_RP_SendAccount( i );
+		G_RP_ForceTell( i );	// (the character's Force setup, or their own)
 	}
 	trap->SendServerCommand( -1, va( "cp \"Roleplay is %s\n\"", on ? "on" : "off" ) );
 }
@@ -2262,6 +2704,12 @@ void G_RPInit( void ) {
 	trap->Cvar_Register( NULL, "vrRP", "0", CVAR_SERVERINFO | CVAR_ROM );
 	memset( &rp, 0, sizeof( rp ) );
 	rp.bootTime = (int)time( NULL );
+	{	// rpforce's numbers go on from the last map's (G_RPShutdown): what a game said of one it had before isn't taken for now's
+		char last[32];
+		trap->Cvar_Register( NULL, "vrrpForce", "0", CVAR_INTERNAL );
+		trap->Cvar_VariableStringBuffer( "vrrpForce", last, sizeof( last ) );
+		rp.forceSeq = (unsigned)strtoul( last, NULL, 10 );
+	}
 	memset( rpLocks, 0, sizeof( rpLocks ) );
 	memset( rpMade, 0, sizeof( rpMade ) );
 	if ( !G_RP_LoadServer() ) {
@@ -2285,6 +2733,7 @@ void G_RPShutdown( void ) {
 			G_RP_WriteSession( i );
 		}
 	}
+	trap->Cvar_Set( "vrrpForce", va( "%u", rp.forceSeq ) );
 	rp.ready = qfalse;
 }
 
@@ -2429,6 +2878,7 @@ qboolean G_RPConsoleCommand( void ) {
 			G_RP_WriteSession( who );
 			G_RP_Refresh( who );
 			G_RP_SendAccount( who );
+			G_RP_ForceTell( who );
 		}
 		return qtrue;
 	}
