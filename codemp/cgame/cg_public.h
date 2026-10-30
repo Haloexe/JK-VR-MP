@@ -762,6 +762,12 @@ typedef struct cgameImport_s {
 		// (units: crouched, a pose, the duck smoothed; 0 when the view isn't the
 		// player's own to move) and VR_EYES_* - call every frame, before drawing
 		void			(*VR_SetEyeDrop)						( float drop, int flags );
+		// OpenJK VR: your other hand (VR_HAND_*) holding the gun in your gun hand
+		// too, and how (VR_GUN_HOLD_*), the line it holds it along this far from
+		// the gun hand's grip, out to its left and up (metres, the gun's own axes:
+		// its bore, as far off it as that hand took hold) - call every frame;
+		// unsaid a moment, it's let go
+		void			(*VR_SetGunHold)						( int hand, int how, float boreLeft, float boreUp );
 	} ext;
 } cgameImport_t;
 

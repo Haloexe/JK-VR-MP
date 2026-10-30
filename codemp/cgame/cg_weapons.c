@@ -563,6 +563,41 @@ qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matr
 	return qtrue;
 }
 
+// Where the gun in your hand ends - its muzzle - from your gun hand's grip,
+// in the gun's own axes (game units: along its barrel, to its left, up), as
+// CG_VR_HeldWeaponPose draws it (both hands on it: cg_vrgun.c). qfalse: not
+// drawn in your hand, or no muzzle to it.
+qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle ) {
+	const vrClientState_t *vr = CG_VR();
+	const int h = CG_VR_GunHand();
+	vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	vec3_t origin, angles, flash, gl, al[3], grip, aim[3], d;
+	matrix3_t axis;
+	mdxaBone_t bolt;
+	void *g2;
+	int i;
+
+	if ( !vr || !CG_VR_HeldWeaponPose( weaponNum, origin, angles, axis ) ) {
+		return qfalse;
+	}
+	g2 = CG_VR_HeldWeaponG2( weaponNum );
+	if ( !g2 || cg_vrHeldFlashBolt[weaponNum] < 0 || !trap->G2API_GetBoltMatrix( g2, 0, cg_vrHeldFlashBolt[weaponNum], &bolt,
+			angles, origin, cg.time, cgs.gameModels, zero ) ) {
+		return qfalse;
+	}
+	BG_GiveMeVectorFromMatrix( &bolt, ORIGIN, flash );
+	VectorCopy( vr->gripOrigin[h], gl );
+	for ( i = 0; i < 3; i++ ) {
+		VectorCopy( vr->aimAxis[h][i], al[i] );
+	}
+	VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gl, al, grip, aim );
+	VectorSubtract( flash, grip, d );
+	for ( i = 0; i < 3; i++ ) {
+		muzzle[i] = DotProduct( d, aim[i] );
+	}
+	return qtrue;
+}
+
 static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	void *g2;
 	int flashBolt;

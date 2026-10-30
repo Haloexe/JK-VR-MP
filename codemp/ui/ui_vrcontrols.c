@@ -42,6 +42,10 @@ them again. The page is otherwise left as it is.
     Menu Size         1-4 m                                vr_menuHeight
     Gun Aim           your hand, or your head              vr_handAim
     Gun Angle         -30-30 degrees                       vr_gunPitch
+    Two-Handed Guns   your other hand's grip squeezed on a cg_vrTwoHandGuns Yes/No
+                      gun takes hold of it: both your hands
+                      aim a rifle, a pistol's steadied
+                      (cgame/cg_vrgun.c)
     Resolution        70%-140%, from when the game next    vr_resolutionScale
                       starts (or after vid_restart)
     Desktop View      the headset's view in the window     vr_mirror
@@ -63,9 +67,9 @@ them again. The page is otherwise left as it is.
                       hand (a server of this build's:
                       game/g_vrforce.c)
 
-They're the engine's settings (but Always Run, Aim Glow and Grip Moves, the
-game's: Aim Glow and Grip Moves made here, as they come, before the game's
-there - vrcCvars - Grip Moves in your userinfo, for the server): all there
+They're the engine's settings (but Always Run, Two-Handed Guns, Aim Glow and
+Grip Moves, the game's: those three made here, as they come, before the
+game's there - vrcCvars - Grip Moves in your userinfo, for the server): all there
 before the menus load, and taking effect at once - but Resolution, which
 the headset's picture takes when it's made. (The menus set it as they set
 any: at once - the engine's latching only holds back the console's - and
@@ -105,6 +109,7 @@ static const struct {
 	const char	*value;
 	uint32_t	flags;
 } vrcCvars[] = {
+	{ "cg_vrTwoHandGuns",	"1",	CVAR_ARCHIVE },
 	{ "cg_vrForceGlow",		"1",	CVAR_ARCHIVE },
 	{ "cg_vrGripMove",		"1",	CVAR_ARCHIVE | CVAR_USERINFO },
 };

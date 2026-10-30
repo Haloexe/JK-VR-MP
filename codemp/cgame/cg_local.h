@@ -1919,6 +1919,11 @@ qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis );
 void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles );
 void CG_VR_AddAimDot( void );
 qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matrix3_t axis );
+qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle );
+// cg_vrgun.c (OpenJK VR: both hands on your gun)
+void		CG_VR_GunFrame( const vrClientState_t *vr );
+int			CG_VR_GunZones( void );
+qboolean	CG_VR_GunBarrelHand( int hand, float *ease, vec3_t dir );
 // cg_vrbody.c (OpenJK VR)
 qboolean CG_VR_BodyActive( centity_t *cent );
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim );

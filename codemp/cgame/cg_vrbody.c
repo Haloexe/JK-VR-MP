@@ -134,6 +134,7 @@ typedef struct {
 	int			saber;				// ...which of the player's sabers it is (0, 1)...
 	float		sign;				// ...held which way round (1: the blade out of the thumb's side of the fist; -1: below it)...
 	float		hilt;				// ...and where along its hilt the fist is (from where its own tag holds it, toward its first blade)
+	qboolean	gun;				// HILT: your gun's barrel, held with this hand too (cg_vrgun.c), not a saber's hilt
 } vrbGrip_t;
 
 // both hands on one saber
@@ -2745,6 +2746,14 @@ static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip ) {
 		if ( CG_VR_HeldWeaponPose( weapon, grip->origin, angles, grip->axis ) ) {
 			grip->kind = VRB_GRIP_GUN;
 		}
+	} else if ( CG_VR_HandAim() && CG_VR_GunBarrelHand( h, &grip->blend, grip->dir ) ) {
+		// your other hand on your gun's barrel too (cg_vrgun.c) - or settling
+		// onto it, or coming off it: its fist round the barrel, the thumb toward
+		// the muzzle, as round a saber's hilt (the barrel runs through your
+		// hand there: both your hands aim it)
+		CG_VRB_Controller( CG_VR(), h, grip->origin, grip->axis );
+		grip->kind = VRB_GRIP_HILT;
+		grip->gun = qtrue;
 	}
 }
 
@@ -4285,8 +4294,9 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 			vrbBone_t own;
 			vec3_t bladeNow, bladeWant;
 			// (another player's hand without a fist frame: the way their hilt
-			// lay in it isn't known here - their hand just rests on it)
-			if ( inFist || ( !vrbRemote && CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &own ) ) ) {
+			// lay in it isn't known here - their hand just rests on it; your
+			// gun's barrel too: no saber's tag to go by)
+			if ( inFist || ( !vrbRemote && !grip->gun && CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &own ) ) ) {
 				if ( inFist ) {
 					VectorCopy( holdDir, bladeNow );
 				} else {
@@ -4518,8 +4528,9 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 
 		// fingers closed round whatever hilt the hand holds - an empty hand's,
 		// and a gun hand's index finger, as yours are (CG_VRB_PoseFingers)
-		if ( grip->kind == VRB_GRIP_HILT && vrb.twoHand ) {
-			// (only while it holds it, closing as it settles on)
+		if ( grip->kind == VRB_GRIP_HILT && vrb.twoHand && !grip->gun ) {
+			// (only while it holds it, closing as it settles on - your gun's
+			// barrel: your fingers as they are on the controller, below)
 			CG_VRB_CurlFingers( cent, h, &H, grip->origin, grip->dir, grip->blend );
 		} else if ( grip->kind == VRB_GRIP_GUN || grip->kind == VRB_GRIP_HILT ||
 			( grip->kind == VRB_GRIP_FREE && !CG_VRB_WeaponOnHand( cent, h ) ) ) {
@@ -4578,13 +4589,14 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 			sent->reversed = ( grip->sign < 0.0f ) ? qtrue : qfalse;
 			break;
 		case VRB_GRIP_HILT:
-			if ( vrb.twoHand ) {
+			if ( vrb.twoHand && !grip->gun ) {
 				sent->grip = VR_GRIP_HILT;
 				VectorCopy( grip->dir, sent->dir );
 				sent->blend = grip->blend;
 				sent->saber = 0;	// (both hands hold the first saber)
 			} else {
-				sent->grip = VR_GRIP_FREE;	// (letting go: the hand coming off it, fingers open)
+				sent->grip = VR_GRIP_FREE;	// (letting go: the hand coming off it, fingers open - or on your gun's
+											// barrel: your hand there, as everyone draws it on any server)
 			}
 			break;
 		default:
@@ -6592,9 +6604,10 @@ void CG_VR_SwapSaberHolds( void ) {
 
 // The hands whose squeeze takes hold of your other hand's hilt (or passes
 // it over) - as last offered, a moment ago at most (your body not drawn a
-// while: none): those come first.
+// while: none) - or of your gun (cg_vrgun.c): those come first.
 int CG_VR_TwoHandZones( void ) {
-	return ( vrbSelf.init && cg.time - vrbSelf.twoHandTime >= 0 && cg.time - vrbSelf.twoHandTime <= 100 ) ? vrbSelf.grabZones : 0;
+	return ( ( vrbSelf.init && cg.time - vrbSelf.twoHandTime >= 0 && cg.time - vrbSelf.twoHandTime <= 100 ) ? vrbSelf.grabZones : 0 ) |
+		CG_VR_GunZones();
 }
 
 // Hand h's squeeze was a holster's (cg_vrholster.c): it doesn't take hold of
@@ -6820,9 +6833,11 @@ void CG_VR_BodyEndFrame( void ) {
 	CG_VRB_SwingSound( vr );
 	CG_VRB_Heft();
 
-	// where a squeezed grip takes hold of something instead of pressing its key
+	// both hands on your gun (cg_vrgun.c) - and where a squeezed grip takes
+	// hold of something instead of pressing its key
+	CG_VR_GunFrame( vr );
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
-		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() |
+		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() | CG_VR_GunZones() |
 			( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)

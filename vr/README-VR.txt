@@ -27,7 +27,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     your face or chest for Mind Trick, a swing back past your hip for
     Speed (see THE FORCE)
   * Guns are held in and aimed with your right hand - your left, playing
-    left-handed (Setup > VR) - with a 3D aim dot
+    left-handed (Setup > VR) - with a 3D aim dot; take hold of a rifle's
+    barrel with your other hand and both hands aim it (see BOTH HANDS ON
+    YOUR GUN)
   * Your own body in first person: it stands under you, turns with you,
     and its arms and hands follow your controllers, gripping what they
     hold (works with any player model on the standard skeleton, custom
@@ -68,7 +70,7 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
 
 Not yet: shots leaving the gun barrel (they leave from your eye, toward
-where you aim), two-handed guns (two-handed sabers work).
+where you aim).
 
 
 INSTALL / RUN
@@ -209,6 +211,9 @@ stick up or down on a slider to move it a step.
                      look
     Gun Angle        tilt guns in your hand (-30 to 30 degrees; their aim
                      tilts with them)
+    Two-Handed Guns  your other hand takes hold of a gun as you squeeze its
+                     grip there (see BOTH HANDS ON YOUR GUN); No: that grip
+                     does what it would anyway (the Force, a holster)
     Resolution       70% to 140% of what the headset asks for (more is
                      sharper, and slower) - from when the game next starts
                      (or after vid_restart)
@@ -451,6 +456,51 @@ and while you hold the grip the saber is in both hands:
     in both hands wins clashes against a one-handed heavy), and either hand
     drives the swing (sliding your second hand along the hilt doesn't count
     as a swing). Hits and clashes buzz both hands.
+
+BOTH HANDS ON YOUR GUN: bring your other hand (the one without the gun -
+your Force hand) to the gun in your gun hand and squeeze its grip. That
+hand takes hold of it with a firm tick (a soft one in your gun hand), and
+while you hold the grip the gun's in both hands:
+  * Rifles - the E-11, the disruptor, the bowcaster, the repeater, the
+    DEMP2, the flechette, the rocket launcher, the concussion rifle: take
+    hold anywhere along the barrel, from a hand's width ahead of your gun
+    hand to just past the muzzle (on it, or up to 10 cm off it). Taking
+    hold doesn't move the gun; from then on both your hands aim it: it
+    turns about your gun hand as your other hand goes round it (sliding
+    your other hand along the barrel doesn't turn it), and your gun hand's
+    wrist only rolls it (Gun Angle tilts a gun in one hand only). Your
+    fist closes where you took hold, along the barrel, its thumb toward
+    the muzzle.
+  * Pistols - the Bryar pistols: take hold under your gun hand, round it.
+    The pistol's steadied and aims as your gun hand points it.
+  * The stun baton, thermal detonators, trip mines and det packs stay in
+    one hand.
+  * Your shots go where both hands aim, on any server (it's your aim that
+    changes, not the game: the same spread and damage).
+  * Let go of the grip to let go. A rifle slips out of your other hand if
+    your hands come together (about 5 cm apart along the barrel), your
+    other hand's pulled well past the muzzle (25 cm), or the gun's turned
+    more than 60 degrees from where your gun hand alone would point it; a
+    pistol, if your other hand's pulled away from under your gun hand
+    (about 18 cm). It slips with a buzz, and takes hold again only once
+    you let go of the grip and squeeze it again there. Putting the gun away
+    or switching guns, a scope, a menu and dying let go too.
+  * Your hand settles onto a rifle and off it over a tenth of a second;
+    letting go, the rifle eases back as quickly to where your gun hand
+    alone points it.
+  * Your other hand's trigger still alt-fires while it holds the gun; it
+    isn't your Force hand meanwhile - let go to use the Force. Near the gun
+    its grip takes hold instead of using the Force (or a holster); anywhere
+    else it does that as usual. A squeeze that took hold of the gun takes
+    hold of nothing else till you let go: switch to your saber with it
+    still squeezed and your other hand takes the hilt only as you squeeze
+    again.
+  * It works with Gun Aim on the hand holding the gun (as it is unless
+    you've changed it): looking to aim, your gun's in one hand.
+  * Everyone sees your gun aimed as you aim it and your other hand where
+    you hold it.
+  * Two-Handed Guns (Setup > Controls > VR View, cg_vrTwoHandGuns) turns
+    it off.
 
 HOLSTERS: your weapons hang on your body, and you take them out and put
 them away with your hands - in VR, seeing your own body and the saber in
@@ -1397,14 +1447,15 @@ LOGS for working out what feels off (both on by default):
                every cut on you your blade stopped as you saw it
                ("blocked"), and every bolt your blade deflected
                ("deflect": whose, your Saber Defense, what became of it)
-  vrdebug.log  (cg_vrLog 1) your two-handed holds, swings, clashes, the
-               animation and fingers of the hand holding the saber, every
-               2 s how your arms are drawn ("arms:" - each elbow's height,
-               how your real wrist is bent and your forearm turned against
-               the arm drawn, and the shoulder), and every 10 s how
-               smoothly the game arrives ("net:" - snapshots a second,
-               ping, and how often others had to stand still because the
-               next snapshot was late)
+  vrdebug.log  (cg_vrLog 1) your two-handed holds (of sabers and guns:
+               where your other hand took hold, why it let go), swings,
+               clashes, the animation and fingers of the hand holding the
+               saber, every 2 s how your arms are drawn ("arms:" - each
+               elbow's height, how your real wrist is bent and your
+               forearm turned against the arm drawn, and the shoulder),
+               and every 10 s how smoothly the game arrives ("net:" -
+               snapshots a second, ping, and how often others had to
+               stand still because the next snapshot was late)
 Both are in Documents\My Games\OpenJK-VR\base.
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can

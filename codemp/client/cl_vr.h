@@ -93,6 +93,11 @@ void		VR_GenericCmd( int genCmd );
 // (units), and VR_EYES_* (cgameImport_t.ext.VR_SetEyeDrop, every frame):
 // your height - Real Crouch keeps your view at your head as they go down.
 void		VR_SetEyeDrop( float drop, int flags );
+// Your other hand holding the gun in your gun hand too (VR_GUN_HOLD_*), the
+// line it holds it along this far from the gun hand's grip, to its left and up
+// (metres): with VR_GUN_HOLD_AIM that line runs through your other hand, so
+// both aim it (cgameImport_t.ext.VR_SetGunHold, every frame).
+void		VR_SetGunHold( int hand, int how, float boreLeft, float boreUp );
 
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.

@@ -552,6 +552,17 @@ typedef struct vrState_s {
 	int						wheelPressTime;	// ...pressed then (ms)
 	int						grabZones;		// hands the cgame says could grab now (bit per hand)...
 	int						grabZoneTime;	// ...as of this cls.realtime
+	int						gunHoldHand;	// your other hand on the gun in your gun hand, as the cgame says...
+	int						gunHoldHow;		// ...how (VR_GUN_HOLD_*)...
+	float					gunHoldBore[2];	// ...the line it's held along from the gun hand's grip, to its left and up
+											// (metres: its bore, as far off it as your other hand took hold - as last
+											// said holding a rifle)...
+	int						gunHoldTime;	// ...as of this cls.realtime
+	float					gunHoldEase;	// how far both hands aim the gun now (0: the gun hand alone .. 1)...
+	int						gunHoldEaseTime;	// ...as of (cls.realtime)...
+	int						gunHoldGunHand;	// ...the gun hand then
+	vec3_t					gunHoldOfs;		// your other hand from the gun hand's grip, in its aim's axes, as last tracked...
+	qboolean				gunHoldOfsKept;	// ...(kept: the hold going on through its tracking lost, however long)
 	qboolean				topOfFrame;		// this poll runs at the top of CL_Frame (not nested)
 
 	// menu pointer: a controller points at the menu screen like a mouse
@@ -3464,16 +3475,151 @@ static qboolean VR_HandGone( int h ) {
 		qtrue : qfalse;
 }
 
+/*
+Both hands on your gun. The cgame says, every frame, when your other hand
+holds the gun in your gun hand too (VR_SetGunHold: it took hold, its grip
+squeezed there - a grab, not its key) and the line it holds it along, from
+your gun hand's grip: the gun's bore, as far off it as your other hand took
+hold. A pistol's held round your gun hand: it aims as ever. A rifle's held
+along its barrel, so both your hands aim it: that line from where it is by
+your gun hand's grip through your other hand's, the gun rolled as your gun
+hand rolls it (taken hold of where your other hand was, it's as your gun hand
+alone aimed it then). Taking hold, the aim eases over to that
+(VR_GUN_HOLD_EASE), and back as it lets go - along the line it last held it
+along; letting go of the grip lets go at once, the cgame's word or not. Your
+other hand's tracking lost, it's where it last was from your gun hand. Your
+gun hand's lost, its aim's left as it was - the easing too, till it's back.
+*/
+
+#define VR_GUN_HOLD_SAID_MS	200		// the cgame's word on your other hand on your gun lasts this long
+#define VR_GUN_HOLD_EASE	0.1f	// seconds both hands take to take over the gun's aim, and to give it back
+#define VR_GUN_HOLD_NEAR	0.05f	// metres along the bore from by your gun hand to your other hand: this near, the
+#define VR_GUN_HOLD_FAR		0.10f	// aim's your gun hand's; this far, both hands' (eased between)
+#define VR_GUN_BORE_STEPS	8		// steps finding the way the barrel runs through your other hand (VR_GunBore)
+#define VR_GUN_HOLD_TURN	0.0f	// both hands aim it only so far round from where your gun hand alone would (the
+									// cosine: 90 degrees, all of it from 72)
+
+static float VR_SmoothStep( float lo, float hi, float x ) {
+	const float t = Com_Clamp( 0.0f, 1.0f, ( x - lo ) / ( hi - lo ) );
+	return t * t * ( 3.0f - 2.0f * t );
+}
+
+void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {
+	vr.gunHoldHand = ( hand == VR_HAND_LEFT || hand == VR_HAND_RIGHT ) ? hand : -1;
+	vr.gunHoldHow = ( vr.gunHoldHand >= 0 && ( how == VR_GUN_HOLD_STEADY || how == VR_GUN_HOLD_AIM ) ) ? how : VR_GUN_HOLD_NONE;
+	if ( vr.gunHoldHow == VR_GUN_HOLD_AIM ) {	// (else the line it last held a rifle along kept: letting go eases back along it)
+		vr.gunHoldBore[0] = ( boreLeft == boreLeft ) ? Com_Clamp( -0.5f, 0.5f, boreLeft ) : 0.0f;	// (NaN: none)
+		vr.gunHoldBore[1] = ( boreUp == boreUp ) ? Com_Clamp( -0.5f, 0.5f, boreUp ) : 0.0f;
+	}
+	vr.gunHoldTime = cls.realtime;
+}
+
+// Whether your other hand aims your gun with your gun hand now: the cgame's
+// word lately, its barrel in that hand, whose grip's still held as a grab.
+static qboolean VR_GunHeld( void ) {
+	const int off = ( VR_GunHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+
+	return (qboolean)( vr.gunHoldHow == VR_GUN_HOLD_AIM && vr.gunHoldHand == off && vr.grabbing[off] &&
+		cls.realtime - vr.gunHoldTime >= 0 && cls.realtime - vr.gunHoldTime < VR_GUN_HOLD_SAID_MS );
+}
+
+// The way a gun's barrel runs (f) to go through p, its bore boreLeft to the
+// left of its grip g and boreUp up (its own axes, rolled as upRef has its up),
+// and how far along it p is from there. qfalse: no such way (p at the bore
+// there, or the barrel along upRef: no roll to go by).
+static qboolean VR_GunBore( const vec3_t g, const vec3_t p, const vec3_t upRef, float boreLeft, float boreUp, vec3_t f,
+	float *along ) {
+	vec3_t d, u, l, q;
+
+	VectorSubtract( p, g, d );
+	*along = VectorNormalize2( d, f );
+	for ( int i = 0; i < VR_GUN_BORE_STEPS; i++ ) {
+		if ( *along < 1e-3f ) {
+			return qfalse;
+		}
+		VectorMA( upRef, -DotProduct( upRef, f ), f, u );
+		if ( VectorNormalize( u ) < 0.1f ) {
+			return qfalse;
+		}
+		CrossProduct( u, f, l );
+		VectorMA( g, boreLeft, l, q );
+		VectorMA( q, boreUp, u, q );
+		VectorSubtract( p, q, d );
+		*along = VectorNormalize2( d, f );
+	}
+	return ( *along >= 1e-3f ) ? qtrue : qfalse;
+}
+
+// Both your hands aiming your gun (above): ax, your gun hand's aim (the tilt
+// in), turned to theirs as far as they've taken it over.
+static void VR_GunHoldAim( int gunHand, int off, vec3_t ax[3] ) {
+	const qboolean held = VR_GunHeld();
+	const float dt = Com_Clamp( 0.0f, 0.1f, ( cls.realtime - vr.gunHoldEaseTime ) * 0.001f );
+	vec3_t g, p, d, f, u;
+	float along, w;
+	int i;
+
+	vr.gunHoldEaseTime = cls.realtime;
+	if ( gunHand != vr.gunHoldGunHand ) {
+		// your hands changed over (vr_leftHanded): nothing of the other's hold carries over
+		vr.gunHoldGunHand = gunHand;
+		vr.gunHoldEase = 0.0f;
+		vr.gunHoldOfsKept = qfalse;
+	}
+	if ( held && vr.handValid[off] ) {
+		// (where your other hand is, from your gun hand's grip in its aim)
+		VectorSubtract( vrClient.gripOrigin[off], vrClient.gripOrigin[gunHand], d );
+		for ( i = 0; i < 3; i++ ) {
+			vr.gunHoldOfs[i] = DotProduct( d, ax[i] );
+		}
+		vr.gunHoldOfsKept = qtrue;
+	}
+	vr.gunHoldEase = ( held && vr.gunHoldOfsKept ) ? Q_min( 1.0f, vr.gunHoldEase + dt / VR_GUN_HOLD_EASE ) :
+		Q_max( 0.0f, vr.gunHoldEase - dt / VR_GUN_HOLD_EASE );
+	if ( vr.gunHoldEase <= 0.0f ) {
+		vr.gunHoldOfsKept = qfalse;	// (let go: found afresh as it takes hold again)
+		return;
+	}
+	// (letting go, as it last held it - where your other hand goes meanwhile
+	// doesn't swing it)
+	VectorCopy( vrClient.gripOrigin[gunHand], g );
+	VectorCopy( g, p );
+	for ( i = 0; i < 3; i++ ) {
+		VectorMA( p, vr.gunHoldOfs[i], ax[i], p );
+	}
+	if ( !VR_GunBore( g, p, ax[2], vr.gunHoldBore[0], vr.gunHoldBore[1], f, &along ) ) {
+		return;
+	}
+	// (and never further round than a wrist could hold it: the cgame lets go
+	// well before - VR_GUN_HOLD_TURN)
+	w = vr.gunHoldEase * VR_SmoothStep( VR_GUN_HOLD_NEAR, VR_GUN_HOLD_FAR, along ) *
+		VR_SmoothStep( VR_GUN_HOLD_TURN, VR_GUN_HOLD_TURN + 0.3f, DotProduct( f, ax[0] ) );
+	VectorScale( ax[0], 1.0f - w, d );
+	VectorMA( d, w, f, d );
+	if ( VectorNormalize2( d, f ) < 0.1f ) {
+		return;
+	}
+	VectorMA( ax[2], -DotProduct( ax[2], f ), f, u );
+	if ( VectorNormalize( u ) < 0.1f ) {
+		return;
+	}
+	VectorCopy( f, ax[0] );
+	CrossProduct( u, f, ax[1] );
+	VectorCopy( u, ax[2] );
+}
+
 // The gun hand's aim, guns being aimed with it: its aim pose tilted by
-// vr_gunPitch (+ = barrel up: the gun drawn in the hand tilts with it), and
-// the yaw and pitch it points (VR_ApplyHeadAim).
+// vr_gunPitch (+ = barrel up: the gun drawn in the hand tilts with it) - as
+// it alone points it (vrClient.gunAimAxis), then as both your hands aim it -
+// and the yaw and pitch it points (VR_ApplyHeadAim).
 static void VR_GunAim( void ) {
-	const int gunHand = VR_GunHand();
+	const int gunHand = VR_GunHand(), off = ( gunHand == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
 
 	// (each hand's aim as it points, before the tilt: where Move Direction's
 	// "where your hand points" takes you)
 	memcpy( vr.handAimAxis, vrClient.aimAxis, sizeof( vr.handAimAxis ) );
 	if ( !vr.handValid[gunHand] ) {
+		vr.gunHoldEaseTime = cls.realtime;	// (both hands' easing waits for it too: no leap once it's back)
 		return;
 	}
 	const float tilt = vr_gunPitch->value;
@@ -3485,6 +3631,8 @@ static void VR_GunAim( void ) {
 		VectorCopy( f, ax[0] );
 		VectorCopy( u, ax[2] );
 	}
+	memcpy( vrClient.gunAimAxis, vrClient.aimAxis[gunHand], sizeof( vrClient.gunAimAxis ) );
+	VR_GunHoldAim( gunHand, off, vrClient.aimAxis[gunHand] );
 	vr.handAimYaw = VR_ForwardYaw( vrClient.aimAxis[gunHand], vr.handAimYaw );
 	vr.handAimPitch = RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, -vrClient.aimAxis[gunHand][0][2] ) ) );
 }
@@ -4880,6 +5028,7 @@ void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
 void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
+void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}
 void VR_GenericCmd( int genCmd ) {}
 void VR_DrawOverlay( void ) {}
 

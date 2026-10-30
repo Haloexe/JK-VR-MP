@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-15"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-16"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -47,6 +47,15 @@ General Public License version 2, like the rest of OpenJK.
 												//     forceDir, vrUserPose_t.thrust (VR_POSE_PROTOCOL 7)
 												// -15: vrForceState_t.casts, cast, place (the Force
 												//     hand's places: Body Gestures)
+												// -16: ext.VR_SetGunHold, vrClientState_t.gunAimAxis
+												//     (your gun held with both hands)
+
+// ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
+// the gun in your gun hand - said every frame (unsaid a moment, not at all)
+#define VR_GUN_HOLD_NONE		0	// it doesn't
+#define VR_GUN_HOLD_STEADY		1	// round your gun hand (a pistol): the gun aims as your gun hand points it
+#define VR_GUN_HOLD_AIM			2	// along its barrel (a rifle): both hands aim it - the line it holds it along runs
+										// through it
 
 // ext.VR_SetEyeDrop( drop, flags ): flags
 #define VR_EYES_POSED			( 1 << 0 )	// in a pose (getting down into it, or up out of it: bg_vrpose.c)
@@ -311,6 +320,10 @@ typedef struct vrClientState_s {
 
 	// your Force hand (above)
 	vrForceState_t	force;
+
+	// the gun hand's aim as that hand alone points it, vr_gunPitch's tilt in
+	// - aimAxis has it as both your hands aim the gun (ext.VR_SetGunHold)
+	vec3_t		gunAimAxis[3];
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.
