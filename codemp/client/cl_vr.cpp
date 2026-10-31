@@ -3482,22 +3482,36 @@ squeezed there - a grab, not its key) and the line it holds it along, from
 your gun hand's grip: the gun's bore, as far off it as your other hand took
 hold. A pistol's held round your gun hand: it aims as ever. A rifle's held
 along its barrel, so both your hands aim it: that line from where it is by
-your gun hand's grip through your other hand's, the gun rolled as your gun
-hand rolls it (taken hold of where your other hand was, it's as your gun hand
-alone aimed it then). Taking hold, the aim eases over to that
-(VR_GUN_HOLD_EASE), and back as it lets go - along the line it last held it
-along; letting go of the grip lets go at once, the cgame's word or not. Your
-other hand's tracking lost, it's where it last was from your gun hand. Your
-gun hand's lost, its aim's left as it was - the easing too, till it's back.
+your gun hand's grip through your other hand's - the gun turned the least
+way from where your gun hand alone points it, so rolled as your gun hand
+rolls it (VR_GunTurned); taken hold of where your other hand was, it's as
+your gun hand alone aimed it then. That way's worked out whole (VR_GunBore).
+Both hands aim it all the way round to 120 degrees from where your gun hand
+points (the cgame lets go there), none of it past 150 (VR_GUN_HOLD_ROUND_*) -
+nor where every way through your other hand nearly fits (it round behind
+your gun hand, the line held well off its grip: VR_GUN_HOLD_LEAN_*). Your
+other hand gone past where the cgame lets go (VR_GunHoldFits), it's kept
+where it last was within it - a frame on, the cgame's let go - so a quick
+swing doesn't drop the aim down a fade first. Taking hold, the aim eases over
+to that (VR_GUN_HOLD_EASE), and back as it lets go - along the line it last
+held it along; letting go of the grip lets go at once, the cgame's word or
+not. Your other hand's tracking lost, it's where it last was from your gun
+hand. Your gun hand's lost, its aim's left as it was - the easing too, till
+it's back.
 */
 
 #define VR_GUN_HOLD_SAID_MS	200		// the cgame's word on your other hand on your gun lasts this long
 #define VR_GUN_HOLD_EASE	0.1f	// seconds both hands take to take over the gun's aim, and to give it back
-#define VR_GUN_HOLD_NEAR	0.05f	// metres along the bore from by your gun hand to your other hand: this near, the
-#define VR_GUN_HOLD_FAR		0.10f	// aim's your gun hand's; this far, both hands' (eased between)
-#define VR_GUN_BORE_STEPS	8		// steps finding the way the barrel runs through your other hand (VR_GunBore)
-#define VR_GUN_HOLD_TURN	0.0f	// both hands aim it only so far round from where your gun hand alone would (the
-									// cosine: 90 degrees, all of it from 72)
+#define VR_GUN_HOLD_NEAR	0.05f	// metres along the line it's held along from by your gun hand to your other hand:
+#define VR_GUN_HOLD_FAR		0.10f	// this near, the aim's your gun hand's; this far, both hands' (eased between)
+#define VR_GUN_HOLD_ROUND_FULL	-0.5f	// both hands aim it however far round from where your gun hand alone would, as
+#define VR_GUN_HOLD_ROUND_NONE	-0.866f	// far as this (the cosine: 120 degrees) - none of it past this (150), eased between
+#define VR_GUN_HOLD_LEAN_FULL	0.6f	// ...and while every way through your other hand fits no nearer than this (VR_GunBore's
+#define VR_GUN_HOLD_LEAN_NONE	0.9f	// lean) - none of it past this
+#define VR_GUN_BEHIND		0.02f	// (1 + the cosine: right round behind your gun hand, past 168.5 degrees - no least way)
+#define VR_GUN_HOLD_NEAR_TURN	0.5f	// where the cgame lets go: your hands nearer than VR_GUN_HOLD_FAR turned past this (the
+#define VR_GUN_HOLD_OFF_MOST	2.0f	// cosine: 60 degrees); the line held off your gun hand's grip against how far apart,
+										// times the tangent of half its turn, past this (with lean, round and near: VR_GunHoldFits)
 
 static float VR_SmoothStep( float lo, float hi, float x ) {
 	const float t = Com_Clamp( 0.0f, 1.0f, ( x - lo ) / ( hi - lo ) );
@@ -3523,31 +3537,85 @@ static qboolean VR_GunHeld( void ) {
 		cls.realtime - vr.gunHoldTime >= 0 && cls.realtime - vr.gunHoldTime < VR_GUN_HOLD_SAID_MS );
 }
 
-// The way a gun's barrel runs (f) to go through p, its bore boreLeft to the
-// left of its grip g and boreUp up (its own axes, rolled as upRef has its up),
-// and how far along it p is from there. qfalse: no such way (p at the bore
-// there, or the barrel along upRef: no roll to go by).
-static qboolean VR_GunBore( const vec3_t g, const vec3_t p, const vec3_t upRef, float boreLeft, float boreUp, vec3_t f,
-	float *along ) {
-	vec3_t d, u, l, q;
+// Your gun hand's aim ax turned the least way to point along f (about ax[0] x
+// f, as far as ax[0] is from f): its left and up so turned (l, u) - its roll
+// carried round with it, however far round f is. qfalse: f right round behind
+// it (VR_GUN_BEHIND: no least way).
+static qboolean VR_GunTurned( vec3_t ax[3], const vec3_t f, vec3_t l, vec3_t u ) {
+	const float c = DotProduct( ax[0], f );
+	vec3_t k, t;
+
+	if ( 1.0f + c < VR_GUN_BEHIND ) {
+		return qfalse;
+	}
+	// (v c + k x v + k (k.v) / (1 + c), k = ax[0] x f: v turned so)
+	CrossProduct( ax[0], f, k );
+	CrossProduct( k, ax[2], t );
+	VectorScale( ax[2], c, u );
+	VectorAdd( u, t, u );
+	VectorMA( u, DotProduct( k, ax[2] ) / ( 1.0f + c ), k, u );
+	VectorMA( u, -DotProduct( u, f ), f, u );	// (square to f, whatever the rounding)
+	if ( VectorNormalize( u ) < 0.5f ) {
+		return qfalse;
+	}
+	CrossProduct( u, f, l );
+	return qtrue;
+}
+
+// The way a gun's barrel runs (f) to go through p - its bore boreLeft to the
+// left of its grip g and boreUp up, in its own axes: your gun hand's aim ax
+// turned the least way onto it (VR_GunTurned) - how far along it p is from
+// there (along), and how near every way through p comes to fitting (lean: 0,
+// one way; 1, any - p round behind your gun hand, the line held well off its
+// grip). Worked out whole: with d from g to p and o the bore in ax, along
+// sqrt(d.d - o.o), lean (o.d - o.o) / (ax[0].d + along) / along, and f along
+// d - o + lean along ax[0] (cg_vrgun.c's CG_VRG_Holds works it out the same).
+// qfalse: no such way to hold it by - p no further from g than the bore, past
+// where any way fits (lean 1 and over), or right round behind your gun hand
+// (VR_GUN_BEHIND).
+static qboolean VR_GunBore( const vec3_t g, const vec3_t p, vec3_t ax[3], float boreLeft, float boreUp, vec3_t f,
+	float *along, float *lean ) {
+	const float r2 = boreLeft * boreLeft + boreUp * boreUp;
+	vec3_t d, o;
+	float s2, den, lambda;
 
 	VectorSubtract( p, g, d );
-	*along = VectorNormalize2( d, f );
-	for ( int i = 0; i < VR_GUN_BORE_STEPS; i++ ) {
-		if ( *along < 1e-3f ) {
-			return qfalse;
-		}
-		VectorMA( upRef, -DotProduct( upRef, f ), f, u );
-		if ( VectorNormalize( u ) < 0.1f ) {
-			return qfalse;
-		}
-		CrossProduct( u, f, l );
-		VectorMA( g, boreLeft, l, q );
-		VectorMA( q, boreUp, u, q );
-		VectorSubtract( p, q, d );
-		*along = VectorNormalize2( d, f );
+	VectorScale( ax[1], boreLeft, o );
+	VectorMA( o, boreUp, ax[2], o );
+	s2 = DotProduct( d, d ) - r2;
+	if ( s2 < 1e-6f ) {
+		return qfalse;
 	}
-	return ( *along >= 1e-3f ) ? qtrue : qfalse;
+	*along = sqrtf( s2 );
+	den = DotProduct( ax[0], d ) + *along;	// ((along - lambda) (1 + its cosine from ax[0]))
+	if ( den < 1e-6f ) {
+		return qfalse;
+	}
+	lambda = ( DotProduct( o, d ) - r2 ) / den;
+	*lean = lambda / *along;
+	if ( *along - lambda < 1e-6f || den / ( *along - lambda ) < VR_GUN_BEHIND ) {
+		return qfalse;
+	}
+	VectorSubtract( d, o, f );
+	VectorMA( f, lambda, ax[0], f );
+	return ( VectorNormalize( f ) > 1e-6f ) ? qtrue : qfalse;
+}
+
+// Whether your other hand's where the cgame holds your gun (cg_vrgun.c's
+// CG_VRG_Holds - its slips but past the muzzle): the way through it found
+// (VR_GunBore: f, along, lean), your hands not together - nor nearer than
+// VR_GUN_HOLD_FAR turned past 60 degrees - nor turned right round, nor round
+// where it can't follow your hand (lean, or the line held well off your gun
+// hand's grip against how far apart: VR_GUN_HOLD_OFF_MOST).
+static qboolean VR_GunHoldFits( vec3_t ax[3], const vec3_t f, float along, float lean, float boreLeft, float boreUp ) {
+	const float c = DotProduct( f, ax[0] );
+
+	if ( along < VR_GUN_HOLD_NEAR || ( along < VR_GUN_HOLD_FAR && c < VR_GUN_HOLD_NEAR_TURN ) || c < VR_GUN_HOLD_ROUND_FULL ||
+		lean > VR_GUN_HOLD_LEAN_FULL ) {
+		return qfalse;
+	}
+	return ( sqrtf( boreLeft * boreLeft + boreUp * boreUp ) * sqrtf( ( 1.0f - c ) / ( 1.0f + c ) ) <= VR_GUN_HOLD_OFF_MOST * along ) ?
+		qtrue : qfalse;
 }
 
 // Both your hands aiming your gun (above): ax, your gun hand's aim (the tilt
@@ -3555,8 +3623,8 @@ static qboolean VR_GunBore( const vec3_t g, const vec3_t p, const vec3_t upRef, 
 static void VR_GunHoldAim( int gunHand, int off, vec3_t ax[3] ) {
 	const qboolean held = VR_GunHeld();
 	const float dt = Com_Clamp( 0.0f, 0.1f, ( cls.realtime - vr.gunHoldEaseTime ) * 0.001f );
-	vec3_t g, p, d, f, u;
-	float along, w;
+	vec3_t g, p, d, f, l, u;
+	float along, lean, w;
 	int i;
 
 	vr.gunHoldEaseTime = cls.realtime;
@@ -3567,12 +3635,18 @@ static void VR_GunHoldAim( int gunHand, int off, vec3_t ax[3] ) {
 		vr.gunHoldOfsKept = qfalse;
 	}
 	if ( held && vr.handValid[off] ) {
-		// (where your other hand is, from your gun hand's grip in its aim)
+		// (where your other hand is, from your gun hand's grip in its aim - but
+		// past where the cgame lets go, where it last was within it: VR_GunHoldFits)
+		vec3_t ofs;
 		VectorSubtract( vrClient.gripOrigin[off], vrClient.gripOrigin[gunHand], d );
 		for ( i = 0; i < 3; i++ ) {
-			vr.gunHoldOfs[i] = DotProduct( d, ax[i] );
+			ofs[i] = DotProduct( d, ax[i] );
 		}
-		vr.gunHoldOfsKept = qtrue;
+		if ( !vr.gunHoldOfsKept || ( VR_GunBore( vrClient.gripOrigin[gunHand], vrClient.gripOrigin[off], ax, vr.gunHoldBore[0],
+				vr.gunHoldBore[1], f, &along, &lean ) && VR_GunHoldFits( ax, f, along, lean, vr.gunHoldBore[0], vr.gunHoldBore[1] ) ) ) {
+			VectorCopy( ofs, vr.gunHoldOfs );
+			vr.gunHoldOfsKept = qtrue;
+		}
 	}
 	vr.gunHoldEase = ( held && vr.gunHoldOfsKept ) ? Q_min( 1.0f, vr.gunHoldEase + dt / VR_GUN_HOLD_EASE ) :
 		Q_max( 0.0f, vr.gunHoldEase - dt / VR_GUN_HOLD_EASE );
@@ -3587,24 +3661,21 @@ static void VR_GunHoldAim( int gunHand, int off, vec3_t ax[3] ) {
 	for ( i = 0; i < 3; i++ ) {
 		VectorMA( p, vr.gunHoldOfs[i], ax[i], p );
 	}
-	if ( !VR_GunBore( g, p, ax[2], vr.gunHoldBore[0], vr.gunHoldBore[1], f, &along ) ) {
+	if ( !VR_GunBore( g, p, ax, vr.gunHoldBore[0], vr.gunHoldBore[1], f, &along, &lean ) ) {
 		return;
 	}
-	// (and never further round than a wrist could hold it: the cgame lets go
-	// well before - VR_GUN_HOLD_TURN)
+	// (far round from where your gun hand points - but not right round behind
+	// it, nor where any way nearly fits: VR_GUN_HOLD_ROUND_*, VR_GUN_HOLD_LEAN_*)
 	w = vr.gunHoldEase * VR_SmoothStep( VR_GUN_HOLD_NEAR, VR_GUN_HOLD_FAR, along ) *
-		VR_SmoothStep( VR_GUN_HOLD_TURN, VR_GUN_HOLD_TURN + 0.3f, DotProduct( f, ax[0] ) );
+		VR_SmoothStep( VR_GUN_HOLD_ROUND_NONE, VR_GUN_HOLD_ROUND_FULL, DotProduct( f, ax[0] ) ) *
+		VR_SmoothStep( VR_GUN_HOLD_LEAN_NONE, VR_GUN_HOLD_LEAN_FULL, lean );
 	VectorScale( ax[0], 1.0f - w, d );
 	VectorMA( d, w, f, d );
-	if ( VectorNormalize2( d, f ) < 0.1f ) {
-		return;
-	}
-	VectorMA( ax[2], -DotProduct( ax[2], f ), f, u );
-	if ( VectorNormalize( u ) < 0.1f ) {
+	if ( VectorNormalize2( d, f ) < 0.1f || !VR_GunTurned( ax, f, l, u ) ) {
 		return;
 	}
 	VectorCopy( f, ax[0] );
-	CrossProduct( u, f, ax[1] );
+	VectorCopy( l, ax[1] );
 	VectorCopy( u, ax[2] );
 }
 

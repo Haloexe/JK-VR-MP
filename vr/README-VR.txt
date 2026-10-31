@@ -468,9 +468,10 @@ while you hold the grip the gun's in both hands:
     hold doesn't move the gun; from then on both your hands aim it: it
     turns about your gun hand as your other hand goes round it (sliding
     your other hand along the barrel doesn't turn it), and your gun hand's
-    wrist only rolls it (Gun Angle tilts a gun in one hand only). Your
-    fist closes where you took hold, along the barrel, its thumb toward
-    the muzzle.
+    wrist only rolls it - your gun hand needn't point where the gun does,
+    up to 120 degrees round from it (Gun Angle tilts a gun in one hand
+    only). Your fist closes where you took hold, along the barrel, its
+    thumb toward the muzzle.
   * Pistols - the Bryar pistols: take hold under your gun hand, round it.
     The pistol's steadied and aims as your gun hand points it.
   * The stun baton, thermal detonators, trip mines and det packs stay in
@@ -478,13 +479,16 @@ while you hold the grip the gun's in both hands:
   * Your shots go where both hands aim, on any server (it's your aim that
     changes, not the game: the same spread and damage).
   * Let go of the grip to let go. A rifle slips out of your other hand if
-    your hands come together (about 5 cm apart along the barrel), your
-    other hand's pulled well past the muzzle (25 cm), or the gun's turned
-    more than 60 degrees from where your gun hand alone would point it; a
-    pistol, if your other hand's pulled away from under your gun hand
-    (about 18 cm). It slips with a buzz, and takes hold again only once
-    you let go of the grip and squeeze it again there. Putting the gun away
-    or switching guns, a scope, a menu and dying let go too.
+    your hands come together (about 5 cm apart along the barrel - 10 with
+    the gun turned more than 60 degrees from where your gun hand points),
+    your other hand's pulled well past the muzzle (25 cm), or the gun's
+    turned right round from where your gun hand points (past 120 degrees -
+    or nearer, round behind your gun hand close to it, or held far off the
+    barrel, where the gun can't follow your hand); a pistol, if your other
+    hand's pulled away from under your gun hand (about 18 cm). It slips
+    with a buzz, and takes hold again only once you let go of the grip and
+    squeeze it again there. Putting the gun away or switching guns, a
+    scope, a menu and dying let go too.
   * Your hand settles onto a rifle and off it over a tenth of a second;
     letting go, the rifle eases back as quickly to where your gun hand
     alone points it.
@@ -1448,7 +1452,8 @@ LOGS for working out what feels off (both on by default):
                ("blocked"), and every bolt your blade deflected
                ("deflect": whose, your Saber Defense, what became of it)
   vrdebug.log  (cg_vrLog 1) your two-handed holds (of sabers and guns:
-               where your other hand took hold, why it let go), swings,
+               where your other hand took hold, why it let go, how long
+               it held a gun and how far round it turned it), swings,
                clashes, the animation and fingers of the hand holding the
                saber, every 2 s how your arms are drawn ("arms:" - each
                elbow's height, how your real wrist is bent and your
