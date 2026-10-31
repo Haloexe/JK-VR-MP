@@ -36,6 +36,10 @@ them again. The page is otherwise left as it is.
     Head Movement     your view follows your head          vr_positional
     Head Reach        how far, 0.1-0.5 m                   vr_positionalMax
     World Scale       28-40 units a metre                  vr_worldScale
+    HUD               its status (health, armor, the       vr_hudWrist 0/1
+                      Force, ammo) in front of you, or on
+                      your Force hand's wrist (cl_vr.cpp,
+                      cgame/cg_vrwrist.c)
     HUD Distance      1-6 m                                vr_hudDepth
     HUD Size          30-90 degrees                        vr_hudFov
     Menu Distance     1.5-6 m                              vr_menuDistance

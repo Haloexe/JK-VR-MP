@@ -477,6 +477,9 @@ void RE_RenderScene( const refdef_t *fd ) {
 	if ( !tr.registered ) {
 		return;
 	}
+	if ( R_VRWrist() ) {
+		return;	// OpenJK VR: the HUD on your wrist is the 2D alone
+	}
 	GLimp_LogComment( "====== RE_RenderScene =====\n" );
 
 	if ( r_norefresh->integer ) {

@@ -46,7 +46,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     another blade and slides along it rather than passing through; saber
     styles are the blade's weight
   * Saber, fists and scopes aim where you look
-  * HUD on a floating plane in front of you
+  * HUD on a floating plane in front of you - or its status on your wrist,
+    shown as you turn it to your face (see THE HUD ON YOUR WRIST)
   * Menus, console and loading screens on a floating screen; point at the
     menus with a controller and pull the trigger to click (the other
     trigger right-clicks)
@@ -202,6 +203,10 @@ stick up or down on a slider to move it a step.
                      (0.1 to 0.5 m)
     World Scale      the game's units in a metre (28 to 40: more makes the
                      world around you feel smaller)
+    HUD              In View (as it comes): in front of you; On Wrist: its
+                     status on the back of your Force hand's wrist, shown
+                     as you turn it to your face (see THE HUD ON YOUR
+                     WRIST)
     HUD Distance     1 to 6 m in front of you
     HUD Size         30 to 90 degrees of your view
     Menu Distance    1.5 to 6 m in front of you
@@ -270,6 +275,22 @@ than a character lying down has its eyes, so never under the floor; seen
 from behind (a saber lock, knocked down, dead) it moves with your head only
 as far as Head Reach. Real Crouch needs this build's game files: on a
 server with a mod's own, only B crouches.
+
+THE HUD ON YOUR WRIST (Setup > Controls > VR View: HUD, On Wrist - In View
+as it comes): the HUD's status - your health and armor, the Force, ammo or
+saber style, the score - goes on the back of your Force hand's wrist (the
+left; the right, left-handed) instead of in front of you, like a watch.
+Turn your wrist to your face and it fades in; turn it away and it fades
+out. Everything else stays in front of you: the chat, kill messages, the
+game's messages, the scoreboard, picking a weapon or a Force power, a
+scope. In a vehicle (at its controls), following someone or watching a
+demo (theirs, not yours) the status is in front of you as ever, and with
+your Force hand's controller gone a while (switched off, its batteries
+flat) it comes back in front of you. The Force meter's warning sound (a
+move you hadn't the Force for) sounds whether you're looking or not. Any
+HUD goes on your wrist - the game's, a mod's, the simple one (cg_hudFiles
+1): its left part and its right part side by side. The desktop window
+doesn't show it.
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
 where it points. Your main hand points (the right; the left, left-handed);
@@ -1491,6 +1512,8 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
   vr_positionalMax 0.25  ...up to this many metres
   vr_hudFov 50           HUD size (vertical degrees)
   vr_hudDepth 3          HUD distance (metres)
+  vr_hudWrist 0          1 = the HUD's status on your wrist (THE HUD ON YOUR
+                         WRIST)
   vr_menuDistance 3      menu screen distance (metres)
   vr_menuHeight 2.2      menu screen height (metres)
   vr_headAim 1           0 = aim with the mouse only; head just looks around
@@ -1672,6 +1695,10 @@ KNOWN LIMITATIONS
   * Mirrors show your character without a head (it is hidden for your view).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
+  * The HUD on your wrist is drawn over everything in front of it - your
+    other hand can't cover it - and its see-through parts look a little
+    darker over bright scenery than in front of you (the headset blends it
+    in light's terms, the game in the screen's).
   * Things near the edge of your view can pop in (the game culls with its
     own, narrower field of view).
   * Name tags and the third-person dynamic crosshair are drawn at the
@@ -1715,6 +1742,11 @@ no client. Source files:
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement
   codemp/rd-vanilla/tr_main.cpp    asymmetric per-eye projection
   codemp/cgame/cg_vr.c         hands, aim dot
+  codemp/cgame/cg_vrwrist.c    the HUD on your wrist: the status drawn for
+                               it, once more after the eyes (the engine
+                               shows it on your wrist: cl_vr.cpp
+                               VR_WristFrame; the renderer draws it into
+                               its own picture: vrRenderState_t.wristPass)
   codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK; the
                                blade's weight and solid blades; the blade
                                poses sent to the server, haptics

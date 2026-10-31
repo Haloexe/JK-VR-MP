@@ -179,8 +179,8 @@ void CG_Text_Paint(float x, float y, float scale, vec4_t color, const char *text
 // OpenJK VR: widescreen 2D - where a HUD menu belongs: the left edge, the
 // right edge or the middle, whichever third of the screen all its items are
 // in the middle of (so a menu is never torn apart, wherever the HUD files put
-// it)
-static float CG_AnchorForMenu( const menuDef_t *menu ) {
+// it) - on your wrist too (cg_vrwrist.c)
+float CG_AnchorForMenu( const menuDef_t *menu ) {
 	float left = SCREEN_WIDTH, right = 0.0f, mid;
 	int i;
 
@@ -1071,6 +1071,44 @@ static void CG_DrawAmmo( centity_t	*cent,menuDef_t *menuHUD)
 
 /*
 ================
+CG_ForceHUDFlash
+
+The Force meter flashing (a move you hadn't the Force for), its warning
+sound once a flash: qtrue while it flashes. (OpenJK VR: each frame the
+status would be drawn, whether it's seen or not - on your wrist it's drawn
+only as you look at it: CG_StatsElsewhere.)
+================
+*/
+static qboolean CG_ForceHUDFlash( void )
+{
+	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
+	if (cg.forceHUDTotalFlashTime > cg.time )
+	{
+		if (cg.forceHUDNextFlashTime < cg.time)
+		{
+			cg.forceHUDNextFlashTime = cg.time + 400;
+			trap->S_StartSound (NULL, 0, CHAN_LOCAL, cgs.media.noforceSound );
+
+			if (cg.forceHUDActive)
+			{
+				cg.forceHUDActive = qfalse;
+			}
+			else
+			{
+				cg.forceHUDActive = qtrue;
+			}
+
+		}
+		return qtrue;
+	}
+	// turn HUD back on if it had just finished flashing time.
+	cg.forceHUDNextFlashTime = 0;
+	cg.forceHUDActive = qtrue;
+	return qfalse;
+}
+
+/*
+================
 CG_DrawForcePower
 ================
 */
@@ -1089,31 +1127,7 @@ void CG_DrawForcePower( menuDef_t *menuHUD )
 		return;
 	}
 
-	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
-	if (cg.forceHUDTotalFlashTime > cg.time )
-	{
-		flash = qtrue;
-		if (cg.forceHUDNextFlashTime < cg.time)
-		{
-			cg.forceHUDNextFlashTime = cg.time + 400;
-			trap->S_StartSound (NULL, 0, CHAN_LOCAL, cgs.media.noforceSound );
-
-			if (cg.forceHUDActive)
-			{
-				cg.forceHUDActive = qfalse;
-			}
-			else
-			{
-				cg.forceHUDActive = qtrue;
-			}
-
-		}
-	}
-	else	// turn HUD back on if it had just finished flashing time.
-	{
-		cg.forceHUDNextFlashTime = 0;
-		cg.forceHUDActive = qtrue;
-	}
+	flash = CG_ForceHUDFlash();
 
 //	if (!cg.forceHUDActive)
 //	{
@@ -1332,30 +1346,7 @@ static void CG_DrawSimpleForcePower( const centity_t *cent )
 		return;
 	}
 
-	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
-	if ( cg.forceHUDTotalFlashTime > cg.time )
-	{
-		flash = qtrue;
-		if ( cg.forceHUDNextFlashTime < cg.time )
-		{
-			cg.forceHUDNextFlashTime = cg.time + 400;
-			trap->S_StartSound( NULL, 0, CHAN_LOCAL, cgs.media.noforceSound );
-			if ( cg.forceHUDActive )
-			{
-				cg.forceHUDActive = qfalse;
-			}
-			else
-			{
-				cg.forceHUDActive = qtrue;
-			}
-
-		}
-	}
-	else	// turn HUD back on if it had just finished flashing time.
-	{
-		cg.forceHUDNextFlashTime = 0;
-		cg.forceHUDActive = qtrue;
-	}
+	flash = CG_ForceHUDFlash();
 
 	// Determine the color of the numeric field
 	calcColor = flash ? CT_RED : CT_ICON_BLUE;
@@ -2884,6 +2875,27 @@ static void CG_DrawStats( void )
 	CG_DrawAmmo(cent);
 
 	CG_DrawTalk(cent);*/
+}
+
+// OpenJK VR: the status alone - the frame the engine draws once more for the
+// HUD on your wrist (cg_vrwrist.c)
+void CG_DrawStatsOnly( void ) {
+	trap->R_SetColor( NULL );
+	CG_DrawStats();
+	trap->R_SetColor( NULL );
+}
+
+// OpenJK VR: the status on your wrist (cg_vrwrist.c), each frame it would be
+// drawn in front of you: what drawing it does whether it's seen or not - the
+// Force meter's warning sound, as CG_DrawHUD would sound it (drawn there only
+// as you look at it, it does no more)
+void CG_StatsElsewhere( void ) {
+	if ( cg.predictedPlayerState.pm_type == PM_SPECTATOR ) {
+		return;
+	}
+	if ( cg_hudFiles.integer ? ( cg.snap->ps.fd.forcePowersKnown != 0 ) : ( Menus_FindByName( "righthud" ) != NULL ) ) {
+		CG_ForceHUDFlash();
+	}
 }
 
 /*
@@ -8209,7 +8221,11 @@ static void CG_Draw2D_HUD( void ) {
 
 			if (cg_drawStatus.integer)
 			{
-				CG_DrawStats();	// (OpenJK VR: each HUD menu where it belongs, CG_AnchorForMenu)
+				if ( !CG_VRW_Takes() ) {	// (OpenJK VR: or on your wrist, cg_vrwrist.c)
+					CG_DrawStats();	// (OpenJK VR: each HUD menu where it belongs, CG_AnchorForMenu)
+				} else {
+					CG_StatsElsewhere();
+				}
 				CG_Anchor2D( ANCHOR2D_MIDDLE );
 			}
 

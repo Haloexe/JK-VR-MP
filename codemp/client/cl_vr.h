@@ -98,6 +98,10 @@ void		VR_SetEyeDrop( float drop, int flags );
 // (metres): with VR_GUN_HOLD_AIM that line runs through your other hand, so
 // both aim it (cgameImport_t.ext.VR_SetGunHold, every frame).
 void		VR_SetGunHold( int hand, int how, float boreLeft, float boreUp );
+// The HUD on your wrist (vr_hudWrist): the status is there to show this
+// frame, in this strip of the 640x480 screen, top to bottom
+// (cgameImport_t.ext.VR_SetWristHud, every frame it's drawn).
+void		VR_SetWristHud( float top, float bottom );
 
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.

@@ -221,6 +221,7 @@ cvar_t	*r_patchStitching;
 
 #if !defined(__APPLE__)
 PFNGLSTENCILOPSEPARATEPROC qglStencilOpSeparate;
+PFNGLBLENDFUNCSEPARATEPROC qglBlendFuncSeparate;
 #endif
 
 PFNGLACTIVETEXTUREARBPROC qglActiveTextureARB;
@@ -741,6 +742,14 @@ static void GLimp_InitExtensions( void )
 	if ( qglStencilOpSeparate )
 	{
 		glConfigExt.doStencilShadowsInOneDrawcall = qtrue;
+	}
+
+	// OpenJK VR: the HUD on your wrist - what covers what's behind it blended
+	// apart from its colour (GL_State)
+	qglBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)ri.GL_GetProcAddress( "glBlendFuncSeparate" );
+	if ( !qglBlendFuncSeparate )
+	{
+		qglBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)ri.GL_GetProcAddress( "glBlendFuncSeparateEXT" );
 	}
 #else
 	glConfigExt.doStencilShadowsInOneDrawcall = qtrue;

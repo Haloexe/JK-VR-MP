@@ -2499,6 +2499,9 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 // headset. (cg.frametime is the last frame's length here, as always; the
 // right eye gets 0.)
 void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demoPlayback ) {
+	if ( CG_VRW_Pass() ) {
+		return;	// OpenJK VR: the frame drawn once more for the HUD on your wrist - the status alone, drawn (cg_vrwrist.c)
+	}
 	if ( stereoView == STEREO_RIGHT ) {
 		const int frametime = cg.frametime;
 		cg.secondEye = qtrue;

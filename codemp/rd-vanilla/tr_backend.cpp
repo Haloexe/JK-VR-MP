@@ -208,9 +208,39 @@ void GL_TexEnv( int env )
 ** This routine is responsible for setting the most commonly changed state
 ** in Q3.
 */
+/*
+** OpenJK VR: the HUD on your wrist is a picture of its own, laid over what's
+** behind it by its alpha - what it covers of it - its colour premultiplied by
+** it. So its alpha is blended apart from its colour: as the colour's blended
+** over what's there, so is what it covers ("over") - but what only adds light
+** to what's under it, or darkens it (a filter), covers nothing more of it, and
+** what replaces it covers it as much as it's opaque.
+*/
+static void R_WristAlphaBlend( GLenum src, GLenum dst, GLenum *srcAlpha, GLenum *dstAlpha )
+{
+	if ( dst == GL_ONE || src == GL_ZERO || src == GL_DST_COLOR )
+	{
+		*srcAlpha = GL_ZERO;
+		*dstAlpha = GL_ONE;
+	}
+	else
+	{
+		*srcAlpha = GL_ONE;
+		*dstAlpha = ( dst == GL_ZERO ) ? GL_ZERO : GL_ONE_MINUS_SRC_ALPHA;
+	}
+}
+
 void GL_State( uint32_t stateBits )
 {
 	uint32_t diff = stateBits ^ glState.glStateBits;
+
+	// OpenJK VR: the HUD on your wrist's blend set again going to or from it
+	const qboolean blendWrist = ( R_VRWrist() && qglBlendFuncSeparate ) ? qtrue : qfalse;
+	if ( blendWrist != glState.blendWrist )
+	{
+		diff |= GLS_SRCBLEND_BITS | GLS_DSTBLEND_BITS;
+		glState.blendWrist = blendWrist;
+	}
 
 	if ( !diff )
 	{
@@ -309,7 +339,16 @@ void GL_State( uint32_t stateBits )
 			}
 
 			qglEnable( GL_BLEND );
-			qglBlendFunc( srcFactor, dstFactor );
+			if ( blendWrist )
+			{
+				GLenum srcAlpha, dstAlpha;
+				R_WristAlphaBlend( srcFactor, dstFactor, &srcAlpha, &dstAlpha );
+				qglBlendFuncSeparate( srcFactor, dstFactor, srcAlpha, dstAlpha );
+			}
+			else
+			{
+				qglBlendFunc( srcFactor, dstFactor );
+			}
 		}
 		else
 		{
@@ -1188,7 +1227,15 @@ void	RB_SetGL2D (void) {
 
 	// set 2D virtual screen size
 	const vrRenderState_t *vrs = R_VRState();
-	if ( vrs && !vrs->screenLayer )
+	const vrRenderState_t *wrist = R_VRWrist();
+	if ( wrist )
+	{
+		// OpenJK VR: the HUD on your wrist - its own picture, all the screen's
+		// width and the strip of its height it says
+		qglViewport( 0, 0, wrist->wristWidth, wrist->wristHeight );
+		qglScissor( 0, 0, wrist->wristWidth, wrist->wristHeight );
+	}
+	else if ( vrs && !vrs->screenLayer )
 	{
 		// OpenJK VR: the HUD lives on a 4:3 plane in front of the player
 		const int eye = vrs->eye;
@@ -1203,7 +1250,14 @@ void	RB_SetGL2D (void) {
 	}
 	qglMatrixMode(GL_PROJECTION);
     qglLoadIdentity ();
-	qglOrtho (0, 640, 480, 0, 0, 1);
+	if ( wrist )
+	{
+		qglOrtho( 0, 640, wrist->wristBottom, wrist->wristTop, 0, 1 );
+	}
+	else
+	{
+		qglOrtho (0, 640, 480, 0, 0, 1);
+	}
 	qglMatrixMode(GL_MODELVIEW);
     qglLoadIdentity ();
 
@@ -1742,6 +1796,17 @@ const void	*RB_DrawBuffer( const void *data ) {
 		qglDrawBuffer( cmd->buffer );
 	}
 
+	// OpenJK VR: the HUD on your wrist's picture stays as the engine cleared
+	// it, nothing at all (alpha 0) - not the fog's colour. With no view drawn
+	// in it, it's not finished either (r_finish as a view has it: no wait for
+	// the eyes' drawing at its end)
+	if ( R_VRWrist() ) {
+		if ( !r_finish->integer ) {
+			glState.finishCalled = qtrue;
+		}
+		return (const void *)(cmd + 1);
+	}
+
 	// clear screen for debugging
 	if (tr.world && tr.world->globalFog != -1)
 	{
@@ -1916,7 +1981,10 @@ const void	*RB_SwapBuffers( const void *data ) {
 		RB_EndSurface();
 	}
 
-	if ( glConfigExt.doGammaCorrectionWithShaders )
+	// (OpenJK VR: not over the HUD on your wrist's picture - its alpha's what it
+	// covers, its size not the scene image's; never in a headset anyway, whose
+	// brightness is in the textures)
+	if ( glConfigExt.doGammaCorrectionWithShaders && !R_VRWrist() )
 	{
 		RB_GammaCorrectRender();
 	}

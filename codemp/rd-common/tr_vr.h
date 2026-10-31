@@ -57,4 +57,16 @@ typedef struct vrRenderState_s {
 	// Rectangle (eye-buffer pixels, origin top-left) the 640x480 2D layer
 	// (HUD, crosshair, scoreboard) is mapped into, per eye.
 	int			hudX[2], hudY[2], hudW[2], hudH[2];
+
+	// The HUD on your wrist: true while the frame being rendered is its own
+	// (once more after the eyes, for the status alone). The 2D layer is then
+	// a wristWidth x wristHeight picture of its own, bound by the engine and
+	// cleared to nothing (alpha 0): all the width of the 640x480 screen, from
+	// wristTop to wristBottom of its height, what's drawn widened toward where
+	// it's anchored (RE_Anchor2D) to stay in proportion - its alpha what
+	// covers what's behind, its colour premultiplied by it. No scene is drawn
+	// in it.
+	qboolean	wristPass;
+	int			wristWidth, wristHeight;
+	float		wristTop, wristBottom;
 } vrRenderState_t;

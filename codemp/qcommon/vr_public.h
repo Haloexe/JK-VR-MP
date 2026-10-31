@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-16"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-17"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -49,6 +49,8 @@ General Public License version 2, like the rest of OpenJK.
 												//     hand's places: Body Gestures)
 												// -16: ext.VR_SetGunHold, vrClientState_t.gunAimAxis
 												//     (your gun held with both hands)
+												// -17: ext.VR_SetWristHud, vrClientState_t.hudWrist,
+												//     wristPass (the HUD on your wrist)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)
@@ -67,6 +69,12 @@ General Public License version 2, like the rest of OpenJK.
 // taken hold of (holsters, Saber Grip: Hold) - a grab is let go of only once
 // the hand's mostly open
 #define VR_GRAB_HOLDS			( 1 << 2 )
+
+// The HUD on your wrist (vrClientState_t.hudWrist): its picture is this many
+// times as wide as it's tall - all the width of the 640x480 screen, and the
+// strip of its height ext.VR_SetWristHud says, what's drawn widened toward
+// where it's anchored (ext.R_Anchor2D) to stay in proportion
+#define VR_WRIST_ASPECT			2.0f
 
 // ext.R_Anchor2D( anchorX ) with anchorX this far left or further: what's
 // drawn is stretched across the window again, as always (any other x is a
@@ -324,6 +332,16 @@ typedef struct vrClientState_s {
 	// the gun hand's aim as that hand alone points it, vr_gunPitch's tilt in
 	// - aimAxis has it as both your hands aim the gun (ext.VR_SetGunHold)
 	vec3_t		gunAimAxis[3];
+
+	// the HUD's status goes on your wrist (vr_hudWrist: On Wrist - the back of
+	// the wrist of the hand your guns aren't in, the left, or left-handed the
+	// right, as you turn it to your face): the cgame doesn't draw it in front
+	// of you then, but says it would have (ext.VR_SetWristHud, every frame),
+	// and the engine draws the frame once more for it - its wristPass, in
+	// which the cgame draws the status alone. Not with that hand's controller
+	// gone a while (it's in front of you again).
+	qboolean	hudWrist;
+	qboolean	wristPass;
 } vrClientState_t;
 
 // Heading of a view axis; well defined even looking straight up/down.

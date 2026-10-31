@@ -588,6 +588,21 @@ static inline qboolean R_VROffscreen( void ) {
 	return ( vrs && ( vrs->active || vrs->offscreen ) ) ? qtrue : qfalse;
 }
 
+// OpenJK VR: non-NULL only while the frame being rendered is the HUD on your
+// wrist's (vrRenderState_t.wristPass: the 2D alone, into its own picture)
+static inline const vrRenderState_t *R_VRWrist( void ) {
+	const vrRenderState_t *vrs = R_VRState();
+	return ( vrs && vrs->wristPass && vrs->wristWidth > 0 && vrs->wristHeight > 0 &&
+		vrs->wristBottom - vrs->wristTop >= 1.0f ) ? vrs : NULL;
+}
+
+// OpenJK VR: how much wider than in 640x480 the HUD on your wrist draws things
+// (RE_Aspect2D): its picture is all the screen's width, and the strip of its
+// height from wristTop to wristBottom
+static inline float R_VRWristWiden( const vrRenderState_t *vrs ) {
+	return ( 640.0f * vrs->wristHeight ) / ( ( vrs->wristBottom - vrs->wristTop ) * vrs->wristWidth );
+}
+
 
 //=================================================================================
 
@@ -953,6 +968,7 @@ typedef struct glstate_s {
 	int			texEnv[2];
 	int			faceCulling;
 	uint32_t	glStateBits;
+	qboolean	blendWrist;		// OpenJK VR: the blend glStateBits has is the HUD on your wrist's (GL_State)
 } glstate_t;
 
 

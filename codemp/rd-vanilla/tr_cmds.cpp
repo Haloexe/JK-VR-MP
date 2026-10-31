@@ -236,7 +236,10 @@ whole screen (a background, a fade) stays stretched across it.
 RE_Anchor2D( VR_ANCHOR2D_STRETCH ) stretches what's drawn again, as it always
 was - which is how every frame starts, so modules that don't know about this
 (and the engine's console) are drawn as ever. Off with r_aspectCorrect2D 0,
-and in a headset (whose HUD is a 4:3 screen of its own).
+and in a headset (whose HUD is a 4:3 screen of its own) - but for the HUD on
+your wrist (R_VRWrist), whose picture is all the screen's width and a strip of
+its height: what's drawn there is widened toward where it belongs instead
+(squeeze more than 1), so the left edge's and the right's meet in it.
 ================================================================================
 */
 
@@ -246,7 +249,11 @@ extern qboolean g_bFont2DSqueezed;	// (tr_font.cpp: r_aspectCorrectFonts would n
 
 float RE_Aspect2D( void ) {
 	float squeeze;
+	const vrRenderState_t *wrist = R_VRWrist();
 
+	if ( wrist ) {
+		return R_VRWristWiden( wrist );
+	}
 	if ( !r_aspectCorrect2D || !r_aspectCorrect2D->integer || R_VRState() || R_VROffscreen()
 		|| glConfig.vidWidth <= 0 || glConfig.vidHeight <= 0 ) {
 		return 1.0f;
@@ -255,9 +262,14 @@ float RE_Aspect2D( void ) {
 	return ( squeeze < 0.999f ) ? squeeze : 1.0f;	// (only wider than 4:3)
 }
 
+// (qtrue: drawing things narrower or wider than in 640x480 - not 1)
+static qboolean R_Squeezes( float squeeze ) {
+	return ( fabsf( squeeze - 1.0f ) > 0.001f ) ? qtrue : qfalse;
+}
+
 void RE_Anchor2D( float anchorX ) {
 	r2DAnchor = anchorX;
-	g_bFont2DSqueezed = ( anchorX > VR_ANCHOR2D_STRETCH && RE_Aspect2D() < 1.0f ) ? qtrue : qfalse;
+	g_bFont2DSqueezed = ( anchorX > VR_ANCHOR2D_STRETCH && R_Squeezes( RE_Aspect2D() ) ) ? qtrue : qfalse;
 }
 
 // How what's drawn now is squeezed: qfalse when it's stretched.
@@ -267,7 +279,7 @@ static qboolean R_Squeeze2D( float *anchorX, float *squeeze ) {
 	}
 	*squeeze = RE_Aspect2D();
 	*anchorX = r2DAnchor;
-	return ( *squeeze < 1.0f ) ? qtrue : qfalse;
+	return R_Squeezes( *squeeze );
 }
 
 /*

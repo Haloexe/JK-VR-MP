@@ -397,6 +397,9 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #if !defined(__APPLE__)
 extern PFNGLSTENCILOPSEPARATEPROC qglStencilOpSeparate;
+extern PFNGLBLENDFUNCSEPARATEPROC qglBlendFuncSeparate;	// OpenJK VR: the HUD on your wrist (NULL: the driver hasn't it)
+#else
+#define qglBlendFuncSeparate glBlendFuncSeparate
 #endif
 
 extern PFNGLACTIVETEXTUREARBPROC qglActiveTextureARB;

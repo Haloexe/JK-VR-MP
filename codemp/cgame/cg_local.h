@@ -1924,6 +1924,13 @@ qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle );
 void		CG_VR_GunFrame( const vrClientState_t *vr );
 int			CG_VR_GunZones( void );
 qboolean	CG_VR_GunBarrelHand( int hand, float *ease, vec3_t dir );
+// cg_vrwrist.c (OpenJK VR: the HUD on your wrist)
+qboolean	CG_VRW_Takes( void );
+qboolean	CG_VRW_Pass( void );
+void		CG_DrawStatsOnly( void );	// (cg_draw.c: the status alone, for it)
+void		CG_StatsElsewhere( void );	// (cg_draw.c: what drawing it does, seen or not)
+struct menuDef_s;
+float		CG_AnchorForMenu( const struct menuDef_s *menu );	// (cg_draw.c: where a HUD menu's drawn toward)
 // cg_vrbody.c (OpenJK VR)
 qboolean CG_VR_BodyActive( centity_t *cent );
 void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim );

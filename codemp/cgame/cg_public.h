@@ -768,6 +768,12 @@ typedef struct cgameImport_s {
 		// its bore, as far off it as that hand took hold) - call every frame;
 		// unsaid a moment, it's let go
 		void			(*VR_SetGunHold)						( int hand, int how, float boreLeft, float boreUp );
+		// OpenJK VR: the HUD on your wrist (vrClientState_t.hudWrist) - the
+		// status is there to show this frame, in this strip of the 640x480
+		// screen (top to bottom, all its width): the engine draws the frame
+		// once more for it (wristPass) when it's shown - call as it would be
+		// drawn, every frame
+		void			(*VR_SetWristHud)						( float top, float bottom );
 	} ext;
 } cgameImport_t;
 
