@@ -369,8 +369,18 @@ on the controller, so a heavy blade lagging behind your swing turns the
 hand and wrist, not the elbow. The elbow only bends; a hand turned palm
 up or down twists the forearm along its length, so the elbow never wrings
 like a towel. Your shoulders lift as you raise a hand overhead and come
-forward as you reach out or across. Other players running this build see
-your arms the same way.
+forward as you reach out or across. Holding the saber with both hands, a
+hand further out than your character's arm reaches - the one on the hilt
+or the one it's in - has its shoulder come forward round the chest, and if
+that isn't enough down a little (15 degrees below level at most) or up for
+a hold overhead, to bring it there - so it stays on the hilt as you run,
+however the steps move your character's shoulders. Taking hold, letting
+go, passing the saber over or taking the lead, the shoulders ease in and
+out over a moment. Held lower or further out than even that reaches, the
+hand falls short of the hilt as before. Your other hand on your gun's
+barrel is brought there the same way. Other players running this build see
+your arms the same way (your hand on a gun's barrel as an empty hand at
+your controller).
 
 YOUR FINGERS: your character's fingers follow yours (Setup > VR: Finger
 Tracking). An empty hand, and a gun hand's trigger finger, do what your

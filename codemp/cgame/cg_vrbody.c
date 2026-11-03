@@ -158,8 +158,10 @@ typedef struct {
 	qboolean	tagTarget;			// the held-item tag was sent to an exact spot:
 	vec3_t		tagOrigin;
 	vec3_t		tagAxis[3];
-	float		reachExcess;		// wanted shoulder->wrist distance minus the arm's reach
+	float		reachExcess;		// wanted shoulder->wrist distance minus the arm's reach (the arm alone's)
 	vec3_t		reachDir;			// shoulder -> wrist
+	float		reachDist;			// ...this far
+	float		reachTurn;			// (the log: degrees the shoulder came on for the hand to reach, CG_VRB_ReachShoulder)
 	float		wristFlex, wristRadial, pronation;	// (the log: your real hand against the forearm drawn, degrees)
 	float		elbowUp;			// (the log: elbow above the shoulder, per upper arm length)
 } vrbArmResult_t;
@@ -225,6 +227,10 @@ typedef struct vrbState_s {
 	float		girdle[2][2];		// the shoulder girdle: lifted, brought forward (radians, eased)
 	qboolean	girdleValid[2];
 	int			girdleTime[2];
+	vrbMat_t	girdleTurn[2];		// how it turns the collarbone (CG_VRB_Girdle; girdleOn: it did this pass), for
+	qboolean	girdleOn[2];		// reaching to turn on from (CG_VRB_ReachShoulder)
+	float		reachShare[2];		// how far the shoulder may come on to reach (eased, CG_VRB_ReachShare)
+	int			reachShareTime[2];
 	void		*extraG2;			// the shoulders / forearm twist bones were moved on this instance
 	int			armLogTime;			// (the log: the arms, now and then)
 
@@ -3714,7 +3720,9 @@ the hand lying on the controller as it lay on the hilt), not the drawn one
 one, and that's the wrist's to take up, not the elbow's).
 
 The shoulder girdle helps too: the collarbone lifts the shoulder as the hand
-goes up and brings it forward as the hand reaches out or across.
+goes up and brings it forward as the hand reaches out or across - and on
+toward a hand holding the saber with the other (either hand), or the gun's
+barrel, that the arm alone can't reach, till it does (CG_VRB_ReachShoulder).
 
 =============================================================================
 */
@@ -4009,23 +4017,26 @@ out or across, back as it goes behind - eased, like the rest of the body.
 The collarbone carries the shoulder's flesh; the upper arm (which doesn't
 hang off it in this skeleton) is turned with it, so the arm goes along.
 Before the arm is solved: it then reaches from the shoulder where it is now.
+qtrue: both turned so (vrb.girdleTurn) - reaching can turn them on from there
+(CG_VRB_ReachShoulder).
 =================
 */
-static void CG_VRB_Girdle( centity_t *cent, int h, const vrbChest_t *ch, const vec3_t hand, qboolean commit ) {
+static qboolean CG_VRB_Girdle( centity_t *cent, int h, const vrbChest_t *ch, const vec3_t hand, qboolean commit ) {
 	vrbBone_t clav, upper;
 	vec3_t d, out, r0, axis;
 	vrbMat_t Re, Rp, C;
 	mdxaBone_t m;
 	float reach, hz, hf, ho, want[2], cur[2], k, dt;
+	qboolean turned;
 	int i;
 
 	if ( !trap->ext.VR_G2SetBoneTransform || !CG_VRB_Bone( cent, vrbClavicle[h], 1, &clav ) ||
 		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_UPPER], 1, &upper ) ) {
-		return;
+		return qfalse;
 	}
 	VectorSubtract( upper.origin, clav.origin, r0 );
 	if ( VectorLength( r0 ) < 1.0f ) {
-		return;		// (no collarbone to speak of)
+		return qfalse;		// (no collarbone to speak of)
 	}
 
 	// where the hand is, from the shoulder, in arm lengths
@@ -4061,22 +4072,169 @@ static void CG_VRB_Girdle( centity_t *cent, int h, const vrbChest_t *ch, const v
 	// lift (the shoulder toward up), then forward (toward the front)
 	CrossProduct( r0, ch->U, axis );
 	if ( VectorNormalize( axis ) < 1e-3f ) {
-		return;
+		return qfalse;
 	}
 	VRB_AxisAngle( axis, cur[0], Re );
 	CrossProduct( r0, ch->F, axis );
 	if ( VectorNormalize( axis ) < 1e-3f ) {
-		return;
+		return qfalse;
 	}
 	VRB_AxisAngle( axis, cur[1], Rp );
 	VRB_Mul( Rp, Re, C );
 	CG_VRB_ModelTurn( cent, C, clav.origin, &m );
-	if ( trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbClavicle[h], &m ) ) {
+	memcpy( vrb.girdleTurn[h], C, sizeof( C ) );
+	turned = trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbClavicle[h], &m );
+	if ( turned ) {
 		vrb.extraG2 = cent->ghoul2;
 	}
 	if ( trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbArmBones[h][VRB_UPPER], &m ) ) {
 		vrb.extraG2 = cent->ghoul2;
+	} else {
+		turned = qfalse;
 	}
+	return turned;
+}
+
+/*
+=================
+CG_VRB_ReachShoulder
+
+A hand holding the saber with the other - either of them: on its hilt, or
+the one it's in - or holding the gun's barrel, that its arm can't reach:
+the shoulder brings it there, the way a real one does. The collarbone comes
+on forward round the chest from where the girdle has it (CG_VRB_Girdle),
+toward where the wrist must go, by up to VRB_REACH_FWD (and no further round
+than VRB_REACH_FWD_MAX in all); then, if that isn't enough, down (or up)
+toward it too - but no lower than VRB_REACH_LOW (a real shoulder hardly
+drops), nor higher than VRB_REACH_HIGH. Each just as far as puts the wrist
+in reach (as near as it comes, if nothing does), as much of it as the hand
+holds it (share: eased as it takes hold and lets go, and as the hands
+change over, CG_VRB_ReachShare).
+So it holds the hilt where it took hold of it: it doesn't fall short of it,
+and back, with every step a run's shoulders take (the body leaning in is
+slower - and stops at your eyes, CG_VRB_UpdateLean). Every pass, from the
+girdle: nothing kept. qtrue: the arm's bones have moved (read them again) -
+the collarbone turned this far (radians).
+=================
+*/
+#define VRB_REACH_FWD		40.0f	// degrees the collarbone comes on forward at most for the hand to reach (past the girdle)...
+#define VRB_REACH_FWD_MAX	50.0f	// ...no further round than this from straight out to the side, in all...
+#define VRB_REACH_LOW		-15.0f	// ...and then down no lower than this (degrees from level)...
+#define VRB_REACH_HIGH		45.0f	// ...or up no higher than this
+
+static qboolean CG_VRB_ReachShoulder( centity_t *cent, int h, const vrbChest_t *ch, const vec3_t S, const vec3_t Wt, float reach,
+	float share, float *turned ) {
+	vrbBone_t clav;
+	vrbMat_t E, T;
+	mdxaBone_t m;
+	vec3_t out, r, w, r1;
+	float rl, wl, c, a0, b0, aw, bw, wf, da, a1, b1, q, A, B, R, k;
+
+	// (the girdle turned both this pass - so they can be turned, and are put
+	// back next pass, CG_VRB_ResetArms)
+	if ( !( share > 0.0f ) || !vrb.girdleOn[h] || !CG_VRB_Bone( cent, vrbClavicle[h], 1, &clav ) ) {
+		return qfalse;
+	}
+	VectorScale( ch->L, ( h == VR_HAND_RIGHT ) ? -1.0f : 1.0f, out );
+	VectorSubtract( S, clav.origin, r );
+	VectorSubtract( Wt, clav.origin, w );
+	rl = VectorNormalize( r );
+	wl = VectorNormalize( w );
+	if ( !( rl > 0.0f ) || !( wl > 0.0f ) ) {
+		return qfalse;
+	}
+	// it reaches the wrist from round within the angle whose cosine is c of
+	// the way to it (none does: c >= 1)
+	c = ( rl * rl + wl * wl - reach * reach ) / ( 2.0f * rl * wl );
+	// both in the chest's terms: round from straight out to the side toward the
+	// front, and up from level
+	a0 = atan2f( DotProduct( r, ch->F ), DotProduct( r, out ) );
+	b0 = asinf( Com_Clamp( -1.0f, 1.0f, DotProduct( r, ch->U ) ) );
+	aw = atan2f( DotProduct( w, ch->F ), DotProduct( w, out ) );
+	bw = asinf( Com_Clamp( -1.0f, 1.0f, DotProduct( w, ch->U ) ) );
+	wf = sqrtf( Square( DotProduct( w, ch->F ) ) + Square( DotProduct( w, out ) ) );	// (off straight up or down this much)
+
+	// Forward first, round toward it at its height, as far as reaches it -
+	// right round to it if that doesn't. Never back, nor for a wrist straight
+	// across (forward or back, it'd have to choose) or straight up or down.
+	da = atan2f( sinf( aw - a0 ), cosf( aw - a0 ) );
+	a1 = a0;
+	if ( da > 0.0f ) {
+		const float room = Q_min( share * DEG2RAD( VRB_REACH_FWD ), DEG2RAD( VRB_REACH_FWD_MAX ) - a0 ) *
+			VRB_SmoothStep( 0.0f, DEG2RAD( 20.0f ), (float)M_PI - da ) * VRB_SmoothStep( 0.05f, 0.2f, wf );
+		q = ( c - sinf( b0 ) * sinf( bw ) ) / Q_max( 1e-4f, cosf( b0 ) * cosf( bw ) );
+		a1 = a0 + Com_Clamp( 0.0f, Q_max( 0.0f, Q_min( da, room ) ), ( q >= 1.0f ) ? da : da - acosf( Q_max( -1.0f, q ) ) );
+	}
+	// Then down (or up) toward it, round there, as far as it still has to (to
+	// the height nearest it, if nothing reaches it) - eased out for a wrist
+	// round past square to it at its own height: over the top or under, it'd
+	// have to choose
+	A = cosf( bw ) * cosf( a1 - aw );
+	B = sinf( bw );
+	R = sqrtf( A * A + B * B );
+	b1 = b0;
+	if ( R > 0.0f ) {
+		const float bs = atan2f( B, A );
+		const float lo = b0 - share * Q_max( 0.0f, b0 - DEG2RAD( VRB_REACH_LOW ) );
+		const float hi = b0 + share * Q_max( 0.0f, DEG2RAD( VRB_REACH_HIGH ) - b0 );
+		const float side = VRB_SmoothStep( 0.0f, 0.2f, cosf( a1 - aw ) );
+		k = ( c >= R ) ? 0.0f : acosf( Q_max( -1.0f, c / R ) );
+		if ( b0 > bs + k ) {
+			b1 = bs + k;
+		} else if ( b0 < bs - k ) {
+			b1 = bs - k;
+		}
+		b1 = b0 + ( Com_Clamp( lo, hi, b1 ) - b0 ) * ( side + ( 1.0f - side ) * VRB_SmoothStep( 0.05f, 0.2f, fabsf( B ) ) );
+	}
+	if ( a1 == a0 && b1 == b0 ) {
+		return qfalse;
+	}
+	// the collarbone so: turned there the least from where the girdle has it
+	VectorScale( out, cosf( b1 ) * cosf( a1 ), r1 );
+	VectorMA( r1, cosf( b1 ) * sinf( a1 ), ch->F, r1 );
+	VectorMA( r1, sinf( b1 ), ch->U, r1 );
+	VRB_Arc( r, r1, E );
+	VRB_Mul( E, vrb.girdleTurn[h], T );
+	CG_VRB_ModelTurn( cent, T, clav.origin, &m );
+	trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbClavicle[h], &m );
+	trap->ext.VR_G2SetBoneTransform( cent->ghoul2, 0, vrbArmBones[h][VRB_UPPER], &m );
+	*turned = acosf( Com_Clamp( -1.0f, 1.0f, DotProduct( r, r1 ) ) );
+	return qtrue;
+}
+
+/*
+=================
+CG_VRB_ReachShare
+
+How much a hand's shoulder may come on to reach (CG_VRB_ReachShoulder): one
+on the hilt (or the gun's barrel) as much as it holds it; the hand the saber
+is in as much as the other holds its hilt. Eased (with time: both eyes the
+same) - so the hands changing over, the hand you use taking the lead or
+passing the saber over, never moves a hand or shoulder all at once.
+=================
+*/
+#define VRB_REACH_SHARE_EASE	0.15f	// seconds to come on all the way, or go
+
+static float CG_VRB_ReachShare( int h, const vrbGrip_t *grip, qboolean commit ) {
+	float want = 0.0f, cur, step;
+
+	if ( grip->kind == VRB_GRIP_HILT ) {
+		want = grip->blend;
+	} else if ( grip->kind == VRB_GRIP_SABER && vrb.twoHandArms && vrb.twoHandTime == cg.time && h != vrb.twoHandOff ) {
+		want = vrb.twoHandEase;
+	}
+	want = ( want > 0.0f ) ? Q_min( want, 1.0f ) : 0.0f;	// (not a number: none)
+	if ( cg.time - vrb.reachShareTime[h] > 500 || cg.time < vrb.reachShareTime[h] ) {
+		cur = want;	// (afresh)
+	} else {
+		step = ( cg.time - vrb.reachShareTime[h] ) * 0.001f / VRB_REACH_SHARE_EASE;
+		cur = vrb.reachShare[h] + Com_Clamp( -step, step, want - vrb.reachShare[h] );
+	}
+	if ( commit ) {
+		vrb.reachShare[h] = cur;
+		vrb.reachShareTime[h] = cg.time;
+	}
+	return cur;
 }
 
 // The hand's twist about the forearm (in D, the turn at the wrist), part of
@@ -4109,7 +4267,7 @@ smoothing/hinge state (only the pass that is finally drawn does).
 =================
 */
 static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int h, int convention,
-	const vrbChest_t *ch, qboolean commit, const vrbGrip_t *grip, vrbArmResult_t *res ) {
+	const vrbChest_t *ch, qboolean commit, const vrbGrip_t *grip, float share, vrbArmResult_t *res ) {
 	vrbBone_t b[VRB_NUM_ARM_BONES];
 	qboolean have[VRB_NUM_ARM_BONES];
 	vec3_t gripO, gA[3], gH[3];
@@ -4117,12 +4275,14 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	vec3_t F0[3], F1[3], want[3], cur[3];
 	vrbMat_t Y0, Y, Q1, A, X;
 	vec3_t holdO, holdDir, sentDir;
-	float a, len2, d, dmin, dmax, cosA, sinA, w, pitch, handLen = 0.0f, letGo;
-	qboolean haveHinge = qfalse, anatomy = qfalse, inFist, wristTurns;
+	float a, len2, d, dmin, dmax, cosA, sinA, w, pitch, handLen = 0.0f, letGo, turned = 0.0f;
+	qboolean haveHinge = qfalse, anatomy = qfalse, inFist, wristTurns, reached = qfalse;
 	int i;
 
 	memset( res, 0, sizeof( *res ) );
 
+again:
+	anatomy = qfalse;
 	for ( i = 0; i < VRB_NUM_ARM_BONES; i++ ) {
 		have[i] = CG_VRB_Bone( cent, vrbArmBones[h][i], convention, &b[i] );
 	}
@@ -4337,8 +4497,20 @@ static qboolean CG_VRB_SolveArm( centity_t *cent, const vrClientState_t *vr, int
 	}
 	dmin = fabsf( a - len2 ) + 0.02f * ( a + len2 );
 	dmax = 0.995f * ( a + len2 );
-	res->reachExcess = d - dmax;
-	VectorCopy( u, res->reachDir );
+	if ( !reached ) {
+		// (as far as the arm alone reaches: the body leans in for the rest, CG_VRB_UpdateLean)
+		res->reachExcess = d - dmax;
+		VectorCopy( u, res->reachDir );
+		res->reachDist = d;
+		// a hand holding the saber with the other (or the gun's barrel), out
+		// of the arm's reach: the shoulder brings it there, the arm worked out
+		// again from there
+		if ( d > dmax && CG_VRB_ReachShoulder( cent, h, ch, S, Wt, dmax, share, &turned ) ) {
+			reached = qtrue;
+			res->reachTurn = RAD2DEG( turned );
+			goto again;
+		}
+	}
 	d = Com_Clamp( dmin, dmax, d );
 	VectorMA( S, d, u, Wt );
 	cosA = Com_Clamp( -1.0f, 1.0f, ( a * a + d * d - len2 * len2 ) / ( 2.0f * a * d ) );
@@ -4669,8 +4841,8 @@ static int CG_VRB_SolveArms( centity_t *cent, const vrClientState_t *vr, int con
 		} else {
 			CG_VRB_Controller( vr, h, hand, ax );
 		}
-		CG_VRB_Girdle( cent, h, &ch, hand, commit );
-		if ( CG_VRB_SolveArm( cent, vr, h, convention, &ch, commit, &grip, &res[h] ) ) {
+		vrb.girdleOn[h] = CG_VRB_Girdle( cent, h, &ch, hand, commit );
+		if ( CG_VRB_SolveArm( cent, vr, h, convention, &ch, commit, &grip, CG_VRB_ReachShare( h, &grip, commit ), &res[h] ) ) {
 			n++;
 		}
 	}
@@ -4697,13 +4869,34 @@ static void CG_VRB_ReportGrip( centity_t *cent, vrbArmResult_t res[2] ) {
 	}
 }
 
+// What a hand asks the body's lean to be, it leaning in by l (up: the hand
+// from its shoulder as the body stands upright; its arm reaching this far):
+// as much as brings it into reach (leaning in by x brings it about x*f
+// closer) - having its say as far as it reaches forward then: none to the
+// side or down (leaning in wouldn't bring it nearer), all of it from 0.4 of
+// the way forward, eased in between (and never more than at 0.3 of it).
+static float VRB_LeanAsk( const vec3_t up, float reach, const vec3_t fwd, float l ) {
+	vec3_t v;
+	float d, f;
+
+	VectorMA( up, -l, fwd, v );
+	d = VectorNormalize( v );
+	f = DotProduct( v, fwd );
+	return VRB_SmoothStep( 0.2f, 0.4f, f ) * ( l + ( d - reach ) / Q_max( f, 0.3f ) );
+}
+
 // When a hand can't reach forward far enough, the body leans in for the
 // next frames (up to having its eyes at yours), instead of the hand falling
-// short of what it holds; with reach to spare it leans back out.
+// short of what it holds; with reach to spare it leans back out. It leans in
+// as far as settles what the hands ask for (VRB_LeanAsk: the most either
+// does, none upright) - worked out from the shoulders as they'd be upright
+// (the lean taken back off): where it settles doesn't change as it leans in,
+// so it eases there steadily, at any frame rate - not in one frame and out
+// the next.
 static void CG_VRB_UpdateLean( vrbArmResult_t res[2], float bodyYaw ) {
-	vec3_t fwd;
-	float want = -1e6f, f;
-	int h;
+	vec3_t fwd, up[2];
+	float reach[2], lo, hi, mid, ask;
+	int h, n = 0, i, k;
 
 	if ( vrb.leanSetTime == cg.time ) {
 		return;		// (second eye)
@@ -4711,14 +4904,40 @@ static void CG_VRB_UpdateLean( vrbArmResult_t res[2], float bodyYaw ) {
 	vrb.leanSetTime = cg.time;
 	VectorSet( fwd, cosf( DEG2RAD( bodyYaw ) ), sinf( DEG2RAD( bodyYaw ) ), 0.0f );
 	for ( h = 0; h < 2; h++ ) {
-		f = res[h].solved ? DotProduct( res[h].reachDir, fwd ) : 0.0f;
-		if ( f > 0.3f ) {
-			// leaning in by x brings the wrist target about x*f closer
-			want = Q_max( want, res[h].reachExcess / f );
+		if ( !res[h].solved ) {
+			continue;
+		}
+		VectorScale( res[h].reachDir, res[h].reachDist, up[n] );
+		VectorMA( up[n], vrb.lean, fwd, up[n] );
+		reach[n] = res[h].reachDist - res[h].reachExcess;
+		n++;
+	}
+	// how much more than l the hands ask for, leaning in by l: where that's
+	// none, it settles (asked for less the further it leans in)
+#define VRB_LEAN_PAST( l, out ) { ( out ) = 0.0f; for ( k = 0; k < n; k++ ) { ( out ) = Q_max( ( out ), VRB_LeanAsk( up[k], reach[k], fwd, ( l ) ) ); } ( out ) -= ( l ); }
+	lo = 0.0f;
+	hi = Q_max( 0.0f, cg_vrBodyBack.value );
+	VRB_LEAN_PAST( lo, ask );
+	if ( !( ask > 0.0f ) ) {
+		vrb.leanTarget = 0.0f;	// (upright: none asks for more)
+		return;
+	}
+	VRB_LEAN_PAST( hi, ask );
+	if ( ask >= 0.0f ) {
+		vrb.leanTarget = hi;	// (eyes at yours: as far as it goes)
+		return;
+	}
+	for ( i = 0; i < 16; i++ ) {
+		mid = 0.5f * ( lo + hi );
+		VRB_LEAN_PAST( mid, ask );
+		if ( ask > 0.0f ) {
+			lo = mid;
+		} else {
+			hi = mid;
 		}
 	}
-	// measured with this frame's lean already in (want < 0: reach to spare)
-	vrb.leanTarget = ( want > -1e5f ) ? Com_Clamp( 0.0f, Q_max( 0.0f, cg_vrBodyBack.value ), vrb.lean + want ) : 0.0f;
+#undef VRB_LEAN_PAST
+	vrb.leanTarget = 0.5f * ( lo + hi );
 }
 
 // Leaning in eases toward what the arms asked for last frame (as far as the
@@ -4757,9 +4976,10 @@ static void CG_VRB_LogArms( vrbArmResult_t res[2] ) {
 			Q_strncpyz( text[h], "-", sizeof( text[h] ) );
 			continue;
 		}
-		Com_sprintf( text[h], sizeof( text[h] ), "elbow %+.2f, wrist %+.0f %+.0f, turned %+.0f, shoulder up %.0f fwd %+.0f",
+		Com_sprintf( text[h], sizeof( text[h] ), "elbow %+.2f, wrist %+.0f %+.0f, turned %+.0f, shoulder up %.0f fwd %+.0f%s",
 			res[h].elbowUp, res[h].wristFlex, res[h].wristRadial, res[h].pronation,
-			RAD2DEG( vrb.girdle[h][0] ), RAD2DEG( vrb.girdle[h][1] ) );
+			RAD2DEG( vrb.girdle[h][0] ), RAD2DEG( vrb.girdle[h][1] ),
+			( res[h].reachTurn > 0.0f ) ? va( " (on %.0f more to reach what it holds)", res[h].reachTurn ) : "" );
 	}
 	CG_VRB_Log( "arms: right %s | left %s\n", text[VR_HAND_RIGHT], text[VR_HAND_LEFT] );
 }
