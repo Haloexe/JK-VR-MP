@@ -302,7 +302,8 @@ typedef struct vrbState_s {
 	float		twoHandSign;		// -1: it holds it the other way round to the blade (this hold)
 	float		twoHandSide;		// +1: it holds it above the first hand (toward the blade), -1 below
 	float		twoHandT;			// where along the hilt it holds it (from the first hand, toward the blade)
-	vec3_t		twoHandGrip[3];		// how it lies round the hilt: its controller's axes in the hilt's frame
+	vec3_t		twoHandGrip[3];		// how the hand lies round the hilt: its axes in the hilt's frame
+	vec3_t		twoHandCtrl[3];		// ...its controller's own then (it turns on the hilt as that does since: CG_VRB_HiltHold)
 	float		twoHandBlend;		// 0..1: how far the hold has taken the hands over (eases in and out)
 	qboolean	twoHandPass;		// the first hand's grip squeezed to pass it over: it goes once the hands have settled
 									// (a new hold starts with none)
@@ -2953,6 +2954,47 @@ static void CG_VRB_HiltFrame( const vrbGrip_t *grip, vec3_t axM[3], const vec3_t
 	CrossProduct( e[0], e[1], e[2] );
 }
 
+// The other hand round the hilt (out), in the hilt's frame e: as it lay on it
+// as it took hold (vrb.twoHandGrip), turned about the hilt as its controller
+// (ax) has turned about it since (vrb.twoHandCtrl: how that lay then). So it
+// turns on the hilt as your hand does - not with the hand holding the saber as
+// that turns the hilt in its fist, which dragged its elbow in across the chest
+// with a wrist rolled one way and the other hand still: two controllers aren't
+// one hilt.
+static void CG_VRB_HiltHold( vec3_t e[3], vec3_t ax[3], vec3_t out[3] ) {
+	vrbMat_t R;
+	vec3_t was, c, t;
+	float sn = 0.0f, cs = 0.0f, fit;
+	int i, k;
+
+	for ( i = 0; i < 3; i++ ) {
+		VectorClear( out[i] );
+		VectorClear( was );
+		for ( k = 0; k < 3; k++ ) {
+			VectorMA( out[i], vrb.twoHandGrip[i][k], e[k], out[i] );
+			VectorMA( was, vrb.twoHandCtrl[i][k], e[k], was );
+		}
+		// (the turn about the hilt that best takes its controller as it was onto it as it is)
+		CrossProduct( was, ax[i], c );
+		sn += DotProduct( c, e[0] );
+		cs += DotProduct( was, ax[i] ) - DotProduct( was, e[0] ) * DotProduct( ax[i], e[0] );
+	}
+	// (the fit is 1 for a turn about the hilt alone; it weakens as the
+	// controller turns end over end against the hilt, where its turn about
+	// the hilt means less and less and swings right round in a few degrees:
+	// there the hand turns less, back to how it took hold, never whipping
+	// round)
+	fit = VRB_SmoothStep( 0.3f, 0.7f, 0.5f * sqrtf( sn * sn + cs * cs ) );
+	if ( !( fit > 0.0f ) ) {
+		return;
+	}
+	VRB_AxisAngle( e[0], fit * atan2f( sn, cs ), R );
+	for ( i = 0; i < 3; i++ ) {
+		VRB_Apply( R, out[i], t );
+		VectorCopy( t, out[i] );
+	}
+}
+
 // A frame a fraction f of the way from a to b (f 0: a).
 static void VRB_FrameBlend( vec3_t a[3], vec3_t b[3], float f, vec3_t out[3] ) {
 	vec3_t fwd, up;
@@ -3030,12 +3072,7 @@ static void CG_VRB_HandOver( centity_t *cent, const vrClientState_t *vr, int fro
 	// ...and how it lies round it (as drawn, settled onto it: CG_VRB_TwoHand)
 	CG_VRB_Grip( cent, from, &gripF );
 	CG_VRB_HiltFrame( &gripF, axF, vrb.twoHandDir, e );
-	for ( i = 0; i < 3; i++ ) {
-		VectorClear( held[i] );
-		for ( k = 0; k < 3; k++ ) {
-			VectorMA( held[i], vrb.twoHandGrip[i][k], e[k], held[i] );
-		}
-	}
+	CG_VRB_HiltHold( e, ax, held );
 	vrb.letGo[to].time = 0;
 	vrb.hold[0].hand = to;
 	vrb.hold[0].sign = vrb.twoHandSign;
@@ -3182,9 +3219,11 @@ static void CG_VRB_TakeLead( centity_t *cent, const vrClientState_t *vr, int fro
 	CG_VRB_Controller( vr, to, pos, ax );
 	CG_VRB_Grip( cent, to, &grip );
 	CG_VRB_HiltFrame( &grip, ax, vrb.twoHandDir, e );
+	CG_VRB_Controller( vr, from, pos, ax );
 	for ( i = 0; i < 3; i++ ) {
 		for ( k = 0; k < 3; k++ ) {
 			vrb.twoHandGrip[i][k] = DotProduct( lay[i], e[k] );
+			vrb.twoHandCtrl[i][k] = DotProduct( ax[i], e[k] );
 		}
 	}
 	CG_VRB_BoltHands( cent );		// (the saber hangs on the hand you use from now on)
@@ -3367,8 +3406,8 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 		}
 
 		// The other hand grips the hilt where it took hold of it: it doesn't
-		// slide along it or turn round it after your hand (let go and take
-		// hold again to move it).
+		// slide along it (let go and take hold again to move it); it turns
+		// round it as its controller does (CG_VRB_HiltHold).
 		if ( !was ) {
 			vec3_t e[3];
 			int k;
@@ -3377,7 +3416,7 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 			CG_VRB_HiltFrame( &gripM, axM, dir, e );
 			for ( i = 0; i < 3; i++ ) {
 				for ( k = 0; k < 3; k++ ) {
-					vrb.twoHandGrip[i][k] = DotProduct( axO[i], e[k] );
+					vrb.twoHandGrip[i][k] = vrb.twoHandCtrl[i][k] = DotProduct( axO[i], e[k] );
 				}
 			}
 		}
@@ -3472,18 +3511,12 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 	}
 	if ( vrb.twoHandBlend > 0.0f ) {
 		vec3_t e[3], held[3];
-		int k;
 		vrb.twoHandEase = VRB_SmoothStep( 0.0f, 1.0f, vrb.twoHandBlend );
 		VectorScale( posO, 1.0f - vrb.twoHandEase, vrb.twoHandHand );
 		VectorMA( vrb.twoHandHand, vrb.twoHandEase, vrb.twoHandPoint, vrb.twoHandHand );
 		// the hand as it lies round the hilt, the controller eased onto that
 		CG_VRB_HiltFrame( &gripM, axM, vrb.twoHandDir, e );
-		for ( i = 0; i < 3; i++ ) {
-			VectorClear( held[i] );
-			for ( k = 0; k < 3; k++ ) {
-				VectorMA( held[i], vrb.twoHandGrip[i][k], e[k], held[i] );
-			}
-		}
+		CG_VRB_HiltHold( e, axO, held );
 		VRB_FrameBlend( axO, held, vrb.twoHandEase, vrb.twoHandAxis );
 		vrb.twoHandArms = qtrue;
 	}

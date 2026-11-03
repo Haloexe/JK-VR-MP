@@ -441,8 +441,10 @@ and while you hold the grip the saber is in both hands:
     the more it follows the line between them, so pushing with one hand
     and pulling with the other levers it round like a real two-handed hilt.
   * Your second hand grips the hilt where it took hold: it doesn't slide
-    along it or turn round it. To hold it somewhere else, let go and take
-    hold again.
+    along it. It turns round it as your hand turns (the hilt is round) -
+    not as the wrist of the hand you use turns the hilt - so its arm stays
+    where your own arm is. To hold it somewhere else, let go and take hold
+    again.
   * Let go of the grip to let go. Moving your hands about doesn't make it
     slip off: only pulling that hand a long way (about 70 cm) from where it
     holds breaks the hold. Taking hold and letting go settle smoothly over
