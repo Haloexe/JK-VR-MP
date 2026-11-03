@@ -324,7 +324,9 @@ typedef struct vrbState_s {
 	vec3_t		twoHandBladeLocal;	// the blade in the frame of the hand tag it is bolted to (raw axes)
 	vec3_t		twoHandGrip2;		// the other hand's controller grip (world)
 	int			grabZones;			// hands that could take hold of something now (engine)
-	void		*fistG2[2];			// that hand's fingers are closed round a hilt on this instance
+	void		*fistG2[2];			// the instance that hand's bones were last animated on (CG_VRB_SetHand; NULL: the body's)...
+	int			fistState[2];		// ...and how (VRB_HAND_*)
+	qboolean	fistCheck[2];		// ...its hand bone found then (looked at each frame: CG_VRB_SetHand)
 	void		*bonesLoggedG2;		// the log has said which finger bones this model has
 	vec3_t		twoHandFist;		// the way the hilt runs through the other fist, as drawn
 
@@ -1118,6 +1120,7 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 	}
 	vrb.probed = qtrue;
 	vrb.probeRetry = cg.time + 2000;	// (only matters if a hand failed)
+	vrb.fistState[0] = vrb.fistState[1] = -1;	// (a model new to the instance: its hands' bones set afresh, CG_VRB_SetHand)
 	vrb.probeG2 = g2;
 	Q_strncpyz( vrb.probeModel, ci->modelName, sizeof( vrb.probeModel ) );
 	vrb.wristG2 = NULL;
@@ -2020,7 +2023,7 @@ static void CG_VRB_EaseFingers( centity_t *cent, const vrClientState_t *vr ) {
 
 // How far hand h's fingers are closed (VR_FINGER_*) on the body being posed:
 // yours as eased this frame (cg_vrFingers on), another player's as their
-// avatar says. qfalse: the animation has them.
+// avatar says. qfalse: the hand's animation has them (CG_VRB_SetHand).
 static qboolean CG_VRB_HandFingers( int h, float out[VR_NUM_FINGERS] ) {
 	int f;
 
@@ -2779,42 +2782,128 @@ hilt, nothing moving (CG_VRB_TakeLead).
 =================
 */
 
-// A hand's fingers closed round a hilt (as in the dual-saber stance, where
-// both hands hold one), or back to what the body's animation does. Whatever
-// the body is doing - running, jumping, parrying, whose animations open the
-// hand - a hand holding a hilt keeps hold of it.
-static const char *const vrbForearm[2] = { "lradius", "rradius" };	// (the fingers are its children)
+// How a hand's bones are animated on a body holding a saber, while your arms
+// are posed on it: each forearm held in the fist's animation
+// (BOTH_SABERDUAL_STANCE, where both hands hold a hilt) all along; the hand
+// (its bone, its fingers and tag - on this skeleton all the forearm's own
+// children, so they go together - and the forearm's twist bone) closed round
+// a hilt as the fist has it, or open as the body stands (STAND5,
+// CG_VR_BodyAnim; the runs' are the same). The arm is worked out from that
+// forearm (CG_VRB_SolveArm), the same every frame, so the upper arm and
+// forearm don't turn as a hand takes hold or lets go, and the hand turned at
+// the wrist (cg_vrBodyWrist) lands where it's going either way: the fingers
+// close, and the forearm's twist goes a few degrees with them (half the
+// hand's turn, CG_VRB_TwistForearm). (The fist used to go on the forearm
+// only as the hand closed: the stance's forearm lies turned on the upper arm
+// from the body's own, and the arm rolled round in a frame as the other hand
+// took hold of the hilt or let go. Without the wrist turned the forearm
+// still takes the hand's turn as it closes, as it always has.) An arm that
+// isn't posed (its hand not tracked) is the body's own again, its hand still
+// closed if the saber's in it. Any other weapon: the body's animation has
+// its hands - a gun held as the game holds it.
+enum {
+	VRB_HAND_BODY,		// as the body's animation has them (nothing of ours)
+	VRB_HAND_OPEN,		// the forearm in the fist, the hand open
+	VRB_HAND_CLOSED,	// the forearm and hand in the fist
+	VRB_HAND_HOLDS		// the arm the body's, the hand closed round the saber in it
+};
+static const char *const vrbForearm[2] = { "lradius", "rradius" };
 
-static void CG_VRB_Fist( centity_t *cent, int h, qboolean on ) {
-	if ( on ) {
-		const animation_t *anims = bgAllAnims[cent->localAnimIndex].anims;
-		const animation_t *anim = &anims[BOTH_SABERDUAL_STANCE];
-		if ( !anim->numFrames ) {
-			anim = &anims[BOTH_SABERSTAFF_STANCE];
+static void CG_VRB_SetHand( centity_t *cent, int h, int state ) {
+	const animation_t *anims, *fist = NULL, *open = NULL;
+	int i;
+
+	if ( !cent->ghoul2 ) {
+		return;
+	}
+	if ( state == VRB_HAND_BODY ) {
+		if ( vrb.fistG2[h] != cent->ghoul2 ) {
+			return;		// (nothing of ours on this one: it was handed back)
 		}
-		if ( !cent->ghoul2 || !anim->numFrames ) {
+	} else {
+		anims = bgAllAnims[cent->localAnimIndex].anims;
+		fist = &anims[BOTH_SABERDUAL_STANCE];
+		open = &anims[anims[BOTH_STAND5].numFrames ? BOTH_STAND5 : BOTH_STAND1];
+		if ( !fist->numFrames ) {
+			fist = &anims[BOTH_SABERSTAFF_STANCE];
+		}
+		if ( !fist->numFrames ) {
+			CG_VRB_SetHand( cent, h, VRB_HAND_BODY );
 			return;
 		}
-		// (every frame: a new model may have taken the old one's instance)
-		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], anim->firstFrame, anim->firstFrame + 1,
-			BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, anim->firstFrame, 0 );
-		vrb.fistG2[h] = cent->ghoul2;
-	} else if ( vrb.fistG2[h] && vrb.fistG2[h] == cent->ghoul2 ) {
-		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], 0, 1, 0, 1.0f, cg.time, -1, 0 );
-		vrb.fistG2[h] = NULL;
+		if ( state == VRB_HAND_OPEN && !open->numFrames ) {
+			state = VRB_HAND_CLOSED;
+		}
+		if ( state != VRB_HAND_HOLDS ) {
+			// (every frame, as ever: a new model may have taken the old one's instance)
+			trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], fist->firstFrame, fist->firstFrame + 1,
+				BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, fist->firstFrame, 0 );
+		}
 	}
+	if ( vrb.fistG2[h] == cent->ghoul2 && vrb.fistState[h] == state ) {
+		// The hand's own bones as they are: set as it changes, not every
+		// frame - but one of them looked at each frame, as the instance may
+		// have been made again where it was (a saber swapped, a skin changed:
+		// the same model) with none of them on it.
+		float frame, speed;
+		int start = -1, end, flags;
+		if ( ( state != VRB_HAND_OPEN && state != VRB_HAND_HOLDS ) || !vrb.fistCheck[h] ||
+			( trap->G2API_GetBoneAnim( cent->ghoul2, vrbHandBones[h][0], cg.time, &frame, &start, &end, &flags, &speed,
+				cgs.gameModels, 0 ) && start == ( ( state == VRB_HAND_OPEN ) ? open : fist )->firstFrame ) ) {
+			return;
+		}
+	}
+	if ( state == VRB_HAND_BODY || state == VRB_HAND_HOLDS ) {
+		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearm[h], 0, 1, 0, 1.0f, cg.time, -1, 0 );
+	}
+	// the forearm's twist bone: open with the hand (it twists with it), else the forearm's (the fist, or the body's)
+	if ( state == VRB_HAND_OPEN ) {
+		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearmTwist[h], open->firstFrame, open->firstFrame + 1,
+			BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, open->firstFrame, 0 );
+	} else {
+		trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbForearmTwist[h], 0, 1, 0, 1.0f, cg.time, -1, 0 );
+	}
+	for ( i = 0; i < VRB_MAX_HAND_BONES; i++ ) {
+		if ( state == VRB_HAND_OPEN || state == VRB_HAND_HOLDS ) {
+			const animation_t *a = ( state == VRB_HAND_OPEN ) ? open : fist;
+			const qboolean found = trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbHandBones[h][i], a->firstFrame, a->firstFrame + 1,
+				BONE_ANIM_OVERRIDE_FREEZE, 1.0f, cg.time, a->firstFrame, 0 );
+			if ( !i ) {
+				vrb.fistCheck[h] = found;
+			}
+		} else {
+			// (none of its own: the forearm's - the fist, or the body's)
+			trap->G2API_SetBoneAnim( cent->ghoul2, 0, vrbHandBones[h][i], 0, 1, 0, 1.0f, cg.time, -1, 0 );
+		}
+	}
+	vrb.fistG2[h] = ( state == VRB_HAND_BODY ) ? NULL : cent->ghoul2;
+	vrb.fistState[h] = state;
+}
+
+// ...a hand's bones back to the body's animation (no arm posed on it).
+static void CG_VRB_Unfist( centity_t *cent, int h ) {
+	CG_VRB_SetHand( cent, h, VRB_HAND_BODY );
 }
 
 // Both hands, before the arms are solved: a fist round whatever hilt each
-// holds (the other one round the first hand's too, while it holds it).
-static void CG_VRB_HandPoses( centity_t *cent ) {
+// holds (the other one round the first hand's too, while it holds it), or
+// open; an arm that isn't posed (its hand not tracked) as the body has it.
+static void CG_VRB_HandPoses( centity_t *cent, const vrClientState_t *vr ) {
 	int h;
 
 	for ( h = 0; h < 2; h++ ) {
 		vrbGrip_t grip;
+		if ( cent->currentState.weapon != WP_SABER ) {
+			CG_VRB_Unfist( cent, h );
+			continue;
+		}
 		CG_VRB_Grip( cent, h, &grip );
-		CG_VRB_Fist( cent, h, (qboolean)( grip.kind == VRB_GRIP_SABER ||
-			( h == vrb.twoHandOff && vrb.twoHand && vrb.twoHandTime == cg.time ) ) );
+		if ( !vr->handValid[h] ) {
+			CG_VRB_SetHand( cent, h, ( grip.kind == VRB_GRIP_SABER ) ? VRB_HAND_HOLDS : VRB_HAND_BODY );
+		} else {
+			CG_VRB_SetHand( cent, h, ( grip.kind == VRB_GRIP_SABER ||
+				( h == vrb.twoHandOff && vrb.twoHand && vrb.twoHandTime == cg.time ) ) ? VRB_HAND_CLOSED : VRB_HAND_OPEN );
+		}
 	}
 }
 
@@ -4259,8 +4348,9 @@ static void CG_VRB_TwistForearm( centity_t *cent, int h, vrbMat_t D, const vec3_
 =================
 CG_VRB_SolveArm
 
-Two-bone IK for one arm, in the world, then the wrist. Reads the arm as the
-game animated it (overrides reset), works out where the hand has to be and
+Two-bone IK for one arm, in the world, then the wrist. Reads the arm as
+animated (overrides reset; a saber's forearm and hand as CG_VRB_SetHand
+holds them), works out where the hand has to be and
 how it has to be turned for what it holds, puts the wrist there with the
 upper arm and forearm, and turns the hand at the wrist. "commit" keeps the
 smoothing/hinge state (only the pass that is finally drawn does).
@@ -5115,7 +5205,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 		CG_VRB_BladeInertia( cent, vr );
 		CG_VRB_EaseFingers( cent, vr );
 	}
-	CG_VRB_HandPoses( cent );
+	CG_VRB_HandPoses( cent, vr );
 
 	if ( vrb.convention < 0 && vrb.checkTime != cg.time ) {
 		vrb.checkTime = cg.time;
@@ -6275,8 +6365,8 @@ static void CG_VRB_PoseOther( centity_t *cent, const vrAvatar_t *world ) {
 		CG_VRB_Arms( cent, &vr, vrb.avatar.bodyYaw );
 	} else {
 		CG_VRB_ResetArms( cent->ghoul2 );
-		CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );
-		CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
+		CG_VRB_Unfist( cent, VR_HAND_LEFT );
+		CG_VRB_Unfist( cent, VR_HAND_RIGHT );
 		CG_VRB_UnboltHands( cent );	// (no hands to hold them: as the game holds them)
 	}
 	vrbRemote = NULL;
@@ -6500,8 +6590,8 @@ void CG_VR_BodyArms( centity_t *cent ) {
 		CG_VRB_LogHands( cent );
 	} else {
 		CG_VRB_ResetArms( cent->ghoul2 );
-		CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );	// (no hands to hold the hilt with)
-		CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
+		CG_VRB_Unfist( cent, VR_HAND_LEFT );	// (no hands to hold the hilt with)
+		CG_VRB_Unfist( cent, VR_HAND_RIGHT );
 		CG_VRB_UnboltHands( cent );					// (...nor the sabers: as the game holds them)
 		vrb.twoHand = vrb.twoHandArms = qfalse;
 		vrb.twoHandBlend = 0.0f;
@@ -8331,8 +8421,8 @@ static void CG_VRB_Restore( centity_t *cent ) {
 	if ( !cent->ghoul2 ) {
 		return;
 	}
-	CG_VRB_Fist( cent, VR_HAND_LEFT, qfalse );
-	CG_VRB_Fist( cent, VR_HAND_RIGHT, qfalse );
+	CG_VRB_Unfist( cent, VR_HAND_LEFT );
+	CG_VRB_Unfist( cent, VR_HAND_RIGHT );
 	CG_VRB_UnboltHands( cent );
 	if ( vrb.armsG2 == cent->ghoul2 ) {
 		CG_VRB_ResetArms( cent->ghoul2 );
