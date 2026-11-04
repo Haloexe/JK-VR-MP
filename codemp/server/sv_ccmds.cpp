@@ -316,6 +316,7 @@ static void SV_MapRestart_f( void ) {
 	// OpenJK VR: nobody's arms carry over the restart (the game sets them again)
 	for ( i = 0; i < sv_maxclients->integer; i++ ) {
 		svs.clients[i].vrAvatar.valid = qfalse;
+		Com_Memset( &svs.clients[i].vrArms, 0, sizeof( svs.clients[i].vrArms ) );
 	}
 
 	SV_RestartGame();

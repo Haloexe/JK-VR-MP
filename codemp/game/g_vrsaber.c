@@ -87,6 +87,7 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace );	// (g_missile.c)
 #define VR_SABER_VIEW_XY	16.0f	// the camera's smoothing can't take it further than this sideways...
 #define VR_SABER_VIEW_Z		48.0f	// ...or up and down from the eye
 #define VR_GAZE_FRESH		500		// ms: where a VR player's headset was last seen to look stands for this long (G_VRHeadGaze)
+#define VR_AVATAR_FRESH		500		// ms: an avatar handed over this lately is still theirs (G_VRSaberAvatar; the engine's too)
 #define VR_SABER_FAST		1.5f	// units/ms: faster than a player or a hand really moves
 #define VR_SABER_TELEPORT	48.0f	// the camera jumping this much more than VR_SABER_FAST: a teleport
 #define VR_SABER_JUMP		8.0f	// a blade jumping this much more than VR_SABER_FAST: a glitch
@@ -691,6 +692,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		vrsGunLeft[clientNum] = qfalse;
 		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
 		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
+		G_VRArmsClientReset( clientNum );	// (and their arms as the other builds are sent them: g_vrarms.c)
 	}
 }
 
@@ -742,6 +744,8 @@ static qboolean VRS_AvatarShown( gentity_t *ent ) {
 }
 
 static float		vrsBodyYaw[MAX_CLIENTS];	// the body's yaw in the avatar handed to the engine
+static vrAvatar_t	vrsAvatar[MAX_CLIENTS];		// ...that avatar (g_vrarms.c: their arms for the other builds)...
+static int			vrsAvatarTime[MAX_CLIENTS];	// ...and when it was handed over (level.time)
 
 // Which way a VR player's body faces, as everyone draws it (their avatar).
 qboolean G_VRSaberBodyYaw( int clientNum, float *yaw ) {
@@ -757,6 +761,17 @@ static void VRS_ClearAvatar( int clientNum ) {
 		trap->ext.VR_SetAvatar( clientNum, NULL );
 		vrsAvatarSet[clientNum] = qfalse;
 	}
+}
+
+// The avatar a VR player's other players are sent (offsets from their
+// origin), if one was handed over lately - within the engine's half second.
+qboolean G_VRSaberAvatar( int clientNum, vrAvatar_t *out ) {
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS || !vrsAvatarSet[clientNum] ||
+		level.time - vrsAvatarTime[clientNum] > VR_AVATAR_FRESH || level.time < vrsAvatarTime[clientNum] ) {
+		return qfalse;
+	}
+	*out = vrsAvatar[clientNum];
+	return qtrue;
 }
 
 // Unit vector, or the fallback if it's nonsense.
@@ -910,6 +925,8 @@ static void VRS_TakeAvatar( gentity_t *ent, const vrUserPose_t *pose ) {
 	trap->ext.VR_SetAvatar( clientNum, &a );
 	vrsAvatarSet[clientNum] = qtrue;
 	vrsBodyYaw[clientNum] = a.bodyYaw;
+	vrsAvatar[clientNum] = a;
+	vrsAvatarTime[clientNum] = level.time;
 	vrsGunLeft[clientNum] = (qboolean)( a.hand[VR_HAND_LEFT].grip == VR_GRIP_GUN && a.hand[VR_HAND_RIGHT].grip != VR_GRIP_GUN );
 }
 
@@ -969,6 +986,11 @@ static qboolean VRS_StandingAnim( const gclient_t *cl, int anim ) {
 		return (qboolean)( ( cl->saber[0].readyAnim != -1 && anim == cl->saber[0].readyAnim ) ||
 			( cl->saber[1].readyAnim != -1 && anim == cl->saber[1].readyAnim ) );
 	}
+}
+
+// The same, for the arms the other builds are sent (g_vrarms.c).
+qboolean G_VRSaberStandingAnim( gentity_t *ent, int anim ) {
+	return (qboolean)( ent && ent->client && VRS_StandingAnim( ent->client, anim ) );
 }
 
 // How the model hit tests use (G_UpdateClientAnims) is posed for a VR player

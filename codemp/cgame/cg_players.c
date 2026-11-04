@@ -3976,18 +3976,25 @@ qboolean CG_RagDoll(centity_t *cent, vec3_t forcedAngles)
 }
 
 //set the bone angles of this client entity based on data from the server -rww
+// OpenJK VR: not on a player drawn as their VR body (cg_vrbody.c turns their
+// arms itself; a server sends other builds' games a VR player's arms there,
+// never this one's - sv_snapshot.cpp SV_VRArmsView - but in case); and a bone
+// the server stops naming goes back as the animation has it (the stock game
+// left it turned)
 void CG_G2ServerBoneAngles(centity_t *cent)
 {
 	int i = 0;
 	int bone = cent->currentState.boneIndex1;
 	int flags, up, right, forward;
 	vec3_t boneAngles;
+	const qboolean vrBody = (qboolean)( cent->currentState.number < MAX_CLIENTS && CG_VR_BodyActive( cent ) );
+	int named[4] = { 0, 0, 0, 0 }, k, n;
 
 	VectorCopy(cent->currentState.boneAngles1, boneAngles);
 
 	while (i < 4)
 	{ //cycle through the 4 bone index values on the entstate
-		if (bone)
+		if (bone && !vrBody && bone > 0 && bone < MAX_G2BONES)
 		{ //if it's non-0 then it could have something in it.
 			const char *boneName = CG_ConfigString(CS_G2BONES+bone);
 
@@ -4001,6 +4008,7 @@ void CG_G2ServerBoneAngles(centity_t *cent)
 				up = (cent->currentState.boneOrient>>6)&7; //3 bits from bit 6
 
 				trap->G2API_SetBoneAngles(cent->ghoul2, 0, boneName, boneAngles, flags, up, right, forward, cgs.gameModels, 100, cg.time);
+				named[i] = bone;
 			}
 		}
 
@@ -4024,6 +4032,27 @@ void CG_G2ServerBoneAngles(centity_t *cent)
 
 		i++;
 	}
+
+	// OpenJK VR: a player's bones turned before, not now: unturned
+	for ( k = 0; k < 4 && cent->currentState.number < MAX_CLIENTS; k++ ) {
+		const int was = cent->serverBones[k];
+		if ( !was || was == named[0] || was == named[1] || was == named[2] || was == named[3] ) {
+			continue;
+		}
+		for ( n = 0; n < k; n++ ) {
+			if ( cent->serverBones[n] == was ) {
+				break;	// (done already)
+			}
+		}
+		if ( n == k && cent->ghoul2 ) {
+			const char *boneName = CG_ConfigString( CS_G2BONES + was );
+			if ( boneName && boneName[0] ) {
+				trap->G2API_SetBoneAngles( cent->ghoul2, 0, boneName, vec3_origin, BONE_ANGLES_POSTMULT, POSITIVE_Z, NEGATIVE_Y,
+					POSITIVE_X, cgs.gameModels, 0, cg.time );
+			}
+		}
+	}
+	memcpy( cent->serverBones, named, sizeof( named ) );
 }
 
 /*

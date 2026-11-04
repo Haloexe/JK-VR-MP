@@ -1470,6 +1470,8 @@ qboolean G_SaberModelSetup(gentity_t *ent)
 	int i = 0;
 	qboolean fallbackForSaber = qtrue;
 
+	G_VRArmsModelChanged( ent );	// OpenJK VR: their arms for the other builds follow (g_vrarms.c)
+
 	while (i < MAX_SABERS)
 	{
 		if (ent->client->saber[i].model[0])
@@ -1568,6 +1570,8 @@ void SetupGameGhoul2Model(gentity_t *ent, char *modelname, char *skinName)
 #endif
 	char		GLAName[MAX_QPATH];
 	vec3_t	tempVec = {0,0,0};
+
+	G_VRArmsModelChanged( ent );	// OpenJK VR: their arms for the other builds follow (g_vrarms.c)
 
 	if (strlen(modelname) >= MAX_QPATH )
 	{

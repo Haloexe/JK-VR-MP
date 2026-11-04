@@ -255,6 +255,15 @@ GOOD TO KNOW
   black core (Setup > VR > Saber Colors), and everyone on this build sees
   them; players of the normal game see the nearest stock color. Team games
   still go red and blue. g_vrSaberRGB 0: the stock colors for everyone.
+* Players of the normal game (or any other build) see a VR player's saber
+  where they really hold it, a fist round it, and their arms reaching it -
+  the other hand on the hilt when it holds it - the body above the legs
+  held in one of the game's own poses, facing the way the player does
+  (standing still, the legs stand straight). Knocked down, rolling,
+  flipping, in a saber lock or with the saber away, they see the game's
+  own animations. Players on this build see VR players as they really
+  move either way. g_vrArmsForAll 0 (or the Server page's "Non-VR players
+  see"): the game's saber stance for them, as before.
 * A VR player's blade is judged as they saw the others (lag compensation,
   g_vrSaberUnlag, up to a quarter of a second back), so players further
   away still meet what they swing at; a server close to its players still

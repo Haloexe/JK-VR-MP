@@ -571,6 +571,7 @@ Ghoul2 Insert End
 			svs.clients[i].oldServerTime = sv.time;
 		}
 		svs.clients[i].vrAvatar.valid = qfalse;	// OpenJK VR: nobody's arms carry over to the new map
+		Com_Memset( &svs.clients[i].vrArms, 0, sizeof( svs.clients[i].vrArms ) );	// (nor as other games are sent them)
 	}
 
 	// wipe the entire per-level structure

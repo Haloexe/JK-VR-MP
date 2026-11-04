@@ -530,6 +530,64 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 
 /*
 =============
+SV_VRArmsView
+
+OpenJK VR: a VR player's entity as a client that can't draw their avatar
+(one that reads no svc_vrAvatars: any other build) is sent it - the held
+torso pose and the four arm bones the game worked out for those games
+(ext.VR_SetArmsView, g_vrarms.c). Only this copy changes: the game and the VR
+builds see the player as they are. A pose the game stopped setting is left
+out, its bones then sent unturned (a game keeps a bone turned until it's sent
+other angles for it). The snapshot's own player (ownPs: the client, or whom
+it follows as a spectator) is drawn by that game from the playerstate - its
+own animations and angles, only the bones taken from the entity - so for
+them, too, the pose is left out and the bones are sent unturned.
+=============
+*/
+static qboolean SV_ReadsAvatars( const client_t *client ) {
+	return (qboolean)( client->vrViewer && sv_vrx->integer == VR_POSE_PROTOCOL );
+}
+
+static void SV_VRArmsView( entityState_t *state, qboolean ownPs ) {
+	const client_t *owner;
+	const vrArmsView_t *v;
+	qboolean fresh;
+	int b;
+
+	if ( state->number < 0 || state->number >= sv_maxclients->integer || state->number >= MAX_CLIENTS ) {
+		return;
+	}
+	owner = &svs.clients[state->number];
+	v = &owner->vrArms;
+	if ( !v->set ) {
+		return;
+	}
+	fresh = (qboolean)( !ownPs && svs.time - owner->vrArmsTime <= VR_ARMS_MAX_AGE && svs.time >= owner->vrArmsTime );
+	if ( fresh && v->pose ) {
+		state->legsAnim = v->legsAnim;
+		state->legsFlip = v->legsFlip ? qtrue : qfalse;
+		state->torsoAnim = v->torsoAnim;
+		state->torsoFlip = v->torsoFlip ? qtrue : qfalse;
+		VectorCopy( v->angles, state->apos.trBase );
+	}
+	state->boneIndex1 = v->boneIndex[0];
+	state->boneIndex2 = v->boneIndex[1];
+	state->boneIndex3 = v->boneIndex[2];
+	state->boneIndex4 = v->boneIndex[3];
+	state->boneOrient = v->boneOrient;
+	for ( b = 0; b < VR_ARMS_BONES; b++ ) {
+		float *to = ( b == 0 ) ? state->boneAngles1 : ( b == 1 ) ? state->boneAngles2 : ( b == 2 ) ? state->boneAngles3 :
+			state->boneAngles4;
+		if ( fresh ) {
+			VectorCopy( v->boneAngles[b], to );
+		} else {
+			VectorClear( to );
+		}
+	}
+}
+
+/*
+=============
 SV_BuildClientSnapshot
 
 Decides which entities are going to be visible to the client, and
@@ -632,6 +690,9 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 		ent = SV_GentityNum(entityNumbers.snapshotEntities[i]);
 		state = &svs.snapshotEntities[svs.nextSnapshotEntities % svs.numSnapshotEntities];
 		*state = ent->s;
+		if ( !SV_ReadsAvatars( client ) ) {	// OpenJK VR: a VR player's arms, for a game that can't draw their avatar
+			SV_VRArmsView( state, (qboolean)( state->number == frame->ps.clientNum ) );
+		}
 		svs.nextSnapshotEntities++;
 		// this should never hit, map should always be restarted first in SV_Frame
 		if ( svs.nextSnapshotEntities >= 0x7FFFFFFE ) {
@@ -792,7 +853,7 @@ static void SV_WriteVRAvatars( client_t *client, msg_t *msg ) {
 	int nums[MAX_CLIENTS];
 	int i, count = 0;
 
-	if ( !client->vrViewer || sv_vrx->integer != VR_POSE_PROTOCOL ) {
+	if ( !SV_ReadsAvatars( client ) ) {
 		return;
 	}
 	// a spectator following someone: the snapshot's playerstate is theirs

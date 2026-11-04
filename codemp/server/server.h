@@ -204,6 +204,10 @@ typedef struct client_s {
 	qboolean		vrViewer;
 	vrAvatar_t		vrAvatar;
 	int				vrAvatarTime;
+	// OpenJK VR: its arms as the clients that don't read svc_vrAvatars are
+	// sent them (ext.VR_SetArmsView; svs.time then - SV_VRArmsView)
+	vrArmsView_t	vrArms;
+	int				vrArmsTime;
 	// OpenJK VR: voice chat (vr_voice.h) - this client reads svc_voice (its
 	// userinfo has cl_voiceProtocol); the other players' voice waiting for
 	// its next snapshots, whose, and where they were; how much voice it may

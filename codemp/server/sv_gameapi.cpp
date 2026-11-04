@@ -1766,6 +1766,49 @@ static void SV_VR_SetAvatar( int clientNum, const vrAvatar_t *avatar ) {
 	cl->vrAvatarTime = svs.time;
 }
 
+// OpenJK VR: a player's arms as the clients without the VR build are sent
+// them (NULL: as they are), for their snapshots (SV_VRArmsView) - only what
+// those games can take: bones they know, anims they have, real angles
+static void SV_VR_SetArmsView( int clientNum, const vrArmsView_t *view ) {
+	vrArmsView_t v;
+	int b, k;
+
+	if ( clientNum < 0 || clientNum >= sv_maxclients->integer || !svs.clients ) {
+		return;
+	}
+	if ( !view || !view->set ) {
+		Com_Memset( &svs.clients[clientNum].vrArms, 0, sizeof( vrArmsView_t ) );
+		return;
+	}
+	v = *view;
+	v.set = qtrue;
+	v.pose = v.pose ? qtrue : qfalse;
+	if ( v.torsoAnim < 0 || v.torsoAnim >= VR_ARMS_ANIMS || v.legsAnim < 0 || v.legsAnim >= VR_ARMS_ANIMS ) {
+		v.pose = qfalse;	// (an animation those games don't have: they'd drop from the server)
+	}
+	v.legsFlip = v.legsFlip ? qtrue : qfalse;
+	v.torsoFlip = v.torsoFlip ? qtrue : qfalse;
+	for ( k = 0; k < 3; k++ ) {
+		if ( !( v.angles[k] == v.angles[k] ) || fabsf( v.angles[k] ) > 720.0f ) {
+			v.pose = qfalse;	// (NaN or nonsense: not this time)
+		}
+	}
+	for ( b = 0; b < VR_ARMS_BONES; b++ ) {
+		if ( v.boneIndex[b] <= 0 || v.boneIndex[b] >= MAX_G2BONES ) {
+			v.boneIndex[b] = 0;
+		}
+		for ( k = 0; k < 3; k++ ) {
+			if ( !( v.boneAngles[b][k] == v.boneAngles[b][k] ) || fabsf( v.boneAngles[b][k] ) > 720.0f ) {
+				VectorClear( v.boneAngles[b] );
+				break;
+			}
+		}
+	}
+	v.boneOrient &= 511;	// (3 bits each)
+	svs.clients[clientNum].vrArms = v;
+	svs.clients[clientNum].vrArmsTime = svs.time;
+}
+
 static qboolean SV_G2API_OverrideServer( void *serverInstance ) {
 	CGhoul2Info_v &g2 = *((CGhoul2Info_v *)serverInstance);
 	return re->G2API_OverrideServerWithClientData( g2, 0 );
@@ -3152,6 +3195,7 @@ void SV_BindGame( void ) {
 
 		gi.ext.VR_GetUserPose					= SV_VR_GetUserPose;
 		gi.ext.VR_SetAvatar						= SV_VR_SetAvatar;
+		gi.ext.VR_SetArmsView					= SV_VR_SetArmsView;
 
 		GetGameAPI = (GetGameAPI_t)gvm->GetModuleAPI;
 		ret = GetGameAPI( GAME_API_VERSION, &gi );

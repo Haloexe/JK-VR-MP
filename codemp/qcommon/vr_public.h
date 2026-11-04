@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-17"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-18"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -51,6 +51,8 @@ General Public License version 2, like the rest of OpenJK.
 												//     (your gun held with both hands)
 												// -17: ext.VR_SetWristHud, vrClientState_t.hudWrist,
 												//     wristPass (the HUD on your wrist)
+												// -18: ext.VR_SetArmsView (game: a VR player's arms
+												//     as games without the VR build are sent them)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)
@@ -215,6 +217,42 @@ typedef struct vrUserPose_s {
 	qboolean		thrustValid;
 	vec3_t			thrust;
 } vrUserPose_t;
+
+/*
+--------------------------------------------------------------------------------
+A VR player's arms for the games that can't draw their avatar (any other
+build: theirs reads no svc_vrAvatars). The server's game works out a held
+torso pose and four bones those games turn on top of it - the stock entity
+fields boneIndex1..4, boneAngles1..4 and boneOrient, which every game applies
+to a player (POSTMULT, cgame CG_G2ServerBoneAngles) - so that they draw the
+saber where the VR player holds it, a fist round its hilt (g_vrarms.c).
+
+The game sets it every frame for a player who has had it (ext.VR_SetArmsView;
+NULL or set == qfalse: none); the engine puts it into the copies of that
+player's entity it sends those games alone (sv_snapshot.cpp), never into the
+entity itself, so the game and VR builds see the player as they are. A game's
+bones stay turned until it's sent other angles for them, so a player whose
+arms stop is sent the same bones unturned (pose qfalse, all angles 0) for as
+long as they're in the game.
+--------------------------------------------------------------------------------
+*/
+#define VR_ARMS_BONES			4		// the entity has room for this many
+#define VR_ARMS_MAX_AGE			500		// ms: a pose the game hasn't set since then is left out (its bones sent unturned)
+#define VR_ARMS_ANIMS			1544	// the game's animations (anims.h MAX_TOTALANIMATIONS): a game of another build
+										// drops from the server on any animation number from this on
+
+typedef struct vrArmsView_s {
+	qboolean		set;				// sent as below (qfalse: the entity as it is)
+	qboolean		pose;				// the held pose: legsAnim, legsFlip, torsoAnim, torsoFlip and angles replace the
+	int				legsAnim;			// entity's...
+	int				legsFlip;
+	int				torsoAnim;
+	int				torsoFlip;
+	vec3_t			angles;				// ...and its apos.trBase (where the body faces, the head's pitch)
+	int				boneIndex[VR_ARMS_BONES];	// CS_G2BONES indices (1..MAX_G2BONES-1; 0: none)
+	vec3_t			boneAngles[VR_ARMS_BONES];	// each turned on top of the animation (POSTMULT)...
+	int				boneOrient;			// ...with this orientation (forward | right << 3 | up << 6)
+} vrArmsView_t;
 
 // Angles that AnglesToAxis turns back into axis (forward, left, up).
 static inline void VR_AxisToAngles( vec3_t axis[3], vec3_t angles ) {

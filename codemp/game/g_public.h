@@ -1106,6 +1106,10 @@ typedef struct gameImport_s {
 		// whenever it changes; the engine leaves out one that hasn't been set
 		// for half a second.
 		void		(*VR_SetAvatar)							( int clientNum, const vrAvatar_t *avatar );
+		// OpenJK VR (VR_ENGINE_TAG -18): this player's arms as the games that
+		// can't draw their avatar are sent them (vrArmsView_t; NULL or
+		// set == qfalse: their entity as it is). Set it every frame.
+		void		(*VR_SetArmsView)						( int clientNum, const vrArmsView_t *view );
 	} ext;
 } gameImport_t;
 

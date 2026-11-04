@@ -487,6 +487,8 @@ void G_ShutdownGame( int restart ) {
 		}
 		i++;
 	}
+	G_VRArmsShutdown( restart );	// OpenJK VR: the VR players' stand-ins (g_vrarms.c)
+
 	if (g2SaberInstance && trap->G2API_HaveWeGhoul2Models(g2SaberInstance))
 	{
 		trap->G2API_CleanGhoul2Models(&g2SaberInstance);
@@ -3428,6 +3430,7 @@ void G_RunFrame( int levelTime ) {
 	CheckCvars();
 
 	G_VRSaberEndFrame();	// OpenJK VR: the VR players' avatars, for everyone else
+	G_VRArmsFrame();		// OpenJK VR: ...and their arms for the other builds (g_vrarms.c)
 
 #ifdef _G_FRAME_PERFANAL
 	iTimer_GameChecks = trap->PrecisionTimer_End(timer_GameChecks);

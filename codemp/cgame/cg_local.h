@@ -475,6 +475,7 @@ typedef struct centity_s {
 	vec3_t			lookBefore;		// ...from these angles (the right eye takes the same step)
 	qboolean		poseYawSet;		// OpenJK VR: in a pose (bg_vrpose.c), the body faces as it did
 	float			poseYaw;		// ...going down: this way (looking about turns the head)
+	int				serverBones[4];	// OpenJK VR: the bones the server turned on it last (CS_G2BONES; CG_G2ServerBoneAngles)
 } centity_t;
 
 

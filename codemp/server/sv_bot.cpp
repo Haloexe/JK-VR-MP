@@ -212,6 +212,8 @@ int SV_BotAllocateClient(void) {
 	Com_Memset( &cl->vrPose, 0, sizeof( cl->vrPose ) );
 	Com_Memset( &cl->vrAvatar, 0, sizeof( cl->vrAvatar ) );
 	cl->vrAvatarTime = 0;
+	Com_Memset( &cl->vrArms, 0, sizeof( cl->vrArms ) );
+	cl->vrArmsTime = 0;
 	cl->voiceListener = qfalse;	// (nor what they heard)
 	cl->voiceQueued = 0;
 

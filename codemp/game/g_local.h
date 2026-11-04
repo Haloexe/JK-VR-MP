@@ -1508,6 +1508,8 @@ qboolean	G_VRSaberOn( void );
 qboolean	G_VRPosesAvailable( void );
 void		G_VRSaberPublish( void );
 qboolean	G_VRSaberBodyYaw( int clientNum, float *yaw );
+qboolean	G_VRSaberAvatar( int clientNum, vrAvatar_t *out );
+qboolean	G_VRSaberStandingAnim( gentity_t *ent, int anim );
 qboolean	G_VRSaberClient( gentity_t *ent );
 qboolean	G_VRHeadGaze( const gentity_t *ent, vec3_t start, vec3_t dir );
 qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
@@ -1530,6 +1532,12 @@ void		G_VRSaberBoxesOut( gentity_t *missile, const vec3_t end );
 void		G_VRSaberBoxesBack( void );
 void		G_VRSaberDeferHit( gentity_t *attacker, gentity_t *victim, const vec3_t dir, const vec3_t spot, int dmg, int dflags,
 				int saberNum, int bladeNum );
+
+// g_vrarms.c (OpenJK VR: VR players' arms for the games without the VR build)
+void		G_VRArmsFrame( void );
+void		G_VRArmsClientReset( int clientNum );
+void		G_VRArmsModelChanged( gentity_t *ent );
+void		G_VRArmsShutdown( int restart );
 
 // g_vrforce.c (OpenJK VR: VR players' Force from their Force hand)
 void		G_VRForceInit( void );

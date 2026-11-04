@@ -944,6 +944,15 @@ static void UI_VRRP_FromServer( void ) {
 		UI_VRRP_Keep( "ui_rpSrvGrey", "0" );
 		UI_VRRP_Keep( "ui_rpSrvMaster", "0" );
 	}
+	// (VR players' arms for the other builds: its own key - g_vrarms.c's g_vrArmsForAll)
+	{
+		const char *arms = Info_ValueForKey( info, "g_vrArmsForAll" );
+		if ( arms[0] ) {
+			trap->Cvar_Set( "ui_rpSrvArms", atoi( arms ) ? "1" : "0" );
+		} else {
+			UI_VRRP_Keep( "ui_rpSrvArms", "1" );
+		}
+	}
 }
 
 // A page shown: what it needs, got.
@@ -973,6 +982,7 @@ static void UI_VRRP_Page( int page ) {
 			UI_VRRP_LocalKeep( "ui_rpSrvCompModels", "g_rpCompanionModels", "1", 0, 1 );
 			UI_VRRP_LocalKeep( "ui_rpSrvGrey", "g_rpGrey", "0", 0, 2 );
 			UI_VRRP_LocalKeep( "ui_rpSrvMaster", "g_rpForceMaster", "0", 0, 1 );
+			UI_VRRP_LocalKeep( "ui_rpSrvArms", "g_vrArmsForAll", "1", 0, 1 );
 		} else {
 			UI_VRRP_FromServer();	// (another server's: as its serverinfo has them)
 		}
@@ -1158,6 +1168,7 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 			UI_VRRP_ServerSet( "g_rpDowned", UI_VRRP_Int( "ui_rpSrvDowned" ) ? "1" : "0" );
 			UI_VRRP_ServerSet( "g_rpGrey", va( "%i", Com_Clampi( 0, 2, UI_VRRP_Int( "ui_rpSrvGrey" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpForceMaster", UI_VRRP_Int( "ui_rpSrvMaster" ) ? "1" : "0" );
+			UI_VRRP_ServerSet( "g_vrArmsForAll", UI_VRRP_Int( "ui_rpSrvArms" ) ? "1" : "0" );
 		} else if ( !Q_stricmp( how, "compApply" ) ) {
 			UI_VRRP_ServerSet( "g_rpCompanions", va( "%i", Com_Clampi( 0, RP_COMP_OUT_MAX, UI_VRRP_Int( "ui_rpSrvComps" ) ) ) );
 			UI_VRRP_ServerSet( "g_rpCompanionsMax", va( "%i", Com_Clampi( 0, VRRP_COMPS_MOST, UI_VRRP_Int( "ui_rpSrvCompsMax" ) ) ) );

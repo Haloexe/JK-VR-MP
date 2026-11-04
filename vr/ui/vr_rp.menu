@@ -2262,7 +2262,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 230 400 22
+			rect            40 228 400 20
 			text            "Characters per account:"
 			cvar            "ui_rpSrvChars"
 			cvarFloatList
@@ -2299,7 +2299,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 254 400 22
+			rect            40 250 400 20
 			text            "Talk reaches:"
 			cvar            "ui_rpSrvRange"
 			cvarFloatList
@@ -2336,7 +2336,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 278 400 22
+			rect            40 272 400 20
 			text            "When health runs out:"
 			cvar            "ui_rpSrvDowned"
 			cvarFloatList
@@ -2374,7 +2374,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 302 400 22
+			rect            40 294 400 20
 			text            "Grey Jedi:"
 			cvar            "ui_rpSrvGrey"
 			cvarFloatList
@@ -2412,7 +2412,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_MULTI
 			style           WINDOW_STYLE_FILLED
-			rect            40 326 400 22
+			rect            40 316 400 20
 			text            "Force Masters:"
 			cvar            "ui_rpSrvMaster"
 			cvarFloatList
@@ -2446,11 +2446,49 @@
 
 		itemDef
 		{
+			name            rp_srv_arms
+			group           rp_srv_set
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            40 338 400 20
+			text            "Non-VR players see:"
+			cvar            "ui_rpSrvArms"
+			cvarFloatList
+			{
+				"VR players' real arms" 1 "The game's stance" 0
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      210
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Players without this build see a VR player's saber where they really hold it, a fist round it, their arms reaching it"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_srv_arms bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_srv_arms bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
 			name            rp_srv_admins
 			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            450 230 120 22
+			rect            450 228 120 20
 			text            "Admins"
 			font            2
 			textscale       0.8
@@ -2485,7 +2523,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            450 254 120 22
+			rect            450 250 120 20
 			text            "Companions"
 			font            2
 			textscale       0.8
@@ -2520,7 +2558,7 @@
 			group           rp_srv_set
 			type            ITEM_TYPE_BUTTON
 			style           WINDOW_STYLE_FILLED
-			rect            450 326 120 22
+			rect            450 338 120 20
 			text            "Apply"
 			font            2
 			textscale       0.8

@@ -865,7 +865,9 @@ clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 50
 weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
 half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
 below), g_vrSaberBolts (1: VR players' blades deflect blaster bolts; 0:
-bolts are blocked for them automatically, as before), g_vrSaberDebug 1
+bolts are blocked for them automatically, as before), g_vrArmsForAll (1:
+players of the normal game see VR players' sabers where they're held, and
+their arms reaching them; 0: the game's stance), g_vrSaberDebug 1
 (prints every cut's speed and damage, and how every clash ended, to the
 console), and the stock g_dismember 100 if you want limbs to come off.
 
@@ -1638,7 +1640,16 @@ KNOWN LIMITATIONS
   * Other players see your real arms and head only in games hosted with
     this build, and only if they run it too (in a headset or not);
     elsewhere they see an animated character facing where your gun
-    points.
+    points. In games hosted with this build, players of the normal game
+    see your saber where you hold it, in a fist, and your arms reaching
+    it, the body above the legs held in one of the game's poses (the
+    Server page's "Non-VR players see"). That body stands upright where
+    the game's stands, so if you lean or crouch further, its arm reaches
+    only as far as it can (the saber drawn along yours, nearer the body);
+    a saber in your left hand is held in its right, across the body; a
+    second saber goes to your other hand, but only roughly along your
+    blade; its head faces the way your body does; and someone following
+    you as a spectator sees the game's stance.
   * Online, other players' arms and blades are drawn a little behind where
     the server has them (the same delay as everyone's movement). Your
     blade is judged as you saw them (see PLAYING WITH OTHERS), but someone
@@ -1702,8 +1713,8 @@ KNOWN LIMITATIONS
   * Holsters: on a model with a cape or a jetpack, what hangs on your back
     (and a hilt at the hip) can sink into it, and long hair or lekku can
     cover a shoulder's; a hilt can touch the leg in some of the game's
-    poses (a run, a crouch). Others with the normal game see your weapon
-    in hand as the game animates it, and nothing hanging on you.
+    poses (a run, a crouch). Others with the normal game see nothing
+    hanging on you.
   * Mirrors show your character without a head (it is hidden for your view).
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.

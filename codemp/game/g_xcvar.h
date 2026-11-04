@@ -177,6 +177,7 @@ XCVAR_DEF( g_timeouttospec,				"70",			NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_userinfoValidate,			"25165823",		NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_useWhileThrowing,			"1",			NULL,						CVAR_NONE,										qtrue )
 XCVAR_DEF( g_voteDelay,					"3000",			NULL,						CVAR_NONE,										qfalse )
+XCVAR_DEF( g_vrArmsForAll,				"1",			NULL,						CVAR_ARCHIVE|CVAR_SERVERINFO,					qtrue )	// OpenJK VR: players without the VR build see VR players' arms and sabers where they are (g_vrarms.c); 0: in the game's stance, as before
 XCVAR_DEF( g_vrForce,					"1",			CVU_VRForce,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' Force from their Force hand (g_vrforce.c); 0: where they look
 XCVAR_DEF( g_vrGripMove,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: whom a VR player's Grip holds moves with their hand (g_vrforce.c); 0: as the game has it
 XCVAR_DEF( g_vrHolsters,				"1",			CVU_VRHolsters,				CVAR_ARCHIVE,									qtrue )
