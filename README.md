@@ -58,7 +58,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   custom models included.
 - **Multiplayer that shows it:** other players see you as you really move
   (head, body, arms, fingers and saber), and lag compensation judges blades as
-  each player saw them.
+  each player saw them. On a server running this build, players without VR
+  see your saber in your fist where you hold it, your arm reaching it.
 - **Roleplay:** servers can switch on a roleplay mode at any time. Players log
   in to an account and play characters of their own (a name, a faction, a
   description and a bio) that everyone sees, with talk that reaches only those
@@ -90,15 +91,17 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   swap the sticks, set the sticks' deadzone, play seated with your character
   standing, set your height and crouch for real, and recentre. Choose whether
   your view follows your head, the world's scale, how far away and how big
-  the HUD and the menu screen are, how guns aim and tilt in your hand, and
-  the headset's resolution.
+  the HUD and the menu screen are (or wear the HUD's status on your wrist,
+  like a watch), how guns aim and tilt in your hand, and the headset's
+  resolution.
 - **Duels with a salute:** challenge someone to a private duel by saluting
   them with your lit saber; they accept by saluting back. Any number of duels
   can go on at once, each pair on its own, and bots accept challenges too.
 - **Proximity voice chat:** talk to the players near you and hear them from
   where they stand.
 - **Guns in your hand:** aim with your hand (the left one if you play
-  left-handed), with a 3D aim dot.
+  left-handed), with a 3D aim dot, or take hold of a rifle's barrel with your
+  other hand and aim it with both.
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a
