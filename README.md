@@ -18,6 +18,32 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 >
 > It comes with no warranty of any kind (see the [licence](#licence)).
 
+## New since 0.1.4
+
+- **Players without VR see your saber where you hold it:** on a server
+  running this build, your character holds the saber in its fist where your
+  hand holds it, its arm reaching it, instead of in the game's saber stance.
+- **Both hands on a gun:** take hold of a rifle's barrel with your other hand
+  and both hands aim it; a pistol is steadied by your other hand under it.
+- **The HUD on your wrist:** your health, armor, Force and ammo on the back of
+  your Force hand's wrist, like a watch, fading in as you turn it to your face
+  (Setup > Controls > VR View: HUD, On Wrist).
+- **Force motions:** hold your hand still at your chest, face, belly, temple
+  or over your head for Heal, Protect, Absorb, Seeing or Team Heal; pull its
+  trigger on your chest for Rage or over your head for Team Energize; wave it
+  across your face or chest for Mind Trick; swing it back past your hip for
+  Speed.
+- **Roleplay characters keep their own Force:** each character keeps its own
+  Force powers, so switching from your Jedi to your Sith switches them too.
+  Servers can allow Grey Jedi, with powers from both sides, and admins can
+  make Force Masters, with every power at level 3.
+- **Also new:** the Force in your hand (Push, Pull, Lightning and a Grip that
+  moves whoever it holds with your hand), blaster bolts deflected by the real
+  blade, and comfort settings to play seated, set your height, crouch for
+  real, dim the view as you snap turn and darken its edges as you move.
+
+## Features
+
 - **Real lightsaber combat:** your blade cuts, blocks and clashes where you
   actually swing it, harder the faster you swing, and deflects blaster bolts
   where it meets them - its angle aims them, and Saber Defense 3 bends them
@@ -30,8 +56,10 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **The Force in your hand:** hold the Force grip and your empty hand reaches
   out with the Force - thrust it out to Push, reach and yank it back to Pull,
   point and hold it still to Grip, pull its trigger for Lightning (palm up:
-  Drain), and squeeze quickly for any other power, picked on the wheel's new
-  Force ring. On a server running this build each power comes from your hand
+  Drain), wave it for Mind Trick, swing it back past your hip for Speed, or
+  hold it still on your body for Heal, Protect, Absorb, Seeing, Rage and the
+  team powers - and squeeze quickly for any other power, picked on the
+  wheel's new Force ring. On a server running this build each power comes from your hand
   and goes where it points - or where your hand is as you see it: put it over
   them - (or the way you thrust), snapping onto someone within 10 degrees
   (Grip: 15, and reaching a quarter further), whoever your Grip's aimed at
@@ -69,7 +97,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   until someone of their faction helps them up or they give up, and NPCs take
   sides by the players' factions. Characters keep companions of their own (up
   to six, two out at a time, as it comes) that follow them, fight for them,
-  get them back up and take orders from the wheel. Server owners can make
+  get them back up and take orders from the wheel. Each character keeps its
+  own Force powers, and servers can allow Grey Jedi (powers from both sides)
+  and Force Masters (every power at level 3, made by admins). Server owners can make
   trusted accounts admins, who get every cheat (and a menu page to spawn any
   NPC or vehicle) without cheats being turned on for everyone. Only the
   server's console or rcon can make an admin, and logging in works with
