@@ -1272,7 +1272,7 @@ void BG_VehWeaponLoadParms( void )
 {
 	int			len, totallen, vehExtFNLen, fileCnt, i;
 	char		*holdChar, *marker;
-	char		vehWeaponExtensionListBuf[2048];			//	The list of file names read in
+	static char	vehWeaponExtensionListBuf[0x40000];			//	The list of file names read in - OpenJK VR: room for all there can be (2048 bytes before: with vehicle packs, the pk3s' listed first, the game's own past them never read)
 	fileHandle_t	f;
 	char		*tempReadBuffer;
 
@@ -1308,6 +1308,11 @@ void BG_VehWeaponLoadParms( void )
 		}
 		else
 		{
+			if ( totallen + len + 2 > MAX_VEH_WEAPON_DATA_SIZE ) {	// OpenJK VR: (room for it, a space before it and the end - asked before it's read: one as big as the buffer it's read into ran past it)
+				trap->FS_Close( f );	// OpenJK VR: this one left out, said - the rest read (not the level down: every pack's read now)
+				Com_Printf( S_COLOR_YELLOW "WARNING: vehicle weapon file %s left out: the vehicle weapon files are too big together (256 KB)\n", holdChar );
+				continue;
+			}
 			trap->FS_Read(tempReadBuffer, len, f);
 			tempReadBuffer[len] = 0;
 
@@ -1319,10 +1324,6 @@ void BG_VehWeaponLoadParms( void )
 				marker++;
 			}
 
-			if ( totallen + len >= MAX_VEH_WEAPON_DATA_SIZE ) {
-				trap->FS_Close( f );
-				Com_Error(ERR_DROP, "Vehicle Weapon extensions (*.vwp) are too large" );
-			}
 			strcat( marker, tempReadBuffer );
 			trap->FS_Close( f );
 
@@ -1339,7 +1340,7 @@ void BG_VehicleLoadParms( void )
 	int			len, totallen, vehExtFNLen, fileCnt, i;
 //	const char	*filename = "ext_data/vehicles.dat";
 	char		*holdChar, *marker;
-	char		vehExtensionListBuf[2048];			//	The list of file names read in
+	static char	vehExtensionListBuf[0x40000];			//	The list of file names read in - OpenJK VR: room for all there can be (2048 bytes before: with vehicle packs, the pk3s' listed first, the game's own past them never read)
 	fileHandle_t	f;
 	char		*tempReadBuffer;
 
@@ -1375,6 +1376,11 @@ void BG_VehicleLoadParms( void )
 		}
 		else
 		{
+			if ( totallen + len + 2 > MAX_VEHICLE_DATA_SIZE ) {	// OpenJK VR: (room for it, a space before it and the end - asked before it's read: one as big as the buffer it's read into ran past it)
+				trap->FS_Close( f );	// OpenJK VR: this one left out, said - the rest read (not the level down: every pack's read now)
+				Com_Printf( S_COLOR_YELLOW "WARNING: vehicle file %s left out: the vehicle files are too big together (1 MB)\n", holdChar );
+				continue;
+			}
 			trap->FS_Read(tempReadBuffer, len, f);
 			tempReadBuffer[len] = 0;
 
@@ -1386,10 +1392,6 @@ void BG_VehicleLoadParms( void )
 				marker++;
 			}
 
-			if ( totallen + len >= MAX_VEHICLE_DATA_SIZE ) {
-				trap->FS_Close( f );
-				Com_Error(ERR_DROP, "Vehicle extensions (*.veh) are too large" );
-			}
 			strcat( marker, tempReadBuffer );
 			trap->FS_Close( f );
 

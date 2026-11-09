@@ -235,7 +235,7 @@ extern qboolean BG_ParseLiteral( const char **data, const char *string );
 //
 // NPC parameters file : scripts/NPCs.cfg
 //
-#define MAX_NPC_DATA_SIZE 0x40000
+#define MAX_NPC_DATA_SIZE 0x400000	// OpenJK VR: every NPC file together - 4 MB, NPC packs and all (256 KB before)
 char	NPCParms[MAX_NPC_DATA_SIZE];
 
 /*
@@ -3560,16 +3560,20 @@ Ghoul2 Insert End
 	return qtrue;
 }
 
-char npcParseBuffer[MAX_NPC_DATA_SIZE];
+#define MAX_NPC_FILE_SIZE 0x40000	// OpenJK VR: one NPC file (all of them together could be no more, before)
+#define NPC_FILES_LISTED_MOST 4095	// OpenJK VR: files the engine lists at most (its MAX_FOUND_FILES - 1): more, those past them left out
+char npcParseBuffer[MAX_NPC_FILE_SIZE + 1];	// OpenJK VR: (+1: a second '\0' after its end - BG_VRBlocksInStep)
+qboolean npcFilesShort;	// OpenJK VR: some NPC files left out or cut short, as they were read last (npc spawn's word on one that didn't come: g_vrdown.c)
 
 void NPC_LoadParms( void )
 {
-	int			len, totallen, npcExtFNLen, fileCnt, i;
+	int			len, totallen, npcExtFNLen, fileCnt, i, read = 0;
 //	const char	*filename = "ext_data/NPC2.cfg";
 	char		/**buffer,*/ *holdChar, *marker;
-	char		npcExtensionListBuf[2048];			//	The list of file names read in
+	static char	npcExtensionListBuf[0x40000];		//	The list of file names read in - OpenJK VR: room for all there can be (MAX_FOUND_FILES, 4096); 2048 bytes before, and the files past them were never read - the game's own, with NPC packs (the pk3s searched first: assets1.pk3's after those named past it) - a server with them had no stormtroopers
 	fileHandle_t f;
 	len = 0;
+	npcFilesShort = qfalse;	// OpenJK VR
 
 	//remember where to store the next one
 	totallen = len;
@@ -3590,18 +3594,37 @@ void NPC_LoadParms( void )
 
 		if ( len == -1 )
 		{
-			Com_Printf( "error reading file\n" );
+			Com_Printf( S_COLOR_YELLOW "WARNING: NPC file %s couldn't be read\n", holdChar );	// OpenJK VR: which ("error reading file" before)
+			npcFilesShort = qtrue;
 		}
 		else
 		{
-			if ( totallen + len >= MAX_NPC_DATA_SIZE ) {
-				trap->FS_Close( f );
-				trap->Error( ERR_DROP, "NPC extensions (*.npc) are too large" );
+			if ( len >= MAX_NPC_FILE_SIZE || totallen + len + 2 > MAX_NPC_DATA_SIZE ) {	// OpenJK VR: (room for it, its "\n" and the end - one more than there was)
+				trap->FS_Close( f );	// OpenJK VR: this one left out, said - the rest read (not the server down)
+				Com_Printf( S_COLOR_YELLOW "WARNING: NPC file %s left out: %s\n", holdChar, len >= MAX_NPC_FILE_SIZE ? "it's too big (256 KB)" :
+					"the NPC files are too big together (4 MB)" );
+				npcFilesShort = qtrue;
+				continue;
 			}
 			trap->FS_Read(npcParseBuffer, len, f);
 			npcParseBuffer[len] = 0;
 
-			len = COM_Compress( npcParseBuffer );
+			len = BG_VRNPCFileText( npcParseBuffer, len );	// OpenJK VR: (COM_Compress'd - a UTF-8 file's mark gone first, a second '\0' after it)
+			{//OpenJK VR: what of it the game's walk through them all goes through in step - the rest left out, said (one broken file of a pack's hid every one after it: the game's own)
+				char at[MAX_QPATH];
+				const int inStep = BG_VRBlocksInStep( npcParseBuffer, len, at, sizeof( at ) );
+				if ( inStep < len ) {
+					int k;
+					for ( k = 0; at[k] && (unsigned char)at[k] > ' '; k++ ) {
+					}
+					at[k] = '\0';	// (a quote never closed: its name, not the rest of its file)
+					Com_Printf( S_COLOR_YELLOW "WARNING: NPC file %s broken at %s - an {, a quote or a /* never closed, a } too many, or a name with nothing after it: the rest of it left out\n",
+						holdChar, at[0] ? at : "\"\"" );
+					npcParseBuffer[inStep] = 0;
+					len = inStep;
+					npcFilesShort = qtrue;
+				}
+			}
 
 			strcat( marker, npcParseBuffer );
 			strcat(marker, "\n");
@@ -3612,6 +3635,14 @@ void NPC_LoadParms( void )
 			marker = NPCParms+totallen;
 			//*marker = 0; //rww - make sure this is null or strcat will not append to the correct place
 			//rww  12/19/02-actually the probelm was npcParseBuffer not being nul-term'd, which could cause issues in the strcat too
+			read++;
 		}
+	}
+	Com_Printf( "NPC files: %i of %i read, %i KB\n", read, fileCnt, ( totallen + 1023 ) / 1024 );	// OpenJK VR: how many - every one, packs and all
+	if ( fileCnt >= NPC_FILES_LISTED_MOST || holdChar - npcExtensionListBuf > (int)sizeof( npcExtensionListBuf ) - 512 )
+	{//OpenJK VR: as many as the engine lists, or names enough to fill the list (names of 256 - a pk3's can be): any past them left out
+		Com_Printf( S_COLOR_YELLOW "WARNING: NPC files: as many as the game lists (%i, or names enough to fill its list) - any more were left out "
+			"(pk3s are listed from the last-named: assets1.pk3, the game's own, after any named past it)\n", fileCnt );
+		npcFilesShort = qtrue;
 	}
 }

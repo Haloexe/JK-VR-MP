@@ -154,6 +154,29 @@ too, from the in-game menu or the wheel.
 NPCs take sides by the players' factions: the light side's are with the
 Heroes, the dark side's with the Villains; Neutral are left alone until
 they attack one. Nobody's NPCs, turrets or sentries harm someone down.
+NPC packs: the server reads every NPC file it has (ext_data/NPCs, in any
+pk3: 4 MB of them at most, 256 KB a file). The stock game read only as
+many as 2 KB of their names held, and a pk3 named after its own
+(assets1.pk3 - most packs start with z) comes before it - so with packs
+installed, its own past that point were never read (no stormtroopers).
+Saber and vehicle files likewise. A pack's file of the same name as one
+of the game's (stormtrooper.npc) takes its place, and so does a pack's
+NPC of the same name in any file. An NPC file broken so the game would
+lose its way in every file after it (an {, a quote or a /* never closed,
+a } too many, a name with nothing after it) is read up to there; a UTF-8
+file's mark (Notepad's) is no part of its first NPC's name now. The
+console says how many at each map - "NPC files: 148 of 148 read, 112 KB"
+- and any left out or cut short, which; an NPC spawn that doesn't come
+says why to whoever typed it. A pack's trooper of the Reborn's or the
+Jedi's class with a gun its file gives it (a blaster, a repeater...)
+fights as a gunner does, as in the original game - this engine had it
+fight as a Jedi: firing less, and putting out a saber it hadn't ten
+times a second, heard each time (loud with a few of them). One of the
+Force alone keeps the Jedi's ways: fists, a baton or nothing, a gun its
+file didn't give it (the game's, for want of one), or one it's not to
+fire (the game's cultists of grip, lightning and drain) - decided as it
+comes, whatever it holds later; with no saber in hand, no saber's heard
+put out.
   g_rpCompanions 2          companions each player has out with them
                             (0 to 2; 0: none)
   g_rpCompanionsMax 16      companions out on the whole server at once
@@ -190,7 +213,30 @@ a player's companions bring at most 8 looks new to a level (after that
 they come as their types do until the next map); the player is told.
 A look must be a model the server has, on the humanoid skeleton, with
 its skin (or a custom character's three parts) - so a model or skin
-added to the server's files is one players can choose.
+added to the server's files is one players can choose. Players running
+this build are told a companion's look (they see it if they have the
+model, else its NPC type); every other game - the normal game, mods, an
+older OpenJK VR - is sent the companion as its NPC type (in the colours
+its owner gave it), so a custom model a player hasn't got can't take
+their game down. A player of another game who has the models can say so,
+and is sent companions in their own looks from then on: they type
+  /setu rpmodels 1
+in their console (it lasts till they quit the game - "setu rpmodels 1"
+in their autoexec.cfg keeps it), and /setu rpmodels 0 to stop. The
+server can't check: a look whose model they haven't got could take their
+game down, so it's theirs to say. A companion already out takes its look
+for them when it next comes out; one whose look's skin is too long for a
+model's name comes in its model's default skin; a level holds 64 types
+and looks of companions' (past that, the next come to them as their
+types too, till the map changes or restarts). They're told of it in the
+console a while after they come in on each map, and the log says who's
+said it ("Roleplay: ... says they have the models companions wear"); a
+server demo of one who's said it needs those models to play. Players
+running this build needn't (they see looks anyway). This build's game
+and server program (openjkded) go together - update both. An NPC type of
+your own whose model players haven't got still could take theirs down
+(this build draws a stand-in): give companions types whose models
+everyone has.
 The log says who went down, by whom, who got whom up and who gave up,
 and which companions came out and were knocked out (lines starting
 "Roleplay:"). The serverinfo's "vrRP" says whether roleplay's on, and
@@ -208,16 +254,111 @@ these settings: "<on> <g_rpCharacters> <g_rpTalkRange> <g_rpDowned>
   rp force <account> <character> grey|master|normal   make a character a
                             Grey Jedi or a Force Master, or neither
                             (online or not)
+  rp invasion start <who> [waves <0-50>] [per <1-32>] [cap <1-32>]
+              [cleared <seconds> | every <seconds>]
+              [side dark | light | creatures]   waves of NPCs at the
+                            players, roleplay on or off (<who>: reborn,
+                            stormtroopers, rebels, jedi, or an NPC type -
+                            or up to 4, a comma between, each mixed in or
+                            so many a wave after a colon: reborn:2,jedi;
+                            waves 0: till it's stopped; per: a wave's - the
+                            mixed ones' together, evenly; cap:
+                            up at once; the next wave that long after one's
+                            beaten, or every that long - 600 at most, a
+                            timer 5 at least; side: theirs, whatever their
+                            NPC file says - villains and heroes too;
+                            defaults: 4 waves of 6, cap 16, cleared 20,
+                            their file's side)
+  rp invasion stop [all | dark | light | creatures | <who>]   called off,
+                            what's left of it gone (villains, heroes: a
+                            side's too)
+  rp invasion               how each invasion on is going
+  rp war start <side> <who> <side> <who> [<side> <who>] [waves ...] [per
+              ...] [cap ...] [cleared ... | every ...] [at <client>]
+                            a war: two or three factions' NPCs fighting
+                            each other where you stand - by rcon, where
+                            client <client> stands (<side>: light, dark,
+                            creatures - heroes, villains; <who>: as rp
+                            invasion start's, all of it on that side;
+                            the settings each side's, as rp invasion
+                            start's)
+  rp war stop               called off, what's left of it gone
+  rp war                    how it's going
+Invasions: one a side at once (the dark side's, the light side's,
+creatures'), and 32 of their NPCs up at most, every invasion's together -
+each one an NPC the server runs, so fewer on a busy server (and none
+while the level has fewer than 128 entities free). With roleplay on they
+go after the players their side fights (the dark side's Heroes, the light
+side's Villains, creatures everyone; nobody someone down or in a duel);
+with it off - and for players playing no character, and bots - the dark
+side's go after everyone and the light side's fight beside the players.
+Their side is their NPC file's, or the one picked (side; the Admin page's
+Faction): any NPC type as either army, a neutral one too (picked none, a
+droid or civilian is turned away: it'd fight nobody).
+They appear out of everyone's sight where they can walk to whom they're
+for, 17.5 to 30 m off - else 12.5 to 16.3 m off, else with nothing between,
+and only where there's nowhere out of sight, in sight; 8 to 11 m off last
+of all (a saber or a creature in sight, or near, where it can walk to
+them, before out of sight where it can't). Each of an invasion's for a
+player is looked for from further round them than its last for them, a
+ring further out or in: they come from all round, near and far, not one
+after another behind them (its first, behind them; in sight, the least in
+their sight first); a
+big type (its NPC file's width and height) only where it fits - on a
+cramped level it may find nowhere ("nowhere for more yet": stop it). An
+invasion with nobody in the game its side goes after, none of it
+fighting and the other side's invasion not on, is over a minute on; with
+nobody in the game at all, it waits. Stuck or lost ones come out again elsewhere; bodies go
+after 10 s (16 at most lie about), and any still up 2 minutes after the
+last wave's all out. A timer's 5 s between waves at least. Not in Duel,
+Power Duel or Siege; held in the intermission. Admins have them on their Admin page
+(Invasions...) and as a command (rp invasion ...). Everyone's told of each
+wave and the end, and the log has every start, wave and end (lines
+starting "Invasion:"; an admin's command also "Admin:"; a non-admin's
+try "Invasion: ... refused"). Their targetname
+is vri_dark, vri_light or vri_creatures (npc kill vri_dark). Give them NPC
+types whose models everyone has: one a mod adds can crash the games of
+players who don't have it.
+An invasion of several NPC types (a lineup) is of one side - the one
+picked, or their files' if they share one (else it's turned away: pick
+one, or set them on each other in a war); each wave has each one's own
+number of it (reborn:2), or a share of per with the others mixed, evenly
+(what won't split, one more each, in turn from a wave to the next), and
+they come out mixed in, not one type after another.
+Wars (rp war: one at once; the Admin page's Mode: War): each side an
+invasion of that side (its lineup, all of it on that side whatever their
+NPC files say) with the same settings - its waves its reinforcements.
+Where the admin stands (by rcon: at <client>), each side comes in from
+its own way round them - the first ahead of them, one of a faction
+they're not of; theirs last, behind them; the rest evenly round - 12.5 to
+20 m off (9 to 12, else 6 to 8, where there's no room so far off), out of
+everyone's sight where it can, where it can walk straight there. Each
+side's NPCs fight every other side's (the game's AI too: it fights one
+side as ever) and the players their side fights, by faction as an
+invasion's. A side whose last wave's beaten is out; the last side
+standing wins - everyone's told, its NPCs gone 15 s on (all beaten at
+once: nobody wins). rp war stop calls it off, as does stopping one of its
+sides' invasions (rp invasion stop: everything); an invasion of a side not
+in it can go on beside it. Not in Duel, Power Duel or Siege. The log has
+its start (where, each side's lineup), each side's waves, each side
+beaten, and its end - won, nobody standing, called off (lines starting
+"War:").
 Admins: a player logged in to an admin account - roleplay on or off - can
-use every cheat command with sv_cheats 0 (npc spawn and npc kill, god,
-noclip, notarget, give and the rest - give forcepowers: every Force power
+use every cheat command with sv_cheats 0 (npc spawn - with a side after
+its targetname, or in its place: light, dark, neutral or creature
+(heroes, villains), the NPC takes it as it begins, whatever its file
+says - a side's word alone after the type is a side, not a name; not a
+vehicle; one that doesn't come, they're told why - and npc kill, god,
+noclip, notarget, give and the
+rest - give forcepowers: every Force power
 at level 3, till their powers are set up again), for themselves, though
 not while down; and they make characters Grey Jedi or Force Masters (the
 People page, or rp force <player> grey|master|normal). The log has each
 one (lines starting "Admin:", with the account). Nobody else is shown
 who's an admin. Logging out, or rp admin off, ends their god mode,
 no-clip, no target and every Force power given. In the Roleplay menu an
-admin has an Admin page (spawn any NPC or vehicle in front of them, kill
+admin has an Admin page (spawn any NPC or vehicle in front of them - an
+NPC on the side its Faction picks, or as its file says - kill
 the ones they spawned or every NPC, switch the cheats, All Force Powers);
 the Server page's Admins makes or unmakes them (by rcon on a server you
 don't host).
@@ -278,6 +419,24 @@ GOOD TO KNOW
   first: players near them can see a bolt hang in the air for a moment.
   g_vrSaberBolts 0: bolts are blocked for VR players automatically, as
   for anyone, as before.
+* VR players' shots leave their gun's barrel - its muzzle, where their
+  hand holds it - the way they point it: they can shoot round a corner
+  with only their arm out. Only with room for the shot all the way out
+  (nothing within about 12 cm of the line from their character's eyes to
+  their hand, nor of the gun; their hand within 1.4 m of those eyes): a
+  gun in or through a wall, or in someone, fires from the eye as ever -
+  never from beyond a wall. Bolts, the disruptor's beam and every other
+  gun's shots; thermal detonators, trip mines and det packs thrown from
+  the hand. Only players on this build ("vrGunBarrel 1" in the server
+  info, and their game says it goes by the same rule, their VR body
+  drawn: their aim dot is traced from the barrel then); players of an
+  earlier build, desktop players, bots and NPCs fire from the eye as
+  ever, and so does anyone zoomed in, in a vehicle or on an emplaced gun.
+  The muzzles come from the game's own weapon models (the server loads
+  each the first time it's fired so). The server takes a player's hand
+  where their game says it is, as it does for VR sabers - a modified
+  game could put it anywhere with room to it within that 1.4 m.
+  g_vrGunBarrel 0: everyone's shots from the eye, as before.
 * VR players' Force powers come from their Force hand (their empty hand,
   with Force gestures on): Push and Pull the way they thrust or yanked it,
   Grip, Lightning and Drain where it points - each straight at someone
@@ -310,6 +469,20 @@ GOOD TO KNOW
   games.log says where each came from (g_vrSaberLog: Lightning's and
   Drain's aim at most four times a second), and whom a Grip moved with
   the hand, how far and how fast they were going when let go.
+* Push and Pull at level 1 do more than in the normal game, for everyone
+  (VR or not, NPCs too): with nothing on their line (a VR player's thrust
+  or yank, or where anyone else looks) - or only the world - they go at
+  whoever's nearest it within 30 degrees, as levels 2 and 3 take in
+  everyone near it - in their reach (512 units), in sight, and one they
+  work on; whoever or whatever is on the line itself is whom they're at,
+  as ever (a teammate, someone knocked down, a door). They shove at 384
+  (the game's 256 a level: half again level 1's, three quarters of level
+  2's), and someone standing with level 1 of the same power only halves
+  it instead of stopping it (moving, they don't resist, as ever; a higher
+  level stops it, moving or not; Absorb as ever, and a Push it takes down
+  to level 1 shoves as the game's level 1). games.log says whom each
+  player's Push or Pull shoved, how hard and whether they resisted it
+  (g_vrSaberLog).
 * Running the server and playing on the same PC is fine: the server takes
   little of the PC. Hosting from home, it takes roughly 2-3 Mbit/s of your
   upload with 8 players (VR bodies and voices included).

@@ -239,6 +239,11 @@ void WP_DeactivateSaber( gentity_t *self, qboolean clearLength )
 	{
 		return;
 	}
+	if ( self->client->ps.weapon != WP_SABER )
+	{//OpenJK VR: no saber in hand - none to put out, none heard (one with a gun or none put out every think: the game lights it again
+	 //each frame, as for every weapon not a saber - bg_pmove.c)
+		return;
+	}
 	//keep my saber off!
 	if ( !self->client->ps.saberHolstered )
 	{

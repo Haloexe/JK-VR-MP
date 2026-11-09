@@ -32,6 +32,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 static vec3_t forward, vright, up;
 static vec3_t muzzle;
+static qboolean muzzleVR;	// OpenJK VR: the muzzle's a VR player's gun barrel's - found clear of walls already (g_vrgun.c)
 
 // Bryar Pistol
 //--------
@@ -205,6 +206,11 @@ void W_TraceSetStart( gentity_t *ent, vec3_t start, vec3_t mins, vec3_t maxs )
 	vec3_t	entMins;
 	vec3_t	entMaxs;
 	vec3_t	eyePoint;
+
+	if ( muzzleVR )
+	{ // OpenJK VR: a VR player's throw from their hand - room for it there already, all the way from their eye (g_vrgun.c)
+		return;
+	}
 
 	VectorAdd( ent->r.currentOrigin, ent->r.mins, entMins );
 	VectorAdd( ent->r.currentOrigin, ent->r.maxs, entMaxs );
@@ -568,8 +574,15 @@ static void WP_DisruptorMainFire( gentity_t *ent )
 
 	memset(&tr, 0, sizeof(tr)); //to shut the compiler up
 
-	VectorCopy( ent->client->ps.origin, start );
-	start[2] += ent->client->ps.viewheight;//By eyes
+	if ( muzzleVR )
+	{ // OpenJK VR: a VR player's from their gun's barrel (g_vrgun.c)
+		VectorCopy( muzzle, start );
+	}
+	else
+	{
+		VectorCopy( ent->client->ps.origin, start );
+		start[2] += ent->client->ps.viewheight;//By eyes
+	}
 
 	VectorMA( start, shotRange, forward, end );
 
@@ -1596,6 +1609,11 @@ static void WP_TraceSetStart( gentity_t *ent, vec3_t start, vec3_t mins, vec3_t 
 	trace_t	tr;
 	vec3_t	entMins;
 	vec3_t	entMaxs;
+
+	if ( muzzleVR )
+	{ // OpenJK VR: a VR player's shot from their gun's barrel - room for it there already, all the way from their eye (g_vrgun.c)
+		return;
+	}
 
 	VectorAdd( ent->r.currentOrigin, ent->r.mins, entMins );
 	VectorAdd( ent->r.currentOrigin, ent->r.maxs, entMaxs );
@@ -3074,9 +3092,13 @@ void WP_DropDetPack( gentity_t *ent, qboolean alt_fire )
 		AngleVectors( ent->client->ps.viewangles, forward, vright, up );
 
 		CalcMuzzlePoint( ent, forward, vright, up, muzzle );
+		muzzleVR = G_VRGunMuzzle( ent, forward, muzzle );	// OpenJK VR: from a VR player's hand (g_vrgun.c)
 
 		VectorNormalize( forward );
-		VectorMA( muzzle, -4, forward, muzzle );
+		if ( !muzzleVR )
+		{ // (OpenJK VR: a VR player's is clear of walls already)
+			VectorMA( muzzle, -4, forward, muzzle );
+		}
 		drop_charge( ent, muzzle, forward );
 
 		ent->client->ps.hasDetPackPlanted = qtrue;
@@ -4586,6 +4608,7 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 		}
 
 		CalcMuzzlePoint ( ent, forward, vright, up, muzzle );
+		muzzleVR = G_VRGunMuzzle( ent, forward, muzzle );	// OpenJK VR: a VR player's from their gun's barrel (g_vrgun.c)
 
 		// fire the specific weapon
 		switch( ent->s.weapon ) {
@@ -4667,6 +4690,7 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 			break;
 		}
 	}
+	muzzleVR = qfalse;	// OpenJK VR: (this shot's alone: never a vehicle's, nor a turret's fired on its own - g_vehicleTurret.c)
 
 	G_LogWeaponFire(ent->s.number, ent->s.weapon);
 }

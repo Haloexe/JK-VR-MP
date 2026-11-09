@@ -865,6 +865,7 @@ void NPC_Begin (gentity_t *ent)
 	gclient_t	*client;
 	usercmd_t	ucmd;
 	gentity_t	*spawnPoint = NULL;
+	qboolean	ownNone = qfalse;	// OpenJK VR: its file gave it no weapon - the game's given it (vrGunner)
 
 	memset( &ucmd, 0, sizeof( ucmd ) );
 
@@ -1044,6 +1045,7 @@ void NPC_Begin (gentity_t *ent)
 	if ( ent->client->ps.weapon == WP_NONE )
 	{//not set by the NPCs.cfg
 		NPC_SetWeapons(ent);
+		ownNone = qtrue;	// OpenJK VR: (none of its own - of the Jedi's class or the Reborn's, the Force its fight: below)
 	}
 	//select the weapon
 	ent->NPC->currentAmmo = ent->client->ps.ammo[weaponData[ent->client->ps.weapon].ammoIndex];
@@ -1134,6 +1136,12 @@ void NPC_Begin (gentity_t *ent)
 	ent->nextthink = level.time + FRAMETIME + Q_irand(0, 100);
 
 	NPC_SetMiscDefaultData( ent );
+	// OpenJK VR: whether it fights as a gunner does, as it comes - of the Jedi's class or the Reborn's, else the Jedi's ways
+	// (NPC_VRJediWays): a gun its file gave it (any weapon past the saber), not its fight the Force's - its weapons the game's (its file
+	// gave it none), or ones it's not to fire (the Force's cultists). What's in its hand later on (fists near, thermals again,
+	// disarmed) and its holding fire (a companion's, a script's) none of it
+	ent->NPC->vrGunner = (qboolean)( !ownNone && ( ent->client->ps.stats[STAT_WEAPONS] & ~( ( 2 << WP_SABER ) - 1 ) ) &&
+		!( ent->NPC->scriptFlags & SCF_DONT_FIRE ) );
 	if ( ent->health <= 0 )
 	{
 		//ORIGINAL ID: health will count down towards max_health
@@ -1197,6 +1205,8 @@ void NPC_Begin (gentity_t *ent)
 		}
 	}
 	ent->waypoint = ent->NPC->homeWp = WAYPOINT_NONE;
+
+	G_RPSideBegin( ent );	// OpenJK VR: roleplay - a side an admin picked for it, now it's set up as its file has it (g_vrdown.c)
 
 	if ( ent->m_pVehicle )
 	{//a vehicle
@@ -1399,7 +1409,7 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 		}
 	}
 
-	newent = G_RPCompSpawner( ent ) ? G_RPCompEntity() : G_Spawn();	// OpenJK VR: roleplay - a companion's: a slot an NPC's had before (g_vrcomp.c)
+	newent = ( G_RPCompSpawner( ent ) || G_RPInvadeSpawner( ent ) ) ? G_RPCompEntity() : G_Spawn();	// OpenJK VR: roleplay - a companion's, an invasion's: a slot an NPC's had before (g_vrcomp.c)
 
 	if ( newent == NULL )
 	{
@@ -1451,8 +1461,8 @@ gentity_t *NPC_Spawn_Do( gentity_t *ent )
 	{
 		ent->NPC_type = "random";
 	}
-	else if ( G_RPCompSpawner( ent ) )
-	{//OpenJK VR: roleplay - a player's companion: its type is kept with it (g_vrcomp.c), not a string spent a spawn
+	else if ( G_RPCompSpawner( ent ) || G_RPInvadeSpawner( ent ) )
+	{//OpenJK VR: roleplay - a player's companion, an invasion's NPC: its type is kept with it (g_vrcomp.c, g_vrinvade.c), not a string spent a spawn
 		Q_strlwr( ent->NPC_type );
 	}
 	else
@@ -4111,7 +4121,10 @@ void NPC_Spawn_f( gentity_t *ent )
 {
 	char	npc_type[1024];
 	char	targetname[1024];
+	char	sideWord[64];	// OpenJK VR
 	qboolean	isVehicle = qfalse;
+	gentity_t	*npc;
+	int		side;
 
 	trap->Argv(2, npc_type, 1024);
 	if ( Q_stricmp( "vehicle", npc_type ) == 0 )
@@ -4119,13 +4132,27 @@ void NPC_Spawn_f( gentity_t *ent )
 		isVehicle = qtrue;
 		trap->Argv(3, npc_type, 1024);
 		trap->Argv(4, targetname, 1024);
+		trap->Argv(5, sideWord, sizeof( sideWord ));
 	}
 	else
 	{
 		trap->Argv(3, targetname, 1024);
+		trap->Argv(4, sideWord, sizeof( sideWord ));
 	}
 
-	NPC_SpawnType( ent, npc_type, targetname, isVehicle );
+	if ( !G_RPSpawnSide( ent, targetname, sideWord, isVehicle, &side ) )
+	{//OpenJK VR: roleplay - a side after its targetname (the Admin page's Faction; or in its place) that isn't one: told (g_vrdown.c)
+		return;
+	}
+	npc = NPC_SpawnType( ent, npc_type, targetname, isVehicle );
+	if ( !npc )
+	{//OpenJK VR: roleplay - none came: whoever typed it told why (g_vrdown.c)
+		G_RPSpawnFailed( ent, npc_type, isVehicle );
+	}
+	else if ( npc->NPC && npc->client && side != RP_SIDE_FILE )
+	{//OpenJK VR: ...one: taken as it begins (G_RPSideBegin)
+		npc->rpSide = side + 1;
+	}
 }
 
 /*

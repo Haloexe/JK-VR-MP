@@ -7,10 +7,14 @@ Each blade has a feel: blue, yellow or red (the saber style; Tavion's swings
 as blue, Desann's as red), the staff, or two sabers. The heavier it feels,
 the slower it can turn in the hand (cg_vrbody.c holds it back), so the
 blade moves slower - and the speeds the server's cuts need come down by the
-same share, so a full swing still does full damage. Two sabers turn as fast
-as they did, and need the speeds they did. The server's weights, which
-decide clashes and how hard a cut can be, are still the styles' (the staff
-and two sabers are medium): the staff is heavier in feel only.
+same share, so a full swing still does full damage. Two sabers need the
+speeds they always have. Every blade got a fifth heavier on Nov 8 2026
+with its cut speeds as they were: swung hard, the heavier blades still
+reach the speeds they did (the hand drags a blade that's fallen far behind
+it on faster than it turns), so cuts needing less would have hit harder.
+The server's weights, which decide clashes and how hard a cut can be, are
+still the styles' (the staff and two sabers are medium): the staff is
+heavier in feel only.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -52,14 +56,28 @@ static QINLINE int BG_VRFeel( int saberAnimLevel ) {
 }
 
 // How fast a blade of that feel turns in the hand at most (degrees a
-// second, in one hand; two hands turn it a fifth faster)...
+// second, in one hand; two hands turn it 15% faster) - a fifth slower since
+// Nov 8 2026...
 static QINLINE float BG_VRFeelTurn( int feel ) {
 	switch ( feel ) {
+	case VR_FEEL_BLUE:	return 1600.0f;
+	case VR_FEEL_RED:	return 375.0f;
+	case VR_FEEL_STAFF:	return 430.0f;
+	case VR_FEEL_DUAL:	return 600.0f;
+	default:			return 470.0f;
+	}
+}
+
+// ...how fast it turned before that, when its cut speeds were last matched
+// to it (they still are: swung hard, the heavier blade reaches the speeds
+// this one did)...
+static QINLINE float BG_VRFeelTurnCut( int feel ) {
+	switch ( feel ) {
 	case VR_FEEL_BLUE:	return 2000.0f;
-	case VR_FEEL_RED:	return 490.0f;
+	case VR_FEEL_RED:	return 470.0f;
 	case VR_FEEL_STAFF:	return 540.0f;
 	case VR_FEEL_DUAL:	return 750.0f;
-	default:			return 620.0f;
+	default:			return 590.0f;
 	}
 }
 
@@ -74,9 +92,9 @@ static QINLINE float BG_VRFeelTurnWas( int feel ) {
 }
 
 // The share of its weight's cut speeds a blade of that feel needs: the
-// share of the speed it had that it has.
+// share of the speed it had that it had when they were matched to it.
 static QINLINE float BG_VRFeelCutScale( int feel ) {
-	return BG_VRFeelTurn( feel ) / BG_VRFeelTurnWas( feel );
+	return BG_VRFeelTurnCut( feel ) / BG_VRFeelTurnWas( feel );
 }
 
 #endif // BG_VRSABER_H

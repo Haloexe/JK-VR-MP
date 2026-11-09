@@ -83,6 +83,10 @@ the NPC type it fights as, a look, its colours, whether it comes out (up
 to RP_COMP_OUT_MAX do) - made on the Companions page (rpcomp), and out
 with the character while roleplay is on - g_vrcomp.c.
 
+INVASIONS: an admin's (or rcon's) waves of NPCs coming for the players
+their side fights, roleplay on or off (rp invasion) - and wars, factions'
+NPCs fighting each other where the admin stands (rp war) - g_vrinvade.c.
+
 CHAT, with roleplay on: talk (the chat key) reaches those within
 g_rpTalkRange (510 units, 15 m), /me actions too; the team chat key or
 /ooc goes to everyone, out of character, under the player's own name;
@@ -95,7 +99,8 @@ Client commands (most sent by the cgame or the menus, not typed):
                             rpforce, and says what it has in its userinfo -
                             rpf "<number> <own>" (or "": its own) - and the
                             number of the rpforce it has here (0: none); 7:
-                            what the character may be with rpforce, and Grey
+                            what the character may be with rpforce, and Grey;
+                            8: rpinv (RP_PROTOCOL_INVADE)
   rpnew <account> <key>     make an account (key: 64 hex digits)
   rplogin <account> <proof> log in (proof: HMAC of the challenge)
   rppass <proof> <newkey>   change the password
@@ -106,6 +111,8 @@ Client commands (most sent by the cgame or the menus, not typed):
   rpcard <client> [<client>...], rpbio <client>   what a character's card
                             shows (a server before several took the first)
   rpcomp list|set|del|out|order ...  companions (G_RP_Comp; 5 and later)
+  rp invasion [start|stop ...]  an admin's invasions, roleplay on or off
+  rp war [start|stop ...]   ...and wars (g_vrinvade.c)
   me <action>, ooc <text>
 To clients: rpch <salt> <challenge>, rpacct <account|-> <active> <count>
 <most> <1: this answers a login or a new account | 0> then rpchar <i>
@@ -114,7 +121,10 @@ admin, and <RPR_*: what an admin made it>), rpbio, rpmsg; rppassok, or
 rpfail <1: the name or password was wrong | 0>, to end a request made
 with a key. A new password's proof is over "password <its key>". An
 admin's game, as it changes: rpadmin <RPA_* bits: 1 an admin, 2 god mode,
-4 no-clip, 8 no target; 0: not an admin>. With the account, to a game of
+4 no-clip, 8 no target, 16 this server takes a side picked for an NPC -
+npc spawn's, rp invasion start's (g_vrdown.c: a game before reads none of
+it), 32 it takes lineups (several NPC types an invasion, how many a wave of
+each) and wars (rp war); 0: not an admin>. With the account, to a game of
 protocol 5 or later: rpcmps <count | -1: no character> <how many may come
 out>, then rpcmp <slot> <out> <seconds before it can come again> "name"
 "type" "look" <r> <g> <b> each - the character's companions. To a game of
@@ -122,11 +132,14 @@ protocol 6 or later, as it changes: rpforce <number> <setup | -> <may> - the
 Force setup it's to have: the character's, or "-": its player's own; and
 what the character may be (BG_FORCE_*: 1 a Grey Jedi, 2 a Force Master),
 which a game before 7 doesn't read - to one of 7 or later, under the same
-number again as only that changes.
+number again as only that changes. To an admin's game of protocol 8 or
+later, as it changes: rpinv <count> "<line>"... - how each invasion on goes
+(g_vrinvade.c).
 
 Rcon: rp list, rp rename <player> <name>, rp delete <account> <character>,
 rp password <account> <temporary>, rp admin <account> [on|off], rp admins,
-rp force <account> <character> grey|master|normal.
+rp force <account> <character> grey|master|normal, rp invasion [start|stop
+...], rp war [start|stop ...] (g_vrinvade.c).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -167,6 +180,8 @@ static const char *rpRoleTitles[RPR_NUM] = { "Light or Dark, as the game has it"
 #define RPA_GOD				2
 #define RPA_NOCLIP			4
 #define RPA_NOTARGET		8
+#define RPA_SIDES			16		// (the server's: it takes a side picked for an NPC - G_RPSpawnSide, rp invasion start's)
+#define RPA_WARS			32		// (the server's: it takes several NPC types an invasion, how many a wave of each, and wars - rp war: g_vrinvade.c)
 #define RP_ACCOUNT_MIN		3
 #define RP_ACCOUNT_MAX		20
 #define RP_NAME_MAX			32		// a character's name: visible characters...
@@ -981,6 +996,12 @@ qboolean G_RPCapable( int clientNum ) {
 	return (qboolean)( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].capable );
 }
 
+// A client's game's roleplay protocol, as it said it (0: not this build's,
+// or not said) - after a map change, before it says again, as before.
+int G_RPGameProtocol( int clientNum ) {
+	return ( clientNum >= 0 && clientNum < MAX_CLIENTS && rpc[clientNum].capable ) ? G_RP_Protocol( &rpc[clientNum] ) : 0;
+}
+
 // A word to a player, in their console - and, their game this build's, on
 // the Roleplay menu's status line (G_RP_Msg): what a cheat did (w_force.c's
 // give forcepowers, the Admin page's All Force Powers).
@@ -1659,7 +1680,7 @@ static int G_RP_AdminBits( int clientNum ) {
 	if ( !G_RPAdmin( clientNum ) || !ent->client ) {
 		return 0;
 	}
-	bits = RPA_ADMIN;
+	bits = RPA_ADMIN | RPA_SIDES | RPA_WARS;
 	if ( ent->flags & FL_GODMODE ) {
 		bits |= RPA_GOD;
 	}
@@ -1869,6 +1890,7 @@ static void G_RP_Hello( gentity_t *ent ) {
 	}
 	G_RP_SendAccount( clientNum );
 	G_RPDownHello( clientNum );	// (who's down: g_vrdown.c)
+	G_RPInvadeHello( clientNum );	// (an admin's: how invasions go - g_vrinvade.c)
 	G_RP_ForceTell( clientNum );
 }
 
@@ -2262,6 +2284,14 @@ static void G_RP_Rp( gentity_t *ent ) {
 		G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " (client %i%s%s) typed rp %s - refused: only the console or rcon makes admins\n",
 			c->playerName[0] ? c->playerName : ent->client->pers.netname, clientNum,	// (their own name, not a character's)
 			c->loggedIn ? ", account " : "", c->loggedIn ? c->acc.name : "", sub );
+		return;
+	}
+	if ( !Q_stricmp( sub, "war" ) ) {
+		G_RPWarCommand( ent );	// (an admin's, roleplay on or off: g_vrinvade.c)
+		return;
+	}
+	if ( !Q_stricmp( sub, "invasion" ) ) {
+		G_RPInvadeCommand( ent );	// (an admin's, roleplay on or off: g_vrinvade.c)
 		return;
 	}
 	if ( !G_RPOn() ) {
@@ -3109,6 +3139,14 @@ qboolean G_RPConsoleCommand( void ) {
 	int i, n;
 
 	trap->Argv( 1, sub, sizeof( sub ) );
+	if ( !Q_stricmp( sub, "war" ) ) {
+		G_RPWarCommand( NULL );	// (no accounts in it: roleplay working or not - g_vrinvade.c)
+		return qtrue;
+	}
+	if ( !Q_stricmp( sub, "invasion" ) ) {
+		G_RPInvadeCommand( NULL );	// (no accounts in it: roleplay working or not - g_vrinvade.c)
+		return qtrue;
+	}
 	if ( !rp.ready && ( !Q_stricmp( sub, "list" ) || !Q_stricmp( sub, "rename" ) || !Q_stricmp( sub, "delete" ) || !Q_stricmp( sub, "password" ) ||
 		!Q_stricmp( sub, "admin" ) || !Q_stricmp( sub, "admins" ) || !Q_stricmp( sub, "force" ) ) ) {
 		trap->Print( "Roleplay isn't working: %s couldn't be read (mend it, or delete it to start over)\n", RP_SERVER_FILE );

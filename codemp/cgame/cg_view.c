@@ -2789,6 +2789,11 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	// OpenJK VR: the scene is built; put your entity back where it really is
 	// (and with the blades in your hands known, a salute to challenge someone)
 	CG_VR_BodyEndFrame();
+	// OpenJK VR: the crosshair floating where the hand-held gun's shots land (cg_vr.c), traced with everyone back where the
+	// server has them - not where other VR players' bodies are drawn (spectators and the intermission: none, as for the gun)
+	if ( cg.predictedPlayerState.persistant[PERS_TEAM] != TEAM_SPECTATOR && cg.predictedPlayerState.pm_type != PM_INTERMISSION ) {
+		CG_VR_AddAimDot();
+	}
 	CG_VR_DuelFrame();
 	CG_PoseWheelFrame();	// (the pose wheel, if it's up: cg_vrpose.c)
 	CG_RP_Frame();			// (roleplay: logging in, who you look at: cg_vrrp.c)

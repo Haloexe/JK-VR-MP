@@ -148,6 +148,7 @@ void CG_ParseServerinfo( void ) {
 		const char *v = Info_ValueForKey( info, "vrSaberRGB" );
 		cgs.vrSaberRGB = v[0] ? ( ( atoi( v ) > 0 ) ? 1 : 0 ) : -1;
 	}
+	CG_VR_ParseServerinfo( info );	// OpenJK VR: shots from your gun's barrel (cg_vr.c)
 
 	cgs.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 	trap->Cvar_Set("g_gametype", va("%i", cgs.gametype));

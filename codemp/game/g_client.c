@@ -1764,7 +1764,7 @@ void SetupGameGhoul2Model(gentity_t *ent, char *modelname, char *skinName)
 					}
 					else
 					{
-						ent->s.modelindex = G_ModelIndex(modelFullPath);
+						ent->s.modelindex = G_ModelIndex( G_RPCompShown( modelFullPath ) );	// OpenJK VR: roleplay - a companion in a look of its own is sent as its type comes (g_vrcomp.c)
 					}
 				}
 			}
@@ -2145,6 +2145,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 
 	G_VRHolsterUserinfo( ent, userinfo );	// OpenJK VR: what's in a VR player's holsters ("vrh": g_vrholster.c)
 	G_VRForceUserinfo( ent, userinfo );		// OpenJK VR: whether their Grip moves whom it holds with their hand (g_vrforce.c)
+	G_VRGunUserinfo( ent, userinfo );		// OpenJK VR: whether their game goes by this server's barrel rule ("vrb": g_vrgun.c)
 
 	// set name
 	Q_strncpyz( oldname, client->pers.netname, sizeof( oldname ) );
@@ -2159,6 +2160,8 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		Q_strncpyz( client->pers.netname, "scoreboard", sizeof( client->pers.netname ) );
 		Q_strncpyz( client->pers.netname_nocolor, "scoreboard", sizeof( client->pers.netname_nocolor ) );
 	}
+
+	G_RPCompUserinfo( clientNum, userinfo );	// OpenJK VR: whether they've said they have the models companions wear ("rpmodels": g_vrcomp.c)
 
 	if ( client->pers.connected == CON_CONNECTED && strcmp( oldname, client->pers.netname ) && !rpNamed ) {	// (OpenJK VR: taking up a roleplay character isn't a rename)
 		if ( client->pers.netnameTime > level.time ) {

@@ -2262,7 +2262,7 @@ void WP_SaberLoadParms( void )
 {
 	int				len, totallen, saberExtFNLen, fileCnt, i;
 	char			*holdChar, *marker;
-	char			saberExtensionListBuf[2048];			//	The list of file names read in
+	static char		saberExtensionListBuf[0x40000];			//	The list of file names read in - OpenJK VR: room for all there can be (2048 bytes before: with saber packs, the pk3s' listed first, the game's own past them never read)
 	fileHandle_t	f;
 
 	len = 0;
@@ -2287,12 +2287,9 @@ void WP_SaberLoadParms( void )
 		}
 
 		if ( (totallen + len+1) >= MAX_SABER_DATA_SIZE ) {
-			trap->FS_Close( f );
-#ifdef UI_BUILD
-			Com_Error( ERR_FATAL, "WP_SaberLoadParms: Saber extensions (*.sab) are too large!\nRan out of space before reading %s", holdChar );
-#else
-			Com_Error( ERR_DROP, "WP_SaberLoadParms: Saber extensions (*.sab) are too large!\nRan out of space before reading %s", holdChar );
-#endif
+			trap->FS_Close( f );	// OpenJK VR: this one left out, said - the rest read (not the game down: every pack's read now)
+			Com_Printf( S_COLOR_YELLOW "WARNING: saber file %s left out: the saber files are too big together (1 MB)\n", holdChar );
+			continue;
 		}
 
 		trap->FS_Read(bgSaberParseTBuffer, len, f);

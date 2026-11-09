@@ -102,6 +102,12 @@ void		VR_SetGunHold( int hand, int how, float boreLeft, float boreUp );
 // frame, in this strip of the 640x480 screen, top to bottom
 // (cgameImport_t.ext.VR_SetWristHud, every frame it's drawn).
 void		VR_SetWristHud( float top, float bottom );
+// A colour the 2D puts across the whole screen this eye (rgba) - the Force's
+// tints, water's, a fall's fade - which in a headset is the HUD's screen in
+// front of you: drawn round that screen too, over the rest of the eye's
+// picture, after any said before it (cgameImport_t.ext.VR_TintView, as the
+// cgame draws it across that screen).
+void		VR_TintView( const float *rgba );
 
 // What goes over everything on the menu screen (the keyboard), drawn last
 // by SCR_DrawScreenField.

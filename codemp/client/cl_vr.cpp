@@ -411,6 +411,10 @@ typedef struct vrSwapchain_s {
 #define VR_WRIST_BACK		0.07f
 #define VR_WRIST_OUT		0.055f
 
+// The cgame's tints across the whole view an eye keeps (VR_TintView): more said
+// than this, the rest aren't (the game has six at most)
+#define VR_MAX_TINTS		8
+
 typedef struct vrState_s {
 	// instance
 	qboolean				instanceTried;
@@ -631,6 +635,9 @@ typedef struct vrState_s {
 	int						snapFadeTime;	// ...as of (ms)
 	int						snapTurn;		// black, its turn in pendingTurn: VR_SNAP_TURN_* ...
 	int						snapBlackTime;	// ...black since (ms)
+	byte					eyeTints[VR_MAX_TINTS][4];	// the cgame's tints across this eye's view (VR_TintView), as the
+														// renderer has the 2D's colours (bytes)...
+	int						numEyeTints;	// ...how many
 } vrState_t;
 
 static vrState_t		vr;
@@ -2605,6 +2612,15 @@ ring round where your head faces, at the same angles in both eyes - so it sits
 far off, like the rim of a visor, not in front of your nose - and for the fade,
 all of it.
 
+Under them go the cgame's tints across the whole view (VR_TintView): what its
+2D puts across the whole screen - the Force's (Rage red, Protect green, Absorb
+blue), water's, a fall's fade to black. In a headset that 2D is the HUD's
+screen in front of you, where a tint alone is a coloured square: the renderer
+still draws it there, under the 2D drawn after it (the scoreboard over a
+fall's black), and the rest of each eye's picture, around that screen, is
+filled here with the same colours, one after the other as the renderer drew
+them - so the tint is across the whole view again, without a seam.
+
 ================================================================================
 */
 
@@ -2837,14 +2853,78 @@ static void VR_DrawVignette( int eye, float strength ) {
 	glEnd();
 }
 
+// A tint the cgame puts across the whole view (cgameImport_t.ext.VR_TintView),
+// said as it draws an eye (VR_UpdateScreen forgets the last eye's first), as it
+// draws it across the HUD's screen too: kept in the bytes the renderer turns
+// its colour into (RB_SetColor), to be drawn around that screen the same way,
+// after any said before it - in the game's own view. On the menu screen, and
+// in the HUD on your wrist's picture, its 2D is drawn as ever (and the cgame
+// doesn't say any there).
+void VR_TintView( const float *rgba ) {
+	byte b[4];
+
+	if ( !rgba || !vrRender.active || vrRender.screenLayer || vrRender.wristPass || vr.numEyeTints >= VR_MAX_TINTS ) {
+		return;
+	}
+	for ( int i = 0; i < 4; i++ ) {
+		const float v = ( rgba[i] > 0.0f ) ? Q_min( rgba[i], 1.0f ) : 0.0f;	// (not a number: none)
+		b[i] = (byte)( v * 255 );
+	}
+	if ( b[3] ) {	// (none of it: the renderer's draws nothing either)
+		memcpy( vr.eyeTints[vr.numEyeTints], b, sizeof( b ) );
+		vr.numEyeTints++;
+	}
+}
+
+// One of the cgame's tints over an eye's picture all round the HUD's screen,
+// where the renderer drew it in the same colour (VR_DrawComfort's GL state):
+// the bands below, above, left and right of that screen, as RB_SetGL2D has it
+// in the picture (from the bottom) and no further than the picture's edges -
+// whole pixels, so they meet it without a seam or an overlap.
+static void VR_TintAroundHud( int eye, const byte *rgba ) {
+	const float w = (float)vr.width, h = (float)vr.height;
+	const float x0 = Com_Clamp( 0.0f, w, (float)vrRender.hudX[eye] );
+	const float x1 = Com_Clamp( 0.0f, w, (float)( vrRender.hudX[eye] + vrRender.hudW[eye] ) );
+	const float y0 = Com_Clamp( 0.0f, h, h - (float)( vrRender.hudY[eye] + vrRender.hudH[eye] ) );
+	const float y1 = Com_Clamp( 0.0f, h, h - (float)vrRender.hudY[eye] );
+	const float band[4][4] = { { 0.0f, 0.0f, w, y0 }, { 0.0f, y1, w, h }, { 0.0f, y0, x0, y1 }, { x1, y0, w, y1 } };
+
+	glColor4ub( rgba[0], rgba[1], rgba[2], rgba[3] );
+	for ( int i = 0; i < 4; i++ ) {
+		if ( band[i][2] <= band[i][0] || band[i][3] <= band[i][1] ) {
+			continue;	// (the screen at the picture's edge, or past it)
+		}
+		const float l = band[i][0] / w * 2.0f - 1.0f, r = band[i][2] / w * 2.0f - 1.0f;
+		const float bottom = band[i][1] / h * 2.0f - 1.0f, top = band[i][3] / h * 2.0f - 1.0f;
+		glBegin( GL_TRIANGLE_STRIP );
+		glVertex2f( l, bottom );
+		glVertex2f( r, bottom );
+		glVertex2f( l, top );
+		glVertex2f( r, top );
+		glEnd();
+	}
+}
+
+// A colour blended over all of the eye's picture (VR_DrawComfort's GL state).
+static void VR_FillEye( float r, float g, float b, float a ) {
+	glColor4f( r, g, b, a );
+	glBegin( GL_TRIANGLE_STRIP );
+	glVertex2f( -1.0f, -1.0f );
+	glVertex2f( 1.0f, -1.0f );
+	glVertex2f( -1.0f, 1.0f );
+	glVertex2f( 1.0f, 1.0f );
+	glEnd();
+}
+
 // Over an eye's finished picture, still in its framebuffer (VR_UpdateScreen,
-// once the renderer's done with it): the vignette, then the fade, in black.
-// Everything of GL's this changes is put back as it was: the renderer keeps a
-// copy of what it last set, and goes on from it.
+// once the renderer's done with it): the cgame's tints round the HUD's screen,
+// then the vignette and the fade, in black. Everything of GL's this changes is
+// put back as it was: the renderer keeps a copy of what it last set, and goes
+// on from it.
 static void VR_DrawComfort( int eye ) {
 	const float vignette = vr.vignette, fade = vr.snapFade;	// (both 0..1)
 
-	if ( vignette < 0.01f && fade < 0.01f ) {
+	if ( vignette < 0.01f && fade < 0.01f && !vr.numEyeTints ) {
 		return;
 	}
 	if ( vrRender.tanRight[eye] - vrRender.tanLeft[eye] < 0.001f || vrRender.tanUp[eye] - vrRender.tanDown[eye] < 0.001f ) {
@@ -2861,7 +2941,7 @@ static void VR_DrawComfort( int eye ) {
 	glPushMatrix();
 	glLoadIdentity();
 
-	// plain black, blended over all of the picture
+	// plain colours, blended over all of the picture
 	for ( int u = vrGLTextureUnits - 1; u >= 0; u-- ) {
 		if ( vglActiveTexture ) {
 			vglActiveTexture( VR_GL_TEXTURE0 + u );
@@ -2900,17 +2980,14 @@ static void VR_DrawComfort( int eye ) {
 	glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 	glViewport( 0, 0, vr.width, vr.height );
 
+	for ( int i = 0; i < vr.numEyeTints; i++ ) {
+		VR_TintAroundHud( eye, vr.eyeTints[i] );
+	}
 	if ( vignette >= 0.01f ) {
 		VR_DrawVignette( eye, vignette );
 	}
 	if ( fade >= 0.01f ) {
-		glColor4f( 0.0f, 0.0f, 0.0f, fade );
-		glBegin( GL_TRIANGLE_STRIP );
-		glVertex2f( -1.0f, -1.0f );
-		glVertex2f( 1.0f, -1.0f );
-		glVertex2f( -1.0f, 1.0f );
-		glVertex2f( 1.0f, 1.0f );
-		glEnd();
+		VR_FillEye( 0.0f, 0.0f, 0.0f, fade );
 	}
 
 	glMatrixMode( GL_PROJECTION );
@@ -5211,6 +5288,7 @@ qboolean VR_UpdateScreen( void ) {
 
 			qboolean copied = qtrue;
 			for ( int eye = 0; eye < 2; eye++ ) {
+				vr.numEyeTints = 0;	// (the cgame says each eye's as it draws it: VR_TintView)
 				VR_BindTarget( eye );
 				SCR_DrawScreenField( eye == 0 ? STEREO_LEFT : STEREO_RIGHT );
 				re->EndFrame( NULL, NULL );
@@ -5454,6 +5532,7 @@ void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}
 void VR_SetWristHud( float top, float bottom ) {}
+void VR_TintView( const float *rgba ) {}
 void VR_GenericCmd( int genCmd ) {}
 void VR_DrawOverlay( void ) {}
 

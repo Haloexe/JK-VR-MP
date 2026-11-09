@@ -191,6 +191,7 @@ typedef struct vrSaberState_s {
 
 static vrSaberState_t	vrSabers[MAX_CLIENTS];
 static qboolean			vrPosesAvailable;	// the engine hands out poses (sv_vrx, vr_engine)
+static qboolean			vrEngine;			// this engine, as this game knows it (vr_engine: gameImport_t.ext as VR_ENGINE_TAG has it)
 static qboolean			vrsAvatarSet[MAX_CLIENTS];	// an avatar was handed to the engine (VRS_TakeAvatar)...
 static qboolean			vrsGunLeft[MAX_CLIENTS];	// ...holding a gun in the left hand (G_VRGunHandLeft)
 
@@ -259,30 +260,30 @@ enum {
 };
 
 // (the defaults of g_vrSaberLight / Medium / Heavy: 1.8 5.3 25 150 and so on.
-// A full-speed heavy blow takes 50 of a player's 100-125 health and armour:
+// A full-speed heavy blow takes 55 of a player's 100-125 health and armour:
 // it takes two or three of those, or more slower cuts, to bring someone down.)
 static const vrSaberWeight_t vrSaberDefaults[VRS_NUM_WEIGHTS] = {
 	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE, 25.0f, 150, 1 },
 	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE, 40.0f, 220, 2 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 50.0f, 300, 3 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 55.0f, 300, 3 },
 };
 static vrSaberWeight_t vrSaberWeights[VRS_NUM_ALL_WEIGHTS] = {
 	{ "light",	1.8f * VR_UNITS_PER_METRE, 5.3f * VR_UNITS_PER_METRE, 25.0f, 150, 1 },
 	{ "medium",	2.5f * VR_UNITS_PER_METRE, 7.1f * VR_UNITS_PER_METRE, 40.0f, 220, 2 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 50.0f, 300, 3 },
-	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 50.0f, 300, 4 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 55.0f, 300, 3 },
+	{ "heavy",	3.2f * VR_UNITS_PER_METRE, 8.8f * VR_UNITS_PER_METRE, 55.0f, 300, 4 },
 };
 
 // The cvars' defaults (as g_xcvar.h has them), and what they were before -
-// when blows did two thirds more and a full-speed heavy one killed, and then
-// when a heavy one did 60: a config that saved an old one gets today's.
-#define VRS_OLD_DEFAULTS	2
+// when blows did two thirds more and a full-speed heavy one killed, then when
+// a heavy one did 60, and then 50: a config that saved an old one gets today's.
+#define VRS_OLD_DEFAULTS	3
 static const char *vrSaberCvarNames[VRS_NUM_WEIGHTS] = { "g_vrSaberLight", "g_vrSaberMedium", "g_vrSaberHeavy" };
-static const char *vrSaberCvarDefaults[VRS_NUM_WEIGHTS] = { "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 50 300" };
+static const char *vrSaberCvarDefaults[VRS_NUM_WEIGHTS] = { "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 55 300" };
 static const char *vrSaberOldDefaults[VRS_NUM_WEIGHTS][VRS_OLD_DEFAULTS] = {
-	{ "1.8 5.3 40 150", NULL },
-	{ "2.5 7.1 65 220", NULL },
-	{ "3.2 8.8 100 300", "3.2 8.8 60 300" },
+	{ "1.8 5.3 40 150", NULL, NULL },
+	{ "2.5 7.1 65 220", NULL, NULL },
+	{ "3.2 8.8 100 300", "3.2 8.8 60 300", "3.2 8.8 50 300" },
 };
 
 // The server's g_vrSaberLight / Medium / Heavy changed: "cut from (m/s)
@@ -658,8 +659,8 @@ void G_VRSaberInit( void ) {
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
 	// sent to clients, so a stock engine never has it) and offers sv_vrx.
 	trap->Cvar_VariableStringBuffer( "vr_engine", tag, sizeof( tag ) );
-	vrPosesAvailable = (qboolean)( !strcmp( tag, VR_ENGINE_TAG ) &&
-		trap->Cvar_VariableIntegerValue( "sv_vrx" ) == VR_POSE_PROTOCOL );
+	vrEngine = (qboolean)!strcmp( tag, VR_ENGINE_TAG );
+	vrPosesAvailable = (qboolean)( vrEngine && trap->Cvar_VariableIntegerValue( "sv_vrx" ) == VR_POSE_PROTOCOL );
 
 	trap->Cvar_Register( NULL, "vrSaber", "0", CVAR_SERVERINFO | CVAR_ROM );
 	G_VRSaberPublish();
@@ -675,6 +676,12 @@ qboolean G_VRSaberOn( void ) {
 // Whether VR players' poses come in at all: this engine, offering sv_vrx.
 qboolean G_VRPosesAvailable( void ) {
 	return vrPosesAvailable;
+}
+
+// Whether the engine's this one, as this game knows it: gameImport_t.ext's
+// there, every call in it (an engine of another build: none of them).
+qboolean G_VREngine( void ) {
+	return vrEngine;
 }
 
 void G_VRSaberPublish( void ) {

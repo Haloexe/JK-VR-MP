@@ -313,7 +313,10 @@ static void SV_MapRestart_f( void ) {
 	sv.state = SS_LOADING;
 	sv.restarting = qtrue;
 
-	// OpenJK VR: nobody's arms carry over the restart (the game sets them again)
+	// OpenJK VR: nobody's arms carry over the restart (the game sets them again).
+	// (Configstrings sent otherwise to some - sv.vrCsFor - do, as each client
+	// holds them: the configstrings themselves do; the game sets again those it
+	// uses, each who holds otherwise sent theirs as it is then.)
 	for ( i = 0; i < sv_maxclients->integer; i++ ) {
 		svs.clients[i].vrAvatar.valid = qfalse;
 		Com_Memset( &svs.clients[i].vrArms, 0, sizeof( svs.clients[i].vrArms ) );

@@ -1725,14 +1725,27 @@ enum { RPF_HEROES, RPF_VILLAINS, RPF_NEUTRAL, RPF_NUM };
 #if ( CS_VR_COMPANIONS + MAX_CLIENTS ) > MAX_CONFIGSTRINGS
 #error overflow: CS_VR_COMPANIONS
 #endif
+#define CS_VR_COMPLOOKS		( CS_VR_COMPANIONS + MAX_CLIENTS )	// RP_COMP_LOOKS_CS of them: the companions in looks of their own, out or knocked out - "<entity>\<look>" each, '\' between, as many in each as fit (every game's sent them as their types come)
+#define RP_COMP_LOOKS_CS	4		// (RP_COMP_OUT_MAX * MAX_CLIENTS of them, a look 47 characters at most: 19 fit in each)
+#if ( CS_VR_COMPLOOKS + RP_COMP_LOOKS_CS ) > MAX_CONFIGSTRINGS
+#error overflow: CS_VR_COMPLOOKS
+#endif
+#define RP_COMP_LOOK_MOST	( MAX_QPATH - 17 )	// a look's characters at most (BG_VRCompLookOk: "models/players/" and "/|" round it, in MAX_QPATH)
+#if ENTITYNUM_MAX_NORMAL > 9999 || ( MAX_STRING_CHARS / ( 4 + 1 + RP_COMP_LOOK_MOST + 1 ) ) * RP_COMP_LOOKS_CS < RP_COMP_OUT_MAX * MAX_CLIENTS
+#error CS_VR_COMPLOOKS: too few for every companion's look (an entity's 4 digits, '\', the longest look, '\' between)
+#endif
 qboolean	BG_VRCompClassOk( const char *className );
 const char	*BG_VRCompClassWord( const char *className );
 qboolean	BG_VRCompTypeOk( const char *type );
+int			BG_VRNPCFileText( char *text, int len );
+int			BG_VRBlocksInStep( const char *buf, int len, char *at, int atSize );
 qboolean	BG_VRCompLookOk( const char *look );
 qboolean	BG_VRCompSkinInCs( const char *model, const char *skin );
 void		BG_VRCompLookSplit( const char *look, char *model, int modelSize, char *skin, int skinSize );
 #define BG_VRCOMP_GLM_HEAD	( 8 + MAX_QPATH * 2 )	// a model.glm's first bytes: ident, version, name, its skeleton's name
 qboolean	BG_VRCompGlmHumanoid( const byte *head, int len );
+qboolean	BG_VRCompLooksPack( const int *ents, const char (*looks)[MAX_QPATH], int count, char (*cs)[MAX_STRING_CHARS] );
+int			BG_VRCompLooksRead( const char *cs, int *ents, char (*looks)[MAX_QPATH], int n, int most );
 
 // OpenJK VR: poses - sit, sit cross-legged, kneel, lie down (bg_vrpose.c) -
 // and, in roleplay, down (g_vrdown.c): on the floor until helped up

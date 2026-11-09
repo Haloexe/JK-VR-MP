@@ -29,7 +29,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot; take hold of a rifle's
     barrel with your other hand and both hands aim it (see BOTH HANDS ON
-    YOUR GUN)
+    YOUR GUN). On servers running this build your shots leave the gun's
+    barrel, so you can shoot round a corner with only your arm out (see
+    SHOTS FROM YOUR GUN'S BARREL)
   * Your own body in first person: it stands under you, turns with you,
     and its arms and hands follow your controllers, gripping what they
     hold (works with any player model on the standard skeleton, custom
@@ -69,9 +71,6 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * A keyboard in the headset for typing in menus, chat and the console
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
-
-Not yet: shots leaving the gun barrel (they leave from your eye, toward
-where you aim).
 
 
 INSTALL / RUN
@@ -539,6 +538,39 @@ while you hold the grip the gun's in both hands:
   * Two-Handed Guns (Setup > Controls > VR View, cg_vrTwoHandGuns) turns
     it off.
 
+SHOTS FROM YOUR GUN'S BARREL: on servers running this build (and games you
+host with it) your shots leave your gun at its muzzle - where its flash is
+drawn - the way the gun points, not at your eye. Your aim dot is traced
+from there too, so it still shows where they land. Hold your gun out past
+a corner, a doorframe or a crate and you shoot round it, only your arm
+showing:
+  * A shot leaves the muzzle when there's room for it all the way out:
+    nothing within about 12 cm of the line from your character's eyes
+    to your hand, nor of the gun from your hand to its muzzle, and your
+    hand no more than about 1.4 m from those eyes. They're your body's
+    eyes, not your headset's: leaning out round a corner moves your view
+    (as far as Head Reach) but not them, so it doesn't make room.
+    Anything closer - a wall, the edge of a doorframe, someone - or your
+    gun pushed into or through a wall, and that shot leaves from your
+    eye toward where you aim, as before (the aim dot is traced from
+    there then too).
+  * It needs your body in first person and the gun drawn in your hand
+    (cg_vrBody and cg_vrWorldGun, on unless you've turned them off):
+    your gun's hand as everyone sees it is where the shot comes from.
+  * Every gun: bolts, the disruptor's beam, the flechette's and the
+    concussion rifle's shots. Thermal detonators, trip mines and det packs
+    are thrown from your hand - round a corner too. The stun baton and
+    fists hit as ever. The rocket launcher's lock-on still looks from
+    your eye: round a corner it can't lock on to what only your barrel
+    sees.
+  * Zoomed in with the disruptor's scope, in a vehicle and on an emplaced
+    gun you aim with your head, as before, and shoot from your eye.
+  * Everywhere else - other servers, and servers running an earlier build
+    of this mod - your shots leave from your eye toward where you aim, and
+    your aim dot is traced from your eye too, as before. Players on an
+    earlier build shoot from their eye on servers running this one.
+  * The server can turn it off (g_vrGunBarrel 0: README-SERVER.txt).
+
 HOLSTERS: your weapons hang on your body, and you take them out and put
 them away with your hands - in VR, seeing your own body and the saber in
 your hands in first person (cg_vrBody and cg_vrSaber, on unless you've
@@ -781,7 +813,7 @@ server running this build: your real blade is the weapon.
       light  (fast style)    small quick swings cut, up to 25 damage,
                              recovers quickly after a clash
       medium (medium style)  up to 40 damage
-      heavy  (strong style)  needs big swings, up to 50 damage, breaks
+      heavy  (strong style)  needs big swings, up to 55 damage, breaks
                              through guards at full speed, recovers slowly
     Slower swings cut for less (a quarter at the slowest). A player starts
     with 100 health (125, and 25 armour, outside duels), so it takes two or
@@ -794,24 +826,29 @@ server running this build: your real blade is the weapon.
     The heavier a blade feels in your hand (below), the slower it can
     move - so the swing speeds a cut needs come down by the same share,
     and a full swing still hits as hard: the blue style's are 77% of the
-    light weight's, yellow's 83% of medium's, red's 89% of heavy's, and
+    light weight's, yellow's 79% of medium's, red's 85% of heavy's, and
     the staff's 72% of medium's (it hits and clashes as medium does - it's
     heavier in feel only); two sabers need the speeds they always have.
     Held with both hands, the same share of the heavier weight's speeds.
+    (Every blade got a fifth heavier on 8 November 2026, below, and those
+    stayed as they were: swung hard, the heavier blades still reach
+    the same speeds - your hand drags a blade that's fallen far behind it
+    on faster - so needing less would have made them hit harder.)
   * The weight is something you feel, not just numbers:
       - a blade can't be whipped about faster than its weight lets it: it
         has a top speed and takes a moment to get going and to turn back.
-        It turns at most 2000 degrees a second with the blue style, 620
-        with yellow, 490 with red; the staff 540, between yellow and red;
-        two sabers 750 each. Swing faster than that and the blade - and
-        your character's hand, which keeps hold of it - falls behind your
-        real hand (blue 25 degrees at most, yellow 55, red 63, the staff
-        60, two sabers 50), catching up as you slow. Slow, careful moves
-        stay exact, and it never carries on past where your hand stops;
-        only swung back hard, its weight carries it on a little first.
-        Two hands on it turn it a fifth faster. cg_vrSaberInertia sets
-        how much (1; 0 = the blade exactly where the controller points
-        it; 2 or 3 = heavier still)
+        It turns at most 1600 degrees a second with the blue style, 470
+        with yellow, 375 with red; the staff 430, between yellow and red;
+        two sabers 600 each (all a fifth heavier than before 8 November
+        2026: 2000, 590, 470, 540 and 750). Swing faster than that and the
+        blade - and your character's hand, which keeps hold of it - falls
+        behind your real hand (blue 25 degrees at most, yellow 57, red 65,
+        the staff 60, two sabers 50), catching up as you slow. Slow,
+        careful moves stay exact, and it never carries on past where your
+        hand stops; only swung back hard, its weight carries it on a
+        little first. Two hands on it turn it 15% faster (a fifth before).
+        cg_vrSaberInertia sets how much (1; 0 = the blade exactly where
+        the controller points it; 2 or 3 = heavier still)
       - swinging it, your hands feel the blade's weight: the faster it
         goes, the harder it pulls - red a deep, rough rumble, the staff a
         little less, yellow less again, blue a light buzz (held with both
@@ -860,7 +897,7 @@ Servers fighting this way show "vrSaber 1" in their server info.
 Server settings: g_vrSaber (1; 0 = the old animated combat),
 g_vrSaberLight / g_vrSaberMedium / g_vrSaberHeavy (each "cut-from
 full-damage-at max-damage recover": swing speeds in m/s, recovery after a
-clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 50
+clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 55
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
 weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
 half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
@@ -870,6 +907,9 @@ players of the normal game see VR players' sabers where they're held, and
 their arms reaching them; 0: the game's stance), g_vrSaberDebug 1
 (prints every cut's speed and damage, and how every clash ended, to the
 console), and the stock g_dismember 100 if you want limbs to come off.
+A weight saved in a config at an earlier default (heavy's blows at 50, 60
+or 100) is taken as today's; to keep one on purpose, write it another
+way ("3.2 8.8 50.0 300").
 
 THE FORCE: your Force hand - the left (the right, left-handed), whenever
 it's empty - reaches out with the Force while you hold its grip (the Force
@@ -1095,6 +1135,19 @@ or on someone whose Grip holds someone gripping you). Grip Moves: No, or
 a server with g_vrGripMove 0, gives the Grip from your hand as before:
 lifted at level 2, and at level 3 floated to just in front of you where
 your hand points.
+
+Push and Pull at level 1 do more on a server running this build, for
+everyone there (VR or not). With nothing on the line you thrust or yanked
+along (or look along) - or only a wall - they go at whoever's nearest it
+within 30 degrees, as levels 2 and 3 take in everyone near it; someone or
+something on the line itself is still whom it's at, as in the normal
+game. They shove half again as hard as the normal game's level 1 (three
+quarters as hard as level 2). And someone standing with level 1 of that
+power of their own (a Push against your Push, a Pull against your Pull)
+only halves it, instead of stopping it dead; moving, they don't resist at
+all, and a higher level still stops it, moving or not. In the normal game,
+level 1 only reaches whoever's right on that line, and anyone standing
+with that power of their own stops it.
 
 PLAYING WITH OTHERS: everyone who runs this build - in a headset or not -
 sees a VR player as they really move, in a game hosted with this build:
@@ -1331,14 +1384,26 @@ that server even with its cheats off, for you alone, and each one goes in
 its log; not while you're down. An Admin button shows at the top of the
 Roleplay menu (only to you): its page lists every NPC and vehicle the
 game has - Find narrows it - and Spawn puts the one picked in front of
-you; Kill my NPCs (the ones you spawned there), Kill all NPCs; God mode,
-No-clip and No target, each saying whether it's on; Give all; All Force
+you, on the side its Faction says: From its NPC file, Heroes (the light
+side: beside Heroes, after Villains), Villains (the dark side), Neutral
+(leaves everyone be till they attack it) or Creature (after everyone) -
+so a custom NPC can be whichever you need (it comes as its file has it,
+its weapon and all, then takes that side - a walker, a fighting droid or
+a howler keeping its own ways; the crosshair shows a hero or a villain as
+a friend or a foe; a vehicle takes none; one that doesn't come, the
+page says why - the server's NPC files are what count, and it reads every
+one, NPC packs and all; a pack's trooper of the Reborn's or the Jedi's
+class with a gun of its file's fights as a gunner, as in the original
+game - not as a Jedi, putting out a saber it hasn't, over and over); Kill my NPCs (the ones you
+spawned there), Kill all NPCs; God mode, No-clip and No target, each
+saying whether it's on; Give all; All Force
 Powers (every power at level 3 till you change them or the map changes:
 give forcepowers). On the People page, with someone picked, an admin
 sees what their character is and makes it a Grey Jedi, a Force Master or
 Normal again (logged like a cheat; rp force <player> grey|master|normal;
 it stays so till an admin or the owner changes it). The console cheats
-work too (npc spawn <name>, god, noclip...). Nobody else is shown who's
+work too (npc spawn <name> [<tag>] [light | dark | neutral | creature],
+god, noclip...). Nobody else is shown who's
 an admin; logging out ends your god mode, no-clip, no target and All
 Force Powers.
 Only the server's owner makes admins - at its console, or by rcon with
@@ -1347,6 +1412,80 @@ your Server page does it straight away - and rcon reaches it too while
 your game has an rcon password, such as one you typed on that page for
 another server; its Admins says so). A player typing rp admin is turned
 away, and the server's log says who tried.
+  INVASIONS: an admin (roleplay on or off) sends waves of NPCs at the
+players - Invasions... on the Admin page (on a server that has them):
+Invaders - Reborn, Stormtroopers, Rebels, Jedi, or an NPC type by name
+(any the server has but a vehicle, or - its Faction its file's - a droid
+or civilian, who'd fight nobody) - and, on a server that takes them, up
+to two more NPC types (and:, a row each, Nobody else leaving it out), each
+mixed in with the others in every wave (How many: Mixed - the default:
+In a wave shared evenly among the mixed ones) or so many of it every
+wave (How many: 1 to 32 a wave, besides); Faction (From its NPC file, Heroes,
+Villains or Creatures: their side, whatever their file says - a custom
+NPC as either army); Waves (1 to 20, or till you stop it); In a wave; Up
+at once (32 at most, every invasion's together); Next wave (once one's
+beaten, or on a timer - 5 s at least) and Waiting; Start, Stop all - and
+how each invasion on is going. The page starts at 4 waves of 6 Reborn, 16
+up at once, the next 20 s after one's beaten; an invasion's NPC types are
+all of one side - its Faction (or their files', if they share one). Whom
+they go after is their side's (their Faction): with roleplay on,
+the dark side's (Reborn, troopers) go after Heroes and the light side's
+(Rebels, Jedi) after Villains, creatures after everyone - and nobody goes
+after someone who's down or in a duel (though a rancor grabs whoever's in
+its reach); with roleplay off, and for anyone playing no character and
+bots, the dark side's go after everyone and the light side's fight on the
+players' side. One invasion a side at once, so Rebels can come to the
+Heroes' aid as Reborn come at them; companions go after whoever goes after
+their player. Each comes out 17.5 to 30 m from a player it's after (12.5
+to 16.3 m where there's no room so far off), out of everyone's sight, where
+it can walk to them - in sight only where there's nowhere out of it, and
+8 to 11 m off only where nowhere further will do (a saber or a creature
+rather in sight, or near, where it can walk to them than out of sight
+where it can't), a big one (a rancor) only where there's room for it.
+Each of an invasion's for you is looked for from further round you than
+its last for you (its first, behind you), a ring further out or in: they
+come from all round you, near and far, not one after another behind you -
+in sight, where it must be, the least in your sight first. With nobody it's after here, it comes out by someone
+else and waits; with nobody to fight for a minute (and the other side's
+invasion not on), the invasion's over - with nobody in the game at all,
+it waits.
+Everyone sees each wave come, and the end, on their screen. One that's
+stuck or lost far off is brought out again somewhere better, out of
+sight; bodies go after 10 s (16 at most lie about), and any still up 2
+minutes after the last wave's all out. Not in Duel, Power Duel or Siege.
+  WARS: on a server that has them, the Invasion part's Mode: War sets
+factions of NPCs on each other where you stand - two of the Heroes, the
+Villains and the Creatures, or all three. Each has its own lineup, as an
+invasion's (Lineup of picks whose rows you see: Heroes:, Villains:,
+Creatures:, each with up to two more and How many; Not in the war leaves
+one out - the page starts at Rebels against Stormtroopers), and the first
+line says what war they make. Waves, In a wave, Up at once, Next wave and
+Waiting are each side's. Start war: each side comes in from its own way
+round you - one you're not of ahead of you, yours (if it's in) last, behind
+you - 12.5 to 20 m off where it can (nearer where there's no room), out of
+everyone's sight where it can and where it can walk straight to you. Each
+side's NPCs are on their side whatever their NPC files say, and fight
+every other side's - and the players their side fights, by faction, as an
+invasion's do. A side's next wave comes as Next wave says (reinforcements,
+each side's own); a side whose last wave's beaten is out of the war; the
+last side standing wins - everyone's told, and its NPCs go 15 s on (the
+last of them all beaten at once: nobody wins). Stop war calls it off (Stop
+all, in Invasion mode, ends it and every invasion; stopping one of its
+sides' invasions calls it off too). One war at once; an invasion of a side
+that isn't in it can go on beside it, one of a side that is can't. Not in
+Duel, Power Duel or Siege.
+Typed, or by rcon: rp invasion start <who> [waves <0-50, 0 till it's
+stopped>] [per <1-32>] [cap <1-32>] [cleared <seconds> | every <5
+seconds or more>] [side dark | light | creatures] (<who>: up to 4 NPC types
+or presets, a comma between - reborn,stormtroopers - each mixed in, or so
+many a wave after a colon: reborn:2,jedi); rp invasion stop [all
+| dark | light | creatures | <who>] (villains and heroes say a side too);
+rp invasion (how they're going); rp war start <side> <who> <side> <who>
+[<side> <who>] [the settings as rp invasion start's] (side: light, dark,
+creatures - heroes, villains; by rcon, at <client>: where they stand); rp
+war stop; rp war (how it's going). Pick NPC types whose models are
+the game's own: one a mod adds can crash the games of players who don't
+have it, as spawning one would.
   COMPANIONS: each of your characters keeps up to 6 NPCs of its own. Make
 them in the Profile menu's Companions page (COMPANIONS at the bottom of
 the game's player menu, or Companions on the Roleplay menu's Editor
@@ -1384,12 +1523,12 @@ there's no room for two (the one nearer you along the way takes the nearer
 place), and step round anyone in their way - someone standing on a spot,
 they stop by them. With nowhere behind you (your back to a wall) they wait
 near you, or come your way. Stuck for 5 s (a second at the foot of a lift
-you went up), more than 40 m away, or where your trail can't be walked (a
+you went up), more than 80 m away, or where your trail can't be walked (a
 lift, a train, a jump up a ledge, lava), they come to just behind you -
 you in mid-air, to just behind where you left the ground. They keep out of
 lava and slime, and slow down at an edge rather than walk off it. They
-fight no further than 15 m from you (5 m from where they hold - one with
-a gun or thermals still takes on anyone up to 15 m off). One with a gun
+fight no further than 30 m from you (5 m from where they hold - one with
+a gun or thermals still takes on anyone up to 30 m off). One with a gun
 and no clear shot (you, your other companion, a pillar or a doorway's
 side in the way) steps aside till it has one, or goes after its enemy,
 inside those limits (a rocket never nearer than 5.5 m); it backs you up in
@@ -1398,19 +1537,28 @@ a saber fight, fires the disruptor without sniping, and opens fire within
 feet, never within 5 m of the thrower (fists for anyone that near); fists
 and a baton go up to their enemy and hit. One that can't get at its enemy
 (a wall, a ledge or lava in the way) gives up after 2 s and comes back,
-leaving them be for 5 s, or till they come at you. When you're down, one of
-yours (one not fighting, if there is one) comes to you and gets you up (3 s
-by you), as someone of your side would.
+leaving them be for 5 s, or till they come at you. Of several after you,
+they take on the one nearest you first. When you're down, one of yours (one
+not fighting, if there is one) comes to you and gets you up (3 s by you), as
+someone of your side would - brought to you if it's more than 40 m off, or
+your trail's cut on its way to you.
   A companion whose health runs out is knocked out: it lies there 10 s,
 then goes, and can come again 2 minutes later (Come to me, or your next
 life) - the page shows the wait. One put away hurt (unticked, or changed)
 comes back as hurt for 2 minutes. The server's owner sets how many come
 out with each player and on the whole server, and whether they may look
 like player models; a level near its limits holds them back for a while,
-and says so. Someone without the model a companion wears sees a stand-in
-(a Jedi, a trooper or a rebel). A custom character whose species and
-parts have long names (jedi_stkotor_european's, say) looks itself to
-players running this build; others see that species' default look.
+and says so. A companion in a look of its own looks itself only to
+players running this build who have its model; anyone here without it
+sees it as the NPC type it fights as, and every other game - the normal
+game, other mods, an older OpenJK VR - is sent it as that type (a
+Cultist_Saber companion in a custom model is a Cultist_Saber to them, in
+the colours you gave it where that model takes colours; its body too when
+it's knocked out). Nobody's game goes down drawing a model it hasn't got:
+without that type's model either - or any NPC's, on any server - you see
+a stand-in (a Jedi, a trooper or a rebel). A player of another game who
+has the server's models can see companions' own looks too, by typing
+/setu rpmodels 1 in their console (see README-SERVER.txt); you needn't.
 Without the headset, the same wheel (hold P) and the same page.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
@@ -1634,9 +1782,16 @@ camera. "cg_thirdPerson 1" gives third person all the time.
 
 KNOWN LIMITATIONS
 -----------------
-  * Shots on normal servers still start at your eye, not the gun barrel
-    (they go exactly where the aim dot shows). The VR server mod will fire
-    them from the gun.
+  * Shots start at your gun's muzzle only on servers running this build
+    (and games hosted with it); elsewhere they start at your eye (they go
+    exactly where the aim dot shows either way). Round a corner, the
+    muzzle fires only while your character's eyes can see your hand with
+    room round it (about 12 cm each way): a gun held round a corner
+    blind, or poked through a gap narrower than about 24 cm, fires from
+    your eye. Your game doesn't see a portable shield (or the few
+    breakable things only shots stop): with one in the way of your gun
+    the shot leaves from your eye, while the aim dot is still traced
+    from the barrel.
   * Other players see your real arms and head only in games hosted with
     this build, and only if they run it too (in a headset or not);
     elsewhere they see an animated character facing where your gun
@@ -1765,6 +1920,13 @@ no client. Source files:
   codemp/rd-vanilla/tr_scene.cpp   per-eye camera, HUD placement
   codemp/rd-vanilla/tr_main.cpp    asymmetric per-eye projection
   codemp/cgame/cg_vr.c         hands, aim dot
+  codemp/game/g_vrgun.c        shots from a VR player's gun barrel, the
+                               server's side: the gun as their avatar holds
+                               it, its world model's "*flash" (the rule both
+                               sides go by: game/bg_vrgun.h; the aim dot's
+                               side: cgame/cg_vr.c, cg_weapons.c, and
+                               cg_vrbody.c CG_VR_AvatarGun - your avatar's
+                               gun hand as the server's told it)
   codemp/cgame/cg_vrwrist.c    the HUD on your wrist: the status drawn for
                                it, once more after the eyes (the engine
                                shows it on your wrist: cl_vr.cpp

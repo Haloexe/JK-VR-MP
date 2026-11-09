@@ -7640,10 +7640,12 @@ static QINLINE void CG_ChatBox_DrawStrings(void)
 	}
 }
 
+// (OpenJK VR: each across the whole view in a headset - CG_FillScreen, cg_vr.c)
 static void CG_Draw2DScreenTints( void )
 {
 	float			rageTime, rageRecTime, absorbTime, protectTime, ysalTime;
 	vec4_t			hcolor;
+	int				viewContents;
 	if (cgs.clientinfo[cg.snap->ps.clientNum].team != TEAM_SPECTATOR)
 	{
 		if (cg.snap->ps.fd.forcePowersActive & (1 << FP_RAGE))
@@ -7673,7 +7675,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 
 			cgRageFadeTime = 0;
@@ -7728,7 +7730,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson && rageTime)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 			else
 			{
@@ -7738,7 +7740,7 @@ static void CG_Draw2DScreenTints( void )
 					hcolor[0] = 0.2f;
 					hcolor[1] = 0.2f;
 					hcolor[2] = 0.2f;
-					CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+					CG_FillScreen( hcolor );
 				}
 				cgRageTime = 0;
 			}
@@ -7770,7 +7772,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 
 			cgRageRecFadeTime = 0;
@@ -7804,7 +7806,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson && rageRecTime)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 			else
 			{
@@ -7839,7 +7841,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 
 			cgAbsorbFadeTime = 0;
@@ -7873,7 +7875,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson && absorbTime)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 			else
 			{
@@ -7908,7 +7910,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 
 			cgProtectFadeTime = 0;
@@ -7942,7 +7944,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson && protectTime)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 			else
 			{
@@ -7982,7 +7984,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 
 			cgYsalFadeTime = 0;
@@ -8016,7 +8018,7 @@ static void CG_Draw2DScreenTints( void )
 
 			if (!cg.renderingThirdPerson && ysalTime)
 			{
-				CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+				CG_FillScreen( hcolor );
 			}
 			else
 			{
@@ -8025,7 +8027,8 @@ static void CG_Draw2DScreenTints( void )
 		}
 	}
 
-	if ( (cg.refdef.viewContents&CONTENTS_LAVA) )
+	viewContents = CG_VR_ViewContents();	// (OpenJK VR: in a headset, at your head)
+	if ( (viewContents&CONTENTS_LAVA) )
 	{//tint screen red
 		float phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
 		hcolor[3] = 0.5 + (0.15f*sin( phase ));
@@ -8033,9 +8036,9 @@ static void CG_Draw2DScreenTints( void )
 		hcolor[1] = 0;
 		hcolor[2] = 0;
 
-		CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+		CG_FillScreen( hcolor );
 	}
-	else if ( (cg.refdef.viewContents&CONTENTS_SLIME) )
+	else if ( (viewContents&CONTENTS_SLIME) )
 	{//tint screen green
 		float phase = cg.time / 1000.0 * WAVE_FREQUENCY * M_PI * 2;
 		hcolor[3] = 0.4 + (0.1f*sin( phase ));
@@ -8043,9 +8046,9 @@ static void CG_Draw2DScreenTints( void )
 		hcolor[1] = 0.7f;
 		hcolor[2] = 0;
 
-		CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+		CG_FillScreen( hcolor );
 	}
-	else if ( (cg.refdef.viewContents&CONTENTS_WATER) )
+	else if ( (viewContents&CONTENTS_WATER) )
 	{//tint screen light blue -- FIXME: don't do this if CONTENTS_FOG? (in case someone *does* make a water shader with fog in it?)
 		float phase = cg.time / 1000.0f * WAVE_FREQUENCY * M_PI * 2;
 		hcolor[3] = 0.3f + (0.05f*sinf( phase ));
@@ -8053,7 +8056,7 @@ static void CG_Draw2DScreenTints( void )
 		hcolor[1] = 0.2f;
 		hcolor[2] = 0.8f;
 
-		CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+		CG_FillScreen( hcolor );
 	}
 }
 
@@ -8260,7 +8263,7 @@ static void CG_Draw2D_HUD( void ) {
 		hcolor[1] = 0;
 		hcolor[2] = 0;
 
-		CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, hcolor );
+		CG_FillScreen( hcolor );
 
 		if (!gCGHasFallVector)
 		{

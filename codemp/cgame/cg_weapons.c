@@ -24,6 +24,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // cg_weapons.c -- events and effects dealing with weapons
 #include "cg_local.h"
 #include "fx_local.h"
+#include "game/bg_vrgun.h"
 
 /*
 Ghoul2 Insert Start
@@ -598,6 +599,36 @@ qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle ) {
 	return qtrue;
 }
 
+// Where the gun in your hand fires from on a server that fires from its
+// barrel (bg_vrgun.h), as the server finds it from your avatar: the grip it's
+// drawn at (its model's origin, CG_VR_HeldWeaponPose), its muzzle - the
+// model's "*flash", or VR_BARREL_NO_FLASH along its barrel on one without
+// (where its flash is drawn) - and which way its barrel runs. qfalse: not
+// drawn in your hand.
+qboolean CG_VR_HeldWeaponBarrel( int weaponNum, vec3_t grip, vec3_t muzzle, vec3_t dir ) {
+	vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	vec3_t angles, flash, barrel = { 1.0f, 0.0f, 0.0f };
+	matrix3_t axis;
+	mdxaBone_t bolt;
+	void *g2;
+
+	if ( !CG_VR_HeldWeaponPose( weaponNum, grip, angles, axis ) ) {
+		return qfalse;
+	}
+	VectorScale( barrel, VR_BARREL_NO_FLASH, flash );
+	g2 = CG_VR_HeldWeaponG2( weaponNum );
+	if ( g2 && cg_vrHeldFlashBolt[weaponNum] >= 0 && trap->G2API_GetBoltMatrix( g2, 0, cg_vrHeldFlashBolt[weaponNum], &bolt,
+			zero, zero, cg.time, cgs.gameModels, zero ) ) {
+		BG_GiveMeVectorFromMatrix( &bolt, ORIGIN, flash );	// (the model at rest: its own axes, from its origin)
+		BG_GiveMeVectorFromMatrix( &bolt, POSITIVE_X, barrel );
+		if ( !( VectorNormalize( barrel ) >= 0.5f ) ) {
+			VectorSet( barrel, 1.0f, 0.0f, 0.0f );
+		}
+	}
+	BG_VRBarrelPlace( grip, axis, flash, barrel, muzzle, dir );
+	return qtrue;
+}
+
 static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 	void *g2;
 	int flashBolt;
@@ -644,7 +675,7 @@ static void CG_VR_AddHeldWeapon( centity_t *cent, int weaponNum ) {
 			VectorCopy( vr->aimAxis[h][i], al[i] );
 		}
 		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, gl, al, g, aim );
-		VectorMA( origin, 12.0f, aim[0], cg_vrHeld.flashOrigin );
+		VectorMA( origin, VR_BARREL_NO_FLASH, aim[0], cg_vrHeld.flashOrigin );	// (where a server firing from the barrel fires: bg_vrgun.h)
 		AxisCopy( aim, cg_vrHeld.flashAxis );
 	}
 	cg_vrHeld.ready = qtrue;
@@ -1055,8 +1086,7 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		return;
 	}
 
-	// OpenJK VR: crosshair floating where the hand-held gun's shots land
-	CG_VR_AddAimDot();
+	// (OpenJK VR: the crosshair floating where the hand-held gun's shots land is added once the scene's built - cg_view.c)
 
 	// no gun if in third person view or a camera is active
 	//if ( cg.renderingThirdPerson || cg.cameraMode) {

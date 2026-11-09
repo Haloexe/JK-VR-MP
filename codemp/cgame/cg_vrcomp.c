@@ -13,18 +13,29 @@ one came - a companion saved), and the page changes them with "rpui comp
 
 WHOSE. The configstring CS_VR_COMPANIONS + owner says which entities are a
 player's companions, their names, and a look whose skin was too long for
-the model's configstring ("<entity>\<name>\<look>", '\' between; the
-look "" but for those: its model's configstring has the default skin). A
-companion you look at shows its card (cg_vrrp.c: its name over its head,
-whose it is, its side); the wheel's Companions ring (cg_vrpose.c) gives
-your orders, greyed with none of yours out; one getting you up (rpup:
-cg_vrdown.c) goes by its name.
+a model's configstring ("<entity>\<name>\<look>", '\' between; the look ""
+but for those - on a server before CS_VR_COMPLOOKS, its model's
+configstring has the model's default skin). A companion you look at shows
+its card (cg_vrrp.c: its name over its head, whose it is, its side); the
+wheel's Companions ring (cg_vrpose.c) gives your orders, greyed with none
+of yours out; one getting you up (rpup: cg_vrdown.c) goes by its name.
 
-STAND-INS. A companion's model this PC hasn't got, or one not on the
-humanoid skeleton (another skeleton wants animations of its own, which
-may not be here either), is drawn as a stand-in for its kind - a Jedi, a
-trooper, anyone else - and never not at all (cg_players.c:
-CG_G2AnimEntModelLoad). A look told beside (above) is drawn in its skin.
+LOOKS. Every game is sent a companion as its NPC type comes, its type's
+model and skin (a game without a look's model would go down drawing it);
+its look of its own is told beside, to us (CS_VR_COMPLOOKS: "<entity>\<look>"
+each, '\' between, as many in each of them as fit - out, or knocked out
+while its body's there). We draw it in its look where this PC has the
+model (in the look's skin, else - not here - as it's sent where that's the
+same model, else the model's own), else as its type comes
+(cg_players.c: CG_G2AnimEntModelLoad).
+
+STAND-INS. A companion's model this PC hasn't got (its look's, and its
+type's), or one not on the humanoid skeleton (another skeleton wants
+animations of its own, which may not be here either), is drawn as a
+stand-in for its kind - a Jedi, a trooper, anyone else - and never not at
+all; so is any other NPC whose model this PC hasn't got at all, on any
+server (CG_RP_NpcModel). On a server before CS_VR_COMPLOOKS, a look told
+beside its model's configstring (WHOSE, above) is drawn in its skin.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -65,9 +76,18 @@ typedef struct {
 
 static cgCompsOf_t cgCompsOf[MAX_CLIENTS];
 
+// the companions in looks of their own, as their configstrings say (CS_VR_COMPLOOKS)
+static struct {
+	char	cs[RP_COMP_LOOKS_CS][MAX_STRING_CHARS];	// the configstrings, as read
+	int		count;
+	int		ent[RP_COMP_OUT_MAX * MAX_CLIENTS];
+	char	look[RP_COMP_OUT_MAX * MAX_CLIENTS][MAX_QPATH];
+} cgcLooks;
+
 static struct {
 	char		model[MAX_QPATH];
-	qboolean	ok;
+	qboolean	there;		// its model.glm's on this PC...
+	qboolean	ok;			// ...on the humanoid skeleton
 } cgcModels[RPC_MODELS];
 static int cgcNumModels;
 
@@ -154,6 +174,42 @@ const char *CG_RP_CompName( int entNum ) {
 		}
 	}
 	return NULL;
+}
+
+// The companions in looks of their own (their configstrings read again if
+// one's changed; none where roleplay isn't on).
+static void CG_RPC_Looks( void ) {
+	qboolean changed = qfalse;
+	int n;
+
+	for ( n = 0; n < RP_COMP_LOOKS_CS; n++ ) {
+		const char *cs = CG_RP_On() ? CG_ConfigString( CS_VR_COMPLOOKS + n ) : "";
+		if ( strcmp( cs, cgcLooks.cs[n] ) ) {
+			Q_strncpyz( cgcLooks.cs[n], cs, sizeof( cgcLooks.cs[0] ) );
+			changed = qtrue;
+		}
+	}
+	if ( !changed ) {
+		return;
+	}
+	cgcLooks.count = 0;
+	for ( n = 0; n < RP_COMP_LOOKS_CS; n++ ) {
+		cgcLooks.count = BG_VRCompLooksRead( cgcLooks.cs[n], cgcLooks.ent, cgcLooks.look, cgcLooks.count, (int)ARRAY_LEN( cgcLooks.ent ) );
+	}
+}
+
+// A companion's look of its own ("": none, or the entity isn't one) - out,
+// or knocked out (its body's still there).
+const char *CG_RP_CompLook( int entNum ) {
+	int k;
+
+	CG_RPC_Looks();
+	for ( k = 0; k < cgcLooks.count; k++ ) {
+		if ( cgcLooks.ent[k] == entNum ) {
+			return cgcLooks.look[k];
+		}
+	}
+	return "";
 }
 
 // A companion's look told beside its configstring (a skin too long for it:
@@ -378,9 +434,9 @@ Stand-ins (cg_players.c: CG_G2AnimEntModelLoad)
 ================================================================================
 */
 
-// Whether a model's here, on the humanoid skeleton (as its model.glm's first
-// bytes say: bg_vrcomp.c; kept - asked once).
-static qboolean CG_RPC_ModelOk( const char *path ) {
+// Whether a model's here (there), and on the humanoid skeleton (as its
+// model.glm's first bytes say: bg_vrcomp.c) - kept: asked once.
+static qboolean CG_RPC_Model( const char *path, qboolean *there ) {
 	byte head[BG_VRCOMP_GLM_HEAD];
 	fileHandle_t f = 0;
 	int i, len;
@@ -388,10 +444,12 @@ static qboolean CG_RPC_ModelOk( const char *path ) {
 
 	for ( i = 0; i < cgcNumModels; i++ ) {
 		if ( !Q_stricmp( cgcModels[i].model, path ) ) {
+			*there = cgcModels[i].there;
 			return cgcModels[i].ok;
 		}
 	}
 	len = trap->FS_Open( path, &f, FS_READ );
+	*there = (qboolean)( f != 0 );
 	if ( f ) {
 		if ( len >= (int)sizeof( head ) && trap->FS_Read( head, sizeof( head ), f ) == (int)sizeof( head ) ) {
 			ok = BG_VRCompGlmHumanoid( head, sizeof( head ) );
@@ -400,35 +458,33 @@ static qboolean CG_RPC_ModelOk( const char *path ) {
 	}
 	if ( cgcNumModels < RPC_MODELS ) {
 		Q_strncpyz( cgcModels[cgcNumModels].model, path, sizeof( cgcModels[0].model ) );
+		cgcModels[cgcNumModels].there = *there;
 		cgcModels[cgcNumModels].ok = ok;
 		cgcNumModels++;
 	}
 	return ok;
 }
 
-// A companion's model, as CG_G2AnimEntModelLoad has it ("models/players/<model>/model.glm",
-// its skin taken off): if it won't do here, a stand-in for its kind instead, and its skin.
-int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID ) {
-	const char *standIn, *told = CG_RPC_ToldLook( cent->currentState.number );
+// Whether a model's here, on the humanoid skeleton.
+static qboolean CG_RPC_ModelOk( const char *path ) {
+	qboolean there;
+	return CG_RPC_Model( path, &there );
+}
+
+// Whether a model's here at all (on whatever skeleton).
+static qboolean CG_RPC_ModelThere( const char *path ) {
+	qboolean there;
+	CG_RPC_Model( path, &there );
+	return there;
+}
+
+// A stand-in for an NPC's kind, for a model this PC hasn't got: a Jedi, a
+// trooper, anyone else (or, those not here either, the game's own model) -
+// into modelName, and its skin.
+static int CG_RPC_StandIn( const centity_t *cent, char *modelName, int size ) {
+	const char *standIn;
 	char path[MAX_QPATH];
 
-	if ( CG_RPC_ModelOk( modelName ) ) {
-		if ( told[0] ) {
-			// its skin, told beside (too long for its model's configstring,
-			// which has the default): the skin the look names, on its model
-			char model[MAX_QPATH], skin[MAX_QPATH];
-			qhandle_t h;
-			BG_VRCompLookSplit( told, model, sizeof( model ), skin, sizeof( skin ) );
-			Com_sprintf( path, sizeof( path ), "models/players/%s/model.glm", model );
-			if ( !Q_stricmp( path, modelName ) ) {
-				h = trap->R_RegisterSkin( strchr( skin, '|' ) ? va( "models/players/%s/|%s", model, skin ) : va( "models/players/%s/model_%s.skin", model, skin ) );
-				if ( h ) {
-					return h;
-				}
-			}
-		}
-		return skinID;
-	}
 	switch ( cent->currentState.NPC_class ) {
 	case CLASS_JEDI:
 	case CLASS_LUKE:
@@ -459,6 +515,58 @@ int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinI
 	return trap->R_RegisterSkin( va( "models/players/%s/model_default.skin", standIn ) );
 }
 
+// A companion's model, as CG_G2AnimEntModelLoad has it ("models/players/<model>/model.glm",
+// its skin taken off - as the server sends it every game: as its type comes):
+// its look of its own instead, where that's here; else as it's sent, where
+// that's here; else a stand-in for its kind - and its skin.
+int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID ) {
+	const char *look = CG_RP_CompLook( cent->currentState.number );
+	const char *told = look[0] ? "" : CG_RPC_ToldLook( cent->currentState.number );	// (a server before CS_VR_COMPLOOKS)
+	char path[MAX_QPATH];
+
+	if ( look[0] ) {
+		char model[MAX_QPATH], skin[MAX_QPATH];
+		BG_VRCompLookSplit( look, model, sizeof( model ), skin, sizeof( skin ) );
+		Com_sprintf( path, sizeof( path ), "models/players/%s/model.glm", model );
+		if ( CG_RPC_ModelOk( path ) ) {
+			qhandle_t h = trap->R_RegisterSkin( strchr( skin, '|' ) ? va( "models/players/%s/|%s", model, skin ) :
+				va( "models/players/%s/model_%s.skin", model, skin ) );
+			if ( !h ) {	// (its skin's not here: as it's sent where that's the same model, else the model's own)
+				h = !Q_stricmp( path, modelName ) ? skinID : trap->R_RegisterSkin( va( "models/players/%s/model_default.skin", model ) );
+			}
+			Q_strncpyz( modelName, path, size );
+			return h;
+		}
+	}
+	if ( CG_RPC_ModelOk( modelName ) ) {
+		if ( told[0] ) {
+			// its skin, told beside (too long for its model's configstring,
+			// which has the default): the skin the look names, on its model
+			char model[MAX_QPATH], skin[MAX_QPATH];
+			qhandle_t h;
+			BG_VRCompLookSplit( told, model, sizeof( model ), skin, sizeof( skin ) );
+			Com_sprintf( path, sizeof( path ), "models/players/%s/model.glm", model );
+			if ( !Q_stricmp( path, modelName ) ) {
+				h = trap->R_RegisterSkin( strchr( skin, '|' ) ? va( "models/players/%s/|%s", model, skin ) : va( "models/players/%s/model_%s.skin", model, skin ) );
+				if ( h ) {
+					return h;
+				}
+			}
+		}
+		return skinID;
+	}
+	return CG_RPC_StandIn( cent, modelName, size );
+}
+
+// Any other NPC (nobody's companion, on any server), as CG_G2AnimEntModelLoad
+// has it: as it's sent - or, its model not on this PC at all (a server's NPC
+// of its own, say), a stand-in for its kind: a game would go down drawing a
+// model it hasn't got. (On another skeleton, as it's sent: a droid's, a
+// beast's - its own animations.)
+int CG_RP_NpcModel( const centity_t *cent, char *modelName, int size, int skinID ) {
+	return CG_RPC_ModelThere( modelName ) ? skinID : CG_RPC_StandIn( cent, modelName, size );
+}
+
 /*
 ================================================================================
 Every frame, starting and stopping
@@ -480,6 +588,7 @@ void CG_RP_CompInit( void ) {
 	memset( &cgc, 0, sizeof( cgc ) );
 	cgc.gen = gen;
 	memset( cgCompsOf, 0, sizeof( cgCompsOf ) );
+	memset( &cgcLooks, 0, sizeof( cgcLooks ) );
 	cgcNumModels = 0;
 	cgc.count = -1;
 	for ( i = 0; i < RP_COMP_MAX; i++ ) {

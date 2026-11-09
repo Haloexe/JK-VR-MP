@@ -42,11 +42,28 @@ asked: "rpui <what>", run from here.
                server's by rcon, its password typed - and it says so)
   Admin        an admin's only (its button at the top: ui_rpAdmin, from the
                server's rpadmin): every NPC and vehicle the game's files have
-               (feeder 67, a box to find one) to spawn in front of you; kill
+               (feeder 67, a box to find one) to spawn in front of you - an
+               NPC with the Faction picked (its file's, the Heroes', the
+               Villains', neutral, a creature: on a server that takes one,
+               as rpadmin says - ui_rpAdminSides); kill
                those you spawned, or every NPC; god mode, no-clip, no target
                (each as the server says it is); give all; All Force
                Powers (every power at level 3: give forcepowers - on a
-               server that gives them, as it says)
+               server that gives them, as it says); and, on a server that
+               has them (it says how they go: ui_rpInvAble, cg_vrrp.c), its
+               Invasion part - who invades (Reborn, Stormtroopers, Rebels,
+               Jedi, or an NPC type by name), their Faction (as a spawn's,
+               but neutral), waves (or till it's stopped),
+               a wave's, how many up at once, the next wave once one's
+               beaten or on a timer, the wait; Start, Stop all; how each
+               invasion on goes, as the server says (ui_rpInvLine<n>). On a
+               server that takes them (rpadmin: ui_rpAdminWars) an
+               invasion's of up to three NPC types, mixed in every wave or
+               each so many a wave (How many), and its Mode - Invasion, or
+               War: each side's lineup (Lineup of: the Heroes', the
+               Villains', the Creatures' - two at least), the same settings
+               (each side's), Start war, Stop war; its first line the war
+               they make (ui_rpWarSum)
 
 Also: Roleplay on Create game (g_rp, in a free row of its settings).
 
@@ -71,13 +88,31 @@ void			UI_ParseMenu( const char *menuFile );
 #define VRRP_CHARS_MAX		10
 #define VRRP_PEOPLE_AGAIN	8000	// while People's up, the cards asked for again this often (ms)
 #define VRRP_MESSAGE_TIME	10000	// a message (ui_rpMessage) shown this long (ms)
-#define VRRP_NPCS_MAX		1024	// NPCs and vehicles the Admin page lists, at most
+#define VRRP_NPCS_MAX		4096	// NPCs and vehicles the Admin page lists, at most (NPC packs and all)
 #define VRRP_NPC_NAME		64
-#define VRRP_NPC_FILE_MAX	65536	// a file of them read (more of one: cut there)
+#define VRRP_NPC_FILE_MAX	0x40000	// a file of them read: one as big, left out (as the server leaves an NPC file out)
 #define VRRP_COMPS_MOST		64		// companions out on the server at once, the most the page sets
 
 enum { RPP_CHARS, RPP_EDIT, RPP_PEOPLE, RPP_CHAT, RPP_HELP, RPP_SERVER, RPP_ADMIN, RPP_PAGES };
 enum { RPS_SETTINGS, RPS_ADMINS, RPS_COMPANIONS };	// the Server page's parts
+enum { RPA_CHEATS, RPA_INVASION };	// the Admin page's parts
+#define VRRP_INV_KINDS		4		// the Invasion part's who: its presets' words (then one by name: ui_rpInvType)
+#define VRRP_INV_NOBODY		5		// a lineup's row, nobody (else) in it: a war's first, the side's not in the war
+#define VRRP_INV_ROWS		3		// a lineup's rows (the server takes 4 NPC types an invasion: g_vrinvade.c)
+#define VRRP_INV_EACH_MOST	32		// how many of one a wave, at most (as the server's)
+#define VRRP_WAR_SIDES		3
+#define VRRP_WAR_SUM_MOST	80		// the War mode's first line, cut at this ("..."): within the page
+static const char *vrrpInvaders[VRRP_INV_KINDS] = { "reborn", "stormtroopers", "rebels", "jedi" };
+static const char *vrrpInvaderTitles[VRRP_INV_KINDS] = { "Reborn", "Stormtroopers", "Rebels", "Jedi" };
+// a war's sides (as the game sends them on: light, dark, creatures - cg_vrrp.c): their rows' cvars (ui_rpWar<side>Kind<n>...),
+// what the page calls them
+static const char *vrrpWarCvars[VRRP_WAR_SIDES] = { "Light", "Dark", "Creatures" };
+static const char *vrrpWarTitles[VRRP_WAR_SIDES] = { "Heroes", "Villains", "Creatures" };
+
+// The Admin page's Faction for an NPC (ui_rpAdmSide, a spawn's; ui_rpInvSide,
+// an invasion's): its words for the game (cg_vrrp.c), by the row's value - 0,
+// none: its NPC file's.
+static const char *vrrpSideWords[] = { "", "light", "dark", "neutral", "creature" };
 
 static const char *vrrpFactions[] = { "Heroes", "Villains", "Neutral" };
 
@@ -98,6 +133,7 @@ static struct {
 	int			people[MAX_CLIENTS];
 	char		names[MAX_CLIENTS][MAX_QPATH];
 	int			srvPart;		// the Server page's part shown: RPS_*
+	int			admPart;		// the Admin page's: RPA_*
 	char		adminFind[MAX_CVAR_VALUE_STRING];	// what the Admin page's list was lit from the top for
 } vrrp = { RPP_CHARS, qfalse, qfalse, -1, 0 };
 
@@ -319,7 +355,7 @@ static qboolean UI_VRRP_NPCNameOk( const char *name ) {
 
 // The NPCs (or vehicles) a file of them defines, into the list.
 static void UI_VRRP_ReadNPCFile( const char *path, qboolean vehicle ) {
-	static char text[VRRP_NPC_FILE_MAX];
+	static char text[VRRP_NPC_FILE_MAX + 1];
 	fileHandle_t f = 0;
 	const char *p;
 	int len, i;
@@ -328,16 +364,17 @@ static void UI_VRRP_ReadNPCFile( const char *path, qboolean vehicle ) {
 	if ( !f ) {
 		return;
 	}
-	if ( len <= 0 ) {
+	if ( len <= 0 || len >= VRRP_NPC_FILE_MAX ) {
 		trap->FS_Close( f );
-		return;
-	}
-	if ( len >= (int)sizeof( text ) ) {
-		len = (int)sizeof( text ) - 1;	// (one this big: what's past it, left out)
+		return;	// (an NPC file this big the server leaves out: NPC_LoadParms)
 	}
 	trap->FS_Read( text, len, f );
 	trap->FS_Close( f );
 	text[len] = '\0';
+	if ( !vehicle ) {	// (an NPC file as the server reads one, and the part of it it keeps: NPC_LoadParms)
+		len = BG_VRNPCFileText( text, len );
+		text[BG_VRBlocksInStep( text, len, NULL, 0 )] = '\0';
+	}
 	p = text;
 	COM_BeginParseSession( path );
 	while ( p && vrrpNPCs.count < VRRP_NPCS_MAX ) {
@@ -380,7 +417,7 @@ static int QDECL UI_VRRP_NPCOrder( const void *a, const void *b ) {
 
 // The game's NPCs and vehicles, read once (a menu set loaded again keeps them).
 static void UI_VRRP_ReadNPCs( void ) {
-	static char files[16384];
+	static char files[0x40000];	// (every file there can be: 4096, MAX_FOUND_FILES - NPC packs' and all)
 	static const struct { const char *dir, *ext; qboolean vehicle; } kinds[] = {
 		{ "ext_data/NPCs", ".npc", qfalse },
 		{ "ext_data/vehicles", ".veh", qtrue },
@@ -541,6 +578,198 @@ static void UI_VRRP_SetPick( menuDef_t *menu, const char *name, int index ) {
 
 /*
 --------------------------------------------------------------------------------
+The Invasion part's lineups: an invasion's, each side's of a war
+--------------------------------------------------------------------------------
+*/
+
+// Whether the server takes lineups - several NPC types an invasion, how many
+// a wave of each - and wars (it says so: rpadmin - ui_rpAdminWars, cg_vrrp.c).
+static qboolean UI_VRRP_Wars( void ) {
+	return (qboolean)( UI_VRRP_Int( "ui_rpAdminWars" ) == 1 );
+}
+
+// The Invasion part's in War mode (Mode: a server without wars, Invasion).
+static qboolean UI_VRRP_WarMode( void ) {
+	return (qboolean)( UI_VRRP_Wars() && UI_VRRP_Int( "ui_rpInvMode" ) == 1 );
+}
+
+// The war's side whose lineup the rows show (Lineup of).
+static int UI_VRRP_WarSide( void ) {
+	return Com_Clampi( 0, VRRP_WAR_SIDES - 1, UI_VRRP_Int( "ui_rpWarSide" ) );
+}
+
+// A lineup's row's cvar - what's Kind (who: a preset, by name, nobody), Type
+// (the NPC type by name) or Each (how many a wave: 0, mixed) - of row n of
+// an invasion's (side -1: ui_rpInvKind, ui_rpInvKind1...) or a war side's
+// (ui_rpWarLightKind0...).
+static void UI_VRRP_RowCvar( int side, int n, const char *what, char *out, int size ) {
+	if ( side >= 0 ) {
+		Com_sprintf( out, size, "ui_rpWar%s%s%i", vrrpWarCvars[side], what, n );
+	} else if ( n ) {
+		Com_sprintf( out, size, "ui_rpInv%s%i", what, n );
+	} else {
+		Com_sprintf( out, size, "ui_rpInv%s", what );
+	}
+}
+
+static int UI_VRRP_RowInt( int side, int n, const char *what ) {
+	char cvar[MAX_QPATH];
+
+	UI_VRRP_RowCvar( side, n, what, cvar, sizeof( cvar ) );
+	return UI_VRRP_Int( cvar );
+}
+
+// Whether row n has someone in it: a preset or an NPC type by name.
+static qboolean UI_VRRP_RowSomeone( int side, int n ) {
+	const int kind = UI_VRRP_RowInt( side, n, "Kind" );
+
+	return (qboolean)( kind >= 0 && kind <= VRRP_INV_KINDS );
+}
+
+// The rows of a lineup in it: the first ones with someone in each (a row
+// after one with nobody, not shown, isn't); one at most where the server
+// takes one NPC type an invasion.
+static int UI_VRRP_Rows( int side ) {
+	const int most = UI_VRRP_Wars() ? VRRP_INV_ROWS : 1;
+	int n;
+
+	for ( n = 0; n < most && UI_VRRP_RowSomeone( side, n ); n++ ) {
+	}
+	return n;
+}
+
+// A lineup's row's items (groups rp_inv_s<n>, an invasion's, and
+// rp_war<side>_s<n>, a war side's - its Type box's a t after, its How
+// many's an n): shown on the Invasion part in their mode (a war side's, the
+// side Lineup of picks), a row with someone in every row before it - a
+// server that takes several; its Type box with An NPC type, by name picked,
+// its How many with someone in it. -1: not one of them.
+static int UI_VRRP_RowShown( const char *group ) {
+	int side = -1, n, shownRows;
+	const char *p;
+
+	if ( !Q_stricmpn( group, "rp_inv_s", 8 ) ) {
+		p = group + 8;
+	} else if ( !Q_stricmpn( group, "rp_war", 6 ) && group[6] >= '0' && group[6] < '0' + VRRP_WAR_SIDES && !Q_stricmpn( group + 7, "_s", 2 ) ) {
+		side = group[6] - '0';
+		p = group + 9;
+	} else {
+		return -1;
+	}
+	if ( p[0] < '0' || p[0] >= '0' + VRRP_INV_ROWS || ( p[1] && ( ( p[1] != 't' && p[1] != 'n' ) || p[2] ) ) ) {
+		return -1;
+	}
+	n = p[0] - '0';
+	if ( vrrp.page != RPP_ADMIN || vrrp.admPart != RPA_INVASION || ( side >= 0 ) != UI_VRRP_WarMode() || ( side >= 0 && side != UI_VRRP_WarSide() ) ) {
+		return 0;
+	}
+	shownRows = Q_min( UI_VRRP_Rows( side ) + 1, UI_VRRP_Wars() ? VRRP_INV_ROWS : 1 );
+	if ( n >= shownRows ) {
+		return 0;
+	}
+	if ( p[1] == 't' ) {
+		return UI_VRRP_RowInt( side, n, "Kind" ) == VRRP_INV_KINDS;
+	}
+	if ( p[1] == 'n' ) {
+		return UI_VRRP_Wars() && UI_VRRP_RowSomeone( side, n );
+	}
+	return 1;
+}
+
+// What a lineup's rows make (side -1, an invasion's; a war side's) - an NPC
+// type or a preset each, a comma between, how many a wave of one after a
+// colon (reborn:2,jedi; several, and how many, only on a server that takes
+// them): how many NPC types it's of (0: nobody - a war's side not in it);
+// -1, a row's NPC type isn't one, or one's in it twice: ui_rpMessage says so
+// (whose: the side's, "Villains: ").
+static int UI_VRRP_Lineup( int side, const char *whose, char *who, int size ) {
+	char names[VRRP_INV_ROWS][VRRP_NPC_NAME];
+	const int rows = UI_VRRP_Rows( side );
+	int n, i;
+
+	who[0] = '\0';
+	for ( n = 0; n < rows; n++ ) {
+		const int kind = UI_VRRP_RowInt( side, n, "Kind" );
+		const int each = UI_VRRP_Wars() ? Com_Clampi( 0, VRRP_INV_EACH_MOST, UI_VRRP_RowInt( side, n, "Each" ) ) : 0;
+		if ( kind < VRRP_INV_KINDS ) {
+			Q_strncpyz( names[n], vrrpInvaders[kind], sizeof( names[n] ) );
+		} else {
+			char cvar[MAX_QPATH], typed[MAX_CVAR_VALUE_STRING];	// (one too long: seen whole, and refused)
+			UI_VRRP_RowCvar( side, n, "Type", cvar, sizeof( cvar ) );
+			UI_VRRP_Str( cvar, typed, sizeof( typed ) );
+			if ( !UI_VRRP_NPCNameOk( typed ) ) {
+				trap->Cvar_Set( "ui_rpMessage", va( "%sType the NPC type's name: letters, numbers, _ - and .", whose ) );
+				return -1;
+			}
+			Q_strncpyz( names[n], typed, sizeof( names[n] ) );
+		}
+		for ( i = 0; i < n; i++ ) {
+			if ( !Q_stricmp( names[i], names[n] ) ) {
+				trap->Cvar_Set( "ui_rpMessage", va( "%s%s is in it twice: pick it once - How many, how many a wave of it", whose,
+					( kind < VRRP_INV_KINDS ) ? vrrpInvaderTitles[kind] : names[n] ) );
+				return -1;
+			}
+		}
+		Q_strcat( who, size, n ? "," : "" );
+		Q_strcat( who, size, names[n] );
+		if ( each ) {
+			Q_strcat( who, size, va( ":%i", each ) );
+		}
+	}
+	return rows;
+}
+
+// The War mode's first line (ui_rpWarSum): the war its lineups make, each
+// side's NPC types against the others' - where you stand - or what it needs yet.
+static void UI_VRRP_WarSum( void ) {
+	char sides[VRRP_WAR_SIDES][MAX_CVAR_VALUE_STRING], sum[MAX_CVAR_VALUE_STRING];
+	int s, n, in = 0;
+
+	for ( s = 0; s < VRRP_WAR_SIDES; s++ ) {
+		const int rows = UI_VRRP_Rows( s );
+		if ( !rows ) {
+			continue;
+		}
+		Com_sprintf( sides[in], sizeof( sides[in] ), "%s (", vrrpWarTitles[s] );
+		for ( n = 0; n < rows; n++ ) {
+			const int kind = UI_VRRP_RowInt( s, n, "Kind" );
+			char name[VRRP_NPC_NAME];
+			if ( kind < VRRP_INV_KINDS ) {
+				Q_strncpyz( name, vrrpInvaderTitles[kind], sizeof( name ) );
+			} else {
+				char cvar[MAX_QPATH];
+				UI_VRRP_RowCvar( s, n, "Type", cvar, sizeof( cvar ) );
+				UI_VRRP_Str( cvar, name, sizeof( name ) );
+				if ( !name[0] ) {
+					Q_strncpyz( name, "an NPC type", sizeof( name ) );
+				}
+			}
+			Q_strcat( sides[in], sizeof( sides[in] ), va( "%s%s", n ? ", " : "", name ) );
+		}
+		Q_strcat( sides[in], sizeof( sides[in] ), ")" );
+		in++;
+	}
+	if ( in < 2 ) {
+		Q_strncpyz( sum, "War: two sides at least - pick who fights for each in Lineup of", sizeof( sum ) );
+	} else if ( in == 2 ) {
+		Com_sprintf( sum, sizeof( sum ), "War: %s against %s, where you stand", sides[0], sides[1] );
+		if ( (int)strlen( sum ) > VRRP_WAR_SUM_MOST ) {
+			Com_sprintf( sum, sizeof( sum ), "War: %s against %s", sides[0], sides[1] );	// (too long: just the sides)
+		}
+	} else {
+		Com_sprintf( sum, sizeof( sum ), "War: %s, %s and %s, each against the others", sides[0], sides[1], sides[2] );
+		if ( (int)strlen( sum ) > VRRP_WAR_SUM_MOST ) {
+			Com_sprintf( sum, sizeof( sum ), "War: %s, %s and %s", sides[0], sides[1], sides[2] );
+		}
+	}
+	if ( (int)strlen( sum ) > VRRP_WAR_SUM_MOST ) {
+		strcpy( sum + VRRP_WAR_SUM_MOST - 3, "..." );
+	}
+	trap->Cvar_Set( "ui_rpWarSum", sum );
+}
+
+/*
+--------------------------------------------------------------------------------
 Every frame, while it's up: what's shown, as things stand
 --------------------------------------------------------------------------------
 */
@@ -577,11 +806,44 @@ static int UI_VRRP_Shown( const char *group, int server, qboolean in, qboolean p
 		return admin;
 	}
 	if ( !Q_stricmp( group, "rp_admin" ) ) {
-		return vrrp.page == RPP_ADMIN;	// (no longer an admin: another page - UI_VRRP_Frame)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_CHEATS;	// (no longer an admin: another page - UI_VRRP_Frame)
 	}
 	if ( !Q_stricmp( group, "rp_admin_force" ) ) {	// (All Force Powers: a server that gives them)
 		int grey, master;
-		return vrrp.page == RPP_ADMIN && UI_VRRP_ServerRoles( &grey, &master );
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_CHEATS && UI_VRRP_ServerRoles( &grey, &master );
+	}
+	if ( !Q_stricmp( group, "rp_admin_inv" ) ) {	// (the Invasion part's button: a server that has them)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_CHEATS && UI_VRRP_Int( "ui_rpInvAble" ) == 1;
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv" ) ) {
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION;
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv_im" ) ) {	// (its Invasion mode's)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && !UI_VRRP_WarMode();
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv_wm" ) ) {	// (its War mode's)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && UI_VRRP_WarMode();
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv_wars" ) ) {	// (Mode: a server that has wars)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && UI_VRRP_Wars();
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv_none" ) ) {	// (no invasion on)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && UI_VRRP_Int( "ui_rpInvOn" ) != 1 && !UI_VRRP_WarMode();
+	}
+	if ( !Q_stricmp( group, "rp_adm_war_none" ) ) {	// (no war on - nor an invasion)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && UI_VRRP_Int( "ui_rpInvOn" ) != 1 && UI_VRRP_WarMode();
+	}
+	{	// (a lineup's rows)
+		const int row = UI_VRRP_RowShown( group );
+		if ( row >= 0 ) {
+			return row;
+		}
+	}
+	if ( !Q_stricmp( group, "rp_admin_side" ) ) {	// (a spawn's Faction: a server that takes one - it says so, rpadmin)
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_CHEATS && UI_VRRP_Int( "ui_rpAdminSides" ) == 1;
+	}
+	if ( !Q_stricmp( group, "rp_adm_inv_side" ) ) {	// (an invasion's: a war's sides are its lineups')
+		return vrrp.page == RPP_ADMIN && vrrp.admPart == RPA_INVASION && UI_VRRP_Int( "ui_rpAdminSides" ) == 1 && !UI_VRRP_WarMode();
 	}
 	if ( !Q_stricmp( group, "rp_in" ) ) {
 		return chars && in && !vrrp.password;
@@ -768,6 +1030,9 @@ static void UI_VRRP_Lines( int server, const char *account, const char *playing,
 	} else {
 		trap->Cvar_Set( "ui_rpAdminWhoLine", "Only someone with this server's rcon password (above) can make admins." );
 	}
+	if ( vrrp.page == RPP_ADMIN && admin && vrrp.admPart == RPA_INVASION && UI_VRRP_WarMode() ) {
+		UI_VRRP_WarSum();
+	}
 	if ( vrrp.page == RPP_ADMIN && admin ) {
 		const int shown = UI_VRRP_NPCs();
 		trap->Cvar_Set( "ui_rpAdminCountLine", vrrpNPCs.find[0] ? va( "%i of %i found", shown, vrrpNPCs.count ) :
@@ -813,6 +1078,9 @@ void UI_VRRP_Frame( void ) {
 	}
 	if ( vrrp.page == RPP_ADMIN && !admin ) {
 		UI_VRRP_Page( RPP_CHARS );	// (no longer an admin: the first page)
+	}
+	if ( vrrp.admPart == RPA_INVASION && UI_VRRP_Int( "ui_rpInvAble" ) != 1 ) {
+		vrrp.admPart = RPA_CHEATS;	// (a server without them - told nothing yet: the cheats)
 	}
 	UI_VRRP_PickedChar();	// (the lists lit on a row there is)
 	if ( vrrp.page == RPP_PEOPLE ) {
@@ -885,6 +1153,17 @@ void UI_VRRP_Frame( void ) {
 What the buttons do (uiScript vrRP <what> ...)
 --------------------------------------------------------------------------------
 */
+
+// The Faction picked in its row (cvar): its word for the game (vrrpSideWords)
+// - "": none, its NPC file's (a server that takes none: the row's not there).
+static const char *UI_VRRP_Side( const char *cvar ) {
+	const int n = UI_VRRP_Int( cvar );
+
+	if ( UI_VRRP_Int( "ui_rpAdminSides" ) != 1 || n <= 0 || n >= (int)ARRAY_LEN( vrrpSideWords ) ) {
+		return "";
+	}
+	return vrrpSideWords[n];
+}
 
 // What was set here last, or the default.
 static void UI_VRRP_Keep( const char *cvar, const char *def ) {
@@ -960,6 +1239,7 @@ static void UI_VRRP_Page( int page ) {
 	vrrp.page = Com_Clampi( 0, RPP_PAGES - 1, page );
 	vrrp.newAccount = vrrp.password = qfalse;
 	vrrp.srvPart = RPS_SETTINGS;
+	vrrp.admPart = RPA_CHEATS;
 	vrrp.deleting = -1;
 	vrrp.peopleTime = 0;
 	trap->Cvar_Set( "ui_rpMessage", "" );
@@ -986,6 +1266,9 @@ static void UI_VRRP_Page( int page ) {
 		} else {
 			UI_VRRP_FromServer();	// (another server's: as its serverinfo has them)
 		}
+		break;
+	case RPP_ADMIN:
+		UI_VRRP_Keep( "ui_rpAdmSide", "0" );	// (a spawn's Faction: its NPC file's)
 		break;
 	default:
 		break;
@@ -1188,7 +1471,8 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 	} else if ( !Q_stricmp( what, "adminSpawn" ) ) {
 		const vrrpNPC_t *npc = UI_VRRP_PickedNPC();
 		if ( npc ) {
-			UI_VRRP_Exec( va( "rpui admin spawn %s %s\n", npc->name, npc->vehicle ? "vehicle" : "npc" ) );
+			const char *side = npc->vehicle ? "" : UI_VRRP_Side( "ui_rpAdmSide" );	// (a vehicle takes none)
+			UI_VRRP_Exec( va( "rpui admin spawn %s %s%s%s\n", npc->name, npc->vehicle ? "vehicle" : "npc", side[0] ? " " : "", side ) );
 		} else {
 			trap->Cvar_Set( "ui_rpMessage", vrrpNPCs.count ? "Nothing in the list matches what's in Find" : "No NPCs found in the game's files" );
 		}
@@ -1197,6 +1481,86 @@ qboolean UI_VRRP_Script( const char *name, char **args ) {
 		if ( String_Parse( args, &how ) && ( !Q_stricmp( how, "killmine" ) || !Q_stricmp( how, "killall" ) || !Q_stricmp( how, "god" ) ||
 			!Q_stricmp( how, "noclip" ) || !Q_stricmp( how, "notarget" ) || !Q_stricmp( how, "give" ) || !Q_stricmp( how, "forcepowers" ) ) ) {
 			UI_VRRP_Exec( va( "rpui admin %s\n", how ) );
+		}
+	} else if ( !Q_stricmp( what, "invasion" ) ) {
+		// the Admin page's Invasion part (an admin's: rpui admin invasion - cg_vrrp.c, g_vrinvade.c)
+		const char *how;
+		if ( !String_Parse( args, &how ) ) {
+			return qtrue;
+		}
+		if ( !Q_stricmp( how, "open" ) ) {
+			char cvar[MAX_QPATH];
+			int s;
+			vrrp.admPart = RPA_INVASION;
+			UI_VRRP_Keep( "ui_rpInvMode", "0" );	// (an invasion of Reborn, mixed; a war of Rebels against Stormtroopers, mixed)
+			UI_VRRP_Keep( "ui_rpWarSide", "0" );
+			for ( n = 0; n < VRRP_INV_ROWS; n++ ) {
+				for ( s = -1; s < VRRP_WAR_SIDES; s++ ) {
+					UI_VRRP_RowCvar( s, n, "Kind", cvar, sizeof( cvar ) );
+					UI_VRRP_Keep( cvar, n ? va( "%i", VRRP_INV_NOBODY ) : ( s < 0 ) ? "0" : ( s == 0 ) ? "2" : ( s == 1 ) ? "1" : va( "%i", VRRP_INV_NOBODY ) );
+					UI_VRRP_RowCvar( s, n, "Each", cvar, sizeof( cvar ) );
+					UI_VRRP_Keep( cvar, "0" );
+				}
+			}
+			UI_VRRP_Keep( "ui_rpInvWaves", "4" );	// (4 waves of 6, 16 up at most, the next 20 s after one's beaten)
+			UI_VRRP_Keep( "ui_rpInvPer", "6" );
+			UI_VRRP_Keep( "ui_rpInvCap", "16" );
+			UI_VRRP_Keep( "ui_rpInvNext", "0" );
+			UI_VRRP_Keep( "ui_rpInvWait", "20" );
+			UI_VRRP_Keep( "ui_rpInvSide", "0" );	// (its NPC file's)
+			trap->Cvar_Set( "ui_rpMessage", "" );
+		} else if ( !Q_stricmp( how, "back" ) ) {
+			vrrp.admPart = RPA_CHEATS;
+			trap->Cvar_Set( "ui_rpMessage", "" );
+		} else if ( !Q_stricmp( how, "stop" ) ) {
+			UI_VRRP_Exec( "rpui admin invasion stop\n" );
+		} else if ( !Q_stricmp( how, "start" ) ) {
+			char who[MAX_CVAR_VALUE_STRING];
+			n = UI_VRRP_Lineup( -1, "", who, sizeof( who ) );
+			if ( n < 0 ) {
+				return qtrue;	// (it says why)
+			}
+			if ( !n ) {
+				trap->Cvar_Set( "ui_rpMessage", "Pick who invades" );
+				return qtrue;
+			}
+			{
+				const char *side = UI_VRRP_Side( "ui_rpInvSide" );
+				UI_VRRP_Exec( va( "rpui admin invasion start %s %i %i %i %s %i%s%s\n", who, UI_VRRP_Int( "ui_rpInvWaves" ), UI_VRRP_Int( "ui_rpInvPer" ),
+					UI_VRRP_Int( "ui_rpInvCap" ), UI_VRRP_Int( "ui_rpInvNext" ) ? "every" : "cleared", UI_VRRP_Int( "ui_rpInvWait" ), side[0] ? " " : "", side ) );
+			}
+		}
+	} else if ( !Q_stricmp( what, "war" ) ) {
+		// its War mode (rpui admin war - cg_vrrp.c, g_vrinvade.c): each side's lineup ("-": not in it), the settings the invasions'
+		const char *how;
+		if ( !String_Parse( args, &how ) || !UI_VRRP_Wars() ) {
+			return qtrue;
+		}
+		if ( !Q_stricmp( how, "stop" ) ) {
+			UI_VRRP_Exec( "rpui admin war stop\n" );
+		} else if ( !Q_stricmp( how, "start" ) ) {
+			char who[VRRP_WAR_SIDES][MAX_CVAR_VALUE_STRING];
+			int s, sides = 0;
+			for ( s = 0; s < VRRP_WAR_SIDES; s++ ) {
+				char whose[32];
+				Com_sprintf( whose, sizeof( whose ), "%s: ", vrrpWarTitles[s] );
+				n = UI_VRRP_Lineup( s, whose, who[s], sizeof( who[s] ) );
+				if ( n < 0 ) {
+					trap->Cvar_Set( "ui_rpWarSide", va( "%i", s ) );	// (the side it's in, shown - it says why)
+					return qtrue;
+				}
+				if ( n ) {
+					sides++;
+				} else {
+					Q_strncpyz( who[s], "-", sizeof( who[s] ) );
+				}
+			}
+			if ( sides < 2 ) {
+				trap->Cvar_Set( "ui_rpMessage", "A war's of two sides at least: pick who fights for another in Lineup of" );
+				return qtrue;
+			}
+			UI_VRRP_Exec( va( "rpui admin war start %s %s %s %i %i %i %s %i\n", who[0], who[1], who[2], UI_VRRP_Int( "ui_rpInvWaves" ), UI_VRRP_Int( "ui_rpInvPer" ),
+				UI_VRRP_Int( "ui_rpInvCap" ), UI_VRRP_Int( "ui_rpInvNext" ) ? "every" : "cleared", UI_VRRP_Int( "ui_rpInvWait" ) ) );
 		}
 	} else if ( !Q_stricmp( what, "people" ) ) {
 		// an admin's: the character of the one picked a Grey Jedi, a Force Master, or neither (rp force)

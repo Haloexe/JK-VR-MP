@@ -30,6 +30,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "qcommon/vr_voice.h"	// OpenJK VR: voice chat
 
 #define SV_VOICE_QUEUE		16	// OpenJK VR: voice packets waiting for a client's next snapshot
+#define VR_CS_FOR_MAX		128	// OpenJK VR: configstrings sent otherwise to some clients (ext.VR_SetConfigstringFor: a game's 64 a level, those held through a map_restart)
 #include "rd-common/tr_public.h"
 
 //=============================================================================
@@ -91,6 +92,15 @@ typedef struct server_s {
 
 	time_t			realMapTimeStarted;	// time the current map was started
 	qboolean		demosPruned; // whether or not existing demos were cleaned up already
+
+	// OpenJK VR: configstrings sent otherwise to some clients (ext.VR_SetConfigstringFor,
+	// SV_VRConfigstringFor) - a roleplay companion's model, its look's to the players who
+	// said they have it (clients 0: a free one)
+	struct {
+		int				index;
+		char			value[MAX_QPATH];
+		unsigned int	clients;		// bit n: client n
+	} vrCsFor[VR_CS_FOR_MAX];
 } server_t;
 
 typedef struct clientSnapshot_s {
@@ -352,6 +362,9 @@ void SV_MasterShutdown (void);
 void SV_SetConfigstring( int index, const char *val );
 void SV_GetConfigstring( int index, char *buffer, int bufferSize );
 void SV_UpdateConfigstrings( client_t *client );
+const char *SV_VRConfigstringFor( const client_t *client, int index );	// OpenJK VR: a configstring as this client's sent it
+qboolean SV_VRSetConfigstringFor( int index, const char *value, unsigned int clients );
+void SV_VRConfigstringsForGone( const client_t *client );
 
 void SV_SetUserinfo( int index, const char *val );
 void SV_GetUserinfo( int index, char *buffer, int bufferSize );

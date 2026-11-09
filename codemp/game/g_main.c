@@ -300,10 +300,12 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_VRForceInit();		// OpenJK VR: the Force hand (g_vrforce.c; after G_VRSaberInit: the poses)
 	G_VRHolsterInit();		// OpenJK VR: holsters (g_vrholster.c)
 	G_VRColorInit();		// OpenJK VR: saber colours (g_vrcolor.c)
+	G_VRGunInit();			// OpenJK VR: shots from VR players' gun barrels (g_vrgun.c)
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 	G_VRPoseInit();			// OpenJK VR: poses (g_vrpose.c)
 	G_RPInit();				// OpenJK VR: roleplay mode (g_vrrp.c)
 	G_RPCompInit();			// OpenJK VR: roleplay - companions (g_vrcomp.c)
+	G_RPInvadeInit();		// OpenJK VR: invasions (g_vrinvade.c)
 
 	NPC_InitGame();
 
@@ -488,6 +490,7 @@ void G_ShutdownGame( int restart ) {
 		i++;
 	}
 	G_VRArmsShutdown( restart );	// OpenJK VR: the VR players' stand-ins (g_vrarms.c)
+	G_VRGunShutdown();				// OpenJK VR: no shots from the barrel said, till the game's back (g_vrgun.c)
 
 	if (g2SaberInstance && trap->G2API_HaveWeGhoul2Models(g2SaberInstance))
 	{
@@ -3388,10 +3391,11 @@ void G_RunFrame( int levelTime ) {
 #endif
 	// OpenJK VR: roleplay - players' sides for the NPCs, who's down (g_vrdown.c);
 	// admins' games told what their Admin page shows (g_vrrp.c); companions
-	// out or not, players' trails (g_vrcomp.c)
+	// out or not, players' trails (g_vrcomp.c); invasions' waves (g_vrinvade.c)
 	G_RPDownFrame();
 	G_RPFrame();
 	G_RPCompFrame();
+	G_RPInvadeFrame();
 	G_VRHolsterFrame();	// OpenJK VR: whether everyone has a saber, as they're told (g_vrholster.c)
 
 	// perform final fixups on the players

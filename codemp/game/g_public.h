@@ -1110,6 +1110,12 @@ typedef struct gameImport_s {
 		// can't draw their avatar are sent them (vrArmsView_t; NULL or
 		// set == qfalse: their entity as it is). Set it every frame.
 		void		(*VR_SetArmsView)						( int clientNum, const vrArmsView_t *view );
+		// OpenJK VR (VR_ENGINE_TAG -20): configstring index as the clients in
+		// the mask (bit n: client n) are sent it - value, shorter than
+		// MAX_QPATH - everyone else as it is (NULL or "", or no clients: as
+		// it is to all); each one it changes for is sent it again. qfalse: the
+		// engine has no room for another (as it is to all).
+		qboolean	(*VR_SetConfigstringFor)				( int index, const char *value, unsigned int clients );
 	} ext;
 } gameImport_t;
 

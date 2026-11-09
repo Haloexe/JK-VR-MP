@@ -774,6 +774,13 @@ typedef struct cgameImport_s {
 		// once more for it (wristPass) when it's shown - call as it would be
 		// drawn, every frame
 		void			(*VR_SetWristHud)						( float top, float bottom );
+		// OpenJK VR: a colour across the whole view (rgba, the alpha how much
+		// of it) - what the 2D puts across the whole screen (the Force's
+		// tints, water's, a fall's fade), which in a headset is the HUD's
+		// screen in front of you: still draw it there (CG_FillRect over all of
+		// it), and say it here too, as it's drawn - the engine fills the rest
+		// of each eye's picture, around that screen, with it the same way
+		void			(*VR_TintView)							( const float *rgba );
 	} ext;
 } cgameImport_t;
 

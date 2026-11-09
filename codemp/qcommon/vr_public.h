@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-18"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-20"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -53,6 +53,13 @@ General Public License version 2, like the rest of OpenJK.
 												//     wristPass (the HUD on your wrist)
 												// -18: ext.VR_SetArmsView (game: a VR player's arms
 												//     as games without the VR build are sent them)
+												// -19: ext.VR_TintView (cgame: a tint across the
+												//     whole view - the Force's, water's, a fall's
+												//     fade - round the HUD's screen as well as on it)
+												// -20: ext.VR_SetConfigstringFor (game: a configstring
+												//     sent otherwise to some clients - a roleplay
+												//     companion's look, to the players who said they
+												//     have its model)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)

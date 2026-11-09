@@ -3196,6 +3196,7 @@ void SV_BindGame( void ) {
 		gi.ext.VR_GetUserPose					= SV_VR_GetUserPose;
 		gi.ext.VR_SetAvatar						= SV_VR_SetAvatar;
 		gi.ext.VR_SetArmsView					= SV_VR_SetArmsView;
+		gi.ext.VR_SetConfigstringFor			= SV_VRSetConfigstringFor;	// (sv_init.cpp)
 
 		GetGameAPI = (GetGameAPI_t)gvm->GetModuleAPI;
 		ret = GetGameAPI( GAME_API_VERSION, &gi );

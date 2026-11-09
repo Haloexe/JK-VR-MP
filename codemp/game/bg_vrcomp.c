@@ -22,12 +22,14 @@ Each part letters, digits, _ and -; short enough for every name the game
 makes of it (each held in MAX_QPATH): the skin's own path,
 "models/players/<model>/model_<skin>.skin" or a custom character's
 "models/players/<model>/|<head|torso|lower>" (a player's own custom
-character's limit); the model's configstring every player's game is told,
-"models/players/<model>/model.glm*<skin>" - a custom character too long to
-go there goes as the default skin, the look itself told to the players'
-games beside it (CS_VR_COMPANIONS); and, where the default skin's worn
-(the model alone, or a custom character told beside),
-"models/players/<model>/model_default.skin".
+character's limit); the name the server's own NPC is made with,
+"models/players/<model>/model.glm*<skin>" - a custom character too long for
+that is made with the default skin (and told beside its owner's
+configstring, CS_VR_COMPANIONS, as this build's games before CS_VR_COMPLOOKS
+take it); and "models/players/<model>/model_default.skin". No game is ever
+sent a look's model: every player's game is sent a companion as its type
+comes, and this build's are told its look beside (CS_VR_COMPLOOKS:
+"<entity>\<look>" each - BG_VRCompLooksPack, BG_VRCompLooksRead).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -89,6 +91,62 @@ qboolean BG_VRCompTypeOk( const char *type ) {
 	return qtrue;
 }
 
+// An NPC file's text as the server reads one (NPC_LoadParms): a UTF-8
+// file's mark gone (Notepad's - the game read it as its first name's),
+// COM_Compress'd, a second '\0' after it (BG_VRBlocksInStep's). text[len]
+// is '\0', with room after it for one more. Its length now.
+int BG_VRNPCFileText( char *text, int len ) {
+	if ( len >= 3 && !memcmp( text, "\xEF\xBB\xBF", 3 ) ) {
+		memmove( text, text + 3, len - 3 + 1 );	// (its '\0' too)
+	}
+	len = COM_Compress( text );
+	text[len + 1] = '\0';
+	return len;
+}
+
+// How much of a file of NPC types (BG_VRNPCFileText's) the game's walk
+// through them all goes through in step. NPC_ParseParms and the rest look
+// for a type from the first file read on - a name, then SkipBracedSection
+// (its block, or a word for one) - so one file's "" for a name, name with
+// nothing after it, { never closed, } too many or quote never closed threw
+// that walk out for every file after it: the game's own, after a pack's.
+// Its length, if the walk ends in step; else where the entry it loses its
+// way in begins (at, if not NULL: that entry's name - "/*", a comment it'd
+// take into the next file). buf[len] and buf[len + 1] are '\0' (a quote
+// never closed: COM_ParseExt goes past the first, and finds the second).
+int BG_VRBlocksInStep( const char *buf, int len, char *at, int atSize ) {
+	const char *p = buf, *tok;
+	int good = 0;
+
+	if ( at && atSize > 0 ) {
+		at[0] = '\0';
+	}
+	COM_BeginParseSession( "NPC file" );
+	while ( 1 ) {
+		tok = COM_ParseExt( &p, qtrue );
+		if ( !p ) {
+			if ( strstr( buf + good, "/*" ) ) {
+				if ( at ) {
+					Q_strncpyz( at, "/*", atSize );
+				}
+				return good;	// (one COM_Compress left - a quote begun mid-word: it took the rest for a string - the walk takes on to a */ in a file after it)
+			}
+			return len;	// (its end: all of it in step)
+		}
+		if ( at ) {
+			Q_strncpyz( at, tok, atSize );
+		}
+		if ( !tok[0] ) {
+			return good;	// ("" for a name: the walk ends there)
+		}
+		SkipBracedSection( &p, 0 );
+		if ( !p || p > buf + len ) {
+			return good;	// (the walk on to its end - nothing after a name: the next file's first taken for its; an { never closed, a } too many; a quote never closed)
+		}
+		good = (int)( p - buf );
+	}
+}
+
 // how many characters from s are a part's (letters, digits, _ -)
 static int BG_VRCompPart( const char *s ) {
 	int n = 0;
@@ -145,15 +203,16 @@ qboolean BG_VRCompLookOk( const char *look ) {
 	if ( parts == 1 ) {
 		return (qboolean)( 15 + (int)strlen( look ) + 6 + 5 < MAX_QPATH );	// (the '/' between becomes "/model_", and ".skin" after)
 	}
-	// a custom character's: the '/' between becomes "/|"; and where its
-	// model's configstring can't carry the three (BG_VRCompSkinInCs: the '/'
-	// becomes "/model.glm*"), the model's default skin as above
+	// a custom character's: the '/' between becomes "/|"; and where the name
+	// the server's NPC is made with can't carry the three (BG_VRCompSkinInCs:
+	// the '/' becomes "/model.glm*"), the model's default skin as above
 	return (qboolean)( 15 + (int)strlen( look ) + 1 < MAX_QPATH && ( 15 + (int)strlen( look ) + 10 < MAX_QPATH || 15 + n + 19 < MAX_QPATH ) );
 }
 
-// Whether a model's configstring can carry its skin after it
-// ("models/players/<model>/model.glm*<skin>" in MAX_QPATH, as every
-// player's game holds it): else it carries the default skin.
+// Whether a model's NPC name - its configstring, as an NPC type's is - can
+// carry its skin after it ("models/players/<model>/model.glm*<skin>" in
+// MAX_QPATH, as SetupGameGhoul2Model and every player's game hold it):
+// else it carries the default skin.
 qboolean BG_VRCompSkinInCs( const char *model, const char *skin ) {
 	return (qboolean)( 15 + (int)strlen( model ) + 11 + (int)strlen( skin[0] ? skin : "default" ) < MAX_QPATH );
 }
@@ -185,4 +244,66 @@ void BG_VRCompLookSplit( const char *look, char *model, int modelSize, char *ski
 	}
 	Q_strncpyz( model, look, Com_Clampi( 1, modelSize, (int)( slash - look ) + 1 ) );
 	Q_strncpyz( skin, slash + 1, skinSize );
+}
+
+// The companions in looks of their own (count: an entity and a look each)
+// written into their configstrings (CS_VR_COMPLOOKS, RP_COMP_LOOKS_CS of
+// them): "<entity>\<look>" each, '\' between, as many in each as fit in a
+// configstring a game reads (MAX_STRING_CHARS), the next in the next. All of
+// them fit, as many as there can be (RP_COMP_OUT_MAX a player, the longest
+// look); qfalse: one didn't (it's left out - its game draws it as its type).
+qboolean BG_VRCompLooksPack( const int *ents, const char (*looks)[MAX_QPATH], int count, char (*cs)[MAX_STRING_CHARS] ) {
+	qboolean all = qtrue;
+	int i, n = 0;
+
+	for ( i = 0; i < RP_COMP_LOOKS_CS; i++ ) {
+		cs[i][0] = '\0';
+	}
+	for ( i = 0; i < count; i++ ) {
+		char entry[MAX_QPATH + 16];
+		Com_sprintf( entry, sizeof( entry ), "%i\\%s", ents[i], looks[i] );
+		while ( n < RP_COMP_LOOKS_CS && strlen( cs[n] ) + ( cs[n][0] ? 1 : 0 ) + strlen( entry ) >= MAX_STRING_CHARS ) {
+			n++;	// (full: the next)
+		}
+		if ( n >= RP_COMP_LOOKS_CS ) {
+			all = qfalse;
+			break;
+		}
+		if ( cs[n][0] ) {
+			Q_strcat( cs[n], MAX_STRING_CHARS, "\\" );
+		}
+		Q_strcat( cs[n], MAX_STRING_CHARS, entry );
+	}
+	return all;
+}
+
+// One of the companions' looks' configstrings read (BG_VRCompLooksPack's):
+// its entities and looks into ents and looks from n on, up to most - an
+// entity not a companion's, or a look the game doesn't take, left out.
+// Returns how many there are then.
+int BG_VRCompLooksRead( const char *cs, int *ents, char (*looks)[MAX_QPATH], int n, int most ) {
+	char buf[MAX_STRING_CHARS], *p = buf;
+
+	Q_strncpyz( buf, cs ? cs : "", sizeof( buf ) );
+	while ( *p && n < most ) {
+		char *field[2];
+		int i, ent;
+		for ( i = 0; i < 2; i++ ) {
+			char *end = strchr( p, '\\' );
+			field[i] = p;
+			if ( end ) {
+				*end = '\0';
+				p = end + 1;
+			} else {
+				p += strlen( p );
+			}
+		}
+		ent = atoi( field[0] );
+		if ( ent >= MAX_CLIENTS && ent < ENTITYNUM_MAX_NORMAL && field[1][0] && BG_VRCompLookOk( field[1] ) ) {
+			ents[n] = ent;
+			Q_strncpyz( looks[n], field[1], MAX_QPATH );
+			n++;
+		}
+	}
+	return n;
 }

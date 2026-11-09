@@ -80,8 +80,8 @@ void Howler_Patrol( void )
 	//OJK: clientnum 0
 	VectorSubtract( g_entities[0].r.currentOrigin, NPCS.NPC->r.currentOrigin, dif );
 
-	if ( VectorLengthSquared( dif ) < 256 * 256 )
-	{
+	if ( VectorLengthSquared( dif ) < 256 * 256 && NPC_ValidEnemy( &g_entities[0] ) )
+	{//OpenJK VR: one its side fights (one on a side an admin picked: g_vrdown.c G_RPSideWays) - in the game, not hidden
 		G_SetEnemy( NPCS.NPC, &g_entities[0] );
 	}
 

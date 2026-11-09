@@ -20,10 +20,26 @@ spawned (G_RPCompLook, asked by NPC_ParseParms) - if the server lets
 companions look as they like (g_rpCompanionModels 1), has the model, on the
 humanoid skeleton (another would take the server down: its model.glm's
 first bytes say, read - never loaded), and the skin; else it comes as its
-type does. Each look new to the level is a model configstring every player
-keeps till the map changes, or a skin told beside one (too long for it)
-that every player's game seeing it keeps: a player's companions bring
-RPC_NEW_LOOKS new ones a level at most (then as their types come).
+type does. Every player's game is sent it as its type comes (its model's
+configstring, G_RPCompShown: the look's never one of its own - a game
+without its model would go down drawing it, precaching it even, and the
+server can't know which games have it); this build's games are told its
+look beside (CS_VR_COMPLOOKS - "<entity>\<look>" each, '\' between, as many
+in each as fit; knocked out too, while its body's there) and draw it where
+they have it, else as its type comes (cg_vrcomp.c). A player of another game
+can say they have the models companions wear - "rpmodels" in their userinfo
+(/setu rpmodels 1; told of it a while after they come in; a change taken
+RPC_MODELS_GAP apart at most) - and is sent its look as its model: while
+someone has, a companion that comes out in a look of its own is sent as a
+model configstring of its own for each type and look (G_RPC_LookSlot) - its
+type's, which the engine sends them as its look's (ext.VR_SetConfigstringFor)
+- so nobody else's game ever has the look's name. (What the engine sends can
+drop a player as it's sent - more than they can hold - and run their
+disconnect in the middle of it: what's asked of the engine is kept as it's
+asked, and asked again as it is after.) Each look new to the level
+is a model and skin every player's game that draws it keeps till the map
+changes: a player's companions bring RPC_NEW_LOOKS new ones a level at most
+(then as their types come).
 
 ROOM. A companion comes out only where the level has room for it: entities
 G_Spawn would hand out, configstrings of each kind, and room in the
@@ -102,10 +118,12 @@ their faction does (g_vrdown.c).
 
 The players' games are told (configstring CS_VR_COMPANIONS + owner) which
 entities are whose companions, their names, and a look whose skin is too
-long for the model's configstring to carry (it carries the default:
-BG_VRCompSkinInCs) - "<entity>\<name>\<look>", '\' between, the look ""
-but for those; and an owner, getting up by one of theirs: rpup <entity>
-<owner> <time | 0 stopped | -1 got them up> (cg_vrdown.c).
+long for a model's configstring to carry (BG_VRCompSkinInCs: as this
+build's games before CS_VR_COMPLOOKS take it - on its model, their type's
+the same) - "<entity>\<name>\<look>", '\' between, the look "" but for
+those; their looks (CS_VR_COMPLOOKS, LOOKS above); and an owner, getting up
+by one of theirs: rpup <entity> <owner> <time | 0 stopped | -1 got them up>
+(cg_vrdown.c).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -139,7 +157,7 @@ extern void ChangeWeapon( gentity_t *ent, int newWeapon );	// (NPC_combat.c: an 
 #define RPC_HELP_TIME		3000	// ms getting their owner up (as a hand does, g_vrdown.c)
 #define RPC_HELP_REACH		60.0f	// near enough to them for it
 #define RPC_TRAIL_STEP		17.0f	// a point of the trail every 0.5 m...
-#define RPC_TRAIL			150		// ...the last 75 m of it
+#define RPC_TRAIL			300		// ...the last 150 m of it (further than RPC_FAR along any way)
 #define RPC_BEHIND			51.0f	// the spots: 1.5 m back...
 #define RPC_PAIR			24.0f	// ...two side by side, this far either side...
 #define RPC_BESIDE			41.0f	// ...1.2 m to each side...
@@ -151,7 +169,7 @@ extern void ChangeWeapon( gentity_t *ent, int newWeapon );	// (NPC_combat.c: an 
 #define RPC_TURN_TIME		1000	// ...this long: the spots turn
 #define RPC_MOVING			40.0f	// faster than this, the player's walking (and their way is their walk's)
 #define RPC_RUNNING			180.0f	// faster than this, running
-#define RPC_LEASH			510.0f	// fighting, no further than 15 m from them...
+#define RPC_LEASH			1020.0f	// fighting, no further than 30 m from them...
 #define RPC_HOLD_LEASH		170.0f	// ...or 5 m from where they hold (a gun there shoots at what's as far off as following)
 #define RPC_GUN_MARGIN		80.0f	// a gun going after a clear shot stops this short of its leash (its way on brings it nearer)
 #define RPC_BLOW			8.0f	// fists' or a baton's blow: this far on from where it begins (MELEE_RANGE, STUN_BATON_RANGE: G_RPC_Blow)
@@ -170,7 +188,9 @@ extern void ChangeWeapon( gentity_t *ent, int newWeapon );	// (NPC_combat.c: an 
 #define RPC_FIGHT_MOVED		16.0f	// ...moved less than this...
 #define RPC_FIGHT_IGNORE	5000	// ...it lets them be this long...
 #define RPC_FIGHT_SHIFT		64.0f	// ...or till they've come this much nearer (G_RPC_Ignored)
-#define RPC_FAR				1360.0f	// 40 m from them: to just behind them
+#define RPC_FAR				2720.0f	// 80 m from them: to just behind them
+#define RPC_HELP_FAR		1360.0f	// getting their owner up, 40 m from them: to just by them (not walking all that way)
+#define RPC_SHOOT_FAR		( RPC_LEASH * 2.5f )	// a gun's, thermals', fists' or a baton's own fighting keeps an enemy this far off (NPC_MaxDistSquaredForWeapon: its leash either side of them, its enemy's let go at reach * 1.5)
 #define RPC_STUCK			5000	// ms getting nowhere: to just behind them
 #define RPC_CUT_STUCK		1000	// ms getting nowhere, the trail cut just ahead (a lift gone up with them, a jump): to them
 #define RPC_STUCK_MOVE		16.0f	// moved less than this in a second, wanting to: getting nowhere
@@ -183,15 +203,20 @@ extern void ChangeWeapon( gentity_t *ent, int newWeapon );	// (NPC_combat.c: an 
 #define RPC_LOOK			2048.0f	// whom a player looks at, at most this far (an order's)
 #define RPC_ADDRESS			0.985f	// looking at one of theirs: cos of 10 degrees off it
 #define RPC_ROOM_ENTS		64		// entities kept free (each companion takes up to 3)
-#define RPC_ROOM_MODELS		16		// model configstrings kept free (a companion can take 3, a look of its own 1 more)
+#define RPC_ROOM_MODELS		16		// model configstrings kept free (a companion can take 5: its type's model as its file has it and as it's sent, two sabers, and in a look of its own one for its type and look - G_RPC_LookSlot)
 #define RPC_ROOM_SOUNDS		8		// sound configstrings kept free (its sound sets: 4)
 #define RPC_ROOM_FX			2		// effect configstrings kept free
 #define RPC_ROOM_CHARS		3072	// room kept in the gamestate (for the level's own, and what a companion brings)
-#define RPC_NEW_LOOKS		8		// looks new to the level a player's companions bring (each a configstring, or a skin told beside one, kept till the map changes)
-#define RPC_TOLD_KEPT		256		// looks told beside their models' configstrings this level, kept (past that: each new again)
+#define RPC_NEW_LOOKS		8		// looks new to the level a player's companions bring (each a model and skin the games that draw it keep till the map changes)
+#define RPC_TOLD_KEPT		512		// looks told this level, kept (every player's RPC_NEW_LOOKS twice over - players come and go; past that: each new again)
+#define RPC_LOOK_SLOTS		64		// model configstrings companions in looks of their own are sent as, this level: one each type and look (past that, as their types come to all)
+#define RPC_MODELS_TELL		15000	// ms after a player's in, a player of another game's told of rpmodels (or that they've said it)
+#define RPC_MODELS_GAP		2000	// ms between changes to whether a player's said rpmodels taken (each sends them every look's model configstring again)
 #define RPC_MODELS_KEPT		64		// player models asked whether they're on the humanoid skeleton, kept
 #define RPC_HELP_HEIGHT		48.0f	// getting their owner up: no further above or below them than this
-#define RPC_WALK_FAR		512.0f	// further than this, a way isn't looked along (it's the trail's, or a teleport's)
+#define RPC_WALK_FAR		( RPC_LEASH + 128.0f )	// further than this, a way isn't looked along (it's the trail's, or a teleport's) - back from as far as it fights, walked
+#define RPC_AIR_NEAR		512.0f	// their trail's newest point no further than this from them in the air a moment: where they left the ground
+#define RPC_WALK_NEAR		512.0f	// a way straight to its spot no further than this looked along every frame; further (as far as RPC_WALK_FAR), every RPC_PATH (its many traces)
 #define RPC_WALK_STEP		16.0f	// a way's floor looked at this often along it (a stair's depth)...
 #define RPC_STEP_UP			( STEPSIZE + 1.0f )	// ...up no more than a step from one to the next (and a little: where a body stands, it's a touch above the floor)
 #define RPC_DETOUR			16.0f	// round a body in its way: this far past its side
@@ -227,6 +252,9 @@ typedef struct {
 	int			trailAt;		// the trail point it's making for (its number; -1: its spot, straight)
 	int			pathTime;		// the last look along the trail for a way straight on
 	int			noWayTime;		// a look along it found no way then (0: it found one) - not looked again for RPC_PATH
+	int			straightTime;	// a way straight to its spot further than RPC_WALK_NEAR looked along then...
+	qboolean	straight;		// ...walkable...
+	vec3_t		straightTo;		// ...to there (looked along again every RPC_PATH, or its spot moved on)
 	int			clearTime;		// not begun, someone where it is: the last look for somewhere free (not again for RPC_PATH)
 	qboolean	arrived;		// at its spot...
 	qboolean	arrivedBy;		// ...by someone standing on it: there while they are
@@ -292,10 +320,30 @@ static struct {
 } rpcModels[RPC_MODELS_KEPT];
 static int rpcNumModels;
 
-// looks told beside their models' configstrings this level (G_RPC_Tell): a
-// skin each, every player's game that sees it keeps till the map changes
+// looks told this level (CS_VR_COMPLOOKS): a model and skin each, every
+// player's game that draws it keeps till the map changes
 static char rpcTold[RPC_TOLD_KEPT][MAX_QPATH];
 static int rpcNumTold;
+
+// the model configstring a companion being spawned in a look of its own is
+// sent as: its type's (G_RPCompShown)
+static char rpcShown[MAX_QPATH];
+
+// the model configstrings companions in looks of their own are sent as (one
+// each type and look this level, G_RPC_LookSlot): their type's to every game,
+// their look's to the players of other games who've said they have the
+// models (rpmodels) - the engine sends it them (ext.VR_SetConfigstringFor)
+static struct {
+	int		index;				// its model index
+	char	type[MAX_QPATH];	// its type's model configstring (as it is: to every game)...
+	char	look[MAX_QPATH];	// ...its look's (to them)
+} rpcLookSlots[RPC_LOOK_SLOTS];
+static int rpcNumLookSlots;
+static unsigned int rpcLooksTo;	// the players the engine's been told to send the looks' to (bit n: client n)
+static qboolean rpcHasModels[MAX_CLIENTS];	// a player's said they have the models companions wear ("rpmodels" in their userinfo), as it's taken...
+static qboolean rpcModelsWant[MAX_CLIENTS];	// ...and as their userinfo has it now (taken RPC_MODELS_GAP after the last: G_RPC_ModelsTake)
+static int rpcModelsAt[MAX_CLIENTS];		// level.time the last was taken (0: none yet - the first at once)
+static int rpcModelsTell[MAX_CLIENTS];		// level.time they're told of it (0: not yet set; -1: told, or not to be)
 
 extern gNPC_t		*gNPCPtrs[MAX_GENTITIES];	// (NPC_spawn.c, g_utils.c: an NPC's memory, kept with its slot)
 extern gclient_t	*gClPtrs[MAX_GENTITIES];
@@ -420,21 +468,24 @@ Where a body goes
 
 static const vec3_t rpcMins = { -15, -15, DEFAULT_MINS_2 }, rpcMaxs = { 15, 15, DEFAULT_MAXS_2 };
 static const vec3_t rpcStepMins = { -15, -15, DEFAULT_MINS_2 + STEPSIZE };	// (a body raised a step: what's in its way, walking)
+static unsigned int rpcTraces;	// traces the rules below have taken, all told (G_RPCompTraces: what an invasion's looking costs - round again past its most)
 
-// Whether a body fits at at (pass: whose it'd be - its own isn't in its
-// way), standing on something not far under it (not lava, slime) - set down
-// on it.
-static qboolean G_RPC_Fits( vec3_t at, int pass ) {
+// Whether a body (its box: mins, maxs) fits at at (pass: whose it'd be - its
+// own isn't in its way), standing on something not far under it (not lava,
+// slime) - set down on it.
+static qboolean G_RPC_FitsBox( vec3_t at, const vec3_t mins, const vec3_t maxs, int pass ) {
 	trace_t tr;
 	vec3_t down;
 
-	trap->Trace( &tr, at, rpcMins, rpcMaxs, at, pass, RPC_MASK | CONTENTS_BODY, qfalse, 0, 0 );
+	rpcTraces++;
+	trap->Trace( &tr, at, mins, maxs, at, pass, RPC_MASK | CONTENTS_BODY, qfalse, 0, 0 );
 	if ( tr.startsolid || tr.allsolid ) {
 		return qfalse;
 	}
 	VectorCopy( at, down );
 	down[2] -= 48.0f;
-	trap->Trace( &tr, at, rpcMins, rpcMaxs, down, pass, RPC_MASK | RPC_UNWALKABLE, qfalse, 0, 0 );
+	rpcTraces++;
+	trap->Trace( &tr, at, mins, maxs, down, pass, RPC_MASK | RPC_UNWALKABLE, qfalse, 0, 0 );
 	if ( tr.startsolid || tr.allsolid || tr.fraction >= 1.0f || ( tr.contents & RPC_UNWALKABLE ) ) {
 		return qfalse;	// (nothing to stand on: a ledge, a pit, lava)
 	}
@@ -442,18 +493,25 @@ static qboolean G_RPC_Fits( vec3_t at, int pass ) {
 	return qtrue;
 }
 
-// The floor under at, as a body standing on it has its origin there (*z):
-// looked for with the body raised a step, so the edge of a stair it's over
-// is under it, not in it. 1: found; 0: nothing near enough under it (a gap,
-// a drop - or lava, slime); -1: the raised body's in something there
-// (nothing learnt).
-static int G_RPC_Floor( const vec3_t at, int pass, float *z ) {
+// ...a companion's (a person's).
+static qboolean G_RPC_Fits( vec3_t at, int pass ) {
+	return G_RPC_FitsBox( at, rpcMins, rpcMaxs, pass );
+}
+
+// The floor under at, as a body (mins, maxs) standing on it has its origin
+// there (*z): looked for with the body raised a step, so the edge of a stair
+// it's over is under it, not in it. 1: found; 0: nothing near enough under
+// it (a gap, a drop - or lava, slime); -1: the raised body's in something
+// there (nothing learnt).
+static int G_RPC_FloorBox( const vec3_t at, const vec3_t mins, const vec3_t maxs, int pass, float *z ) {
+	const vec3_t stepMins = { mins[0], mins[1], Q_min( mins[2] + STEPSIZE, maxs[2] - 1.0f ) };	// (a body shorter than a step: its top's bottom)
 	trace_t tr;
 	vec3_t down;
 
 	VectorCopy( at, down );
 	down[2] -= 48.0f + 2.0f * STEPSIZE;
-	trap->Trace( &tr, at, rpcStepMins, rpcMaxs, down, pass, RPC_MASK | RPC_UNWALKABLE, qfalse, 0, 0 );
+	rpcTraces++;
+	trap->Trace( &tr, at, stepMins, maxs, down, pass, RPC_MASK | RPC_UNWALKABLE, qfalse, 0, 0 );
 	if ( ( tr.startsolid || tr.fraction < 1.0f ) && ( tr.contents & RPC_UNWALKABLE ) ) {
 		return 0;
 	}
@@ -465,6 +523,10 @@ static int G_RPC_Floor( const vec3_t at, int pass, float *z ) {
 	}
 	*z = tr.endpos[2] + STEPSIZE;
 	return 1;
+}
+
+static int G_RPC_Floor( const vec3_t at, int pass, float *z ) {
+	return G_RPC_FloorBox( at, rpcMins, rpcMaxs, pass, z );
 }
 
 // Whether there's nothing at all near under at, where a body stood (a
@@ -479,11 +541,12 @@ static qboolean G_RPC_Gone( const vec3_t at, int pass ) {
 	return (qboolean)( !tr.startsolid && tr.fraction >= 1.0f );
 }
 
-// Whether a body can walk straight from from to to: nothing in the way
-// above a step's height, floor all along (no gap, no drop), and nowhere up
-// more than a step at a time (a straight line over a ledge's edge isn't a
-// way up it), nor down off a sheer drop.
-static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
+// Whether a body (mins, maxs) can walk straight from from to to: nothing in
+// the way above a step's height, floor all along (no gap, no drop), and
+// nowhere up more than a step at a time (a straight line over a ledge's edge
+// isn't a way up it), nor down off a sheer drop.
+static qboolean G_RPC_WalkableBox( const vec3_t from, const vec3_t to, const vec3_t mins, const vec3_t maxs, int pass ) {
+	const vec3_t stepMins = { mins[0], mins[1], Q_min( mins[2] + STEPSIZE, maxs[2] - 1.0f ) };
 	trace_t tr;
 	vec3_t d, at;
 	float len, s, floorZ = from[2], z;
@@ -491,11 +554,12 @@ static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
 	if ( !( Distance( from, to ) <= RPC_WALK_FAR ) ) {
 		return qfalse;	// (the trail's way, or a teleport's: not this many traces - or nowhere at all)
 	}
-	trap->Trace( &tr, from, rpcStepMins, rpcMaxs, to, pass, RPC_MASK, qfalse, 0, 0 );
+	rpcTraces++;
+	trap->Trace( &tr, from, stepMins, maxs, to, pass, RPC_MASK, qfalse, 0, 0 );
 	if ( tr.startsolid || tr.fraction < 1.0f ) {
 		return qfalse;
 	}
-	if ( G_RPC_Floor( from, pass, &z ) > 0 ) {
+	if ( G_RPC_FloorBox( from, mins, maxs, pass, &z ) > 0 ) {
 		floorZ = z;	// (from in the air: the floor under it)
 	}
 	VectorSubtract( to, from, d );
@@ -509,7 +573,7 @@ static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
 		} else {
 			VectorMA( from, s, d, at );
 		}
-		found = G_RPC_Floor( at, pass, &z );
+		found = G_RPC_FloorBox( at, mins, maxs, pass, &z );
 		if ( !found ) {
 			return qfalse;	// (a gap, or a drop)
 		}
@@ -528,6 +592,10 @@ static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
 	}
 }
 
+static qboolean G_RPC_Walkable( const vec3_t from, const vec3_t to, int pass ) {
+	return G_RPC_WalkableBox( from, to, rpcMins, rpcMaxs, pass );
+}
+
 // Whether another's body (not pass's) stands where a body at at would.
 static qboolean G_RPC_Taken( const vec3_t at, int pass ) {
 	trace_t tr;
@@ -541,6 +609,7 @@ static qboolean G_RPC_Taken( const vec3_t at, int pass ) {
 static qboolean G_RPC_Clear( const vec3_t a, const vec3_t b, int pass ) {
 	trace_t tr;
 
+	rpcTraces++;
 	trap->Trace( &tr, a, NULL, NULL, b, pass, RPC_MASK, qfalse, 0, 0 );
 	return (qboolean)( tr.fraction >= 1.0f && !tr.startsolid );
 }
@@ -598,7 +667,7 @@ static qboolean G_RPC_TrailHere( const gentity_t *owner, rpcOwner_t *o ) {
 	}
 	d = Distance( G_RPC_At( o, G_RPC_Newest( o ) )->at, ps->origin );
 	return (qboolean)( d <= RPC_TRAIL_STEP * 4.0f ||
-		( ps->groundEntityNum == ENTITYNUM_NONE && o->airSince && level.time - o->airSince <= RPC_AIR_TRAIL && d <= RPC_WALK_FAR ) );
+		( ps->groundEntityNum == ENTITYNUM_NONE && o->airSince && level.time - o->airSince <= RPC_AIR_TRAIL && d <= RPC_AIR_NEAR ) );
 }
 
 // The number of the trail's point about dist back along it from its newest
@@ -925,13 +994,18 @@ static qboolean G_RPC_SkinOk( const char *model, const char *skin ) {
 	return qtrue;
 }
 
-// The model configstring an NPC with this model and skin takes (as
-// SetupGameGhoul2Model makes it), and whether it's there already.
+// The model configstring an NPC with this model and skin takes, as
+// NPC_ParseParms and SetupGameGhoul2Model make it (no skin: the default).
+static void G_RPC_ModelCs( const char *model, const char *skin, char *cs, int csSize ) {
+	Com_sprintf( cs, csSize, "models/players/%s/model.glm*%s", model, skin[0] ? skin : "default" );
+}
+
+// Whether an NPC with this model and skin has its configstring there already.
 static qboolean G_RPC_ModelCsThere( const char *model, const char *skin ) {
 	char want[MAX_QPATH * 2], cs[MAX_STRING_CHARS];
 	int i;
 
-	Com_sprintf( want, sizeof( want ), "models/players/%s/model.glm*%s", model, ( skin[0] && BG_VRCompSkinInCs( model, skin ) ) ? skin : "default" );
+	G_RPC_ModelCs( model, skin, want, sizeof( want ) );
 	for ( i = 1; i < MAX_MODELS; i++ ) {
 		trap->GetConfigstring( CS_MODELS + i, cs, sizeof( cs ) );
 		if ( !cs[0] ) {
@@ -944,21 +1018,20 @@ static qboolean G_RPC_ModelCsThere( const char *model, const char *skin ) {
 	return qfalse;
 }
 
-// Whether a look's skin is one told beside its model's configstring (too
-// long for it: BG_VRCompSkinInCs) that's new to the level - every player's
-// game that sees it keeps it till the map changes, as a configstring.
-static qboolean G_RPC_ToldNew( const char *model, const char *skin, const char *look ) {
+// Whether a look's new to the level - every player's game that draws it
+// keeps its model and skin till the map changes: not told this level, nor
+// a model with its skin that the level has a configstring of (every
+// player's game has it, as the level began or as it came; a skin too long
+// for one, never).
+static qboolean G_RPC_LookNew( const char *model, const char *skin, const char *look ) {
 	int i;
 
-	if ( BG_VRCompSkinInCs( model, skin ) ) {
-		return qfalse;	// (its configstring carries it: nothing told)
-	}
 	for ( i = 0; i < rpcNumTold; i++ ) {
 		if ( !Q_stricmp( rpcTold[i], look ) ) {
-			return qfalse;	// (as a player's game keeps skins: whatever their letters' case)
+			return qfalse;	// (as a player's game keeps models and skins: whatever their letters' case)
 		}
 	}
-	return qtrue;
+	return (qboolean)!G_RPC_ModelCsThere( model, skin );
 }
 
 // How many of a kind of configstring are free, as many as need at most
@@ -987,12 +1060,190 @@ static qboolean G_RPC_SlotFree( const gentity_t *e ) {
 // each and its end; past MAX_GAMESTATE_CHARS, every player's dropped).
 static int G_RPC_GameStateChars( void ) {
 	static char cs[BIG_INFO_STRING];
+	char small[256];
 	int i, n = 1;
 
 	for ( i = 0; i < MAX_CONFIGSTRINGS; i++ ) {
-		trap->GetConfigstring( i, cs, sizeof( cs ) );
-		if ( cs[0] ) {
-			n += (int)strlen( cs ) + 1;
+		int len;
+		trap->GetConfigstring( i, small, sizeof( small ) );	// (the engine fills all it's given: a small read, most are short)
+		len = (int)strlen( small );
+		if ( len >= (int)sizeof( small ) - 1 ) {
+			trap->GetConfigstring( i, cs, sizeof( cs ) );	// (a long one: the whole of it)
+			len = (int)strlen( cs );
+		}
+		if ( len ) {
+			n += len + 1;
+		}
+	}
+	return n;
+}
+
+// Whether a player's sent companions' looks as their models (bit n of
+// G_RPC_LooksTo): one of another game (this build's draw them from
+// CS_VR_COMPLOOKS - and fall back on the type's, where they haven't one)
+// who's said they have the models companions wear (rpmodels).
+static qboolean G_RPC_SentLooks( int clientNum ) {
+	return (qboolean)( clientNum >= 0 && clientNum < level.maxclients && clientNum < MAX_CLIENTS && rpcHasModels[clientNum] &&
+		!G_RPCapable( clientNum ) && level.clients[clientNum].pers.connected != CON_DISCONNECTED && !( g_entities[clientNum].r.svFlags & SVF_BOT ) );
+}
+
+static unsigned int G_RPC_LooksTo( void ) {
+	unsigned int mask = 0;
+	int i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		if ( G_RPC_SentLooks( i ) ) {
+			mask |= 1u << i;
+		}
+	}
+	return mask;
+}
+
+// Whether the engine sends a configstring otherwise to some players (this
+// one: ext.VR_SetConfigstringFor) - else every game's sent companions as
+// their types come, rpmodels or not.
+static qboolean G_RPC_LooksEngine( void ) {
+	return (qboolean)( G_VREngine() && trap->ext.VR_SetConfigstringFor );
+}
+
+// The engine told who's sent the looks' model configstrings, as that changes
+// (a player says rpmodels, or stops; comes, goes, says hello: this build's).
+// One dropped by what's sent meanwhile: their disconnect runs this again, in
+// the middle of it, for every look as it is then - no further as it was.
+static void G_RPC_LooksUpdate( void ) {
+	const unsigned int to = G_RPC_LooksTo();
+	int i;
+
+	if ( to == rpcLooksTo || !G_RPC_LooksEngine() ) {
+		return;
+	}
+	rpcLooksTo = to;
+	for ( i = 0; i < rpcNumLookSlots && rpcLooksTo == to; i++ ) {
+		trap->ext.VR_SetConfigstringFor( CS_MODELS + rpcLookSlots[i].index, rpcLookSlots[i].look, to );
+	}
+}
+
+// Whether a model configstring's one of the looks' this level (G_RPC_LookSlot).
+static qboolean G_RPC_LookSlotIs( int index ) {
+	int i;
+
+	for ( i = 0; i < rpcNumLookSlots; i++ ) {
+		if ( rpcLookSlots[i].index == index ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// The engine out of room for another (VR_CS_FOR_MAX): what it keeps for one
+// of a type's not one of the looks' let go - from before a map_restart, a
+// player may hold a look in it (nothing's drawn with it: those holding it
+// are sent its type's) - and asked again, till there's room.
+static qboolean G_RPC_LookSlotRoom( int slot, const char *lookCs ) {
+	char cs[MAX_STRING_CHARS], was[MAX_STRING_CHARS];
+	int i, k;
+
+	for ( i = 2; i < MAX_MODELS; i++ ) {
+		trap->GetConfigstring( CS_MODELS + i, cs, sizeof( cs ) );
+		if ( !cs[0] ) {
+			break;
+		}
+		if ( i == slot || Q_strncmp( cs, "models/players/", 15 ) || !strchr( cs, '*' ) || G_RPC_LookSlotIs( i ) ) {
+			continue;
+		}
+		for ( k = 1; k < i; k++ ) {
+			trap->GetConfigstring( CS_MODELS + k, was, sizeof( was ) );
+			if ( !strcmp( was, cs ) ) {
+				break;
+			}
+		}
+		if ( k < i ) {
+			trap->ext.VR_SetConfigstringFor( CS_MODELS + i, NULL, 0 );
+			if ( trap->ext.VR_SetConfigstringFor( CS_MODELS + slot, lookCs, rpcLooksTo ) ) {
+				return qtrue;
+			}
+		}
+	}
+	return qfalse;
+}
+
+// The model configstring a companion of this type in this look is sent as
+// (its model index): one of its own for each type and look this level - its
+// type's to every game, the look's to the players who've said they have
+// the models (G_RPC_LooksTo) - made once someone has (till then none's
+// sent its look: nothing taken up for it); its type's own (every other NPC
+// of that type takes that) where there's none (nobody's said it, the
+// engine can't, or none left). Asked before anything of the companion's
+// made (what's sent can drop a player - its owner too).
+static int G_RPC_LookSlot( const char *typeCs, const char *lookCs ) {
+	char cs[MAX_STRING_CHARS];
+	int i, index, k;
+
+	for ( i = 0; i < rpcNumLookSlots; i++ ) {
+		if ( !strcmp( rpcLookSlots[i].type, typeCs ) && !strcmp( rpcLookSlots[i].look, lookCs ) ) {
+			return rpcLookSlots[i].index;
+		}
+	}
+	index = G_ModelIndex( typeCs );	// (its type's own first: G_ModelIndex finds that one for any other)
+	if ( !G_RPC_LooksEngine() || !G_RPC_LooksTo() || rpcNumLookSlots >= RPC_LOOK_SLOTS ) {
+		return index;
+	}
+	// the first free, as G_ModelIndex takes them (the free ones last: it stops
+	// at the first) - or one of this type's not one of the looks': from before
+	// a map_restart (the configstrings kept, the engine and this game starting
+	// over), or one the engine had no room for (its type's still, nothing's
+	// sent as it)
+	for ( i = 1; i < MAX_MODELS; i++ ) {
+		trap->GetConfigstring( CS_MODELS + i, cs, sizeof( cs ) );
+		if ( !cs[0] || ( i != index && !strcmp( cs, typeCs ) && !G_RPC_LookSlotIs( i ) ) ) {
+			break;
+		}
+	}
+	if ( i >= MAX_MODELS ) {
+		return index;	// (no room: as its type comes, to all)
+	}
+	// its type's to every game (first: nothing else takes it meanwhile), kept
+	// as one of the looks' (before the engine's asked: one dropped as it sends
+	// it has it put right with the rest), then the look's to them
+	trap->SetConfigstring( CS_MODELS + i, typeCs );
+	k = rpcNumLookSlots++;
+	rpcLookSlots[k].index = i;
+	Q_strncpyz( rpcLookSlots[k].type, typeCs, sizeof( rpcLookSlots[0].type ) );
+	Q_strncpyz( rpcLookSlots[k].look, lookCs, sizeof( rpcLookSlots[0].look ) );
+	if ( !trap->ext.VR_SetConfigstringFor( CS_MODELS + i, lookCs, rpcLooksTo ) && !G_RPC_LookSlotRoom( i, lookCs ) ) {
+		for ( k = 0; k < rpcNumLookSlots && rpcLookSlots[k].index != i; k++ );
+		if ( k < rpcNumLookSlots ) {
+			rpcLookSlots[k] = rpcLookSlots[--rpcNumLookSlots];
+		}
+		return index;	// (the engine's no room: as its type comes, to all - that configstring one of its type's for the next)
+	}
+	return i;
+}
+
+// What the looks' model configstrings take of a gamestate beyond what they
+// are (their types'), to a player sent the looks' - and those of a type's not
+// one of the looks' (from before a map_restart: a player may hold a look in
+// one still, the engine knowing it, this game not) as long as a look can be.
+static int G_RPC_LookSlotsMore( void ) {
+	static char cs[MAX_MODELS][MAX_QPATH];
+	int i, k, n = 0, m;
+
+	for ( i = 0; i < rpcNumLookSlots; i++ ) {
+		n += Q_max( 0, (int)strlen( rpcLookSlots[i].look ) - (int)strlen( rpcLookSlots[i].type ) );
+	}
+	for ( m = 1; m < MAX_MODELS; m++ ) {
+		trap->GetConfigstring( CS_MODELS + m, cs[m], sizeof( cs[0] ) );
+		if ( !cs[m][0] ) {
+			break;
+		}
+	}
+	for ( i = 2; i < m; i++ ) {
+		if ( Q_strncmp( cs[i], "models/players/", 15 ) || !strchr( cs[i], '*' ) || G_RPC_LookSlotIs( i ) ) {
+			continue;
+		}
+		for ( k = 1; k < i && strcmp( cs[k], cs[i] ); k++ );
+		if ( k < i ) {
+			n += Q_max( 0, MAX_QPATH - 1 - (int)strlen( cs[i] ) );
 		}
 	}
 	return n;
@@ -1001,18 +1252,46 @@ static int G_RPC_GameStateChars( void ) {
 // Whether the level has room for another companion: entities (as G_Spawn
 // hands them out - near the most there are, it opens no new ones and drops
 // the level), what it registers - models, sounds, effects: run out of
-// those, and the level's dropped - and room in the gamestate.
-static qboolean G_RPC_Room( void ) {
+// those, and the level's dropped - and room in the gamestate (a player sent
+// the looks' model configstrings holds more: theirs).
+static qboolean G_RPC_RoomFor( int ents ) {
 	int i, n = ENTITYNUM_MAX_NORMAL - level.num_entities;	// (never opened yet)
 
-	for ( i = MAX_CLIENTS; i < level.num_entities && n < RPC_ROOM_ENTS; i++ ) {
+	for ( i = MAX_CLIENTS; i < level.num_entities && n < ents; i++ ) {
 		if ( G_RPC_SlotFree( &g_entities[i] ) ) {
 			n++;
 		}
 	}
-	return (qboolean)( n >= RPC_ROOM_ENTS && G_RPC_CsFree( CS_MODELS, MAX_MODELS, RPC_ROOM_MODELS ) >= RPC_ROOM_MODELS &&
+	return (qboolean)( n >= ents && G_RPC_CsFree( CS_MODELS, MAX_MODELS, RPC_ROOM_MODELS ) >= RPC_ROOM_MODELS &&
 		G_RPC_CsFree( CS_SOUNDS, MAX_SOUNDS, RPC_ROOM_SOUNDS ) >= RPC_ROOM_SOUNDS && G_RPC_CsFree( CS_EFFECTS, MAX_FX, RPC_ROOM_FX ) >= RPC_ROOM_FX &&
-		G_RPC_GameStateChars() + RPC_ROOM_CHARS < MAX_GAMESTATE_CHARS );
+		G_RPC_GameStateChars() + G_RPC_LookSlotsMore() + RPC_ROOM_CHARS < MAX_GAMESTATE_CHARS );
+}
+
+static qboolean G_RPC_Room( void ) {
+	return G_RPC_RoomFor( RPC_ROOM_ENTS );
+}
+
+// The companions' rules, an invasion's too (g_vrinvade.c): the level's room
+// for another NPC (ents: entities left free), a body (its box) fitting where
+// it'd stand, a way it can walk straight, nothing between.
+qboolean G_RPCompRoom( int ents ) {
+	return G_RPC_RoomFor( ents );
+}
+
+qboolean G_RPCompFits( vec3_t at, const vec3_t mins, const vec3_t maxs, int pass ) {
+	return G_RPC_FitsBox( at, mins, maxs, pass );
+}
+
+qboolean G_RPCompWalkable( const vec3_t from, const vec3_t to, const vec3_t mins, const vec3_t maxs, int pass ) {
+	return G_RPC_WalkableBox( from, to, mins, maxs, pass );
+}
+
+qboolean G_RPCompClear( const vec3_t a, const vec3_t b, int pass ) {
+	return G_RPC_Clear( a, b, pass );
+}
+
+unsigned int G_RPCompTraces( void ) {
+	return rpcTraces;
 }
 
 // NPC_Spawn_Do: a companion's entity - a slot an NPC's had before where
@@ -1038,7 +1317,6 @@ gentity_t *G_RPCompEntity( void ) {
 static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 	char model[MAX_QPATH], skin[MAX_QPATH];
 	rpcOwner_t *o = &rpco[clientNum];
-	qboolean toldNew;
 
 	if ( !c->look[0] || !g_rpCompanionModels.integer || !BG_VRCompLookOk( c->look ) ) {
 		return "";
@@ -1047,8 +1325,7 @@ static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 	if ( !G_RPC_ModelOk( model ) || !G_RPC_SkinOk( model, skin ) ) {
 		return "";
 	}
-	toldNew = G_RPC_ToldNew( model, skin, c->look );
-	if ( !G_RPC_ModelCsThere( model, skin ) || toldNew ) {
+	if ( G_RPC_LookNew( model, skin, c->look ) ) {
 		if ( o->newLooks >= RPC_NEW_LOOKS ) {
 			if ( o->newLooks == RPC_NEW_LOOKS ) {
 				o->newLooks++;	// (said once)
@@ -1058,8 +1335,8 @@ static const char *G_RPC_LookFor( int clientNum, const rpComp_t *c ) {
 			return "";
 		}
 		o->newLooks++;
-		if ( toldNew && rpcNumTold < RPC_TOLD_KEPT ) {
-			Q_strncpyz( rpcTold[rpcNumTold++], c->look, sizeof( rpcTold[0] ) );	// (told from now on: G_RPC_Tell)
+		if ( rpcNumTold < RPC_TOLD_KEPT ) {
+			Q_strncpyz( rpcTold[rpcNumTold++], c->look, sizeof( rpcTold[0] ) );	// (told from now on: not new again)
 		}
 	}
 	return c->look;
@@ -1116,8 +1393,17 @@ void G_RPCompLook( gentity_t *npc, char *model, int modelSize, char *skin, int s
 	}
 	BG_VRCompLookSplit( rpcSpawning->look, model, modelSize, skin, skinSize );
 	if ( !BG_VRCompSkinInCs( model, skin ) ) {
-		Q_strncpyz( skin, "default", skinSize );	// (too long for its configstring: the players' games are told it beside - G_RPC_Tell)
+		Q_strncpyz( skin, "default", skinSize );	// (too long for SetupGameGhoul2Model's name of it: the server's own is the default skin)
 	}
+}
+
+// SetupGameGhoul2Model: the model configstring an NPC's sent as (modelCs,
+// its own) - a companion being spawned in a look of its own, its type's:
+// that's what every player's game is sent (one without the look's model
+// would go down drawing it, precaching it even); this build's games are
+// told the look beside (G_RPC_Looks).
+const char *G_RPCompShown( const char *modelCs ) {
+	return ( rpcSpawning && rpcSpawning->look[0] ) ? rpcShown : modelCs;
 }
 
 // NPC_Spawn_Do: whether a spawner's a companion's (its NPC type, kept with
@@ -1262,6 +1548,35 @@ static void G_RPC_Tell( int clientNum ) {
 	}
 }
 
+// This build's games told the looks of the companions in looks of their own
+// (every game's sent them as their types come: G_RPCompShown) - out, or
+// knocked out while their bodies are there: CS_VR_COMPLOOKS, as many in each
+// as fit ("<entity>\<look>", '\' between; all of them fit - RP_COMP_LOOKS_CS).
+static void G_RPC_Looks( void ) {
+	static char cs[RP_COMP_LOOKS_CS][MAX_STRING_CHARS], looks[MAX_CLIENTS * RP_COMP_OUT_MAX][MAX_QPATH];
+	int ents[MAX_CLIENTS * RP_COMP_OUT_MAX];
+	int i, k, n = 0;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		for ( k = 0; k < RP_COMP_OUT_MAX; k++ ) {
+			const rpcOut_t *out = &rpco[i].out[k];
+			if ( out->ent >= 0 && out->worn[0] ) {
+				ents[n] = out->ent;
+				Q_strncpyz( looks[n], out->worn, sizeof( looks[0] ) );
+				n++;
+			}
+		}
+	}
+	BG_VRCompLooksPack( ents, (const char (*)[MAX_QPATH])looks, n, cs );	// (all of them fit: bg_public.h's check of RP_COMP_LOOKS_CS)
+	for ( n = 0; n < RP_COMP_LOOKS_CS; n++ ) {
+		char was[MAX_STRING_CHARS];
+		trap->GetConfigstring( CS_VR_COMPLOOKS + n, was, sizeof( was ) );	// (as it is: whatever set it - the level before a map_restart, say)
+		if ( strcmp( cs[n], was ) ) {
+			trap->SetConfigstring( CS_VR_COMPLOOKS + n, cs[n] );
+		}
+	}
+}
+
 // What its owner's game is told of a companion getting them up: now, since
 // when (0: it isn't; -1: it got them up) - as it changes.
 static void G_RPC_HelpTell( int clientNum, rpcOut_t *out, int now ) {
@@ -1283,6 +1598,7 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	const rpComp_t *c = G_RPComp( clientNum, slot );
 	rpComp_t as;
 	vec3_t at;
+	int lookIndex = 0;
 
 	if ( !c || !c->name[0] ) {
 		return qfalse;
@@ -1298,6 +1614,23 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	}
 	as = *c;
 	Q_strncpyz( as.look, G_RPC_LookFor( clientNum, c ), sizeof( as.look ) );
+	if ( as.look[0] ) {
+		// what every player's game is sent: its type's model (G_RPCompShown) -
+		// to the players of other games who've said they have the models, its
+		// look's (rpmodels: G_RPC_LookSlot, before anything of it's made)
+		char cls[64], model[MAX_QPATH], skin[MAX_QPATH], lookCs[MAX_QPATH];
+		if ( G_RPC_TypeInfo( c->type, cls, sizeof( cls ), model, sizeof( model ), skin, sizeof( skin ) ) ) {
+			G_RPC_ModelCs( model, skin, rpcShown, sizeof( rpcShown ) );
+			BG_VRCompLookSplit( as.look, model, sizeof( model ), skin, sizeof( skin ) );
+			G_RPC_ModelCs( model, BG_VRCompSkinInCs( model, skin ) ? skin : "default", lookCs, sizeof( lookCs ) );
+			lookIndex = G_RPC_LookSlot( rpcShown, lookCs );
+			if ( o->charIndex < 0 || !owner->client || owner->client->pers.connected != CON_CONNECTED ) {
+				return qfalse;	// (its owner dropped as that was sent: theirs gone with them)
+			}
+		} else {
+			as.look[0] = '\0';	// (can't be: its type's checked - as its type comes, then)
+		}
+	}
 
 	memset( out, 0, sizeof( *out ) );
 	out->ent = -1;
@@ -1342,6 +1675,7 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	npc->rpCompOwner = clientNum + 1;
 	out->ent = npc->s.number;
 	if ( as.look[0] ) {
+		npc->s.modelindex = lookIndex;	// (its type's own, or the one for its type and look: G_RPC_LookSlot, above)
 		npc->client->ps.customRGBA[0] = as.rgb[0];
 		npc->client->ps.customRGBA[1] = as.rgb[1];
 		npc->client->ps.customRGBA[2] = as.rgb[2];
@@ -1349,6 +1683,9 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	}
 	G_RPC_Sides( npc, clientNum );
 	G_RPC_Flags( npc, qfalse );
+	if ( npc->NPC->stats.shootDistance < RPC_SHOOT_FAR ) {
+		npc->NPC->stats.shootDistance = RPC_SHOOT_FAR;	// (its own fighting lets go of one further from it than its weapon's reach: as far as its leash allows - a saber's own goes by its blade)
+	}
 	out->walkSpeed = npc->NPC->stats.walkSpeed;
 	out->runSpeed = npc->NPC->stats.runSpeed;
 	VectorCopy( at, out->lastAt );
@@ -1356,6 +1693,52 @@ static qboolean G_RPC_Spawn( int clientNum, int k, int slot, int count ) {
 	G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE "'s companion %s came out (%s%s%s)\n", owner->client->pers.netname, c->name, c->type,
 		as.look[0] ? ", " : "", as.look );
 	return qtrue;
+}
+
+extern void Rancor_DropVictim( gentity_t *self );
+
+// Before an NPC of ours goes (G_FreeEntity): a rancor lets go of whoever it
+// holds, in its hand or its jaws (else they're held for good - stuck where
+// they are, never to come back if they die - or its bite to come lands on
+// one freed), and one a rancor holds is let go of (the rancor's bite would).
+void G_RPLetGo( gentity_t *npc ) {
+	int i;
+
+	if ( !npc || !npc->client ) {
+		return;
+	}
+	if ( ( npc->client->NPC_class == CLASS_RANCOR || npc->s.NPC_class == CLASS_RANCOR ) && npc->activator ) {
+		Rancor_DropVictim( npc );
+	}
+	if ( npc->client->ps.eFlags2 & EF2_HELD_BY_MONSTER ) {
+		for ( i = MAX_CLIENTS; i < level.num_entities; i++ ) {
+			gentity_t *e = &g_entities[i];
+			if ( e != npc && e->inuse && e->client && e->activator == npc && ( e->client->NPC_class == CLASS_RANCOR || e->s.NPC_class == CLASS_RANCOR ) ) {
+				Rancor_DropVictim( e );
+			}
+		}
+		npc->client->ps.eFlags2 &= ~EF2_HELD_BY_MONSTER;
+	}
+}
+
+// A companion's NPC freed, and what it held - whoever it holds, whoever holds
+// it, let go of (G_RPLetGo).
+static void G_RPC_FreeNpc( gentity_t *npc ) {
+	G_RPLetGo( npc );
+	if ( npc->NPC ) {
+		if ( npc->NPC->combatPoint >= 0 ) {
+			NPC_FreeCombatPoint( npc->NPC->combatPoint, qfalse );
+			npc->NPC->combatPoint = -1;
+		}
+		if ( npc->NPC->group ) {
+			AI_DeleteSelfFromGroup( npc );
+		}
+		if ( npc->NPC->tempGoal ) {
+			G_FreeEntity( npc->NPC->tempGoal );
+			npc->NPC->tempGoal = NULL;
+		}
+	}
+	G_FreeEntity( npc );
 }
 
 // A companion gone (despawned: its owner's gone, it was changed, or it was
@@ -1366,17 +1749,7 @@ static void G_RPC_Remove( int clientNum, int k ) {
 
 	G_RPC_HelpTell( clientNum, out, 0 );
 	if ( npc ) {
-		if ( npc->NPC->combatPoint >= 0 ) {
-			NPC_FreeCombatPoint( npc->NPC->combatPoint, qfalse );
-		}
-		if ( npc->NPC->group ) {
-			AI_DeleteSelfFromGroup( npc );
-		}
-		if ( npc->NPC->tempGoal ) {
-			G_FreeEntity( npc->NPC->tempGoal );
-			npc->NPC->tempGoal = NULL;
-		}
-		G_FreeEntity( npc );
+		G_RPC_FreeNpc( npc );
 	}
 	out->ent = -1;
 	out->knockedAt = 0;
@@ -1564,6 +1937,7 @@ static void G_RPC_Reconcile( int clientNum ) {
 			o->tryAfter = level.time + RPC_RETRY;
 			break;
 		}
+		G_RPC_Looks();	// (its look told at once: the next one's room - G_RPC_Room - counts it, as it does what it registered)
 	}
 	G_RPC_Tell( clientNum );
 }
@@ -1909,6 +2283,23 @@ static qboolean G_RPC_CutAhead( rpcOwner_t *o, const rpcOut_t *out ) {
 	return (qboolean)( o->trailCount && out->trailAt >= G_RPC_Oldest( o ) && out->trailAt < G_RPC_Newest( o ) && G_RPC_At( o, out->trailAt + 1 )->cut );
 }
 
+// Whether the trail's cut anywhere on from where it's on it (they've been
+// taken somewhere since, or gone up a lift, down a drop: no way to them
+// along it, maybe).
+static qboolean G_RPC_CutOnWay( rpcOwner_t *o, const rpcOut_t *out ) {
+	int n;
+
+	if ( !o->trailCount || out->trailAt < G_RPC_Oldest( o ) ) {
+		return qfalse;
+	}
+	for ( n = out->trailAt + 1; n <= G_RPC_Newest( o ); n++ ) {
+		if ( G_RPC_At( o, n )->cut ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 // Whether it's been getting nowhere long enough to go to its owner that way
 // (sooner, the trail cut just ahead).
 static qboolean G_RPC_StuckLong( rpcOwner_t *o, const rpcOut_t *out ) {
@@ -1942,8 +2333,19 @@ static void G_RPC_StuckFrame( gentity_t *npc, rpcOut_t *out, qboolean going ) {
 static qboolean G_RPC_Goal( rpcOwner_t *o, gentity_t *npc, rpcOut_t *out, const vec3_t spot, vec3_t goal ) {
 	const int oldest = G_RPC_Oldest( o ), newest = G_RPC_Newest( o );
 	int n, step, tries;
+	qboolean straight;
 
-	if ( G_RPC_Walkable( npc->r.currentOrigin, spot, npc->s.number ) ) {
+	if ( Distance( npc->r.currentOrigin, spot ) <= RPC_WALK_NEAR ) {
+		straight = G_RPC_Walkable( npc->r.currentOrigin, spot, npc->s.number );
+	} else {
+		if ( !out->straightTime || level.time - out->straightTime >= RPC_PATH || Distance( out->straightTo, spot ) > RPC_LEAVE ) {
+			out->straightTime = level.time ? level.time : 1;
+			out->straight = G_RPC_Walkable( npc->r.currentOrigin, spot, npc->s.number );
+			VectorCopy( spot, out->straightTo );
+		}
+		straight = out->straight;	// (as looked a moment ago: its many traces not every frame)
+	}
+	if ( straight ) {
 		out->trailAt = -1;
 		VectorCopy( spot, goal );
 		return qtrue;
@@ -2110,11 +2512,15 @@ static void G_RPC_Help( gentity_t *owner, rpcOwner_t *o, gentity_t *npc, rpcOut_
 		out->helpFrom = 0;
 		G_RPC_HelpTell( owner->s.number, out, 0 );
 		G_RPC_StuckFrame( npc, out, qtrue );
-		if ( level.time - out->teleTime >= RPC_TELE_WAIT && ( dist > RPC_FAR || G_RPC_StuckLong( o, out ) ) ) {
+		if ( level.time - out->teleTime >= RPC_TELE_WAIT && ( dist > RPC_HELP_FAR || G_RPC_StuckLong( o, out ) ) ) {
 			G_RPC_Teleport( owner, o, npc, out );
 			return;
 		}
 		if ( G_RPC_Goal( o, npc, out, owner->client->ps.origin, goal ) ) {
+			if ( out->trailAt >= 0 && G_RPC_CutOnWay( o, out ) && level.time - out->teleTime >= RPC_TELE_WAIT ) {
+				G_RPC_Teleport( owner, o, npc, out );	// (their trail cut on the way to them: down, they're not walked to as far as that - brought)
+				return;
+			}
 			if ( !G_RPC_MoveTo( npc, goal, qtrue, (qboolean)( out->trailAt < 0 ) ) && out->trailAt >= 0 && !G_RPC_CutAhead( o, out ) ) {
 				out->trailAt = -1;	// (stopped at an edge on its way to that point of the trail: another looked for - not the last before a cut)
 			}
@@ -2151,8 +2557,11 @@ static qboolean G_RPC_Ignored( const rpcOut_t *out, const gentity_t *e, const ve
 }
 
 // Looks about for whom to fight: whoever's after them, or hurt them
-// lately, near enough and in sight (every RPC_SCAN) - not one it lets be.
+// lately, near enough and in sight (every RPC_SCAN) - not one it lets be;
+// the nearest to them (or where it holds) of those.
 static gentity_t *G_RPC_Scan( gentity_t *npc, rpcOut_t *out, const vec3_t anchor, float leash ) {
+	gentity_t *best = NULL;
+	float bestDist = leash;
 	int i;
 
 	if ( level.time - out->scanTime < RPC_SCAN ) {
@@ -2161,13 +2570,19 @@ static gentity_t *G_RPC_Scan( gentity_t *npc, rpcOut_t *out, const vec3_t anchor
 	out->scanTime = level.time;
 	for ( i = 0; i < level.num_entities; i++ ) {
 		gentity_t *e = &g_entities[i];
-		if ( !e->inuse || !e->client || e == npc || Distance( e->r.currentOrigin, anchor ) > leash || G_RPC_Ignored( out, e, anchor ) ||
-			G_RPCompEnemy( npc, e ) != 1 || !G_RPC_Sees( npc->r.currentOrigin, e->r.currentOrigin, npc->s.number ) ) {
+		float d;
+		if ( !e->inuse || !e->client || e == npc ) {
 			continue;
 		}
-		return e;
+		d = Distance( e->r.currentOrigin, anchor );
+		if ( d > bestDist || ( best && d == bestDist ) || G_RPC_Ignored( out, e, anchor ) || G_RPCompEnemy( npc, e ) != 1 ||
+			!G_RPC_Sees( npc->r.currentOrigin, e->r.currentOrigin, npc->s.number ) ) {
+			continue;
+		}
+		best = e;	// (the nearest to them - or where it holds - so far: the one by them before one far off)
+		bestDist = d;
 	}
-	return NULL;
+	return best;
 }
 
 // Whether a weapon's a gun: fired at what it's aimed at (not a saber, fists
@@ -2435,9 +2850,8 @@ static qboolean G_RPC_Weapon( gentity_t *npc, rpcOut_t *out, gentity_t *enemy, c
 	const int chased = out->chaseSince;	// (getting nowhere since - kept only while it's after them still: below)
 	qboolean ready;
 
-	if ( npc->client->NPC_class == CLASS_JEDI || npc->client->NPC_class == CLASS_REBORN || npc->client->NPC_class == CLASS_BOBAFETT ||
-		npc->client->ps.weapon == WP_SABER ) {
-		return qtrue;	// (the Jedi's fighting, its own way: NPC_RunBehavior)
+	if ( npc->client->NPC_class == CLASS_BOBAFETT || NPC_VRJediWays( npc ) ) {
+		return qtrue;	// (the Jedi's fighting, its own way: NPC_RunBehavior - one of their class or the Reborn's with a gun of its file's: a gunner's, here)
 	}
 	out->chaseSince = 0;
 	if ( G_RPC_Thrower( npc ) ) {
@@ -2546,7 +2960,7 @@ qboolean G_RPCompThink( int *team, int *bState ) {
 
 	if ( n < 0 ) {
 		// (no one's now - lost track of: gone next frame, never an NPC of the level)
-		npc->think = G_FreeEntity;
+		npc->think = G_RPC_FreeNpc;
 		npc->nextthink = level.time + FRAMETIME;
 		return qtrue;
 	}
@@ -2956,6 +3370,9 @@ void G_RPCompOwnerGone( int clientNum ) {
 	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
 		return;
 	}
+	rpcHasModels[clientNum] = rpcModelsWant[clientNum] = qfalse;	// (whoever comes next says for themselves - first: what's sent as theirs go may drop another, its update has them gone)
+	rpcModelsAt[clientNum] = 0;
+	rpcModelsTell[clientNum] = 0;
 	G_RPC_RemoveAll( clientNum );
 	memset( &rpco[clientNum], 0, sizeof( rpco[0] ) );
 	rpco[clientNum].charIndex = rpco[clientNum].knockGen = -1;
@@ -2963,6 +3380,76 @@ void G_RPCompOwnerGone( int clientNum ) {
 		rpco[clientNum].out[k].ent = -1;
 	}
 	trap->SetConfigstring( CS_VR_COMPANIONS + clientNum, "" );
+	G_RPC_LooksUpdate();
+}
+
+// Whether a player's said rpmodels, as their userinfo has it, taken - the
+// first at once (their gamestate has it), each after RPC_MODELS_GAP after
+// the last (each sends them every look's model configstring again: more
+// at once than their game takes in drops them); else once that's passed
+// (G_RPCompFrame). Told, and logged, as it's taken.
+static void G_RPC_ModelsTake( int clientNum ) {
+	const gclient_t *cl = &level.clients[clientNum];
+
+	if ( rpcModelsWant[clientNum] == rpcHasModels[clientNum] || ( cl->pers.connected == CON_CONNECTED && rpcModelsAt[clientNum] &&
+		level.time - rpcModelsAt[clientNum] < RPC_MODELS_GAP ) ) {
+		return;	// (as they come in, nothing's sent them: their gamestate has it - no gap then)
+	}
+	rpcHasModels[clientNum] = rpcModelsWant[clientNum];
+	rpcModelsAt[clientNum] = level.time ? level.time : 1;
+	G_LogPrintf( "Roleplay: %s" S_COLOR_WHITE " %s the models companions wear (rpmodels)\n", cl->pers.netname,
+		rpcHasModels[clientNum] ? "says they have" : "no longer says they have" );
+	if ( cl->pers.connected == CON_CONNECTED && rpcModelsTell[clientNum] < 0 ) {
+		rpcModelsTell[clientNum] = level.time ? level.time : 1;	// (in already, told then: now)
+	}
+	G_RPC_LooksUpdate();
+}
+
+// ClientUserinfoChanged: whether a player's said they have the models
+// companions wear ("rpmodels" in their userinfo, set with /setu rpmodels 1:
+// not "" or "0") - a player of another game is sent companions' looks as
+// their models from now on (their game would go down drawing one it hasn't
+// got: theirs to say). Taken here as they come in (their gamestate has it);
+// once they're in, by the frame (what's sent them then may drop them - not
+// in the middle of their userinfo).
+void G_RPCompUserinfo( int clientNum, const char *userinfo ) {
+	const char *s = Info_ValueForKey( userinfo, "rpmodels" );
+
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return;
+	}
+	rpcModelsWant[clientNum] = (qboolean)( s[0] && strcmp( s, "0" ) );
+	if ( level.clients[clientNum].pers.connected != CON_CONNECTED ) {
+		G_RPC_ModelsTake( clientNum );
+	}
+}
+
+// A player of another game, a while after they come in (and as they say
+// rpmodels or stop, once they're in), told of rpmodels: how they'd see
+// companions' own looks - or that they're sent them now (or no longer).
+static void G_RPC_ModelsTell( int clientNum ) {
+	const gclient_t *cl = &level.clients[clientNum];
+
+	if ( cl->pers.connected != CON_CONNECTED || ( g_entities[clientNum].r.svFlags & SVF_BOT ) ) {
+		rpcModelsTell[clientNum] = 0;	// (once they're in)
+		return;
+	}
+	if ( !rpcModelsTell[clientNum] ) {
+		rpcModelsTell[clientNum] = level.time + RPC_MODELS_TELL;
+		return;
+	}
+	if ( rpcModelsTell[clientNum] < 0 || level.time - rpcModelsTell[clientNum] < 0 ) {
+		return;
+	}
+	rpcModelsTell[clientNum] = -1;
+	if ( G_RPCapable( clientNum ) || !G_RPOn() || !G_RPC_LooksEngine() || !g_rpCompanionModels.integer ) {
+		return;	// (this build's: it draws them itself; or none to see)
+	}
+	if ( rpcHasModels[clientNum] ) {
+		trap->SendServerCommand( clientNum, "print \"You're sent companions in their own looks (rpmodels): a model one wears that your game hasn't got could take it down - /setu rpmodels 0 to stop. (One about already: once it next comes out.)\n\"" );
+	} else {
+		trap->SendServerCommand( clientNum, "print \"Companions here may wear custom models: you see them as their NPC types. If you have this server's models, type /setu rpmodels 1 in the console to see their own looks (without one of them, your game could crash).\n\"" );
+	}
 }
 
 void G_RPCompFrame( void ) {
@@ -2977,7 +3464,13 @@ void G_RPCompFrame( void ) {
 		} else if ( rpco[i].trailCount ) {
 			G_RPC_TrailClear( &rpco[i] );	// (not walked meanwhile: none of it's theirs to follow next)
 		}
+		if ( i < level.maxclients ) {
+			G_RPC_ModelsTake( i );	// (one held back: RPC_MODELS_GAP on)
+			G_RPC_ModelsTell( i );
+		}
 	}
+	G_RPC_Looks();	// (this frame's: one out now is in the snapshot after it, its look told before it)
+	G_RPC_LooksUpdate();	// (whatever changed it - this build's said hello, say: each frame, as well as as it does)
 }
 
 void G_RPCompInit( void ) {
@@ -2991,7 +3484,17 @@ void G_RPCompInit( void ) {
 		}
 		trap->SetConfigstring( CS_VR_COMPANIONS + i, "" );
 	}
+	for ( i = 0; i < RP_COMP_LOOKS_CS; i++ ) {
+		trap->SetConfigstring( CS_VR_COMPLOOKS + i, "" );
+	}
 	rpcSpawning = NULL;
 	rpcNumModels = 0;
 	rpcNumTold = 0;
+	rpcShown[0] = '\0';
+	rpcNumLookSlots = 0;	// (the engine's forgotten them: a new level, or a map_restart)
+	rpcLooksTo = 0;
+	memset( rpcHasModels, 0, sizeof( rpcHasModels ) );	// (each player says again: ClientConnect)
+	memset( rpcModelsWant, 0, sizeof( rpcModelsWant ) );
+	memset( rpcModelsAt, 0, sizeof( rpcModelsAt ) );
+	memset( rpcModelsTell, 0, sizeof( rpcModelsTell ) );
 }

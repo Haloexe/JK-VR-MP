@@ -180,6 +180,7 @@ XCVAR_DEF( g_voteDelay,					"3000",			NULL,						CVAR_NONE,										qfalse )
 XCVAR_DEF( g_vrArmsForAll,				"1",			NULL,						CVAR_ARCHIVE|CVAR_SERVERINFO,					qtrue )	// OpenJK VR: players without the VR build see VR players' arms and sabers where they are (g_vrarms.c); 0: in the game's stance, as before
 XCVAR_DEF( g_vrForce,					"1",			CVU_VRForce,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' Force from their Force hand (g_vrforce.c); 0: where they look
 XCVAR_DEF( g_vrGripMove,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: whom a VR player's Grip holds moves with their hand (g_vrforce.c); 0: as the game has it
+XCVAR_DEF( g_vrGunBarrel,				"1",			CVU_VRGunBarrel,			CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' shots leave their gun's barrel (g_vrgun.c); 0: their eye, as before
 XCVAR_DEF( g_vrHolsters,				"1",			CVU_VRHolsters,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaber,					"1",			CVU_VRSaber,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberRGB,				"1",			CVU_VRSaberRGB,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: saber colours of players' own and black cores passed on (g_vrcolor.c)
@@ -187,7 +188,7 @@ XCVAR_DEF( g_vrSaberDamageScale,		"1",			NULL,						CVAR_ARCHIVE_ND,								qtru
 XCVAR_DEF( g_vrSaberDebug,				"0",			NULL,						CVAR_NONE,										qfalse )
 XCVAR_DEF( g_vrSaberBolts,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' blades deflect bolts; 0: blocked for them automatically, as before (g_vrsaber.c)
 XCVAR_DEF( g_vrSaberBotGuard,			"1",			NULL,						CVAR_ARCHIVE,									qtrue )
-XCVAR_DEF( g_vrSaberHeavy,				"3.2 8.8 50 300",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
+XCVAR_DEF( g_vrSaberHeavy,				"3.2 8.8 55 300",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
 XCVAR_DEF( g_vrSaberLight,				"1.8 5.3 25 150",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
 XCVAR_DEF( g_vrSaberLog,					"1",			NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_vrSaberMedium,				"2.5 7.1 40 220",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )

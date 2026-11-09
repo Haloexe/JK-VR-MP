@@ -3586,13 +3586,13 @@ CG_VRB_BladeInertia
 The blade in your hand - and the hand with it (the arm turns your fist to
 hold it, so the hilt never leaves the fist). It has a top speed and takes a
 moment to get going and to turn back, as heavy as it feels (bg_vrsaber.h):
-the blue style's hardly (2000 degrees a second), yellow's more (620), the
-staff's more again (540), red's most (490); two sabers each 750 - swing
+the blue style's hardly (1600 degrees a second), yellow's more (470), the
+staff's more again (430), red's most (375); two sabers each 600 - swing
 faster than that and the blade, and the fist holding it, fall behind the
 controller (you feel them strain, CG_VRB_Heft), catching up as you slow.
 Slow, careful moves stay exact, and it never carries on past where your
 hand stops; only turning it back fast, its weight carries it on a little
-first. Two hands on it turn it faster. It runs in your room, so turning
+first. Two hands on it turn it 15% faster. It runs in your room, so turning
 and walking never swing it. cg_vrSaberInertia scales all of it (1; 0 = the
 blade exactly where the controller points it; up to 3: slower still).
 Another blade stops it dead for a moment, and cutting through someone drags
@@ -3604,12 +3604,12 @@ on it (CG_VRB_BladeSolid).
 #define VRB_BLADE_STEP		0.002f	// s: integration step
 #define VRB_BLADE_FOLLOW	0.006f	// s: how closely it keeps to a hand turning slower than it can
 #define VRB_BLADE_STRAIN	25.0f	// falling well behind, it's dragged faster by this much (rad/s per rad)
-#define VRB_BLADE_TWOHANDS	1.2f	// two hands on it turn it this much faster
+#define VRB_BLADE_TWOHANDS	1.15f	// two hands on it turn it this much faster
 
 // by feel - blue, yellow, red, the staff, two sabers (and how fast it turns at
-// most: BG_VRFeelTurn)
-static const float	vrbBladeMaxAccel[VR_NUM_FEELS] = { 120000.0f, 11500.0f, 8700.0f, 9000.0f, 14000.0f };	// deg/s/s it gets going (or turns back) at most
-static const float	vrbBladeMaxLag[VR_NUM_FEELS] = { 25.0f, 55.0f, 63.0f, 60.0f, 50.0f };	// degrees behind the hand at most
+// most: BG_VRFeelTurn; both a fifth less than before Nov 8 2026)
+static const float	vrbBladeMaxAccel[VR_NUM_FEELS] = { 96000.0f, 8700.0f, 6650.0f, 7200.0f, 11200.0f };	// deg/s/s it gets going (or turns back) at most
+static const float	vrbBladeMaxLag[VR_NUM_FEELS] = { 25.0f, 57.0f, 65.0f, 60.0f, 50.0f };	// degrees behind the hand at most
 static const int	vrbBladeHold[VR_NUM_FEELS] = { 35, 60, 75, 68, 60 };					// ms another blade stops it for
 
 // world yaw minus room (tracking) yaw
@@ -6825,6 +6825,21 @@ qboolean CG_VRB_GazeShared( void ) {
 	return (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SYSTEMINFO ), "sv_vrx" ) ) == VR_POSE_PROTOCOL );
 }
 
+// Whether your avatar this frame has your gun in hand h, as the server's
+// told it (CG_VR_BodyEndFrame, CG_VRB_FillAvatar: your body drawn, its arm
+// on the gun) - your pose going to a server that reads it (sv_vrx). Only
+// then does a server firing from the barrel fire yours from it (cg_vr.c
+// CG_VR_AddAimDot, after CG_VR_BodyEndFrame: this frame's still).
+qboolean CG_VR_AvatarGun( int h ) {
+	const vrbState_t *s = &vrbSelf;
+
+	if ( h < 0 || h > 1 || !s->bodyCent || s->bodyTime != cg.time || !CG_VRB_BodyUsable( s->bodyCent ) || s->sentTime[h] != cg.time ||
+		s->armTime[h] != cg.time || s->sent[h].grip != VR_GRIP_GUN ) {
+		return qfalse;
+	}
+	return (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SYSTEMINFO ), "sv_vrx" ) ) == VR_POSE_PROTOCOL );
+}
+
 // The hand holding your saber saberNum (the first in the hand you use, unless
 // it was passed to the other) - cg_vrduel.c: which hand salutes. -1: none.
 int CG_VR_SaberHand( int saberNum ) {
@@ -8242,9 +8257,9 @@ those are felt as such. cg_vrSaberWeight scales it (0: weightless; up to
 #define VRB_HEFT_QUIET_MS	250		// after meeting someone or a blade: that's what's felt
 
 // by feel: blue, yellow, red, the staff, two sabers
-static const float	vrbHeftPull[VR_NUM_FEELS] = { 0.24f, 0.46f, 0.53f, 0.50f, 0.40f };	// at full speed
-static const float	vrbHeftStop[VR_NUM_FEELS] = { 0.24f, 0.50f, 0.60f, 0.55f, 0.50f };	// a full-speed swing stopped short...
-static const int	vrbHeftStopHold[VR_NUM_FEELS] = { 22, 30, 39, 35, 30 };			// ...held this long (ms)...
+static const float	vrbHeftPull[VR_NUM_FEELS] = { 0.24f, 0.49f, 0.60f, 0.50f, 0.40f };	// at full speed
+static const float	vrbHeftStop[VR_NUM_FEELS] = { 0.24f, 0.54f, 0.68f, 0.55f, 0.50f };	// a full-speed swing stopped short...
+static const int	vrbHeftStopHold[VR_NUM_FEELS] = { 22, 32, 44, 35, 30 };			// ...held this long (ms)...
 static const int	vrbHeftStopDecay[VR_NUM_FEELS] = { 65, 100, 140, 120, 100 };		// ...dying away over this
 static const float	vrbHeftGrain[VR_NUM_FEELS] = { 0.1f, 0.3f, 0.4f, 0.35f, 0.3f };		// rougher the heavier
 static const float	vrbHeftStrain[VR_NUM_FEELS] = { 0.15f, 0.40f, 0.45f, 0.43f, 0.40f };	// as far behind your hand as it can fall

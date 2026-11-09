@@ -1319,6 +1319,28 @@ extern qboolean NPC_CheckSurrender( void );
 extern void Boba_FlyStop( gentity_t *self );
 extern void NPC_BSWampa_Default( void );
 extern qboolean Jedi_CultistDestroyer( gentity_t *self );
+
+// OpenJK VR: whether an NPC goes about a fight the Jedi's way (NPC_BehaviorSet_Jedi; a companion: G_RPC_Weapon leaves it to them) -
+// a saber in hand; or of the Jedi's class or the Reborn's, not a gunner as it came (vrGunner: a gun its file gave it, not to fire
+// it none - NPC_Begin): fists, a baton or nothing, or the Force's fight (a gun the game gave it, its file none; one not to fire, the
+// Force's cultists). One of those classes with a gun of its file's fights as a gunner does, whatever's in its hand now: as the game
+// did, by the saber alone - an NPC pack's troopers are often of the Reborn's class, and the Jedi's ways had them fight as with a
+// saber, putting out one they hadn't every think (heard each time)
+qboolean NPC_VRJediWays( const gentity_t *npc )
+{
+	const gclient_t *cl = npc->client;
+
+	if ( cl->ps.weapon == WP_SABER )
+	{
+		return qtrue;
+	}
+	if ( cl->NPC_class != CLASS_JEDI && cl->NPC_class != CLASS_REBORN )
+	{
+		return qfalse;
+	}
+	return (qboolean)!( npc->NPC && npc->NPC->vrGunner );
+}
+
 void NPC_RunBehavior( int team, int bState )
 {
 	if (NPCS.NPC->s.NPC_class == CLASS_VEHICLE &&
@@ -1332,6 +1354,8 @@ void NPC_RunBehavior( int team, int bState )
 		return;
 	}
 
+	team = G_RPSideWays( NPCS.NPC, team );	// OpenJK VR: roleplay - one whose side an admin picked: its class's own ways on any side (g_vrdown.c)
+
 	if ( bState == BS_CINEMATIC )
 	{
 		NPC_BSCinematic();
@@ -1343,10 +1367,9 @@ void NPC_RunBehavior( int team, int bState )
 		return;
 	}
 //	else if ( NPCS.NPC->client->ps.weapon == WP_SABER )		// this is an _extremely_ shitty comparison.. FIXME: make a CLASS_CULTIST? --eez
-	else if ( NPCS.NPC->client->NPC_class == CLASS_JEDI ||
-		NPCS.NPC->client->NPC_class == CLASS_REBORN ||
-		NPCS.NPC->client->ps.weapon == WP_SABER )
-	{//jedi
+	else if ( NPC_VRJediWays( NPCS.NPC ) )
+	{//jedi (OpenJK VR: of the Jedi's class or the Reborn's with a gun of its file's - an NPC pack's trooper - a gunner's ways,
+	 //below, as the game had them: NPC_VRJediWays)
 		NPC_BehaviorSet_Jedi( bState );
 	}
 	else if ( NPCS.NPC->client->NPC_class == CLASS_WAMPA )

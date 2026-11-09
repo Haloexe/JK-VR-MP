@@ -49,7 +49,21 @@ wherever it takes or keeps an enemy):
   neutral          leave you be    leave you be    leave you be
 Attacking an NPC whose side was leaving you be makes that side fight back
 for the rest of that life (rpProvoked). Nobody's NPCs harm someone who's
-down. Monsters, bots, and players not playing a character are left as ever.
+down. Monsters, bots, and players not playing a character are left as ever
+- but by an invasion's NPCs (g_vrinvade.c): the dark side's go after them,
+roleplay on or off, and the light side's stand beside them.
+
+A SIDE PICKED. An admin may pick an NPC's side instead of its file's (the
+Admin page's Faction: npc spawn <type> <targetname> <side>, rp invasion
+start ... side <side> - light or heroes, dark or villains, neutral,
+creature): it begins as its file has it - its weapon, its class's setup (a
+flying droid's) - and then takes the side picked, as though its file said
+so (whom it fights and stands beside, how it goes about it - though by its
+class's own ways where only the dark side's would run them, a walker's or
+a howler's, and a neutral one not a droid as the light side's, not as a
+droid - and, one of the light side or the dark, what the crosshair shows
+of it), and takes part: not one that stands there (a Kyle's). Not a
+vehicle.
 
 The players' games (cg_vrdown.c) are told, if they run this build:
   rpdn <client> <faction>       client is down (faction: theirs), or up (-1)
@@ -66,6 +80,10 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "g_local.h"
 #include "b_local.h"
+#include "bg_saga.h"	// (SIEGETEAM_*: a Siege team's NPCs - G_RPSideBegin)
+
+extern char NPCParms[];		// (NPC_stats.c: the NPC files, read...
+extern qboolean npcFilesShort;	// ...some left out or cut short)
 
 extern char *modNames[MOD_MAX];	// (g_combat.c)
 
@@ -560,11 +578,13 @@ static int G_RP_Side( int faction ) {
 // Whether npc may have ent as its enemy, as roleplay has it: 1 yes, 0 no,
 // -1 roleplay doesn't say (as ever). A player's companion is on its
 // owner's side, and their grudges are its; whom a companion itself fights
-// is its owner's to say (g_vrcomp.c).
+// is its owner's to say (g_vrcomp.c). In a war, its NPCs fight every other
+// side's, and not their own (g_vrinvade.c: one side's whom another's after
+// isn't left to the game's, whose NPCs fight one other side, a creature
+// whichever one it went for last).
 int G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent ) {
-	const gentity_t *who;
-	int faction, side;
 	const int comp = G_RPCompEnemy( npc, ent );
+	int war;
 
 	if ( comp >= 0 ) {
 		return comp;	// (npc is a player's companion)
@@ -572,18 +592,50 @@ int G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent ) {
 	if ( !npc || !npc->client || !ent || !ent->client ) {
 		return -1;
 	}
-	if ( ent->client->rpDowned ) {
+	war = G_RPWarEnemy( npc, ent );
+	if ( war >= 0 ) {
+		return war;
+	}
+	return G_RPSideEnemy( npc->client->playerTeam, G_RPInvader( npc ), ent );
+}
+
+// Whether an NPC on a side (its playerTeam: NPCTEAM_*) - an invasion's
+// (invader: g_vrinvade.c), or not - may have ent as its enemy, as roleplay
+// has it (G_RPNPCEnemy): nobody someone down, no invader someone in a duel
+// (nothing harms them but whom they duel), else as their side has it
+// (G_RPSideRule).
+int G_RPSideEnemy( int side, qboolean invader, const gentity_t *ent ) {
+	if ( !ent || !ent->client ) {
+		return -1;
+	}
+	if ( ent->client->rpDowned || ( invader && ent->client->ps.duelInProgress ) ) {
 		return 0;	// (nobody harms someone down)
+	}
+	return G_RPSideRule( side, invader, ent );
+}
+
+// ...their side's rule, down or not: 1, its enemy; 0, not; -1, as ever. An
+// invader and a player of no faction - roleplay off, playing no character, a
+// bot: the dark side's go after them, the light side's leave them be (they're
+// on their side), creatures as ever.
+int G_RPSideRule( int side, qboolean invader, const gentity_t *ent ) {
+	const gentity_t *who;
+	int faction;
+
+	if ( !ent || !ent->client ) {
+		return -1;
 	}
 	who = G_RPCompOwner( ent );	// (ent is a player's companion: by its owner)
 	if ( !who ) {
 		who = ent;
 	}
 	faction = G_RPFaction( who->s.number );	// (-1: roleplay off, no character, not a player)
+	if ( invader && ( faction < 0 || ( who->r.svFlags & SVF_BOT ) ) && who->s.number >= 0 && who->s.number < MAX_CLIENTS && level.gametype != GT_SIEGE ) {
+		return ( side == NPCTEAM_ENEMY ) ? 1 : ( side == NPCTEAM_PLAYER ) ? 0 : -1;
+	}
 	if ( faction < 0 || ( who->r.svFlags & SVF_BOT ) || level.gametype == GT_SIEGE ) {
 		return -1;
 	}
-	side = npc->client->playerTeam;
 	if ( side <= NPCTEAM_FREE || side >= NPCTEAM_NUM_TEAMS ) {
 		return -1;	// (monsters: no side)
 	}
@@ -612,6 +664,192 @@ void G_RPProvoke( gentity_t *attacker, gentity_t *targ ) {
 		return;
 	}
 	attacker->client->rpProvoked |= 1 << side;
+}
+
+// The sides an admin may pick for an NPC, by their words or their
+// factions' (the Admin page's Faction: npc spawn's, rp invasion start's).
+static const struct {
+	const char	*word;
+	int			side;
+} rpSideWords[] = {
+	{ "light", NPCTEAM_PLAYER }, { "heroes", NPCTEAM_PLAYER },
+	{ "dark", NPCTEAM_ENEMY }, { "villains", NPCTEAM_ENEMY },
+	{ "neutral", NPCTEAM_NEUTRAL },
+	{ "creature", NPCTEAM_FREE }, { "creatures", NPCTEAM_FREE },
+	{ "file", RP_SIDE_FILE },
+};
+
+// A side as typed, any case: NPCTEAM_*; RP_SIDE_FILE, its NPC file's ("file",
+// or nothing); RP_SIDE_BAD, no side's word.
+int G_RPSideWord( const char *word ) {
+	int i;
+
+	if ( !word || !word[0] ) {
+		return RP_SIDE_FILE;
+	}
+	for ( i = 0; i < (int)ARRAY_LEN( rpSideWords ); i++ ) {
+		if ( !Q_stricmp( word, rpSideWords[i].word ) ) {
+			return rpSideWords[i].side;
+		}
+	}
+	return RP_SIDE_BAD;
+}
+
+// npc spawn: the side typed after its targetname - or in its place, nothing
+// after it (npc spawn reborn dark: the dark side, no name) - *side: NPCTEAM_*,
+// or RP_SIDE_FILE (none, its file's). qfalse: it isn't spawned - a word that's
+// no side's, or a side for a vehicle; whoever typed it is told.
+qboolean G_RPSpawnSide( gentity_t *ent, char *targetname, const char *word, qboolean vehicle, int *side ) {
+	const int clientNum = ent ? (int)( ent - g_entities ) : -1;
+
+	if ( !word[0] && targetname[0] && G_RPSideWord( targetname ) != RP_SIDE_BAD ) {
+		*side = G_RPSideWord( targetname );
+		targetname[0] = '\0';
+	} else {
+		*side = G_RPSideWord( word );
+	}
+	if ( *side == RP_SIDE_BAD ) {
+		G_RPMessage( clientNum, "Its side: light, dark, neutral or creature (or heroes, villains) - or none, its NPC file's" );
+		return qfalse;
+	}
+	if ( vehicle && *side != RP_SIDE_FILE ) {
+		G_RPMessage( clientNum, "A vehicle takes no side: spawn it without one" );
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// npc spawn: one that didn't come (NPC_SpawnType's none) - whoever typed it
+// told why, more than the server's console alone says (an admin in VR has
+// none to look at): its type none of the NPC files the server read has (the
+// server's count - not the game's, whose list the Admin page shows - and
+// whether some were left out or cut short); no { after its name; its block,
+// as NPC_ParseParms reads it, one it won't take - a vehicle not spawned as
+// one, no playerModel; or something else (its console says what). A block
+// the server read closes (NPC_LoadParms: BG_VRBlocksInStep).
+void G_RPSpawnFailed( gentity_t *ent, const char *type, qboolean vehicle ) {
+	const int clientNum = ent ? (int)( ent - g_entities ) : -1;
+	const char *p = NPCParms, *tok;
+	qboolean model = qfalse, isVehicle = qfalse;
+
+	if ( !BG_VRCompTypeOk( type ) ) {
+		return;	// (none named, or not a name to say back: the console's usage)
+	}
+	COM_BeginParseSession( "npc spawn" );
+	while ( 1 ) {
+		tok = COM_ParseExt( &p, qtrue );
+		if ( !tok[0] ) {
+			G_RPMessage( clientNum, va( "No %s spawned: the server's NPC files have none by that name%s", type,
+				npcFilesShort ? " - some were left out or cut short (its console says which)" : "" ) );
+			return;
+		}
+		if ( !Q_stricmp( tok, type ) ) {
+			break;
+		}
+		SkipBracedSection( &p, 0 );
+	}
+	if ( strcmp( COM_ParseExt( &p, qtrue ), "{" ) ) {
+		G_RPMessage( clientNum, va( "No %s spawned: its NPC file has no { after its name", type ) );
+		return;
+	}
+	while ( ( tok = COM_ParseExt( &p, qtrue ) )[0] && strcmp( tok, "}" ) ) {
+		if ( !Q_stricmp( tok, "playerModel" ) ) {
+			COM_ParseExt( &p, qfalse );	// (its value, as the game takes it: none on its line still counts - COM_ParseString)
+			model = qtrue;
+		} else if ( !Q_stricmp( tok, "class" ) ) {
+			if ( !Q_stricmp( COM_ParseExt( &p, qfalse ), "CLASS_VEHICLE" ) ) {
+				if ( !vehicle ) {
+					G_RPMessage( clientNum, va( "No %s spawned: it's a vehicle - spawn it as one (npc spawn vehicle %s)", type, type ) );
+					return;
+				}
+				isVehicle = qtrue;	// (one wants no playerModel)
+			}
+		} else {
+			while ( ( tok = COM_ParseExt( &p, qfalse ) )[0] && strcmp( tok, "}" ) ) {
+			}	// (the rest of its line: a } on it ends the block, as the game reads a key's value and goes on)
+			if ( tok[0] ) {
+				break;
+			}
+		}
+	}
+	G_RPMessage( clientNum, va( "No %s spawned: %s", type, !model && !isVehicle ? "its NPC file gives it no playerModel" : "the server's console says why" ) );
+}
+
+// The side the NPCs of a side fight (their enemyTeam, as the NPC files have
+// it): the light side's the dark side, the dark side's the light; neutrals,
+// neutrals (nobody: not their own); creatures, anyone.
+static int G_RP_Against( int side ) {
+	switch ( side ) {
+	case NPCTEAM_PLAYER:	return NPCTEAM_ENEMY;
+	case NPCTEAM_ENEMY:		return NPCTEAM_PLAYER;
+	case NPCTEAM_NEUTRAL:	return NPCTEAM_NEUTRAL;
+	default:				return NPCTEAM_FREE;
+	}
+}
+
+// NPC_Begin, done - its weapon and its class's setup as its file's side has
+// them (a flying droid's): an NPC an admin picked a side for (rpSide) on it
+// now, as though its file said so - whom it fights and stands beside, how
+// it goes about it (NPC_RunBehavior: by its side - G_RPSideWays), a Siege
+// team's (as NPC_SetMiscDefaultData has them) - and taking part: not one that
+// stands there (a Kyle's, BS_CINEMATIC). The crosshair shows one of the light
+// side or the dark as a friend or a foe (by yours, cg_draw.c); a neutral one
+// and a creature as its file's are (none's: theirs would be the foes' colour).
+void G_RPSideBegin( gentity_t *npc ) {
+	int side;
+
+	if ( !npc || !npc->client || !npc->NPC || npc->rpSide <= 0 || npc->rpSide > NPCTEAM_NUM_TEAMS ) {
+		return;
+	}
+	side = npc->rpSide - 1;
+	npc->client->playerTeam = (npcteam_t)side;
+	npc->client->enemyTeam = (npcteam_t)G_RP_Against( side );
+	npc->s.teamowner = ( side == NPCTEAM_PLAYER || side == NPCTEAM_ENEMY ) ? side : NPCTEAM_FREE;
+	npc->client->ps.persistant[PERS_TEAM] = side;
+	if ( level.gametype == GT_SIEGE ) {
+		npc->client->sess.sessionTeam = ( npc->client->enemyTeam == NPCTEAM_PLAYER ) ? SIEGETEAM_TEAM1 :
+			( npc->client->enemyTeam == NPCTEAM_ENEMY ) ? SIEGETEAM_TEAM2 : TEAM_FREE;
+	}
+	if ( npc->NPC->defaultBehavior == BS_CINEMATIC ) {
+		npc->NPC->defaultBehavior = BS_DEFAULT;
+	}
+}
+
+// NPC_RunBehavior: whose ways an NPC an admin picked a side for goes about
+// things by (the game's AI is picked by side - team, its own as it comes): a
+// class whose own ways only the dark side's run (a walker, a probe or another
+// droid that fights, a howler, a mine monster), by them on any side - none
+// other fights; a neutral one not a droid, as the light side's (the
+// neutrals' are droids': it would run on the spot, never fight back), as a
+// neutral companion fights (G_RPCompThink); else its side's. Mind-tricked
+// (till its own side's back: charmedTime), the light side's - where the
+// game's own tricked NPCs go, and their trick wears off (NPC_CheckCharmed).
+int G_RPSideWays( const gentity_t *npc, int team ) {
+	if ( !npc || !npc->client || !npc->rpSide ) {
+		return team;
+	}
+	if ( npc->NPC && npc->NPC->charmedTime ) {
+		return NPCTEAM_PLAYER;
+	}
+	switch ( npc->client->NPC_class ) {
+	case CLASS_ATST:
+	case CLASS_PROBE:
+	case CLASS_SENTRY:
+	case CLASS_INTERROGATOR:
+	case CLASS_MINEMONSTER:
+	case CLASS_HOWLER:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_GALAKMECH:
+		return NPCTEAM_ENEMY;
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_GONK:
+	case CLASS_MOUSE:
+		return team;	// (a droid: a droid's)
+	default:
+		return ( team == NPCTEAM_NEUTRAL ) ? NPCTEAM_PLAYER : team;
+	}
 }
 
 // A player's side for the NPCs: by their faction, or as ever.

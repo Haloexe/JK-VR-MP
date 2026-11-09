@@ -3183,6 +3183,24 @@ void ForceThrow( gentity_t *self, qboolean pull )
 
 		trap->Trace(&tr, tfrom, NULL, NULL, tto, self->s.number, MASK_PLAYERSOLID, qfalse, 0, 0);
 
+		if ( tr.fraction == 1.0f || tr.entityNum == ENTITYNUM_NONE || tr.entityNum == ENTITYNUM_WORLD )
+		{//OpenJK VR: nothing on the line itself - the one nearest it, within
+		 //G_THROW1_NEAR degrees (as levels 2 and 3 take in all near it), and
+		 //the way to them
+			gentity_t *nearest = G_ForceThrowNearest( self, powerUse, radius/2, tfrom, fwd );
+			if ( nearest )
+			{
+				tr.fraction = 0.0f;
+				tr.entityNum = nearest->s.number;
+				VectorCopy( fwd, forward );
+				if ( g_vrSaberLog.integer && self->s.number < MAX_CLIENTS && !( self->r.svFlags & SVF_BOT ) )
+				{
+					G_LogPrintf( "VRForce: %i's level 1 %s, nobody on its line: at %i, the nearest within %.0f degrees\n", self->s.number,
+						pull ? "Pull" : "Push", nearest->s.number, G_THROW1_NEAR );
+				}
+			}
+		}
+
 		if (tr.fraction != 1.0 &&
 			tr.entityNum != ENTITYNUM_NONE)
 		{
@@ -3448,6 +3466,11 @@ void ForceThrow( gentity_t *self, qboolean pull )
 			}
 
 			pushPower = 256*modPowerLevel;
+			if ( powerLevel == FORCE_LEVEL_1 && modPowerLevel == FORCE_LEVEL_1 )
+			{//OpenJK VR: a level 1 Push or Pull (not one Absorb took down to it):
+			 //halfway to level 2's
+				pushPower = G_THROW1_POWER;
+			}
 
 			if (push_list[x]->client)
 			{
@@ -3463,6 +3486,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 				int otherPushPower = push_list[x]->client->ps.fd.forcePowerLevel[powerUse];
 				qboolean canPullWeapon = qtrue;
 				float dirLen = 0;
+				const char *resisted = "";	// (OpenJK VR: for the log)
 
 				if ( g_debugMelee.integer )
 				{
@@ -3516,12 +3540,26 @@ void ForceThrow( gentity_t *self, qboolean pull )
 
 					if (otherPushPower >= modPowerLevel)
 					{
-						pushPowerMod = 0;
+						if ( powerLevel == FORCE_LEVEL_1 && modPowerLevel == FORCE_LEVEL_1 &&
+							push_list[x]->client->ps.fd.forcePowerLevel[powerUse] == FORCE_LEVEL_1 )
+						{//OpenJK VR: level 1 resisted with level 1 (standing: moving, it
+						 //doesn't resist at all) - half of it gets through; a higher
+						 //level, moving or not, stops it
+							pushPowerMod /= 2;
+							resisted = " - resisted at level 1: half of it";
+						}
+						else
+						{
+							pushPowerMod = 0;
+							resisted = " - resisted: stopped";
+						}
 						canPullWeapon = qfalse;
 					}
 					else
 					{
 						int powerDif = (modPowerLevel - otherPushPower);
+
+						resisted = " - resisted: less of it";
 
 						if (powerDif >= 3)
 						{
@@ -3646,6 +3684,11 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					if (pushPowerMod < 16)
 					{
 						pushPowerMod = 16;
+					}
+					if ( g_vrSaberLog.integer && self->s.number < MAX_CLIENTS && !( self->r.svFlags & SVF_BOT ) )
+					{//OpenJK VR: how hard a player's Push or Pull shoved them (games.log)
+						G_LogPrintf( "VRForce: %i's %s (level %i%s) shoved %i at %i%s\n", self->s.number, pull ? "Pull" : "Push", powerLevel,
+							( modPowerLevel != powerLevel ) ? va( ", Absorbed to %i", modPowerLevel ) : "", push_list[x]->s.number, pushPowerMod, resisted );
 					}
 
 					//fullbody push effect

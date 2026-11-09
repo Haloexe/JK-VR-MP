@@ -28,12 +28,21 @@ player sends: chat, the menus (a server that takes a few at once has it).
 ADMINS. An account the server's owner made an admin (rcon rp admin) can
 use every cheat there, cheats on or off: the server says so (rpadmin),
 and the Roleplay menu shows its Admin page - spawn an NPC or a vehicle
-(tagged as the admin's: vra_<account>), kill those or every NPC, god
+(tagged as the admin's: vra_<account>; an NPC on the side its Faction
+picks - with the Heroes, the Villains, neutral, a creature - where the
+server takes one, as rpadmin says: else its file's), kill those or every NPC, god
 mode, no-clip, no target, give all, every Force power (give forcepowers).
 They're the game's own cheat commands, which the server lets an admin use.
 On the People page an admin makes the character of whoever's picked a Grey
 Jedi or a Force Master, or neither (rp force: the server's answer to their
 card says which it is).
+Its Invasion part starts and stops invasions - waves of NPCs (rp
+invasion: g_vrinvade.c), on their file's side or the one its Faction
+picks - and shows how they go, as the server says
+(rpinv, to an admin's game: and so that the server has them). Where the
+server says it takes them (RPA_WARS), an invasion's lineup is of several
+NPC types, mixed or each so many a wave, and wars (rp war): each side's
+lineup fighting the others' where the admin stands.
 
 THE MENUS read where things stand in ui_rp* cvars, and ask for things
 with "rpui <what>" (below).
@@ -77,13 +86,22 @@ General Public License version 2, like the rest of OpenJK.
 
 qboolean CG_WorldCoordToScreenCoordFloat( vec3_t worldCoord, float *x, float *y );	// (cg_draw.c)
 
-#define RP_PROTOCOL			7		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions, 6 a character's Force setup, 7 Grey and Force Masters)
+#define RP_PROTOCOL			8		// (as the server's, g_vrrp.c: 4 takes rpadmin, 5 companions, 6 a character's Force setup, 7 Grey and Force Masters, 8 rpinv)
+#define RP_INV_LINES		3		// invasions the Admin page shows how they go (one a side: g_vrinvade.c)
+#define RP_INV_WAVES_MOST	50		// (an invasion's waves at most, a wave's and those up at once, s between waves: the server's, g_vrinvade.c)
+#define RP_INV_MOST			32
+#define RP_INV_WAIT_MOST	600
 
 // what the server says of an admin (rpadmin; as g_vrrp.c's)
 #define RPA_ADMIN			1
 #define RPA_GOD				2
 #define RPA_NOCLIP			4
 #define RPA_NOTARGET		8
+#define RPA_SIDES			16		// (the server takes a side picked for an NPC: the Admin page's Faction)
+#define RPA_WARS			32		// (the server takes lineups - several NPC types an invasion, how many a wave of each - and wars)
+#define RP_LINEUP_KINDS		4		// a lineup's NPC types at most, how many a wave of one (as the server's)
+#define RP_LINEUP_EACH_MOST	32
+#define RP_LINEUP_SIZE		( RP_LINEUP_KINDS * ( RP_NPC_NAME_MAX + 4 ) + 8 )	// (room for one too long: seen whole, and refused)
 #define RP_ADMIN_TAG		"vra_"	// an admin's NPCs, spawned from the Admin page: vra_<account>
 #define RP_NPC_NAME_MAX		63
 #define RP_CHARS_MAX		10		// (as many as a server keeps at most)
@@ -469,6 +487,25 @@ static void CG_RP_UIAdmin( void ) {
 	trap->Cvar_Set( "ui_rpAdminGod", ( cgrp.admin & RPA_GOD ) ? "1" : "0" );
 	trap->Cvar_Set( "ui_rpAdminNoclip", ( cgrp.admin & RPA_NOCLIP ) ? "1" : "0" );
 	trap->Cvar_Set( "ui_rpAdminNotarget", ( cgrp.admin & RPA_NOTARGET ) ? "1" : "0" );
+	trap->Cvar_Set( "ui_rpAdminSides", ( cgrp.admin & RPA_SIDES ) ? "1" : "0" );	// (the Faction rows: the server takes them)
+	trap->Cvar_Set( "ui_rpAdminWars", ( cgrp.admin & RPA_WARS ) ? "1" : "0" );	// (a lineup's rows, the Invasion part's War mode)
+}
+
+// The Admin page's Invasion part: how the invasions go (ui_rpInvLine<n>,
+// ui_rpInvOn), and whether this server has them (ui_rpInvAble) - as the
+// server says (rpinv); nothing yet - another server's, or no admin here.
+static void CG_RP_UIInvade( int count, char lines[RP_INV_LINES][MAX_STRING_CHARS], qboolean able ) {
+	int i;
+
+	for ( i = 0; i < RP_INV_LINES; i++ ) {
+		trap->Cvar_Set( va( "ui_rpInvLine%i", i ), ( i < count ) ? lines[i] : "" );
+	}
+	trap->Cvar_Set( "ui_rpInvOn", count > 0 ? "1" : "0" );
+	trap->Cvar_Set( "ui_rpInvAble", able ? "1" : "0" );
+}
+
+static void CG_RP_UIInvadeClear( void ) {
+	CG_RP_UIInvade( 0, NULL, qfalse );
 }
 
 /*
@@ -1037,16 +1074,85 @@ static qboolean CG_RP_NPCName( const char *name ) {
 	return qtrue;
 }
 
+// An invasion's lineup as the Admin page sends it: an NPC type's name (as
+// CG_RP_NPCName has one) - or, several (a server that takes them), up to
+// RP_LINEUP_KINDS of them a comma between, each its own number a wave
+// after a colon, 1 to RP_LINEUP_EACH_MOST, or none (mixed): reborn:2,jedi.
+static qboolean CG_RP_LineupOk( const char *lineup, qboolean several ) {
+	const char *p = lineup;
+	int n;
+
+	if ( !several ) {
+		return CG_RP_NPCName( lineup );
+	}
+	for ( n = 0; n < RP_LINEUP_KINDS; n++ ) {
+		char name[RP_NPC_NAME_MAX + 2];
+		const int len = (int)strcspn( p, ",:" );
+		if ( len > RP_NPC_NAME_MAX ) {
+			return qfalse;
+		}
+		memcpy( name, p, len );
+		name[len] = '\0';
+		if ( !CG_RP_NPCName( name ) ) {
+			return qfalse;
+		}
+		p += len;
+		if ( *p == ':' ) {
+			const int digits = (int)strspn( ++p, "0123456789" );
+			const int each = ( digits > 0 && digits <= 2 ) ? atoi( p ) : 0;
+			if ( each < 1 || each > RP_LINEUP_EACH_MOST ) {
+				return qfalse;
+			}
+			p += digits;
+		}
+		if ( !*p ) {
+			return qtrue;
+		}
+		if ( *p++ != ',' ) {
+			return qfalse;
+		}
+	}
+	return qfalse;	// (more than a server takes)
+}
+
+// The Admin page's Faction for an NPC (a spawn's, an invasion's): its word
+// for the server (g_vrdown.c's G_RPSideWord: "" none, its NPC file's), and
+// what the page then says of one spawned.
+static const char *rpSideWords[] = { "", "light", "dark", "neutral", "creature" };
+static const char *rpSideSaid[] = { "", " - with the Heroes", " - with the Villains", " - neutral", " - a creature, against everyone" };
+
+// A Faction's word as the page sends it: rpSideWords' (-1: not one).
+static int CG_RP_SideWord( const char *word ) {
+	int i;
+
+	for ( i = 0; i < (int)ARRAY_LEN( rpSideWords ); i++ ) {
+		if ( !strcmp( word, rpSideWords[i] ) ) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 /*
 rpui admin <what>: the Admin page's buttons, the game's own cheat commands
 (the server lets an admin use them with cheats off):
-  spawn <name> <npc|vehicle>   in front of you, tagged vra_<account>
+  spawn <name> <npc|vehicle> [<faction>]   in front of you, tagged
+                               vra_<account>; its faction (light, dark,
+                               neutral, creature: npc spawn's side - not a
+                               vehicle's, and where the server takes it,
+                               RPA_SIDES), else its NPC file's
   killmine, killall            the NPCs spawned here with your tag / every one
   god, noclip, notarget        on or off
   give                         give all
   forcepowers                  give forcepowers: every Force power at level 3
   force <client> grey|master|normal   rp force: whoever's picked on the
                                People page - their character
+  invasion start <who> <waves> <per> <cap> cleared|every <seconds> [<faction>]
+  invasion stop                rp invasion (the Invasion part: g_vrinvade.c) -
+                               <who>, a lineup (CG_RP_LineupOk)
+  war start <light> <dark> <creatures> <waves> <per> <cap> cleared|every <seconds>
+  war stop                     rp war (its War mode, a server that has them:
+                               RPA_WARS) - each side's lineup, or - (not in it)
 */
 static void CG_RP_Admin( void ) {
 	char what[32];
@@ -1057,15 +1163,25 @@ static void CG_RP_Admin( void ) {
 		return;
 	}
 	if ( !Q_stricmp( what, "spawn" ) ) {
-		char name[MAX_QPATH * 2], kind[16];	// (room for one too long: seen whole, and refused)
+		char name[MAX_QPATH * 2], kind[16], faction[MAX_QPATH];	// (room for one too long: seen whole, and refused)
+		qboolean vehicle;
+		int side;
 		trap->Cmd_Argv( 3, name, sizeof( name ) );
 		trap->Cmd_Argv( 4, kind, sizeof( kind ) );
+		trap->Cmd_Argv( 5, faction, sizeof( faction ) );
 		if ( !CG_RP_NPCName( name ) ) {
 			trap->Cvar_Set( "ui_rpMessage", "Pick one in the list first" );
 			return;
 		}
-		CG_RP_Send( va( "npc spawn %s%s " RP_ADMIN_TAG "%s", !Q_stricmp( kind, "vehicle" ) ? "vehicle " : "", name, cgrp.account ) );
-		trap->Cvar_Set( "ui_rpMessage", va( "%s, in front of you", name ) );
+		if ( ( side = CG_RP_SideWord( faction ) ) < 0 ) {
+			return;	// (not the page's)
+		}
+		vehicle = (qboolean)!Q_stricmp( kind, "vehicle" );
+		if ( vehicle || !( cgrp.admin & RPA_SIDES ) ) {
+			side = 0;	// (a vehicle takes none; a server that takes none: as its NPC file says)
+		}
+		CG_RP_Send( va( "npc spawn %s%s " RP_ADMIN_TAG "%s%s%s", vehicle ? "vehicle " : "", name, cgrp.account, side ? " " : "", rpSideWords[side] ) );
+		trap->Cvar_Set( "ui_rpMessage", va( "%s, in front of you%s", name, rpSideSaid[side] ) );
 	} else if ( !Q_stricmp( what, "killmine" ) ) {
 		CG_RP_Send( va( "npc kill " RP_ADMIN_TAG "%s", cgrp.account ) );
 		trap->Cvar_Set( "ui_rpMessage", "The NPCs you spawned here: killed" );
@@ -1090,6 +1206,82 @@ static void CG_RP_Admin( void ) {
 		if ( who[0] && strlen( who ) <= 2 && strspn( who, "0123456789" ) == strlen( who ) && n < MAX_CLIENTS && cgs.clientinfo[n].infoValid &&
 			( !Q_stricmp( how, "grey" ) || !Q_stricmp( how, "master" ) || !Q_stricmp( how, "normal" ) ) ) {
 			CG_RP_Send( va( "rp force %i %s", n, how ) );	// (the server says what came of it: rpmsg, and their card)
+		}
+	} else if ( !Q_stricmp( what, "invasion" ) ) {
+		char how[16];
+		trap->Cmd_Argv( 3, how, sizeof( how ) );
+		if ( !Q_stricmp( how, "stop" ) ) {
+			CG_RP_Send( "rp invasion stop" );
+			trap->Cvar_Set( "ui_rpMessage", "" );	// (what came of it, as the server says: rpmsg)
+		} else if ( !Q_stricmp( how, "start" ) ) {
+			char who[RP_LINEUP_SIZE], next[16], faction[MAX_QPATH];
+			int side;
+			trap->Cmd_Argv( 4, who, sizeof( who ) );
+			trap->Cmd_Argv( 8, next, sizeof( next ) );
+			trap->Cmd_Argv( 10, faction, sizeof( faction ) );
+			if ( !CG_RP_LineupOk( who, (qboolean)( ( cgrp.admin & RPA_WARS ) != 0 ) ) ) {
+				trap->Cvar_Set( "ui_rpMessage", "Type the NPC type's name: letters, numbers, _ - and ." );
+				return;
+			}
+			if ( ( Q_stricmp( next, "cleared" ) && Q_stricmp( next, "every" ) ) || ( side = CG_RP_SideWord( faction ) ) < 0 ) {
+				return;	// (not the page's)
+			}
+			if ( !( cgrp.admin & RPA_SIDES ) ) {
+				side = 0;	// (a server that takes none: its NPC file's)
+			}
+			{	// (each read by itself: CG_Argv's one buffer)
+				const int waves = Com_Clampi( 0, RP_INV_WAVES_MOST, atoi( CG_Argv( 5 ) ) );
+				const int per = Com_Clampi( 1, RP_INV_MOST, atoi( CG_Argv( 6 ) ) );
+				const int cap = Com_Clampi( 1, RP_INV_MOST, atoi( CG_Argv( 7 ) ) );
+				const int wait = Com_Clampi( 0, RP_INV_WAIT_MOST, atoi( CG_Argv( 9 ) ) );
+				CG_RP_Send( va( "rp invasion start %s waves %i per %i cap %i %s %i%s%s", who, waves, per, cap, Q_stricmp( next, "every" ) ? "cleared" : "every", wait,
+					side ? " side " : "", rpSideWords[side] ) );
+			}
+			trap->Cvar_Set( "ui_rpMessage", "" );
+		}
+	} else if ( !Q_stricmp( what, "war" ) ) {
+		static const char *words[3] = { "light", "dark", "creatures" };
+		char how[16];
+		trap->Cmd_Argv( 3, how, sizeof( how ) );
+		if ( !( cgrp.admin & RPA_WARS ) ) {
+			trap->Cvar_Set( "ui_rpMessage", "This server has no wars" );
+			return;
+		}
+		if ( !Q_stricmp( how, "stop" ) ) {
+			CG_RP_Send( "rp war stop" );
+			trap->Cvar_Set( "ui_rpMessage", "" );	// (what came of it, as the server says: rpmsg)
+		} else if ( !Q_stricmp( how, "start" ) ) {
+			char who[3][RP_LINEUP_SIZE], next[16], line[MAX_STRING_CHARS];
+			int s, sides = 0;
+			for ( s = 0; s < 3; s++ ) {
+				trap->Cmd_Argv( 4 + s, who[s], sizeof( who[s] ) );
+				if ( strcmp( who[s], "-" ) ) {
+					if ( !CG_RP_LineupOk( who[s], qtrue ) ) {
+						trap->Cvar_Set( "ui_rpMessage", "Type the NPC type's name: letters, numbers, _ - and ." );
+						return;
+					}
+					sides++;
+				}
+			}
+			trap->Cmd_Argv( 10, next, sizeof( next ) );
+			if ( sides < 2 || ( Q_stricmp( next, "cleared" ) && Q_stricmp( next, "every" ) ) ) {
+				return;	// (not the page's)
+			}
+			Q_strncpyz( line, "rp war start", sizeof( line ) );
+			for ( s = 0; s < 3; s++ ) {
+				if ( strcmp( who[s], "-" ) ) {
+					Q_strcat( line, sizeof( line ), va( " %s %s", words[s], who[s] ) );
+				}
+			}
+			{	// (each read by itself: CG_Argv's one buffer)
+				const int waves = Com_Clampi( 0, RP_INV_WAVES_MOST, atoi( CG_Argv( 7 ) ) );
+				const int per = Com_Clampi( 1, RP_INV_MOST, atoi( CG_Argv( 8 ) ) );
+				const int cap = Com_Clampi( 1, RP_INV_MOST, atoi( CG_Argv( 9 ) ) );
+				const int wait = Com_Clampi( 0, RP_INV_WAIT_MOST, atoi( CG_Argv( 11 ) ) );
+				Q_strcat( line, sizeof( line ), va( " waves %i per %i cap %i %s %i", waves, per, cap, Q_stricmp( next, "every" ) ? "cleared" : "every", wait ) );
+			}
+			CG_RP_Send( line );	// (where you stand: what came of it, as the server says - rpmsg)
+			trap->Cvar_Set( "ui_rpMessage", "" );
 		}
 	}
 }
@@ -1238,6 +1430,7 @@ static void CG_RP_AccountCmd( void ) {
 		if ( cgrp.admin ) {
 			cgrp.admin = 0;	// (...not an admin until the server says so: rpadmin, a frame on)
 			CG_RP_UIAdmin();
+			CG_RP_UIInvadeClear();
 		}
 	}
 	Q_strncpyz( cgrp.account, account, sizeof( cgrp.account ) );
@@ -1346,11 +1539,28 @@ static void CG_RP_MessageCmd( void ) {
 
 // rpadmin <RPA_* bits>: whether we're an admin here, and our cheats on or off
 static void CG_RP_AdminCmd( void ) {
-	cgrp.admin = atoi( CG_Argv( 1 ) ) & ( RPA_ADMIN | RPA_GOD | RPA_NOCLIP | RPA_NOTARGET );
+	cgrp.admin = atoi( CG_Argv( 1 ) ) & ( RPA_ADMIN | RPA_GOD | RPA_NOCLIP | RPA_NOTARGET | RPA_SIDES | RPA_WARS );
 	if ( !( cgrp.admin & RPA_ADMIN ) ) {
 		cgrp.admin = 0;
+		CG_RP_UIInvadeClear();	// (an admin's alone: told again as we're one)
 	}
 	CG_RP_UIAdmin();
+}
+
+// rpinv <count> "<line>"...: how the invasions on go, for the Admin page's
+// Invasion part (to an admin: g_vrinvade.c) - and so, that this server has them.
+static void CG_RP_InvadeCmd( void ) {
+	char lines[RP_INV_LINES][MAX_STRING_CHARS];
+	const int count = Com_Clampi( 0, RP_INV_LINES, atoi( CG_Argv( 1 ) ) );
+	int i;
+
+	if ( !cgrp.admin ) {
+		return;	// (an admin's: one sent as we stopped being one)
+	}
+	for ( i = 0; i < count; i++ ) {
+		trap->Cmd_Argv( 2 + i, lines[i], sizeof( lines[i] ) );
+	}
+	CG_RP_UIInvade( count, lines, qtrue );
 }
 
 // rppassok: the new password's the one now
@@ -1472,6 +1682,8 @@ qboolean CG_RP_ServerCommand( const char *cmd ) {
 		CG_RP_FailCmd();
 	} else if ( !Q_stricmp( cmd, "rpadmin" ) ) {
 		CG_RP_AdminCmd();
+	} else if ( !Q_stricmp( cmd, "rpinv" ) ) {
+		CG_RP_InvadeCmd();	// (how the invasions go: the Admin page)
 	} else if ( !Q_stricmp( cmd, "rpdn" ) ) {
 		CG_RP_DownCmd();	// (who's down: cg_vrdown.c)
 	} else if ( !Q_stricmp( cmd, "rpup" ) ) {
@@ -1930,6 +2142,7 @@ void CG_RP_Restart( void ) {
 	CG_RP_DownInit();	// (everyone up again; the server says who's down when we hello)
 	cgrp.admin = 0;		// (and whether we're an admin)
 	CG_RP_UIAdmin();
+	CG_RP_UIInvadeClear();	// (and how invasions go: an admin's told)
 	CG_RP_CompInit();	// (and our companions)
 }
 
@@ -1978,6 +2191,7 @@ void CG_RP_Init( void ) {
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
 	CG_RP_UIAdmin();
+	CG_RP_UIInvadeClear();
 }
 
 void CG_RP_Shutdown( void ) {
@@ -1993,6 +2207,7 @@ void CG_RP_Shutdown( void ) {
 	CG_RP_UIServer();
 	CG_RP_UIAccount();
 	CG_RP_UIAdmin();
+	CG_RP_UIInvadeClear();
 	CG_RP_UIClear();
 	CG_RP_CompInit();
 	CG_RP_ForceOwnBack();	// (yours again, out of the game too)

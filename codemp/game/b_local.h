@@ -188,6 +188,9 @@ extern qboolean InVisrange ( gentity_t *ent );
 //NPC_spawn
 extern void NPC_Spawn ( gentity_t *ent, gentity_t *other, gentity_t *activator );
 
+//NPC (OpenJK VR: whether an NPC fights the Jedi's way - a saber, or of their class or the Reborn's, no gun of its file's)
+extern qboolean NPC_VRJediWays( const gentity_t *npc );
+
 //NPC_stats
 extern int NPC_ReactionTime ( void );
 extern qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC );

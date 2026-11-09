@@ -31,6 +31,32 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 /*
 ===============
+SV_VRConfigstringFor
+
+OpenJK VR: a configstring as this client is sent it - otherwise than it is
+where the game said so for it (ext.VR_SetConfigstringFor: a roleplay
+companion's model, its look's to the players who said they have its model;
+everyone else, its type's), else as it is. Used for every configstring a
+client is sent: in its gamestate (SV_CreateClientGameStateMessage) and as it
+changes (SV_SendConfigstring).
+===============
+*/
+const char *SV_VRConfigstringFor( const client_t *client, int index ) {
+	const int c = (int)( client - svs.clients );
+	int i;
+
+	if ( c >= 0 && c < MAX_CLIENTS && index >= 0 && index < MAX_CONFIGSTRINGS ) {
+		for ( i = 0; i < VR_CS_FOR_MAX; i++ ) {
+			if ( sv.vrCsFor[i].clients && sv.vrCsFor[i].index == index && ( sv.vrCsFor[i].clients & ( 1u << c ) ) ) {
+				return sv.vrCsFor[i].value;
+			}
+		}
+	}
+	return sv.configstrings[index];
+}
+
+/*
+===============
 SV_SendConfigstring
 
 Creates and sends the server command necessary to update the CS index for the
@@ -41,8 +67,9 @@ static void SV_SendConfigstring(client_t *client, int index)
 {
 	int maxChunkSize = MAX_STRING_CHARS - 24;
 	int len;
+	const char *val = SV_VRConfigstringFor( client, index );	// OpenJK VR: as this client's sent it
 
-	len = strlen(sv.configstrings[index]);
+	len = strlen(val);
 
 	if( len >= maxChunkSize ) {
 		int		sent = 0;
@@ -60,7 +87,7 @@ static void SV_SendConfigstring(client_t *client, int index)
 			else {
 				cmd = "bcs1";
 			}
-			Q_strncpyz( buf, &sv.configstrings[index][sent],
+			Q_strncpyz( buf, &val[sent],
 				maxChunkSize );
 
 			SV_SendServerCommand( client, "%s %i \"%s\"\n", cmd,
@@ -72,7 +99,110 @@ static void SV_SendConfigstring(client_t *client, int index)
 	} else {
 		// standard cs, just send it
 		SV_SendServerCommand( client, "cs %i \"%s\"\n", index,
-			sv.configstrings[index] );
+			val );
+	}
+}
+
+/*
+===============
+SV_VRSetConfigstringFor
+
+OpenJK VR (ext.VR_SetConfigstringFor): configstring index as the clients in
+the mask are sent it - value (shorter than MAX_QPATH) - everyone else as it
+is; value NULL or "", or no clients: as it is to all. A client dropped (the
+game may ask before its disconnect's run, or as it runs) never. Each client
+whose configstring this changes is sent it again (one loading, once it's
+in: SV_UpdateConfigstrings; one not sent its gamestate yet, there) - which
+can drop a client, and run the game's disconnect for it in the middle of
+this. qfalse: no room for another (VR_CS_FOR_MAX), or one the game can't set
+- as it is to all.
+===============
+*/
+qboolean SV_VRSetConfigstringFor( int index, const char *value, unsigned int clients ) {
+	char was[MAX_CLIENTS][MAX_QPATH];
+	qboolean longer[MAX_CLIENTS];
+	int i, slot = -1, n;
+
+	if ( index < 0 || index >= MAX_CONFIGSTRINGS ) {
+		return qfalse;
+	}
+	if ( !value || !value[0] || strlen( value ) >= MAX_QPATH ) {
+		clients = 0;	// (as it is, to all)
+	}
+	if ( sv_maxclients->integer < MAX_CLIENTS ) {
+		clients &= ( 1u << sv_maxclients->integer ) - 1;
+	}
+	n = Q_min( sv_maxclients->integer, MAX_CLIENTS );
+	for ( i = 0; i < n; i++ ) {
+		if ( svs.clients[i].state == CS_ZOMBIE ) {
+			clients &= ~( 1u << i );	// (dropped - as the game says, with what it asked before it heard: whoever's next there starts afresh)
+		}
+	}
+	for ( i = 0; i < VR_CS_FOR_MAX && slot < 0; i++ ) {
+		if ( sv.vrCsFor[i].clients && sv.vrCsFor[i].index == index ) {
+			slot = i;
+		}
+	}
+	if ( slot < 0 ) {
+		if ( !clients ) {
+			return qtrue;	// (as it is to all already)
+		}
+		for ( i = 0; i < VR_CS_FOR_MAX && slot < 0; i++ ) {
+			if ( !sv.vrCsFor[i].clients ) {
+				slot = i;
+			}
+		}
+		if ( slot < 0 ) {
+			return qfalse;
+		}
+	}
+	// what each client's sent now (as it is, where it's longer than a value: never another's)
+	for ( i = 0; i < n; i++ ) {
+		const char *now = SV_VRConfigstringFor( &svs.clients[i], index );
+		longer[i] = (qboolean)( strlen( now ) >= MAX_QPATH );
+		Q_strncpyz( was[i], now, sizeof( was[0] ) );
+	}
+	sv.vrCsFor[slot].index = index;
+	Q_strncpyz( sv.vrCsFor[slot].value, clients ? value : "", sizeof( sv.vrCsFor[0].value ) );
+	sv.vrCsFor[slot].clients = clients;
+	for ( i = 0; i < n; i++ ) {
+		client_t *cl = &svs.clients[i];
+		const char *now = SV_VRConfigstringFor( cl, index );
+		if ( !longer[i] && !strcmp( now, was[i] ) ) {
+			continue;	// (as it was)
+		}
+		if ( longer[i] && now == sv.configstrings[index] ) {
+			continue;	// (as it is, as it was)
+		}
+		if ( cl->state == CS_ACTIVE ) {
+			SV_SendConfigstring( cl, index );
+		} else if ( cl->state == CS_PRIMED ) {
+			cl->csUpdated[index] = qtrue;
+		}
+	}
+	return qtrue;
+}
+
+/*
+===============
+SV_VRConfigstringsForGone
+
+OpenJK VR (SV_DropClient, SV_DirectConnect's reconnect): a client gone -
+none of the configstrings sent otherwise to them kept (whoever comes next in
+their place starts afresh, whatever the game asked as they went). Nothing
+sent - before the game's told (what it asks as they go changes nothing they
+hold: nothing sent them), and after (anything it asked meanwhile).
+===============
+*/
+void SV_VRConfigstringsForGone( const client_t *client ) {
+	const int c = (int)( client - svs.clients );
+	int i;
+
+	if ( c < 0 || c >= MAX_CLIENTS ) {
+		return;
+	}
+	for ( i = 0; i < VR_CS_FOR_MAX; i++ ) {
+		sv.vrCsFor[i].clients &= ~( 1u << c );
 	}
 }
 

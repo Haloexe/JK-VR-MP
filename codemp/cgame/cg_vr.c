@@ -13,6 +13,7 @@ General Public License version 2, like the rest of OpenJK.
 */
 
 #include "cg_local.h"
+#include "game/bg_vrgun.h"
 
 // Whether the engine is the OpenJK VR engine this cgame was built for: only
 // then do the VR members of trap->ext exist at all.
@@ -68,6 +69,31 @@ int CG_VR_GunHand( void ) {
 qboolean CG_VR_HandAim( void ) {
 	const vrClientState_t *vr = CG_VR();
 	return ( vr && vr->handAim && vr->handValid[CG_VR_GunHand()] ) ? qtrue : qfalse;
+}
+
+// A colour across the whole screen (CG_Draw2D's tints: the Force's, water's, a
+// fall's fade), under the 2D drawn after it. In a headset the 2D is the HUD's
+// screen in front of you, where that alone is a coloured square: there the
+// engine fills the rest of your view round it with the same colour too
+// (ext.VR_TintView; CG_VR first - an older engine's ext ends before it).
+void CG_FillScreen( const vec4_t color ) {
+	CG_FillRect( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, color );
+	if ( CG_VR() && trap->ext.VR_TintView ) {
+		trap->ext.VR_TintView( color );
+	}
+}
+
+// What's where your eyes are, for water's, slime's and lava's tints: in a
+// headset, at your head - your eyes are drawn from it, up to Head Reach from
+// the game's (and further crouched) - else where the game has them.
+int CG_VR_ViewContents( void ) {
+	vec3_t head;
+	matrix3_t axis;
+
+	if ( CG_VR_HeadPose( head, axis ) ) {
+		return CG_PointContents( head, -1 );
+	}
+	return cg.refdef.viewContents;
 }
 
 /*
@@ -133,19 +159,38 @@ void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles ) {
 	vectoangles( aimWorld[0], angles );
 }
 
+// Your game goes by the barrel rule (bg_vrgun.h): it says so to every server
+// ("vrb" in your userinfo) - only one going by it too fires from your barrel.
+void CG_VR_Init( void ) {
+	trap->Cvar_Register( NULL, "vrb", XSTRING( VR_BARREL_RULE ), CVAR_USERINFO | CVAR_ROM | CVAR_TEMP );
+}
+
+// Whether this server fires your shots from your gun's barrel, by the rule
+// you go by ("vrGunBarrel" in its serverinfo: an earlier build's, or none -
+// from your eye).
+void CG_VR_ParseServerinfo( const char *info ) {
+	cgs.vrGunBarrel = (qboolean)( atoi( Info_ValueForKey( info, "vrGunBarrel" ) ) == VR_BARREL_RULE );
+}
+
+static void CG_VR_BarrelTrace( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int pass, int mask ) {
+	CG_Trace( tr, start, mins, maxs, end, pass, mask );
+}
+
 /*
 =================
 CG_VR_AddAimDot
 
 A small crosshair floating where your shots will land. The 2D crosshair is
 hidden in hand-aim mode because it would sit in the middle of your view, not
-where the gun points.
+where the gun points. Added once the scene's built (cg_view.c, after
+CG_VR_BodyEndFrame): other VR players are back where the server has them,
+not where their bodies are drawn - as the server's shot meets them.
 =================
 */
 void CG_VR_AddAimDot( void ) {
 	refEntity_t ent;
 	trace_t tr;
-	vec3_t start, fwd, end;
+	vec3_t eye, start, fwd, end, grip, muzzle, barrel;
 	float dist;
 
 	if ( !CG_VR_HandAim() || !cg_drawCrosshair.integer || !cg_vrAimDot.integer ) {
@@ -153,10 +198,19 @@ void CG_VR_AddAimDot( void ) {
 	}
 
 	// Trace the way the server fires: from the player's eye along the
-	// usercmd angles (the camera itself may be third person or kicked).
-	VectorCopy( cg.predictedPlayerState.origin, start );
-	start[2] += cg.predictedPlayerState.viewheight;
+	// usercmd angles (the camera itself may be third person or kicked) -
+	// from your gun's muzzle on a server that fires from it, as it finds it:
+	// your avatar's gun hand, room all the way (bg_vrgun.h, g_vrgun.c)
+	VectorCopy( cg.predictedPlayerState.origin, eye );
+	eye[2] += cg.predictedPlayerState.viewheight;
+	VectorCopy( eye, start );
 	AngleVectors( cg.predictedPlayerState.viewangles, fwd, NULL, NULL );
+	if ( cgs.vrGunBarrel && BG_VRBarrelWeapon( cg.predictedPlayerState.weapon ) && !cg.predictedPlayerState.zoomMode &&
+		!cg.predictedPlayerState.m_iVehicleNum && !cg.predictedPlayerState.emplacedIndex && CG_VR_AvatarGun( CG_VR_GunHand() ) &&
+		CG_VR_HeldWeaponBarrel( cg.predictedPlayerState.weapon, grip, muzzle, barrel ) && DotProduct( barrel, fwd ) >= VR_BARREL_AGREE &&
+		BG_VRBarrelClear( CG_VR_BarrelTrace, cg.predictedPlayerState.clientNum, eye, grip, muzzle ) ) {
+		VectorCopy( muzzle, start );
+	}
 	VectorMA( start, 8192.0f, fwd, end );
 	CG_Trace( &tr, start, NULL, NULL, end, cg.predictedPlayerState.clientNum, MASK_SHOT );
 

@@ -233,7 +233,9 @@ void SV_DirectConnect( const netadr_t *from ) {
 			// VVFIXME - both SOF2 and Wolf remove this call, claiming it blows away the user's info
 			// disconnect the client from the game first so any flags the
 			// player might have are dropped
+			SV_VRConfigstringsForGone( newcl );	// OpenJK VR: nothing sent otherwise to them kept (SV_DropClient's as well)
 			GVM_ClientDisconnect( newcl - svs.clients );
+			SV_VRConfigstringsForGone( newcl );
 			//
 			goto gotnewcl;
 		}
@@ -375,6 +377,7 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 	if ( drop->state == CS_ZOMBIE ) {
 		return;		// already dropped
 	}
+	SV_VRConfigstringsForGone( drop );	// OpenJK VR: nothing sent otherwise to them kept - before the game's told (nothing sent them as it is)
 
 	// Kill any download
 	SV_CloseDownload( drop );
@@ -403,6 +406,7 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 		Com_DPrintf( "Going to CS_ZOMBIE for %s\n", drop->name );
 		drop->state = CS_ZOMBIE;		// become free in a few seconds
 	}
+	SV_VRConfigstringsForGone( drop );	// OpenJK VR: ...and after (whatever the game asked meanwhile), for whoever's next in their place
 
 	if ( drop->demo.demorecording ) {
 		SV_StopRecordDemo( drop );
@@ -442,10 +446,11 @@ void SV_CreateClientGameStateMessage( client_t *client, msg_t *msg ) {
 
 	// write the configstrings
 	for ( start = 0 ; start < MAX_CONFIGSTRINGS ; start++ ) {
-		if (sv.configstrings[start][0]) {
+		const char *val = SV_VRConfigstringFor( client, start );	// OpenJK VR: as this client's sent it
+		if (val[0]) {
 			MSG_WriteByte( msg, svc_configstring );
 			MSG_WriteShort( msg, start );
-			MSG_WriteBigString( msg, sv.configstrings[start] );
+			MSG_WriteBigString( msg, val );
 		}
 	}
 

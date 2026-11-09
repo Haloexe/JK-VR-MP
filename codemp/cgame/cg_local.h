@@ -1652,6 +1652,7 @@ typedef struct cgs_s {
 
 	qboolean			vrHolsters;		// OpenJK VR: the server has holsters ("vrHolsters 1": cg_vrholster.c)
 	int					vrSaberRGB;		// OpenJK VR: the server passes saber colours on ("vrSaberRGB 1"); 0: it doesn't; -1: it doesn't say (not this build: you see your own)
+	qboolean			vrGunBarrel;	// OpenJK VR: the server fires your shots from your gun's barrel, by your rule ("vrGunBarrel": bg_vrgun.h)
 
 } cgs_t;
 
@@ -1916,11 +1917,17 @@ void CG_AddViewWeapon (playerState_t *ps);
 const vrClientState_t *CG_VR( void );
 int CG_VR_GunHand( void );
 qboolean CG_VR_HandAim( void );
+void CG_FillScreen( const vec4_t color );	// (a tint across the whole screen: in a headset, the whole view)
+int CG_VR_ViewContents( void );	// (what's at your eyes for the liquids' tints: in a headset, at your head)
 qboolean CG_VR_HeadPose( vec3_t origin, matrix3_t axis );
 void CG_VR_PlaceWeaponInHand( refEntity_t *hand, vec3_t angles );
 void CG_VR_AddAimDot( void );
+void CG_VR_Init( void );
+void CG_VR_ParseServerinfo( const char *info );
 qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matrix3_t axis );
 qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle );
+qboolean CG_VR_HeldWeaponBarrel( int weaponNum, vec3_t grip, vec3_t muzzle, vec3_t dir );
+qboolean CG_VR_AvatarGun( int h );	// (cg_vrbody.c: your avatar has your gun in that hand, as the server's told it this frame)
 // cg_vrgun.c (OpenJK VR: both hands on your gun)
 void		CG_VR_GunFrame( const vrClientState_t *vr );
 int			CG_VR_GunZones( void );
@@ -2043,6 +2050,8 @@ const char	*CG_RP_CompsWhy( void );
 const char	*CG_RP_CompOrderWhy( int order );
 void		CG_RP_CompOrder( int order );
 int			CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID );
+int			CG_RP_NpcModel( const centity_t *cent, char *modelName, int size, int skinID );
+const char	*CG_RP_CompLook( int entNum );
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );

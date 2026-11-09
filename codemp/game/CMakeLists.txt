@@ -129,6 +129,8 @@ set(MPGameGameFiles
 	"${MPDir}/game/g_vrrp.c"
 	"${MPDir}/game/g_vrdown.c"
 	"${MPDir}/game/g_vrcomp.c"
+	"${MPDir}/game/g_vrinvade.c"
+	"${MPDir}/game/g_vrgun.c"
 	"${MPDir}/game/WalkerNPC.c"
 	"${MPDir}/game/ai.h"
 	"${MPDir}/game/ai_main.h"

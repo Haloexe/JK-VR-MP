@@ -47,8 +47,8 @@ void			UI_ParseMenu( const char *menuFile );
 #define VRC_PROFILE			"ingame_player"
 #define VRC_PROFILE_ITEMS	"vr_comp_profile"	// its items: on the Profile menu
 #define VRC_PROFILE_ITEM	"vr_comp_profilebutton"
-#define VRC_TYPES_MAX		1024	// NPC types read (each name's first), at most
-#define VRC_NPC_FILE_MAX	65536	// a file of them read (more of one: cut there)
+#define VRC_TYPES_MAX		4096	// NPC types read (each name's first), at most (NPC packs and all: 1024 before - the game's own, read last, left out)
+#define VRC_NPC_FILE_MAX	0x40000	// a file of them read: one as big, left out (as the server leaves it out)
 #define VRC_MODELS_MAX		256		// player models asked whether they're on the humanoid skeleton, kept
 #define VRC_SAVE_WAIT		5000	// Save: the server's word waited for (ms)
 #define VRC_MESSAGE_TIME	10000	// a message (ui_rpMessage) shown this long (ms)
@@ -314,36 +314,36 @@ static const char *UI_VRC_WeaponWord( const char *weapon ) {
 	return "";
 }
 
-// The NPC types a file of them defines, into the list (as the server reads
-// one: its name, then a braced block - "class", "playerModel", "customSkin",
-// "weapon" on its lines, inner blocks skipped).
+// The NPC types a file of them defines, into the list - as the server reads
+// one, the part of it it keeps (NPC_LoadParms): each name the game's walk
+// through them finds, then its block, to where that walk ends it ("class",
+// "playerModel", "customSkin", "weapon" on its lines, inner blocks skipped).
 static void UI_VRC_ReadTypeFile( const char *path ) {
-	static char text[VRC_NPC_FILE_MAX];
+	static char text[VRC_NPC_FILE_MAX + 1];
 	fileHandle_t f = 0;
-	const char *p;
+	const char *p, *block, *q;
 	int len, i;
 
 	len = trap->FS_Open( path, &f, FS_READ );
 	if ( !f ) {
 		return;
 	}
-	if ( len <= 0 ) {
+	if ( len <= 0 || len >= VRC_NPC_FILE_MAX ) {
 		trap->FS_Close( f );
-		return;
-	}
-	if ( len >= (int)sizeof( text ) ) {
-		len = (int)sizeof( text ) - 1;	// (one this big: what's past it, left out)
+		return;	// (one this big the server leaves out: NPC_LoadParms)
 	}
 	trap->FS_Read( text, len, f );
 	trap->FS_Close( f );
 	text[len] = '\0';
+	len = BG_VRNPCFileText( text, len );
+	text[BG_VRBlocksInStep( text, len, NULL, 0 )] = '\0';
 	p = text;
 	COM_BeginParseSession( path );
 	while ( p && vrcTypes.count < VRC_TYPES_MAX ) {
 		vrcType_t *t = &vrcTypes.list[vrcTypes.count];
 		char cls[64], weapon[64];
 		const char *tok = COM_ParseExt( &p, qtrue );
-		qboolean ok, ended = qfalse;
+		qboolean ok;
 
 		if ( !tok[0] ) {
 			break;
@@ -353,37 +353,32 @@ static void UI_VRC_ReadTypeFile( const char *path ) {
 		Q_strncpyz( t->name, tok, sizeof( t->name ) );
 		Q_strncpyz( t->skin, "default", sizeof( t->skin ) );
 		cls[0] = weapon[0] = '\0';
-		tok = COM_ParseExt( &p, qtrue );
-		if ( strcmp( tok, "{" ) ) {
-			break;	// (not a block: the rest's broken)
+		block = p;
+		if ( strcmp( COM_ParseExt( &p, qtrue ), "{" ) ) {
+			p = block;
+			SkipBracedSection( &p, 0 );	// (no block: past what the game's walk takes for one - not a type)
+			continue;
 		}
-		while ( p ) {
-			tok = COM_ParseExt( &p, qtrue );
-			if ( !tok[0] ) {
-				break;
-			}
-			if ( !strcmp( tok, "}" ) ) {
-				ended = qtrue;
-				break;
-			}
+		block = p;
+		if ( !SkipBracedSection( &p, 1 ) || !p ) {
+			break;	// (can't be: what the server keeps closes)
+		}
+		text[p - text - 1] = '\0';	// (its "}" - the walk past it: its keys read up to there)
+		for ( q = block; ( tok = COM_ParseExt( &q, qtrue ) )[0]; ) {
 			if ( !strcmp( tok, "{" ) ) {
-				if ( !SkipBracedSection( &p, 1 ) ) {
-					break;
-				}
+				SkipBracedSection( &q, 1 );
 			} else if ( !Q_stricmp( tok, "class" ) ) {
-				Q_strncpyz( cls, COM_ParseExt( &p, qfalse ), sizeof( cls ) );
+				Q_strncpyz( cls, COM_ParseExt( &q, qfalse ), sizeof( cls ) );
 			} else if ( !Q_stricmp( tok, "playerModel" ) ) {
-				Q_strncpyz( t->model, COM_ParseExt( &p, qfalse ), sizeof( t->model ) );
+				Q_strncpyz( t->model, COM_ParseExt( &q, qfalse ), sizeof( t->model ) );
 			} else if ( !Q_stricmp( tok, "customSkin" ) ) {
-				Q_strncpyz( t->skin, COM_ParseExt( &p, qfalse ), sizeof( t->skin ) );
+				Q_strncpyz( t->skin, COM_ParseExt( &q, qfalse ), sizeof( t->skin ) );
 			} else if ( !Q_stricmp( tok, "weapon" ) ) {
-				Q_strncpyz( weapon, COM_ParseExt( &p, qfalse ), sizeof( weapon ) );
+				Q_strncpyz( weapon, COM_ParseExt( &q, qfalse ), sizeof( weapon ) );
 			} else {
-				SkipRestOfLine( &p );
+				while ( COM_ParseExt( &q, qfalse )[0] ) {
+				}	// (the rest of its line - SkipRestOfLine steps past a '\0': the block's end, on its last line)
 			}
-		}
-		if ( !ended ) {
-			break;	// (its block never ends: the rest's broken)
 		}
 		if ( !ok ) {
 			continue;
@@ -421,7 +416,7 @@ static int QDECL UI_VRC_TypeOrder( const void *a, const void *b ) {
 // The game's NPC types, read once (a menu set loaded again keeps them):
 // those a companion may be first, by kind.
 static void UI_VRC_ReadTypes( void ) {
-	static char files[16384];
+	static char files[0x40000];	// (every file there can be: 4095, the engine's most - NPC packs' and all; 16 KB before)
 	int i, count;
 	const char *p;
 

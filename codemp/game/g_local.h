@@ -404,6 +404,8 @@ struct gentity_s {
 	int			useDebounceTime;	// for cultist_destroyer
 
 	int			rpCompOwner;		// OpenJK VR (g_vrcomp.c): roleplay - a player's companion: whose (client number + 1; 0: nobody's)
+	int			rpInvader;		// OpenJK VR (g_vrinvade.c): one of an invasion's NPCs, or its spawner: its number << 2 | its side + 1 (0: not one)
+	int			rpSide;			// OpenJK VR (g_vrdown.c): an NPC's side an admin picked (npc spawn's, an invasion's): NPCTEAM_* + 1 (0: its file's), taken as it begins
 };
 
 #define DAMAGEREDIRECT_HEAD		1
@@ -1115,6 +1117,8 @@ void		G_RPFrame( void );
 void		G_RPForceSetup( int clientNum, char *forcePowers, int size );
 int			G_RPForceMay( int clientNum );
 qboolean	G_RPForceChanged( gentity_t *ent );
+int			G_RPGameProtocol( int clientNum );
+#define RP_PROTOCOL_INVADE	8		// a game this new takes rpinv: how invasions go, for its Admin page (g_vrinvade.c)
 // g_vrdown.c (OpenJK VR: roleplay - down, not dead; NPCs taking sides)
 qboolean	G_RPDownOn( void );
 qboolean	G_RPDowned( const gentity_t *ent );
@@ -1127,7 +1131,16 @@ void		G_RPDownThink( gentity_t *ent, usercmd_t *ucmd );
 void		G_RPDownFrame( void );
 void		G_RPDownHello( int clientNum );
 int			G_RPNPCEnemy( const gentity_t *npc, const gentity_t *ent );
+int			G_RPSideEnemy( int side, qboolean invader, const gentity_t *ent );
+int			G_RPSideRule( int side, qboolean invader, const gentity_t *ent );
 void		G_RPProvoke( gentity_t *attacker, gentity_t *targ );
+#define RP_SIDE_FILE		-1		// G_RPSideWord: its NPC file's side ("file", or nothing)...
+#define RP_SIDE_BAD			-2		// ...or not a side's word
+int			G_RPSideWord( const char *word );
+qboolean	G_RPSpawnSide( gentity_t *ent, char *targetname, const char *word, qboolean vehicle, int *side );
+void		G_RPSpawnFailed( gentity_t *ent, const char *type, qboolean vehicle );
+void		G_RPSideBegin( gentity_t *npc );
+int			G_RPSideWays( const gentity_t *npc, int team );
 void		G_RPCompGetUp( gentity_t *ent, const char *helper );
 // g_vrcomp.c (OpenJK VR: roleplay - a character's companions)
 void		G_RPCompInit( void );
@@ -1146,10 +1159,27 @@ void		G_RPCompDied( gentity_t *self );
 int			G_RPCompWait( int clientNum, int slot );
 void		G_RPCompOrder( gentity_t *ent );
 void		G_RPCompLook( gentity_t *npc, char *model, int modelSize, char *skin, int skinSize );
+const char	*G_RPCompShown( const char *modelCs );
+void		G_RPCompUserinfo( int clientNum, const char *userinfo );
 qboolean	G_RPCompSpawner( const gentity_t *spawner );
 gentity_t	*G_RPCompEntity( void );
 const char	*G_RPCompTypeProblem( const char *type );
 const char	*G_RPCompLookProblem( const char *look );
+qboolean	G_RPCompRoom( int ents );
+qboolean	G_RPCompFits( vec3_t at, const vec3_t mins, const vec3_t maxs, int pass );
+qboolean	G_RPCompWalkable( const vec3_t from, const vec3_t to, const vec3_t mins, const vec3_t maxs, int pass );
+qboolean	G_RPCompClear( const vec3_t a, const vec3_t b, int pass );
+unsigned int	G_RPCompTraces( void );
+void		G_RPLetGo( gentity_t *npc );
+// g_vrinvade.c (OpenJK VR: an admin's invasions - waves of NPCs)
+void		G_RPInvadeInit( void );
+void		G_RPInvadeFrame( void );
+void		G_RPInvadeCommand( gentity_t *ent );
+void		G_RPWarCommand( gentity_t *ent );
+void		G_RPInvadeHello( int clientNum );
+qboolean	G_RPInvader( const gentity_t *ent );
+int			G_RPWarEnemy( const gentity_t *npc, const gentity_t *ent );
+qboolean	G_RPInvadeSpawner( const gentity_t *spawner );
 
 //
 // g_items.c
@@ -1482,6 +1512,13 @@ void		G_VRColorInit( void );
 void		G_VRColorPublish( void );
 void		G_VRColorInfo( const gentity_t *ent, const char *userinfo, char *buf, int size );
 
+// g_vrgun.c (OpenJK VR: shots from the barrel of a VR player's gun - bg_vrgun.h)
+void		G_VRGunInit( void );
+void		G_VRGunPublish( void );
+void		G_VRGunShutdown( void );
+void		G_VRGunUserinfo( gentity_t *ent, const char *userinfo );
+qboolean	G_VRGunMuzzle( gentity_t *ent, const vec3_t forward, vec3_t muzzle );
+
 // g_vrholster.c (OpenJK VR: holsters - a VR player's weapons hang on their body)
 void		G_VRHolsterInit( void );
 void		G_VRHolsterPublish( void );
@@ -1506,6 +1543,7 @@ void		G_VRSaberClientReset( int clientNum );
 void		G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd );
 qboolean	G_VRSaberOn( void );
 qboolean	G_VRPosesAvailable( void );
+qboolean	G_VREngine( void );
 void		G_VRSaberPublish( void );
 qboolean	G_VRSaberBodyYaw( int clientNum, float *yaw );
 qboolean	G_VRSaberAvatar( int clientNum, vrAvatar_t *out );
@@ -1548,6 +1586,15 @@ void		G_VRForceDrop( int clientNum );
 void		G_VRForceTake( gentity_t *ent, vrAvatar_t *a, const vrUserPose_t *pose );
 void		G_VRForceCmdDone( gentity_t *ent );
 qboolean	G_VRForceAim( gentity_t *self, int power, float range, vec3_t start, vec3_t dir );
+// Level 1 Push and Pull, anyone's (w_force.c ForceThrow): nothing on the line
+// itself (or only the world) - the one nearest it within G_THROW1_NEAR degrees
+// (as levels 2 and 3 take in all near it: G_ForceThrowNearest); a shove of
+// G_THROW1_POWER (the game's 256 a level: halfway to level 2's), and someone
+// standing with level 1 of that power of their own only halves it (moving,
+// they don't resist; a higher level, moving or not, stops it)
+#define		G_THROW1_NEAR	30.0f
+#define		G_THROW1_POWER	384
+gentity_t	*G_ForceThrowNearest( gentity_t *self, int power, float range, const vec3_t from, vec3_t dir );
 qboolean	G_VRForceHand( gentity_t *self, gentity_t *gripEnt, vec3_t start, vec3_t dir );
 float		G_VRForceGripReach( gentity_t *self, gentity_t *gripEnt );
 qboolean	G_VRForceGripSpent( gentity_t *self );

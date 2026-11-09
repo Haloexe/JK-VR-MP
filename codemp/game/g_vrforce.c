@@ -367,11 +367,13 @@ static void VRF_BodyPoint( const gentity_t *ent, const vec3_t from, const vec3_t
 // hold them, G_VRForceGripHolds and DoGripAction's InFront), not on your side
 // (Push and Pull: never, friendly fire or not - ForceThrow's), the power
 // working on them (ForcePowerUsableOn; Grip: no one it can't catch now, nor
-// further from you than it reaches; Drain: some Force in them) - the one
-// nearest that line: the way to that point of them. Of them, someone hidden
-// from you (cloaked, or tricking you - your Seeing not going: it shows both) is
-// never snapped onto, nor off: nearest the line, the line stays as it is. (The
-// line as it is: nobody.)
+// further from you than it reaches; Drain: some Force in them; Push and Pull:
+// none ForceThrow passes over) - the one nearest that line: the way to that
+// point of them. Of them, someone hidden from you (cloaked, or - you a player -
+// tricking you; your Seeing not going: it shows both) is never snapped onto,
+// nor off: nearest the line, the line stays as it is. (The line as it is:
+// nobody.) Anyone's: a VR player's hand, or a level 1 Push or Pull
+// (G_ForceThrowNearest) - an NPC's too.
 static gentity_t *VRF_Snap( gentity_t *self, int power, float range, float snap, const vec3_t from, vec3_t dir ) {
 	const float least = cosf( DEG2RAD( snap ) );
 	const qboolean seeing = (qboolean)( ( self->client->ps.fd.forcePowersActive & ( 1 << FP_SEE ) ) != 0 );
@@ -406,7 +408,12 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, float snap,
 		if ( ( power == FP_DRAIN && ent->client->ps.fd.forcePower <= 0 ) || !ForcePowerUsableOn( self, ent, (forcePowers_t)power ) ) {
 			continue;	// (it won't work on them: down, your companion, knocked down, in a duel, ysalamiri... - no Force to drain)
 		}
-		hidden = (qboolean)( !seeing && ( ent->client->ps.powerups[PW_CLOAKED] || G_IsMindTricked( &ent->client->ps.fd, self->s.number ) ) );
+		if ( ( power == FP_PUSH || power == FP_PULL ) && ( ( ent->s.eFlags & EF_NODRAW ) || ent->client->NPC_class == CLASS_GALAKMECH ||
+			ent->client->NPC_class == CLASS_ATST || ent->client->NPC_class == CLASS_RANCOR ) ) {
+			continue;	// (whom ForceThrow passes over: not drawn, Galak's mech, an AT-ST, a rancor)
+		}
+		hidden = (qboolean)( !seeing && ( ent->client->ps.powerups[PW_CLOAKED] ||
+			( self->s.number < MAX_CLIENTS && G_IsMindTricked( &ent->client->ps.fd, self->s.number ) ) ) );	// (a player's tricked: an NPC's never)
 		VRF_BodyPoint( ent, from, dir, at );
 		VectorSubtract( at, from, to );
 		d = VectorNormalize( to );
@@ -436,6 +443,19 @@ static gentity_t *VRF_Snap( gentity_t *self, int power, float range, float snap,
 		VectorCopy( best, dir );
 	}
 	return pick;
+}
+
+// Whom a level 1 Push or Pull goes at - anyone's, a VR hand's thrust or where
+// they look - with nothing on its line itself (ForceThrow: its trace met
+// nothing, or only the world): the one nearest that line within
+// G_THROW1_NEAR degrees, as VRF_Snap picks them (anywhere on them, alive, in
+// its reach and in sight, not on your side, the power working on them, never
+// someone hidden from you) - dir becomes the way to them. NULL: nobody.
+gentity_t *G_ForceThrowNearest( gentity_t *self, int power, float range, const vec3_t from, vec3_t dir ) {
+	if ( !self || !self->client ) {
+		return NULL;
+	}
+	return VRF_Snap( self, power, range, G_THROW1_NEAR, from, dir );
 }
 
 static const char *VRF_PowerName( int power ) {

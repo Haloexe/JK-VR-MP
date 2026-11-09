@@ -3064,6 +3064,44 @@
 
 		itemDef
 		{
+			name            rp_adm_side
+			group           rp_admin_side
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 334 300 22
+			text            "Faction:"
+			cvar            "ui_rpAdmSide"
+			cvarFloatList
+			{
+				"From its NPC file" 0 "Heroes (light side)" 1 "Villains (dark side)" 2 "Neutral" 3 "Creature: fights all" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      70
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Whose side the NPC you spawn is on: as its file says, or the one picked (a vehicle takes none)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_side bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_side bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
 			name            rp_adm_spawn
 			group           rp_admin
 			type            ITEM_TYPE_BUTTON
@@ -3387,6 +3425,1965 @@
 			mouseExit
 			{
 				setitemcolor	rp_adm_force backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_adm_invasion
+			group           rp_admin_inv
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            350 106 220 24
+			text            "Invasions..."
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      110
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Waves of NPCs coming for the players their side fights"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP invasion open ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_adm_invasion backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_adm_invasion backcolor 0 0 .3 .7
+			}
+		}
+
+		//------------------------------------------------------------------------------------------
+		// Admin: Invasion (waves of NPCs - rp invasion, g_vrinvade.c; how each goes: ui_rpInvLine<n>, from the server) and, on a
+		// server that has them (ui_rpAdminWars), War (rp war: sides of NPCs fighting each other where you stand) - its Mode. A
+		// lineup's rows (an invasion's, ui_rpInv*; a war side's, ui_rpWar<side>*, the side Lineup of picks): who, an NPC type by
+		// name, how many a wave - each row after one with someone in it (the menu code: groups rp_inv_s<n>, rp_war<side>_s<n>)
+		//------------------------------------------------------------------------------------------
+		itemDef
+		{
+			name            rp_inv_l1
+			group           rp_adm_inv_im
+			rect            30 84 540 18
+			text            "Invasions: waves of NPCs come for the players their side fights."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_war_l1
+			group           rp_adm_inv_wm
+			rect            30 84 540 18
+			cvar            "ui_rpWarSum"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_none
+			group           rp_adm_inv_none
+			rect            30 106 540 18
+			text            "No invasion's on."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_war_none
+			group           rp_adm_war_none
+			rect            30 106 540 18
+			text            "No war's on."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_line0
+			group           rp_adm_inv
+			rect            30 106 540 18
+			cvar            "ui_rpInvLine0"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_line1
+			group           rp_adm_inv
+			rect            30 124 540 18
+			cvar            "ui_rpInvLine1"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_line2
+			group           rp_adm_inv
+			rect            30 142 540 18
+			cvar            "ui_rpInvLine2"
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       1 1 1 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_mode
+			group           rp_adm_inv_wars
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 166 236 22
+			text            "Mode:"
+			cvar            "ui_rpInvMode"
+			cvarFloatList
+			{
+				"Invasion" 0 "War" 1
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "War: two sides of NPCs or three, each against the others, round where you stand"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_mode bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_mode bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_side
+			group           rp_adm_inv_side
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            300 166 270 22
+			text            "Faction:"
+			cvar            "ui_rpInvSide"
+			cvarFloatList
+			{
+				"From its NPC file" 0 "Heroes (light side)" 1 "Villains (dark side)" 2 "Creatures: after all" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      78
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Villains go after heroes and roleplay-off players, heroes after villains, creatures after all"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_side bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_side bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war_side
+			group           rp_adm_inv_wm
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            300 166 270 22
+			text            "Lineup of:"
+			cvar            "ui_rpWarSide"
+			cvarFloatList
+			{
+				"Heroes (light side)" 0 "Villains (dark side)" 1 "Creatures" 2
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      78
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "The side whose NPCs the rows below pick: on it whatever their NPC files say"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war_side bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war_side bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_kind
+			group           rp_inv_s0
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 190 236 22
+			text            "Invaders:"
+			cvar            "ui_rpInvKind"
+			cvarFloatList
+			{
+				"Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Reborn and troopers are villains, Rebels and Jedi heroes, as their NPC files say"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_kind bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_kind bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_type
+			group           rp_inv_s0t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 190 150 22
+			text            "Type:"
+			cvar            "ui_rpInvType"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_inv_type bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_type bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_each
+			group           rp_inv_s0n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 190 144 22
+			text            "How many:"
+			cvar            "ui_rpInvEach"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_each bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_each bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_kind1
+			group           rp_inv_s1
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 214 236 22
+			text            "and:"
+			cvar            "ui_rpInvKind1"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types: mixed in every wave, on the same side"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_kind1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_kind1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_type1
+			group           rp_inv_s1t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 214 150 22
+			text            "Type:"
+			cvar            "ui_rpInvType1"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_inv_type1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_type1 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_each1
+			group           rp_inv_s1n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 214 144 22
+			text            "How many:"
+			cvar            "ui_rpInvEach1"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_each1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_each1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_kind2
+			group           rp_inv_s2
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 238 236 22
+			text            "and:"
+			cvar            "ui_rpInvKind2"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types: mixed in every wave, on the same side"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_kind2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_kind2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_type2
+			group           rp_inv_s2t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 238 150 22
+			text            "Type:"
+			cvar            "ui_rpInvType2"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_inv_type2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_type2 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_each2
+			group           rp_inv_s2n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 238 144 22
+			text            "How many:"
+			cvar            "ui_rpInvEach2"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_each2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_each2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_kind0
+			group           rp_war0_s0
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 190 236 22
+			text            "Heroes:"
+			cvar            "ui_rpWarLightKind0"
+			cvarFloatList
+			{
+				"Not in the war" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Who fights for this side - two sides at least are in a war"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_kind0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_kind0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_type0
+			group           rp_war0_s0t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 190 150 22
+			text            "Type:"
+			cvar            "ui_rpWarLightType0"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war0_type0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_type0 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_each0
+			group           rp_war0_s0n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 190 144 22
+			text            "How many:"
+			cvar            "ui_rpWarLightEach0"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_each0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_each0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_kind1
+			group           rp_war0_s1
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 214 236 22
+			text            "and:"
+			cvar            "ui_rpWarLightKind1"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_kind1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_kind1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_type1
+			group           rp_war0_s1t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 214 150 22
+			text            "Type:"
+			cvar            "ui_rpWarLightType1"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war0_type1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_type1 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_each1
+			group           rp_war0_s1n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 214 144 22
+			text            "How many:"
+			cvar            "ui_rpWarLightEach1"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_each1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_each1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_kind2
+			group           rp_war0_s2
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 238 236 22
+			text            "and:"
+			cvar            "ui_rpWarLightKind2"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_kind2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_kind2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_type2
+			group           rp_war0_s2t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 238 150 22
+			text            "Type:"
+			cvar            "ui_rpWarLightType2"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war0_type2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_type2 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war0_each2
+			group           rp_war0_s2n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 238 144 22
+			text            "How many:"
+			cvar            "ui_rpWarLightEach2"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war0_each2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war0_each2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_kind0
+			group           rp_war1_s0
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 190 236 22
+			text            "Villains:"
+			cvar            "ui_rpWarDarkKind0"
+			cvarFloatList
+			{
+				"Not in the war" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Who fights for this side - two sides at least are in a war"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_kind0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_kind0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_type0
+			group           rp_war1_s0t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 190 150 22
+			text            "Type:"
+			cvar            "ui_rpWarDarkType0"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war1_type0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_type0 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_each0
+			group           rp_war1_s0n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 190 144 22
+			text            "How many:"
+			cvar            "ui_rpWarDarkEach0"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_each0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_each0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_kind1
+			group           rp_war1_s1
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 214 236 22
+			text            "and:"
+			cvar            "ui_rpWarDarkKind1"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_kind1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_kind1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_type1
+			group           rp_war1_s1t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 214 150 22
+			text            "Type:"
+			cvar            "ui_rpWarDarkType1"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war1_type1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_type1 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_each1
+			group           rp_war1_s1n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 214 144 22
+			text            "How many:"
+			cvar            "ui_rpWarDarkEach1"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_each1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_each1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_kind2
+			group           rp_war1_s2
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 238 236 22
+			text            "and:"
+			cvar            "ui_rpWarDarkKind2"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_kind2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_kind2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_type2
+			group           rp_war1_s2t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 238 150 22
+			text            "Type:"
+			cvar            "ui_rpWarDarkType2"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war1_type2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_type2 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war1_each2
+			group           rp_war1_s2n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 238 144 22
+			text            "How many:"
+			cvar            "ui_rpWarDarkEach2"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war1_each2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war1_each2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_kind0
+			group           rp_war2_s0
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 190 236 22
+			text            "Creatures:"
+			cvar            "ui_rpWarCreaturesKind0"
+			cvarFloatList
+			{
+				"Not in the war" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Who fights for this side - two sides at least are in a war"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_kind0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_kind0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_type0
+			group           rp_war2_s0t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 190 150 22
+			text            "Type:"
+			cvar            "ui_rpWarCreaturesType0"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war2_type0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_type0 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_each0
+			group           rp_war2_s0n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 190 144 22
+			text            "How many:"
+			cvar            "ui_rpWarCreaturesEach0"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_each0 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_each0 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_kind1
+			group           rp_war2_s1
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 214 236 22
+			text            "and:"
+			cvar            "ui_rpWarCreaturesKind1"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_kind1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_kind1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_type1
+			group           rp_war2_s1t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 214 150 22
+			text            "Type:"
+			cvar            "ui_rpWarCreaturesType1"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war2_type1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_type1 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_each1
+			group           rp_war2_s1n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 214 144 22
+			text            "How many:"
+			cvar            "ui_rpWarCreaturesEach1"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_each1 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_each1 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_kind2
+			group           rp_war2_s2
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 238 236 22
+			text            "and:"
+			cvar            "ui_rpWarCreaturesKind2"
+			cvarFloatList
+			{
+				"Nobody else" 5 "Reborn" 0 "Stormtroopers" 1 "Rebels" 2 "Jedi" 3 "An NPC type, by name" 4
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      80
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "More NPC types for this side: mixed in every wave of its"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_kind2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_kind2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_type2
+			group           rp_war2_s2t
+			type            ITEM_TYPE_EDITFIELD
+			style           WINDOW_STYLE_FILLED
+			rect            271 238 150 22
+			text            "Type:"
+			cvar            "ui_rpWarCreaturesType2"
+			maxChars        63
+			clipToBox
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      40
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .55
+			border          1
+			bordercolor     .35 .45 .8 .7
+			visible         1
+			descText        "As the NPC files name it: the Admin page's list has them all"
+			mouseEnter
+			{
+				setitemcolor	rp_war2_type2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_type2 bordercolor .35 .45 .8 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war2_each2
+			group           rp_war2_s2n
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            426 238 144 22
+			text            "How many:"
+			cvar            "ui_rpWarCreaturesEach2"
+			cvarFloatList
+			{
+				"Mixed" 0 "1 a wave" 1 "2 a wave" 2 "3 a wave" 3 "4 a wave" 4 "5 a wave" 5 "6 a wave" 6 "8 a wave" 8 "10 a wave" 10 "12 a wave" 12 "16 a wave" 16 "20 a wave" 20 "24 a wave" 24 "32 a wave" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      68
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Mixed: In a wave shared evenly with the others mixed - or this many of it every wave"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war2_each2 bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war2_each2 bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_waves
+			group           rp_adm_inv
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 262 236 22
+			text            "Waves:"
+			cvar            "ui_rpInvWaves"
+			cvarFloatList
+			{
+				"1" 1 "2" 2 "3" 3 "4" 4 "5" 5 "6" 6 "8" 8 "10" 10 "15" 15 "20" 20 "Till you stop it" 0
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      100
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "In a war, each side's: the next of its own comes as it says below"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_waves bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_waves bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_per
+			group           rp_adm_inv
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            300 262 270 22
+			text            "In a wave:"
+			cvar            "ui_rpInvPer"
+			cvarFloatList
+			{
+				"1" 1 "2" 2 "3" 3 "4" 4 "6" 6 "8" 8 "10" 10 "12" 12 "16" 16 "20" 20 "24" 24 "32" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      100
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "The mixed ones', evenly - those with a number of their own come besides"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_per bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_per bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_cap
+			group           rp_adm_inv
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 286 236 22
+			text            "Up at once:"
+			cvar            "ui_rpInvCap"
+			cvarFloatList
+			{
+				"4 at most" 4 "6 at most" 6 "8 at most" 8 "10 at most" 10 "12 at most" 12 "16 at most" 16 "20 at most" 20 "24 at most" 24 "32 at most" 32
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      100
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "Each one's an NPC the server runs: fewer on a busy server (32 at most, every invasion's together)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_cap bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_cap bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_next
+			group           rp_adm_inv
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            300 286 270 22
+			text            "Next wave:"
+			cvar            "ui_rpInvNext"
+			cvarFloatList
+			{
+				"Once one's beaten" 0 "On a timer" 1
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      100
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "On a timer, each still waits till the last has all come"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_next bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_next bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_wait
+			group           rp_adm_inv
+			type            ITEM_TYPE_MULTI
+			style           WINDOW_STYLE_FILLED
+			rect            30 310 236 22
+			text            "Waiting:"
+			cvar            "ui_rpInvWait"
+			cvarFloatList
+			{
+				"None" 0 "10 s" 10 "20 s" 20 "30 s" 30 "45 s" 45 "1 minute" 60 "90 s" 90 "2 minutes" 120 "3 minutes" 180 "5 minutes" 300
+			}
+			font            2
+			textscale       0.8
+			textalign       ITEM_ALIGN_RIGHT
+			textalignx      100
+			textaligny      1
+			forecolor       1 1 1 1
+			backcolor       0 0 0 .4
+			border          1
+			bordercolor     .35 .45 .8 .5
+			visible         1
+			descText        "After one's beaten - or, on a timer, from one wave to the next (5 s at least)"
+			action
+			{
+				play		"sound/interface/button1.wav"
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_wait bordercolor 1 .682 0 1
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_wait bordercolor .35 .45 .8 .5
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_note
+			group           rp_adm_inv_im
+			rect            300 312 270 18
+			text            "One invasion a side at once."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_war_note
+			group           rp_adm_inv_wm
+			rect            300 312 270 18
+			text            "The last side standing wins."
+			font            4
+			textscale       1
+			textalign       ITEM_ALIGN_LEFT
+			textalignx      0
+			textaligny      0
+			forecolor       .85 .85 .9 1
+			visible         1
+			decoration
+		}
+
+		itemDef
+		{
+			name            rp_inv_start
+			group           rp_adm_inv_im
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            30 336 130 24
+			text            "Start"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Its first wave comes now"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP invasion start ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_start backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_start backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war_start
+			group           rp_adm_inv_wm
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            30 336 130 24
+			text            "Start war"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Each side's first wave comes now, from round where you stand"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP war start ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war_start backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war_start backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_stop
+			group           rp_adm_inv_im
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            170 336 130 24
+			text            "Stop all"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "Every invasion on ends, and a war: what's left of them goes"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP invasion stop ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_stop backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_stop backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_war_stop
+			group           rp_adm_inv_wm
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            170 336 130 24
+			text            "Stop war"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      65
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			descText        "The war's called off: what's left of it goes"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP war stop ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_war_stop backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_war_stop backcolor 0 0 .3 .7
+			}
+		}
+
+		itemDef
+		{
+			name            rp_inv_back
+			group           rp_adm_inv
+			type            ITEM_TYPE_BUTTON
+			style           WINDOW_STYLE_FILLED
+			rect            310 336 110 24
+			text            "Back"
+			font            2
+			textscale       0.8
+			textstyle       3
+			textalign       ITEM_ALIGN_CENTER
+			textalignx      55
+			textaligny      1
+			forecolor       1 .682 0 1
+			backcolor       0 0 .3 .7
+			border          1
+			bordercolor     .35 .45 .8 .9
+			visible         1
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+				uiScript		vrRP invasion back ;
+			}
+			mouseEnter
+			{
+				setitemcolor	rp_inv_back backcolor .2 .45 .85 .9
+			}
+			mouseExit
+			{
+				setitemcolor	rp_inv_back backcolor 0 0 .3 .7
 			}
 		}
 

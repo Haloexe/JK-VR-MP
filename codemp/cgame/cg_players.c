@@ -7304,9 +7304,13 @@ void CG_G2AnimEntModelLoad(centity_t *cent)
 		else
 		{
 			skinID = CG_HandleAppendedSkin(modelName); //get the skin if there is one.
-			if ( CG_RP_CompOwner( cent->currentState.number ) >= 0 )
-			{//OpenJK VR: roleplay - a player's companion: a look this PC hasn't got is a stand-in (cg_vrcomp.c)
+			if ( CG_RP_CompOwner( cent->currentState.number ) >= 0 || CG_RP_CompLook( cent->currentState.number )[0] )
+			{//OpenJK VR: roleplay - a player's companion (or its body): its look of its own where it's here, else as its type comes, else a stand-in (cg_vrcomp.c)
 				skinID = CG_RP_CompModel( cent, modelName, sizeof( modelName ), skinID );
+			}
+			else
+			{//OpenJK VR: any other NPC whose model this PC hasn't got at all: a stand-in, not a model the game would go down drawing (cg_vrcomp.c)
+				skinID = CG_RP_NpcModel( cent, modelName, sizeof( modelName ), skinID );
 			}
 		}
 
