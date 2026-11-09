@@ -1494,8 +1494,12 @@ round you - one you're not of ahead of you, yours (if it's in) last, behind
 you - 12.5 to 20 m off where it can (nearer where there's no room), out of
 everyone's sight where it can and where it can walk straight to you. Each
 side's NPCs are on their side whatever their NPC files say, and fight
-every other side's - and the players their side fights, by faction, as an
-invasion's do. A side's next wave comes as Next wave says (reinforcements,
+every other side's. The war is theirs: a player their side fights (by
+faction, as an invasion's), a companion or any other NPC they take on only
+up close (about 5.5 m - and, once they're after them, until they're about
+12.5 m off) or once that one has hurt one of them (that NPC's for 15 s,
+wherever they are) - so you can stand by and watch, or step in. A side's
+next wave comes as Next wave says (reinforcements,
 each side's own); a side whose last wave's beaten is out of the war; the
 last side standing wins - everyone's told, and its NPCs go 15 s on (the
 last of them all beaten at once: nobody wins). Stop war calls it off (Stop

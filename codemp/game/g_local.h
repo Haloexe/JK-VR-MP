@@ -405,6 +405,8 @@ struct gentity_s {
 
 	int			rpCompOwner;		// OpenJK VR (g_vrcomp.c): roleplay - a player's companion: whose (client number + 1; 0: nobody's)
 	int			rpInvader;		// OpenJK VR (g_vrinvade.c): one of an invasion's NPCs, or its spawner: its number << 2 | its side + 1 (0: not one)
+	int			rpHurtBy;		// OpenJK VR (g_vrinvade.c): an invader's: who last hurt it (their entity number + 1; 0: nobody)...
+	int			rpHurtAt;		// ...then (level.time) - in a war, it takes them on (G_RPI_WarTakesOn)
 	int			rpSide;			// OpenJK VR (g_vrdown.c): an NPC's side an admin picked (npc spawn's, an invasion's): NPCTEAM_* + 1 (0: its file's), taken as it begins
 };
 
@@ -1179,6 +1181,7 @@ void		G_RPWarCommand( gentity_t *ent );
 void		G_RPInvadeHello( int clientNum );
 qboolean	G_RPInvader( const gentity_t *ent );
 int			G_RPWarEnemy( const gentity_t *npc, const gentity_t *ent );
+void		G_RPInvaderHurt( gentity_t *npc, const gentity_t *attacker );
 qboolean	G_RPInvadeSpawner( const gentity_t *spawner );
 
 //

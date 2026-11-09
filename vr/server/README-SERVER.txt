@@ -334,8 +334,12 @@ they're not of; theirs last, behind them; the rest evenly round - 12.5 to
 20 m off (9 to 12, else 6 to 8, where there's no room so far off), out of
 everyone's sight where it can, where it can walk straight there. Each
 side's NPCs fight every other side's (the game's AI too: it fights one
-side as ever) and the players their side fights, by faction as an
-invasion's. A side whose last wave's beaten is out; the last side
+side as ever). Anyone else - the players their side fights (by faction,
+as an invasion's), companions, other NPCs - they take on only within
+about 5.5 m (once after them, until they're 12.5 m off), or for 15 s
+after that one hurt one of them (that NPC alone), wherever they are; the
+winners, staying their 15 s, go by it too. A side whose last wave's
+beaten is out; the last side
 standing wins - everyone's told, its NPCs gone 15 s on (all beaten at
 once: nobody wins). rp war stop calls it off, as does stopping one of its
 sides' invasions (rp invasion stop: everything); an invasion of a side not

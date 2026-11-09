@@ -19,10 +19,14 @@ waves: where the admin stands, each faction comes in from its own way round
 them (rpiWar.way: the first ahead of them - one of a faction they're not
 of - the rest evenly round), out of everyone's sight where it can, where it
 can walk straight there (rpiWarRings: 12.5 to 20 m), coming for the others'
-(G_RPI_Nearest: the nearest of the others' up, or a player its side fights -
-players by their faction, as ever) - each side's NPCs every other side's
-foes, not their own side's, as the game's AI has it too (G_RPWarEnemy: its
-NPCs fight one other side, a creature whichever it went for last). A side
+(G_RPI_Nearest: the nearest of the others' up) - each side's NPCs every
+other side's foes, not their own side's, as the game's AI has it too
+(G_RPWarEnemy: its NPCs fight one other side, a creature whichever it went
+for last). The war's theirs: anyone else - a player, a companion, another
+NPC - they take on only up close (5.5 m), kept on as far as 12.5 m, or
+having been hurt by them (for 15 s, wherever they are) - as their side has
+it then (players by their faction); those who watch are left be, its
+winners staying a while after it too. A side
 whose last wave's beaten is out; one left standing, it's won - everyone
 told, its NPCs gone RPI_WAR_AFTER on (none left: a draw). Waves 0: till
 it's stopped (rp war stop, or any of its invasions stopped).
@@ -152,6 +156,9 @@ extern char *ConcatArgs( int start );
 #define RPI_EACH_MOST		32		// a type's own number a wave at most (reborn:32)
 #define RPI_TITLE_SIZE		160		// what an invasion's called: its types' together ("Stormtrooper, Reborn and Rebel")
 #define RPI_WAR_AFTER		15000	// ms a war's winners stay, the war won (then they go)
+#define RPI_WAR_NEAR		192.0f	// in a war, anyone not of its sides an invader takes on only this near (5.5 m: G_RPI_WarTakesOn)...
+#define RPI_WAR_KEEP		448.0f	// ...or, its enemy already, as far as this (12.5 m)...
+#define RPI_WAR_GRUDGE		15000	// ...or, having hurt it, for this long (ms) wherever they are
 #define RPI_LOOK_WAR		-3		// (lookFor: its looking's for its way into the war)
 
 enum { RPI_DARK, RPI_LIGHT, RPI_CREATURES };
@@ -816,22 +823,57 @@ qboolean G_RPInvader( const gentity_t *ent ) {
 	return (qboolean)( ent && ( ent->rpInvader & 3 ) && ent->NPC );
 }
 
+// Whether a war's invader takes on ent, not of the war's sides - a player, a
+// companion, another NPC - at all (whether it then fights them is as their
+// side has it: a player by their faction): the war's its sides' fight, so
+// only someone up close (RPI_WAR_NEAR), its enemy already and not far off
+// (RPI_WAR_KEEP), or who's hurt it lately (RPI_WAR_GRUDGE: whoever it was,
+// wherever they are) - those who stand by and watch are left be.
+static qboolean G_RPI_WarTakesOn( const gentity_t *npc, const gentity_t *ent ) {
+	const float d2 = DistanceSquared( npc->r.currentOrigin, ent->r.currentOrigin );
+
+	if ( npc->rpHurtBy == ent->s.number + 1 && level.time - npc->rpHurtAt >= 0 && level.time - npc->rpHurtAt < RPI_WAR_GRUDGE ) {
+		return qtrue;
+	}
+	if ( npc->enemy == ent ) {
+		return (qboolean)( d2 <= RPI_WAR_KEEP * RPI_WAR_KEEP );
+	}
+	return (qboolean)( d2 <= RPI_WAR_NEAR * RPI_WAR_NEAR );
+}
+
 // Whether an invader's to fight ent in a war (G_RPNPCEnemy): 1, it's of
-// another of the war's sides (each fights every other); 0, of its own;
-// -1, the war has nothing to say - not both of its sides' (whom players
-// fight is as their side has it: by their faction).
+// another of the war's sides (each fights every other); 0, of its own - or
+// not of the war's, and not one it takes on (G_RPI_WarTakesOn); -1, the war
+// has nothing to say - the invader not a war's, or ent one it takes on (as
+// their side has it then: by their faction). Its winners staying a while,
+// the war won, go by it still.
 int G_RPWarEnemy( const gentity_t *npc, const gentity_t *ent ) {
 	int a, b;
 
-	if ( !rpiWar.on || !G_RPInvader( npc ) || !G_RPInvader( ent ) ) {
+	if ( !G_RPInvader( npc ) || !ent || !ent->client ) {
 		return -1;
 	}
 	a = ( npc->rpInvader & 3 ) - 1;
-	b = ( ent->rpInvader & 3 ) - 1;
-	if ( a < 0 || a >= RPI_SIDES || b < 0 || b >= RPI_SIDES || !rpi[a].war || !rpi[b].war ) {
+	if ( a < 0 || a >= RPI_SIDES || !rpi[a].on || !rpi[a].war ) {
 		return -1;
 	}
-	return ( a != b ) ? 1 : 0;
+	if ( G_RPInvader( ent ) ) {
+		b = ( ent->rpInvader & 3 ) - 1;
+		if ( b >= 0 && b < RPI_SIDES && rpi[b].on && rpi[b].war ) {
+			return ( a != b ) ? 1 : 0;
+		}
+	}
+	return G_RPI_WarTakesOn( npc, ent ) ? -1 : 0;
+}
+
+// G_Damage: an invader hurt (alive still) - by whom, when: in a war, it
+// takes them on for a while, wherever they are (G_RPI_WarTakesOn).
+void G_RPInvaderHurt( gentity_t *npc, const gentity_t *attacker ) {
+	if ( !G_RPInvader( npc ) || !attacker || attacker == npc || !attacker->client || attacker->s.number < 0 || attacker->s.number >= ENTITYNUM_MAX_NORMAL ) {
+		return;
+	}
+	npc->rpHurtBy = attacker->s.number + 1;
+	npc->rpHurtAt = level.time ? level.time : 1;
 }
 
 // NPC_Spawn_Do: whether a spawner's an invasion's (its NPC type, kept with

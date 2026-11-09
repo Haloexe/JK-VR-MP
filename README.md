@@ -26,6 +26,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Rolls and crouch jumps:** in a roll your view goes down with your body,
   so your arms no longer stretch down to reach it; crouched in mid-air, your
   body crouches too, its head where your eyes are.
+- **Wars are the NPCs' fight:** each side's NPCs go after the other sides'
+  first, and take on a player only up close or once that player has hurt
+  them, so you can stand by and watch, or step in.
 
 ## New since 0.1.4
 
