@@ -20,6 +20,19 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 
 ## New since 0.1.4
 
+- **NPC invasions and faction wars:** admins send waves of NPCs at the
+  players from the Admin page - Reborn, Stormtroopers, Rebels, Jedi or any
+  NPC type, several kinds at once, mixed in every wave or so many of each -
+  or set two or three factions' NPCs on each other where they stand, until
+  the last side standing wins.
+- **Shots from your gun's barrel:** on a server running this build your shots
+  leave the gun's muzzle, so you can shoot round a corner with only your arm
+  out.
+- **Heavier sabers:** every blade is a fifth heavier, and two hands on it turn
+  it 15% faster.
+- **Companions and NPC packs:** a companion in a custom look reaches players
+  without its model as its NPC type, so it can't crash their game, and the
+  server reads every NPC file in the NPC packs it has.
 - **Players without VR see your saber where you hold it:** on a server
   running this build, your character holds the saber in its fist where your
   hand holds it, its arm reaching it, instead of in the game's saber stance.
@@ -39,8 +52,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   make Force Masters, with every power at level 3.
 - **Also new:** the Force in your hand (Push, Pull, Lightning and a Grip that
   moves whoever it holds with your hand), blaster bolts deflected by the real
-  blade, and comfort settings to play seated, set your height, crouch for
-  real, dim the view as you snap turn and darken its edges as you move.
+  blade, level 1 Push and Pull that land on whoever's nearest where you aim,
+  and comfort settings to play seated, set your height, crouch for real, dim
+  the view as you snap turn and darken its edges as you move.
 
 ## Features
 
@@ -101,7 +115,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   own Force powers, and servers can allow Grey Jedi (powers from both sides)
   and Force Masters (every power at level 3, made by admins). Server owners can make
   trusted accounts admins, who get every cheat (and a menu page to spawn any
-  NPC or vehicle) without cheats being turned on for everyone. Only the
+  NPC or vehicle on the side they pick, send waves of NPCs at the players or
+  start a war between factions' NPCs) without cheats being turned on for
+  everyone. Only the
   server's console or rcon can make an admin, and logging in works with
   roleplay switched off.
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
@@ -131,7 +147,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   where they stand.
 - **Guns in your hand:** aim with your hand (the left one if you play
   left-handed), with a 3D aim dot, or take hold of a rifle's barrel with your
-  other hand and aim it with both.
+  other hand and aim it with both. On a server running this build your shots
+  leave the barrel, so you can shoot round a corner.
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a
