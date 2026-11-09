@@ -478,6 +478,8 @@ extern int bgForcePowerCost[NUM_FORCE_POWERS][NUM_FORCE_POWER_LEVELS];
 #define PMF_FOLLOW			4096	// spectate following another player
 #define PMF_SCOREBOARD		8192	// spectate as a scoreboard
 #define PMF_STUCK_TO_WALL	16384	// grabbing a wall
+#define PMF_VR_WALLGRIP		32768	// OpenJK VR: a VR player's wall grip took hold (BUTTON_VR_WALLGRIP) - hanging on with
+									// PMF_STUCK_TO_WALL; without it, let go since, its grip still held (bg_pmove.c PM_VRWallGrip)
 
 #define	PMF_ALL_TIMES	(PMF_TIME_WATERJUMP|PMF_TIME_LAND|PMF_TIME_KNOCKBACK)
 
@@ -1785,6 +1787,16 @@ qboolean	BG_VRPoseHeights( const playerState_t *ps, const animation_t *animation
 qboolean	BG_VRPoseAnim( int anim );
 void		BG_VRPoseDown( playerState_t *ps, animation_t *animations );
 qboolean	BG_VRDowned( const playerState_t *ps );
+qboolean	BG_VRAirCrouch( int groundEntityNum, qboolean crouched, int legsAnim );
+
+// OpenJK VR: hanging on to a wall a VR player's hand grips (bg_pmove.c
+// PM_VRWallGrip): the wall's within this of the side of their box, its upper
+// part (chest to head) - one their hand reaches
+#define VR_WALLGRIP_REACH		16.0f
+#define VR_WALLGRIP_MASK		( CONTENTS_SOLID | CONTENTS_TERRAIN )	// (what can be held: not players, nor clips you can't see)
+qboolean	BG_VRWallFind( void (*trace)( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
+				int passEntityNum, int contentMask ), const vec3_t origin, const vec3_t boxMins, const vec3_t boxMaxs, int passEntityNum,
+				vec3_t normal );
 
 qboolean BG_InSpecialJump( int anim );
 qboolean BG_InSaberStandAnim( int anim );

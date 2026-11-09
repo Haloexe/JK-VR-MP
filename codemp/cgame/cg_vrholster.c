@@ -1692,7 +1692,7 @@ void CG_VRH_SayButtons( void ) {
 		vrh.dropTime[0] = vrh.dropTime[1] = 0;
 	}
 	if ( CG_VR_Engine() && trap->ext.VR_SetCmdButtons ) {
-		trap->ext.VR_SetCmdButtons( CG_VRH_CmdButtons() );
+		trap->ext.VR_SetCmdButtons( CG_VRH_CmdButtons() | CG_VR_WallButtons() );	// (and a hand on a wall: cg_vrwall.c)
 	}
 }
 

@@ -1003,14 +1003,14 @@ qboolean G_VRSaberStandingAnim( gentity_t *ent, int anim ) {
 // How the model hit tests use (G_UpdateClientAnims) is posed for a VR player
 // whose body everyone draws from their avatar: as cg_vrbody.c's
 // CG_VR_BodyAnim draws it - upright through flips and rolls, as they are in
-// their headset, and standing up straight while they stand still (its head
-// where theirs is, hands on it where theirs are) - so blades meet the body
-// where it's seen.
+// their headset, crouched when they crouch in mid-air (BG_VRAirCrouch), and
+// standing up straight while they stand still (its head where theirs is,
+// hands on it where theirs are) - so blades meet the body where it's seen.
 void G_VRSaberBodyAnim( gentity_t *ent, int *legsAnim, int *torsoAnim ) {
 	const gclient_t *cl = ent->client;
 	const animation_t *anims;
 	int n = ent->s.number, anim;
-	qboolean roll;
+	qboolean crouch;
 
 	if ( !cl || n < 0 || n >= MAX_CLIENTS || !vrsAvatarSet[n] || !VRS_AvatarShown( ent ) ) {
 		return;
@@ -1023,9 +1023,10 @@ void G_VRSaberBodyAnim( gentity_t *ent, int *legsAnim, int *torsoAnim ) {
 	if ( !anims || ent->localAnimIndex > 1 ) {
 		return;	// (not a humanoid)
 	}
-	roll = BG_InRoll( (playerState_t *)&cl->ps, *legsAnim );
-	if ( roll || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
-		anim = roll ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
+	crouch = (qboolean)( BG_InRoll( (playerState_t *)&cl->ps, *legsAnim ) ||	// (a roll, or crouched in mid-air: a crouch)
+		BG_VRAirCrouch( cl->ps.groundEntityNum, (qboolean)( ( cl->ps.pm_flags & ( PMF_DUCKED | PMF_ROLLING ) ) != 0 ), *legsAnim ) );
+	if ( crouch || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
+		anim = crouch ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
 		if ( !anims[anim].numFrames ) {
 			anim = BOTH_INAIR1;
 			if ( !anims[anim].numFrames ) {

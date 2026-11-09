@@ -2120,9 +2120,22 @@ qboolean CG_VR_BodyActive( centity_t *cent ) {
 // The animation your VR body shows (CG_PlayerAnimation). A flip, a roll or a
 // wall run tumbles the whole body, which would swing it round your eyes; in
 // the headset you stay upright, so your body shows the in-air pose instead
-// (a crouch for a roll), and your arms, hands and saber stay where yours
-// are. The game itself still flips and rolls you.
+// (a crouch for a roll, your view down with it: CG_VR_RollEyeDrop), and your
+// arms, hands and saber stay where yours are. The game itself still flips
+// and rolls you. Crouched in mid-air (B, or crouching for real - a crouch
+// jump) the game has its eyes down at a crouch's but goes on with its jump's
+// animation, the head up at standing height over your view: your body shows
+// the crouch there too, its head where your eyes are (BG_VRAirCrouch) - and
+// another VR player's, as their game draws it.
 extern qboolean BG_InRollES( entityState_t *ps, int anim );
+
+// Whether another player's box is a crouch's, as the server sends it
+// (SV_LinkEntity: its top, 32 up, in bits 16 to 23; 0, not solid: not known).
+static qboolean CG_VRB_BoxCrouched( const entityState_t *es ) {
+	const int top = ( ( es->solid >> 16 ) & 255 ) - 32;
+
+	return (qboolean)( es->solid && es->solid != SOLID_BMODEL && top < ( DEFAULT_MAXS_2 + CROUCH_MAXS_2 ) / 2 );
+}
 
 // The game's poses for standing still - most of them the saber stances. Those
 // crouch, legs bent and back hunched: the model's eyes come 6 to 8 units
@@ -2231,7 +2244,7 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
 	const animation_t *anims = bgAllAnims[cent->localAnimIndex].anims;
 	const clientInfo_t *ci = NULL;
-	qboolean roll, arms;
+	qboolean roll, airDuck = qfalse, arms;
 	int anim;
 
 	if ( cent->currentState.number != cg.clientNum ) {
@@ -2240,9 +2253,11 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 			return;
 		}
 		roll = BG_InRollES( &cent->currentState, *legsAnim );
+		airDuck = BG_VRAirCrouch( cent->currentState.groundEntityNum, CG_VRB_BoxCrouched( &cent->currentState ), *legsAnim );
 		arms = qtrue;
 	} else if ( CG_VRB_BodyUsable( cent ) ) {
 		roll = BG_InRoll( (playerState_t *)ps, *legsAnim );
+		airDuck = BG_VRAirCrouch( ps->groundEntityNum, (qboolean)( ( ps->pm_flags & ( PMF_DUCKED | PMF_ROLLING ) ) != 0 ), *legsAnim );
 		arms = (qboolean)( cg_vrBodyArms.integer != 0 );
 	} else {
 		return;
@@ -2251,8 +2266,8 @@ void CG_VR_BodyAnim( centity_t *cent, int *legsAnim, int *torsoAnim ) {
 	if ( !anims ) {
 		return;
 	}
-	if ( roll || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
-		anim = roll ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
+	if ( roll || airDuck || BG_FlippingAnim( *legsAnim ) || BG_InSpecialJump( *legsAnim ) ) {
+		anim = ( roll || airDuck ) ? BOTH_CROUCH1IDLE : BOTH_FORCEINAIR1;
 		if ( !anims[anim].numFrames ) {
 			anim = BOTH_INAIR1;
 			if ( !anims[anim].numFrames ) {
@@ -6488,6 +6503,54 @@ float CG_VR_PoseEyeAdjust( void ) {
 	return vrbSelf.poseEye;
 }
 
+// Your view in a roll (in a headset, first person, your own): the game keeps
+// its eyes at standing height all through a roll, and as it gets up from one
+// (bg_pmove.c PM_CheckDuck: PMF_ROLLING - the normal game's first-person
+// view doesn't roll), while its box goes down to a crouch's and your body
+// shows a crouch (CG_VR_BodyAnim) - your view stayed up, the arms stretched
+// down to the body from it. Your view goes down with it instead, to a
+// crouch's eyes, and back up after, at the rate the game's own crouch takes
+// it (DUCK_TIME, as CG_OffsetFirstPersonView smooths one: a roll from a
+// crouch or into one is one smooth move) - your hands with it (the engine
+// places them with the view). How far below the game's eyes (units): 0 out
+// of one.
+#define VRB_ROLL_DROP		( DEFAULT_VIEWHEIGHT - CROUCH_VIEWHEIGHT )
+static float vrbRollFrom, vrbRollTarget = -1.0f;	// (-1: starting over - as it is, at once)
+static int vrbRollTime;
+
+float CG_VR_RollEyeDrop( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	float target;
+	int dt;
+
+	if ( !CG_VR() || ps->clientNum != cg.clientNum || ( ps->pm_flags & PMF_FOLLOW ) || cg.demoPlayback || cg.renderingThirdPerson ||
+		ps->pm_type != PM_NORMAL || ps->m_iVehicleNum ) {
+		vrbRollTarget = -1.0f;
+		return 0.0f;
+	}
+	target = ( ( BG_InRoll( (playerState_t *)ps, ps->legsAnim ) && !BG_KickingAnim( ps->legsAnim ) ) || ( ps->pm_flags & PMF_ROLLING ) ) ?
+		(float)VRB_ROLL_DROP : 0.0f;
+	dt = cg.time - vrbRollTime;
+	if ( vrbRollTarget < 0.0f || dt < 0 ) {
+		// starting over (your own view again, a new map): as it is now
+		vrbRollFrom = vrbRollTarget = target;
+		vrbRollTime = cg.time;
+		return target;
+	}
+	if ( target != vrbRollTarget ) {
+		// a roll begun or over: from where the view is, over a crouch's time from this frame - as the game's own
+		// crouch is smoothed from the frame it changed (cg.duckTime), so a roll from or into a crouch is one move
+		vrbRollFrom = ( dt < DUCK_TIME ) ? vrbRollFrom + ( vrbRollTarget - vrbRollFrom ) * (float)dt / (float)DUCK_TIME : vrbRollTarget;
+		vrbRollTarget = target;
+		vrbRollTime = cg.time;
+		dt = 0;
+	}
+	if ( dt >= DUCK_TIME ) {
+		return vrbRollTarget;
+	}
+	return vrbRollFrom + ( vrbRollTarget - vrbRollFrom ) * (float)dt / (float)DUCK_TIME;
+}
+
 /*
 =================
 CG_VR_BodyPose
@@ -6569,10 +6632,11 @@ void CG_VR_BodyPose( centity_t *cent, refEntity_t *legs ) {
 		if ( cg.time - cg.duckTime >= 0 && cg.time - cg.duckTime < DUCK_TIME ) {
 			duck = cg.duckChange * ( DUCK_TIME - ( cg.time - cg.duckTime ) ) / DUCK_TIME;
 		}
-		// in a pose the camera goes to the body's eyes (CG_VR_PoseEyeAdjust):
-		// the body stays put, on the floor
+		// in a pose the camera goes to the body's eyes (CG_VR_PoseEyeAdjust),
+		// in a roll down to its crouch's (CG_VR_RollEyeDrop): the body stays
+		// put, on the floor
 		CG_VRB_PoseEyes( cent, eyes );
-		ride = cg.refdef.vieworg[2] + duck - vrb.poseEye - ( cent->lerpOrigin[2] - CG_VRB_ScaleLift( cent ) + cg.predictedPlayerState.viewheight );
+		ride = cg.refdef.vieworg[2] + duck - vrb.poseEye + CG_VR_RollEyeDrop() - ( cent->lerpOrigin[2] - CG_VRB_ScaleLift( cent ) + cg.predictedPlayerState.viewheight );
 		full[2] = Com_Clamp( -48.0f, 48.0f, ride + Q_min( 0.0f, head[2] - cg.refdef.vieworg[2] ) );
 
 		// (bent: the feet where they'd be with your head at the view's place,
@@ -6838,6 +6902,24 @@ qboolean CG_VR_AvatarGun( int h ) {
 		return qfalse;
 	}
 	return (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SYSTEMINFO ), "sv_vrx" ) ) == VR_POSE_PROTOCOL );
+}
+
+// Whether your avatar this frame has hand h empty - drawn, on its
+// controller, nothing in it, nor on your gun's barrel - as the server's told
+// it (CG_VR_BodyEndFrame), and where it is (world): cg_vrwall.c, a hand to
+// take hold of a wall with.
+qboolean CG_VR_AvatarFreeHand( int h, vec3_t at ) {
+	const vrbState_t *s = &vrbSelf;
+	float ease;
+	vec3_t dir;
+
+	if ( h < 0 || h > 1 || !s->bodyCent || s->bodyTime != cg.time || !CG_VRB_BodyUsable( s->bodyCent ) || s->sentTime[h] != cg.time ||
+		s->armTime[h] != cg.time || s->sent[h].grip != VR_GRIP_FREE || CG_VRB_WeaponOnHand( s->bodyCent, h ) ||
+		CG_VR_GunBarrelHand( h, &ease, dir ) ) {
+		return qfalse;
+	}
+	VectorCopy( s->sent[h].origin, at );
+	return qtrue;
 }
 
 // The hand holding your saber saberNum (the first in the hand you use, unless
@@ -7191,12 +7273,14 @@ void CG_VR_BodyEndFrame( void ) {
 	CG_VRB_SwingSound( vr );
 	CG_VRB_Heft();
 
-	// both hands on your gun (cg_vrgun.c) - and where a squeezed grip takes
-	// hold of something instead of pressing its key
+	// both hands on your gun (cg_vrgun.c), a hand on a wall (cg_vrwall.c:
+	// after the rest, which come first) - and where a squeezed grip takes hold
+	// of something instead of pressing its key
 	CG_VR_GunFrame( vr );
+	CG_VR_WallFrame( vr );
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
 		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() | CG_VR_GunZones() |
-			( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
+			CG_VR_WallZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
 	CG_VRH_SayButtons();

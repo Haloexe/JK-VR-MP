@@ -1887,8 +1887,9 @@ void ClientThink_real( gentity_t *ent ) {
 		return;
 	}
 
-	// OpenJK VR: the holster bits of this command, as this server takes them (g_vrholster.c)
+	// OpenJK VR: the holster bits of this command, as this server takes them (g_vrholster.c) - and a hand's grip on a wall (g_vrwall.c)
 	G_VRHolsterCmd( ent, &client->pers.cmd );
+	G_VRWallCmd( ent, &client->pers.cmd );
 
 	// This code was moved here from clientThink to fix a problem with g_synchronousClients
 	// being set to 1 when in vehicles.

@@ -437,6 +437,15 @@ GOOD TO KNOW
   where their game says it is, as it does for VR sabers - a modified
   game could put it anywhere with room to it within that 1.4 m.
   g_vrGunBarrel 0: everyone's shots from the eye, as before.
+* VR players hang on to walls: in mid-air, an empty hand squeezed on a
+  wall holds them there until they let go (they drop) or jump (they push
+  off - as the game's own wall jump with Force Jump 3, else as high as a
+  plain jump). Anyone can, Force or not. The server takes the grip only
+  from a player whose avatar has an empty hand at a wall as they take hold
+  ("vrWallGrip 1" in the server info; desktop players and bots never), and
+  only for a wall within about half a metre of the side of their box.
+  Getting hurt or Force pushed or pulled knocks them off, as the game's
+  debug melee wall hold does. g_vrWallGrip 0: no hanging on.
 * VR players' Force powers come from their Force hand (their empty hand,
   with Force gestures on): Push and Pull the way they thrust or yanked it,
   Grip, Lightning and Drain where it points - each straight at someone

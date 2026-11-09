@@ -1384,6 +1384,12 @@ typedef struct siegePers_s
 #define BUTTON_VR_EMPTYHANDS	16384	// their hands are empty, the saber chosen hangs in its holster: unlit
 #define BUTTONS_VR				( BUTTON_VR_HOLSTERS | BUTTON_VR_ONESABER | BUTTON_VR_EMPTYHANDS )	// (rules, not things
 										// done: kept wherever a command's input is taken away)
+// OpenJK VR (wall grip): a VR player's empty hand has a grip on a wall - in
+// mid-air they hang on to it (bg_pmove.c PM_VRWallGrip), on a server of this
+// build that has it ("vrWallGrip 1" in its serverinfo; the server checks
+// their hand's at a wall as it takes hold: g_vrwall.c). A thing done: not one
+// of BUTTONS_VR, taken away with the rest.
+#define BUTTON_VR_WALLGRIP		32768
 
 // Here's an interesting bit.  The bots in TA used buttons to do additional gestures.
 // I ripped them out because I didn't want too many buttons given the fact that I was already adding some for JK2.

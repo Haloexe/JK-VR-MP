@@ -4730,7 +4730,7 @@ void VR_SetGrabZones( int handMask ) {
 }
 
 void VR_SetCmdButtons( int buttons ) {
-	vr.cmdButtons = buttons & BUTTONS_VR;
+	vr.cmdButtons = buttons & ( BUTTONS_VR | BUTTON_VR_WALLGRIP );	// (a hand on a wall too: cg_vrwall.c)
 	vr.cmdButtonsTime = cls.realtime;
 }
 

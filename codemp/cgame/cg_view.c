@@ -1018,8 +1018,9 @@ static void CG_OffsetFirstPersonView( void ) {
 	// add view height
 	origin[2] += cg.predictedPlayerState.viewheight;
 
-	// OpenJK VR: in a pose, at the body's own eyes (cg_vrbody.c)
-	origin[2] += CG_VR_PoseEyeAdjust();
+	// OpenJK VR: in a pose, at the body's own eyes; in a roll, down at a
+	// crouch's (cg_vrbody.c)
+	origin[2] += CG_VR_PoseEyeAdjust() - CG_VR_RollEyeDrop();
 
 	// smooth out duck height changes
 	timeDelta = cg.time - cg.duckTime;
@@ -1515,7 +1516,8 @@ void CG_EmplacedView(vec3_t angles);
 CG_VR_ReportEyes
 
 OpenJK VR: tells the engine how far below standing the eyes are, as the
-camera has them (crouched, a pose, the duck smoothed: CG_OffsetFirstPersonView)
+camera has them (crouched, a pose, a roll, the duck smoothed:
+CG_OffsetFirstPersonView)
 - the camera yours, at your character's eyes (VR_EYES_OWN: first person,
 flying about or gripped too - not a view from behind, a vehicle's, the
 intermission's, a demo's or someone else's: then 0, and your view moves with
@@ -1550,7 +1552,7 @@ static void CG_VR_ReportEyes( void ) {
 		}
 		if ( !cg.renderingThirdPerson && ps->pm_type != PM_INTERMISSION && !ps->m_iVehicleNum ) {
 			const int timeDelta = cg.time - cg.duckTime;
-			float eyes = ps->viewheight + CG_VR_PoseEyeAdjust();
+			float eyes = ps->viewheight + CG_VR_PoseEyeAdjust() - CG_VR_RollEyeDrop();
 
 			if ( timeDelta < DUCK_TIME ) {
 				eyes -= cg.duckChange * ( DUCK_TIME - timeDelta ) / DUCK_TIME;

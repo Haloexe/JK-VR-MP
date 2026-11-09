@@ -753,7 +753,8 @@ typedef struct cgameImport_s {
 		// either trigger attacks
 		void			(*VR_SetWeaponHand)						( int hand );
 		// OpenJK VR: buttons to set on every command sent from now on
-		// (BUTTON_VR_*: holsters; call every frame - unsaid lately, none)
+		// (BUTTON_VR_*: holsters, a hand on a wall; call every frame - unsaid
+		// lately, none)
 		void			(*VR_SetCmdButtons)						( int buttons );
 		// OpenJK VR: a generic command (GENCMD_*) to go with the next command
 		// that has none (one per command, in turn)

@@ -419,8 +419,11 @@ follows every turn of your wrist. Its trigger lights it and puts it out;
 the other trigger is the alternate attack.
 Through flips, force jumps, cartwheels and rolls your body stays upright
 (in an in-air pose, or a crouch for a roll) with the saber in your hands,
-so you can keep fighting mid-air. Fists, saber locks, knockdowns and
-vehicles still use the third-person camera.
+so you can keep fighting mid-air. In a roll your view goes down with your
+body to a crouch's height, your hands with it, and back up as you come out
+of it, as quickly as a crouch; crouched in mid-air (a crouch jump) your
+body crouches too, its head where your eyes are. Fists, saber locks,
+knockdowns and vehicles still use the third-person camera.
 
 BOTH HANDS ON THE HILT: bring your other hand to the saber's hilt -
 anywhere from the pommel to just short of the emitter (the blade can't be
@@ -537,6 +540,31 @@ while you hold the grip the gun's in both hands:
     you hold it.
   * Two-Handed Guns (Setup > Controls > VR View, cg_vrTwoHandGuns) turns
     it off.
+
+HANGING ON TO A WALL: in mid-air, reach out to a wall with an empty hand
+and squeeze its grip. Your hand takes hold with a buzz and you hang there,
+as long as you hold the grip - anyone, Force or not:
+  * You hang still where you took hold. Turn and look round as you like
+    (your view is never turned for you), and fight with your other hand;
+    the stick doesn't move you and crouching doesn't crouch you meanwhile.
+  * Let go of the grip and you drop.
+  * Press jump to push off the wall: away from it and up, as the game's own
+    wall jump with Force Jump at level 3 (its Force spent), else as high as
+    a plain jump.
+  * The wall has to be within about half a metre of your side (your hand
+    can reach further than you can hang on), steep, and not water. Your
+    hand has to be empty - a hand on your saber's hilt or your gun's barrel
+    takes hold of that instead - and your VR body drawn (the server sees
+    your hand at the wall).
+  * Getting hurt or Force pushed or pulled knocks you off (as the game's
+    debug melee wall hold), and so do a Force grip, a knockdown, or the
+    wall moving away (a door, a lift). After pushing off or being knocked
+    off, let go of the grip and squeeze it again to take hold again.
+  * Everyone sees you hanging on: the game's own wall hold, or, running
+    this build, your VR body with its hand on the wall.
+  * Only on servers running this build ("vrWallGrip 1" in the server info:
+    g_vrWallGrip 0 turns it off - README-SERVER.txt). Near a wall on the
+    ground, the grip does what it always does (your Force grip).
 
 SHOTS FROM YOUR GUN'S BARREL: on servers running this build (and games you
 host with it) your shots leave your gun at its muzzle - where its flash is
@@ -1159,7 +1187,8 @@ sees a VR player as they really move, in a game hosted with this build:
     both hands on the hilt when they hold it with both, a gun where they
     hold it (the normal game draws a left-handed player's saber and gun in
     the right hand, as the game animates it)
-  * they stay upright through flips and rolls, as they do in their headset
+  * they stay upright through flips and rolls, as they do in their headset,
+    and crouch when they crouch in mid-air
   * cg_vrOthers 0 shows them with the game's animations instead.
 Players without VR - this build's desktop copy (below), or the normal game
 - fight the normal way, and block automatically as in the normal game:

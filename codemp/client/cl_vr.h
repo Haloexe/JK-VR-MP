@@ -84,8 +84,8 @@ void		VR_SetGrabZones( int handMask );
 // hands are empty, the triggers press nothing; 2: a saber in each hand,
 // either trigger attacks.
 void		VR_SetWeaponHand( int hand );
-// Buttons the cgame sets on every command (BUTTON_VR_*: holsters; said every
-// frame - unsaid lately, none).
+// Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
+// wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );
 // A generic command for the next command that has none.
 void		VR_GenericCmd( int genCmd );

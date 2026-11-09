@@ -36,6 +36,7 @@ General Public License version 2, like the rest of OpenJK.
 #include "bg_public.h"
 
 void BG_SetAnim( playerState_t *ps, animation_t *animations, int setAnimParts, int anim, int setAnimFlags );	// (bg_panimate.c)
+qboolean BG_InKnockDown( int anim );	// (bg_pmove.c)
 
 #define VRPOSE_PIN		100		// ms: the timers in a pose are kept at this, so nothing else animates the body
 #define VRPOSE_SETTLE	600		// ms getting into a pose a model has no getting-down animation for
@@ -346,4 +347,26 @@ qboolean BG_VRPoseAnim( int anim ) {
 		}
 	}
 	return qfalse;
+}
+
+// Whether a VR body crouched in mid-air is drawn crouched (cg_vrbody.c
+// CG_VR_BodyAnim; the server's hit tests pose it the same, g_vrsaber.c): the
+// game has its eyes down at a crouch's there (crouch held after a jump, or a
+// roll's crouch kept - PM_CheckDuck) but goes on with its jump's animation
+// (PM_Footsteps leaves the legs alone off the ground), its head up at
+// standing height over the view. Off the ground (groundEntityNum) with a
+// crouch's box (crouched), not swimming (its strokes), knocked down (its
+// fall) or in a pose.
+qboolean BG_VRAirCrouch( int groundEntityNum, qboolean crouched, int legsAnim ) {
+	if ( groundEntityNum != ENTITYNUM_NONE || !crouched ) {
+		return qfalse;
+	}
+	switch ( legsAnim ) {
+	case BOTH_SWIM_IDLE1:
+	case BOTH_SWIMFORWARD:
+	case BOTH_SWIMBACKWARD:
+		return qfalse;
+	default:
+		return (qboolean)( !BG_InKnockDown( legsAnim ) && !BG_VRPoseAnim( legsAnim ) );
+	}
 }

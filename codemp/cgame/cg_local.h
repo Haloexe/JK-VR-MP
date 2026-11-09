@@ -1653,6 +1653,7 @@ typedef struct cgs_s {
 	qboolean			vrHolsters;		// OpenJK VR: the server has holsters ("vrHolsters 1": cg_vrholster.c)
 	int					vrSaberRGB;		// OpenJK VR: the server passes saber colours on ("vrSaberRGB 1"); 0: it doesn't; -1: it doesn't say (not this build: you see your own)
 	qboolean			vrGunBarrel;	// OpenJK VR: the server fires your shots from your gun's barrel, by your rule ("vrGunBarrel": bg_vrgun.h)
+	qboolean			vrWallGrip;		// OpenJK VR: the server hangs VR players on walls they grip ("vrWallGrip 1": cg_vrwall.c)
 
 } cgs_t;
 
@@ -1928,6 +1929,13 @@ qboolean CG_VR_HeldWeaponPose( int weaponNum, vec3_t origin, vec3_t angles, matr
 qboolean CG_VR_HeldWeaponMuzzle( int weaponNum, vec3_t muzzle );
 qboolean CG_VR_HeldWeaponBarrel( int weaponNum, vec3_t grip, vec3_t muzzle, vec3_t dir );
 qboolean CG_VR_AvatarGun( int h );	// (cg_vrbody.c: your avatar has your gun in that hand, as the server's told it this frame)
+qboolean CG_VR_AvatarFreeHand( int h, vec3_t at );	// (cg_vrbody.c: ...that hand empty, and where it is)
+
+// cg_vrwall.c (hanging on to a wall)
+void		CG_VR_WallFrame( const vrClientState_t *vr );
+int			CG_VR_WallZones( void );
+int			CG_VR_WallButtons( void );
+void		CG_VR_WallInit( void );
 // cg_vrgun.c (OpenJK VR: both hands on your gun)
 void		CG_VR_GunFrame( const vrClientState_t *vr );
 int			CG_VR_GunZones( void );
@@ -1954,6 +1962,7 @@ qboolean CG_VR_LitBlade( int saberNum, int bladeNum, vec3_t base, vec3_t tip, qb
 int CG_VR_SaberHand( int saberNum );
 void CG_VR_BodyRebolt( centity_t *cent );
 float CG_VR_PoseEyeAdjust( void );
+float CG_VR_RollEyeDrop( void );
 qboolean CG_VR_Posed( void );
 int CG_VR_BladeFightTime( void );
 void CG_VR_Feel( int hand, float peak, int hold, float tail, int decay );

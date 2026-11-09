@@ -1755,6 +1755,219 @@ void PM_GrabWallForJump( int anim )
 }
 
 /*
+=============================================================================
+
+OpenJK VR: hanging on to a wall
+
+A VR player squeezes a grip with an empty hand on a wall in mid-air
+(BUTTON_VR_WALLGRIP, from their game: cg_vrwall.c; the server sees their
+hand's at a wall as they take hold: g_vrwall.c) - anyone, Force or not. They
+hang there, as the game's own wall jumps hold on (PMF_STUCK_TO_WALL: no
+falling, no sliding; the wall-hold animations, BOTH_FORCEWALLHOLD_*, the way
+the wall is from the way they face), still, as long as the grip's held
+(PMF_VR_WALLGRIP) - turning, looking round and fighting as they like, their
+view never turned for them. Letting go drops them. Jumping pushes off: as
+the game's own wall jump does with Force Jump at level 3 (its push, its
+Force), else a plain jump. Losing the wall (it moved), the ground under them,
+water, being knocked down or gripped: they let go - and take hold again only
+with a fresh squeeze. Shared by the game and the cgame, so a player's own
+game predicts it as the server runs it.
+
+=============================================================================
+*/
+
+// (the wall nearest a player's box: bg_public.h VR_WALLGRIP_REACH - eight ways
+// round it, the steepness the game's wall jumps hold on to)
+qboolean BG_VRWallFind( void (*trace)( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
+	int passEntityNum, int contentMask ), const vec3_t origin, const vec3_t boxMins, const vec3_t boxMaxs, int passEntityNum,
+	vec3_t normal ) {
+	vec3_t mins, maxs, end;
+	trace_t tr;
+	float best = 1.0f;
+	int i;
+
+	VectorClear( normal );
+	VectorSet( mins, boxMins[0], boxMins[1], 0.0f );
+	VectorSet( maxs, boxMaxs[0], boxMaxs[1], Q_min( 24.0f, boxMaxs[2] ) );	// (chest to head - as the game's wall jumps look)
+	if ( maxs[2] <= mins[2] ) {
+		return qfalse;
+	}
+	for ( i = 0; i < 8; i++ ) {
+		const float a = DEG2RAD( i * 45.0f );
+		end[0] = origin[0] + cosf( a ) * VR_WALLGRIP_REACH;
+		end[1] = origin[1] + sinf( a ) * VR_WALLGRIP_REACH;
+		end[2] = origin[2];
+		trace( &tr, origin, mins, maxs, end, passEntityNum, VR_WALLGRIP_MASK );
+		if ( tr.startsolid || tr.allsolid || tr.fraction >= best || fabsf( tr.plane.normal[2] ) > 0.2f/*MAX_WALL_GRAB_SLOPE*/ ) {
+			continue;
+		}
+		best = tr.fraction;
+		VectorSet( normal, tr.plane.normal[0], tr.plane.normal[1], 0.0f );
+	}
+	if ( best >= 1.0f || VectorNormalize( normal ) < 0.5f ) {
+		return qfalse;
+	}
+	return qtrue;
+}
+
+// Whether they're hanging on to a wall they grip (not the game's own wall
+// jump, its grip held since letting go: PM_CheckJump's).
+static qboolean PM_VRWallHolding( void ) {
+	return (qboolean)( ( pm->ps->pm_flags & ( PMF_VR_WALLGRIP | PMF_STUCK_TO_WALL ) ) == ( PMF_VR_WALLGRIP | PMF_STUCK_TO_WALL ) &&
+		!BG_InReboundJump( pm->ps->legsAnim ) );
+}
+
+// Whether they could hang on to a wall now: a player, on their feet's terms -
+// off the ground, not swimming, not knocked down, held, gripped, in a saber
+// lock, in a pose, riding or on a jetpack.
+static qboolean PM_VRWallCanHold( void ) {
+	const playerState_t *ps = pm->ps;
+	vec3_t waist;
+
+	if ( ps->clientNum >= MAX_CLIENTS || ps->pm_type != PM_NORMAL || ps->groundEntityNum != ENTITYNUM_NONE || ps->m_iVehicleNum ||
+		ps->emplacedIndex || ( ps->eFlags2 & EF2_HELD_BY_MONSTER ) || PM_InKnockDown( (playerState_t *)ps ) ||
+		ps->forceHandExtend == HANDEXTEND_KNOCKDOWN || ps->fd.forceGripBeingGripped > pm->cmd.serverTime ||
+		ps->saberLockTime >= pm->cmd.serverTime || BG_VRPose( ps ) || ps->fallingToDeath ) {
+		return qfalse;
+	}
+	VectorSet( waist, ps->origin[0], ps->origin[1], ps->origin[2] + MINS_Z + ( ps->viewheight - MINS_Z ) / 2 );
+	return (qboolean)!( pm->pointcontents( waist, ps->clientNum ) & MASK_WATER );
+}
+
+// Hanging on: the game's hold for a wall that way from the way they face
+// (as its wall jumps have them: ahead, to the left, behind, to the right),
+// kept - the way changing as they turn.
+static void PM_VRWallHoldAnim( const vec3_t normal ) {
+	playerState_t *ps = pm->ps;
+	vec3_t toWall;
+	float rel;
+	int anim;
+
+	VectorScale( normal, -1.0f, toWall );
+	rel = AngleNormalize180( vectoyaw( toWall ) - ps->viewangles[YAW] );
+	if ( fabsf( rel ) <= 45.0f ) {
+		anim = BOTH_FORCEWALLHOLD_FORWARD;
+	} else if ( fabsf( rel ) >= 135.0f ) {
+		anim = BOTH_FORCEWALLHOLD_BACK;
+	} else {
+		anim = ( rel > 0.0f ) ? BOTH_FORCEWALLHOLD_LEFT : BOTH_FORCEWALLHOLD_RIGHT;
+	}
+	if ( ps->legsAnim != anim || ps->torsoAnim != anim ) {
+		PM_SetAnim( SETANIM_BOTH, anim, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD );
+	}
+	if ( ps->legsTimer < 150 ) {
+		ps->legsTimer = 150;
+	}
+	if ( ps->torsoTimer < 150 ) {
+		ps->torsoTimer = 150;
+	}
+}
+
+// Letting go of the wall (the grip let go, the wall gone, knocked off): they
+// drop.
+static void PM_VRWallLetGo( void ) {
+	playerState_t *ps = pm->ps;
+
+	ps->pm_flags &= ~PMF_STUCK_TO_WALL;
+	if ( BG_InReboundHold( ps->legsAnim ) ) {
+		PM_SetAnim( SETANIM_LEGS, BOTH_INAIR1, SETANIM_FLAG_OVERRIDE );
+		ps->legsTimer = 0;
+	}
+	if ( BG_InReboundHold( ps->torsoAnim ) ) {
+		PM_SetAnim( SETANIM_TORSO, BOTH_INAIR1, SETANIM_FLAG_OVERRIDE );
+		ps->torsoTimer = 0;
+	}
+}
+
+// Jumping off it: away from it and up - as the game's own wall jump with
+// Force Jump at level 3 (its push and its Force: PM_AdjustAngleForWallJump),
+// else a plain jump's height. The grip still held, it takes hold again only
+// once squeezed afresh (PMF_VR_WALLGRIP stays).
+static void PM_VRWallJumpOff( const vec3_t normal ) {
+	playerState_t *ps = pm->ps;
+	const int hold = ps->legsAnim;
+	const qboolean force = (qboolean)( ps->fd.forcePowerLevel[FP_LEVITATION] >= FORCE_LEVEL_3 &&
+		BG_CanUseFPNow( pm->gametype, ps, pm->cmd.serverTime, FP_LEVITATION ) );
+
+	ps->pm_flags &= ~PMF_STUCK_TO_WALL;
+	VectorScale( normal, JUMP_OFF_WALL_SPEED, ps->velocity );
+	ps->velocity[2] = force ? BG_ForceWallJumpStrength() : JUMP_VELOCITY;
+	ps->pm_flags |= PMF_JUMP_HELD;
+	ps->pm_flags |= PMF_TIME_KNOCKBACK;	// (no steering for half a second, as the game's)
+	ps->pm_time = 500;
+	pm->cmd.forwardmove = pm->cmd.rightmove = 0;
+	if ( force ) {
+		ps->fd.forceJumpSound = 1;
+		if ( ps->origin[2] < ps->fd.forceJumpZStart ) {
+			ps->fd.forceJumpZStart = ps->origin[2];
+		}
+		BG_ForcePowerDrain( ps, FP_LEVITATION, 10 );
+		pm->cmd.upmove = 127;
+	} else {
+		PM_AddEvent( EV_JUMP );
+		pm->cmd.upmove = 0;
+	}
+	PM_SetAnim( SETANIM_BOTH, BG_InReboundHold( hold ) ? BOTH_FORCEWALLRELEASE_FORWARD + ( hold - BOTH_FORCEWALLHOLD_FORWARD ) :
+		BOTH_FORCEJUMP1, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD );
+}
+
+// A VR player's wall grip, each move (before the game's own wall jumps:
+// PmoveSingle) - qtrue: hanging on.
+static qboolean PM_VRWallGrip( void ) {
+	playerState_t *ps = pm->ps;
+	const qboolean holding = PM_VRWallHolding();
+	vec3_t mins, maxs, normal;
+
+	if ( !holding && ( ps->pm_flags & PMF_VR_WALLGRIP ) && ( BG_InReboundHold( ps->legsAnim ) || BG_InReboundHold( ps->torsoAnim ) ) ) {
+		PM_VRWallLetGo();	// (knocked off it - hurt, pushed: G_LetGoOfWall - still in its hold, which falls nowhere: dropping)
+	}
+	if ( !( pm->cmd.buttons & BUTTON_VR_WALLGRIP ) ) {
+		// (no grip: let go of it - a hold that isn't the grip's is the game's own)
+		if ( holding ) {
+			PM_VRWallLetGo();
+		}
+		ps->pm_flags &= ~PMF_VR_WALLGRIP;
+		return qfalse;
+	}
+	if ( !PM_VRWallCanHold() ) {
+		if ( holding ) {
+			PM_VRWallLetGo();
+		}
+		return qfalse;
+	}
+	if ( !holding && ( ps->pm_flags & PMF_VR_WALLGRIP ) ) {
+		return qfalse;	// (let go of it since, the grip still held: squeezed afresh first)
+	}
+	// (a player's box as it is, before this move ducks it or stands it up)
+	VectorSet( mins, -15.0f, -15.0f, MINS_Z );
+	VectorSet( maxs, 15.0f, 15.0f, ( ps->pm_flags & ( PMF_DUCKED | PMF_ROLLING ) ) ? ps->crouchheight : ps->standheight );
+	if ( !BG_VRWallFind( pm->trace, ps->origin, mins, maxs, ps->clientNum, normal ) ) {
+		if ( holding ) {
+			PM_VRWallLetGo();	// (it's gone: a door, a lift)
+		}
+		return qfalse;
+	}
+	if ( !holding ) {
+		// taking hold (jump held then: pushing off waits for the next press)
+		ps->pm_flags |= PMF_VR_WALLGRIP | PMF_STUCK_TO_WALL;
+		if ( pm->cmd.upmove > 0 ) {
+			ps->pm_flags |= PMF_JUMP_HELD;
+		}
+		PM_AddEvent( EV_JUMP );	// (the grab's sound, as the game's wall jumps make it)
+	} else if ( pm->cmd.upmove > 0 && !( ps->pm_flags & PMF_JUMP_HELD ) ) {
+		PM_VRWallJumpOff( normal );
+		return qfalse;
+	}
+	if ( pm->cmd.upmove < 10 ) {
+		ps->pm_flags &= ~PMF_JUMP_HELD;	// (jump let go of: the next press pushes off - stuck, the game keeps it held)
+	}
+	VectorClear( ps->velocity );
+	PM_VRWallHoldAnim( normal );
+	pm->cmd.forwardmove = pm->cmd.rightmove = pm->cmd.upmove = 0;	// (still: no moving off, crouching or jumping meanwhile)
+	return qtrue;
+}
+
+/*
 =============
 PM_CheckJump
 =============
@@ -10662,7 +10875,10 @@ void PmoveSingle (pmove_t *pmove) {
 
 //	PM_AdjustAngleForWallRun(pm->ps, &pm->cmd, qtrue);
 //	PM_AdjustAnglesForStabDown( pm->ps, &pm->cmd );
-	PM_AdjustAngleForWallJump( pm->ps, &pm->cmd, qtrue );
+	if ( !PM_VRWallGrip() )	// OpenJK VR: hanging on to a wall a VR player grips - else the game's own wall jumps
+	{
+		PM_AdjustAngleForWallJump( pm->ps, &pm->cmd, qtrue );
+	}
 	PM_AdjustAngleForWallRunUp( pm->ps, &pm->cmd, qtrue );
 	PM_AdjustAngleForWallRun( pm->ps, &pm->cmd, qtrue );
 

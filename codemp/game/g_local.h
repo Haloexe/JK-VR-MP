@@ -1519,6 +1519,12 @@ void		G_VRGunShutdown( void );
 void		G_VRGunUserinfo( gentity_t *ent, const char *userinfo );
 qboolean	G_VRGunMuzzle( gentity_t *ent, const vec3_t forward, vec3_t muzzle );
 
+// g_vrwall.c (OpenJK VR: hanging on to a wall a VR player grips - bg_pmove.c PM_VRWallGrip)
+void		G_VRWallInit( void );
+void		G_VRWallPublish( void );
+void		G_VRWallShutdown( void );
+void		G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd );
+
 // g_vrholster.c (OpenJK VR: holsters - a VR player's weapons hang on their body)
 void		G_VRHolsterInit( void );
 void		G_VRHolsterPublish( void );

@@ -3488,7 +3488,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 				float dirLen = 0;
 				const char *resisted = "";	// (OpenJK VR: for the log)
 
-				if ( g_debugMelee.integer )
+				if ( g_debugMelee.integer || ( push_list[x]->client->ps.pm_flags & PMF_VR_WALLGRIP ) )	// (OpenJK VR: a VR player's hold too)
 				{
 					if ( (push_list[x]->client->ps.pm_flags&PMF_STUCK_TO_WALL) )
 					{//no resistance if stuck to wall

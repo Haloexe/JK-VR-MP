@@ -18,6 +18,15 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 >
 > It comes with no warranty of any kind (see the [licence](#licence)).
 
+## New since 0.1.5
+
+- **Hang on to walls:** in mid-air, squeeze the grip with an empty hand on a
+  wall and you hang there until you let go; press jump to push off. Anyone
+  can, Force or not (servers can turn it off: `g_vrWallGrip 0`).
+- **Rolls and crouch jumps:** in a roll your view goes down with your body,
+  so your arms no longer stretch down to reach it; crouched in mid-air, your
+  body crouches too, its head where your eyes are.
+
 ## New since 0.1.4
 
 - **NPC invasions and faction wars:** admins send waves of NPCs at the

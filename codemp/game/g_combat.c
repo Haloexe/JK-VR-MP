@@ -5541,8 +5541,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 		else
 		{
-			if ( g_debugMelee.integer )
-			{//getting hurt makes you let go of the wall
+			if ( g_debugMelee.integer || ( targ->client && ( targ->client->ps.pm_flags & PMF_VR_WALLGRIP ) ) )
+			{//getting hurt makes you let go of the wall (OpenJK VR: a VR player's hold on one too, as debug melee's: bg_pmove.c PM_VRWallGrip)
 				if ( targ->client && (targ->client->ps.pm_flags&PMF_STUCK_TO_WALL) )
 				{
 					G_LetGoOfWall( targ );
