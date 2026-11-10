@@ -29,6 +29,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Wars are the NPCs' fight:** each side's NPCs go after the other sides'
   first, and take on a player only up close or once that player has hurt
   them, so you can stand by and watch, or step in.
+- **The console in the headset:** Console on the wheel (hold Y, down and to
+  the left) opens it in a game, with the headset's keyboard to type in it;
+  either stick scrolls it, Close or B shuts it.
 
 ## New since 0.1.4
 
@@ -134,9 +137,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   roleplay switched off.
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
   a pose (sit, sit cross-legged, kneel or lie down, with your view at your
-  character's eyes and your head and arms still tracked) or reach roleplay;
-  a keyboard comes up whenever something takes typing. Players without VR get
-  the wheel on a key.
+  character's eyes and your head and arms still tracked), reach roleplay or
+  open the console; a keyboard comes up whenever something takes typing.
+  Players without VR get the wheel on a key.
 - **Menus in the headset:** point at them with a controller and pull the
   trigger to click (the other trigger right-clicks). Setup has a VR page for
   playing left-handed, finger tracking, Body Bends, how heavy sabers feel,

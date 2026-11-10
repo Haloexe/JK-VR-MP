@@ -69,6 +69,7 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     a character, 2 out with you - that follow you, fight for you, get you
     up and take orders from the wheel (see ROLEPLAY)
   * A keyboard in the headset for typing in menus, chat and the console
+    (the wheel opens the console in a game - hold Y)
   * A dedicated server to run your own servers with all of the above, on
     Windows ("Launch OpenJK VR Server.bat") or Linux (see README-SERVER.txt)
 
@@ -306,10 +307,10 @@ until you raise it again.
   Left menu button     close the menu / back
 Each click gives a small buzz in your hand. The keyboard and mouse keep
 working alongside. To type - click a text field (your name, a server
-address), open the chat line, or the console - a keyboard comes up on the
-menu screen: point at a key and pull the trigger. Shift once makes the next
-key a capital (or the symbol over a number); Backspace held repeats; Enter
-is Enter; Close (or B) is done.
+address), open the chat line, or the console (in a game: Console on the
+wheel) - a keyboard comes up on the menu screen: point at a key and pull
+the trigger. Shift once makes the next key a capital (or the symbol over a
+number); Backspace held repeats; Enter is Enter; Close (or B) is done.
 In Controls, the triggers, B and pushing a stick up or down are busy
 clicking, going back and scrolling, so to put a command on one of those use
 the console (see the AUX key names below); the other buttons (grips, A, X,
@@ -1285,6 +1286,9 @@ quick press of Y still picks the next Force power):
                       duel, give up (when you're down), the Roleplay menu
                       (roleplay on or off: you log in there either way -
                       see ROLEPLAY)
+  down   Console      the console, with the headset's keyboard to type in
+  and                 it; either stick scrolls it, Close (or B) shuts it
+  left                (its commands and settings: see below)
 Rest on Force, Poses or Roleplay a moment and its ring opens: push toward
 what you want there and let go of Y (Back, up and to the left, goes back;
 let go with the stick in the middle and nothing happens). A stick already
@@ -1686,7 +1690,7 @@ rebind them in the console, e.g.  bind AUX23 force_throw
   AUX18 right grip      AUX22 X   AUX26 right stick up
   AUX19 left grip       AUX23 Y   AUX27 right stick down
 
-Console (Shift+~) commands:
+Console (Shift+~; in the headset, Console on the wheel) commands:
   vr_recenter        re-centre your position and the menu screen
   vr_setHeight       your eyes' height above the floor becomes your height
                      (stand up straight)

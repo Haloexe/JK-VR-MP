@@ -2056,7 +2056,7 @@
 			type            ITEM_TYPE_TEXTSCROLL
 			style           WINDOW_STYLE_FILLED
 			rect            30 84 545 136
-			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one; what you wear and set in the Force menu stays with it - Grey too, where the server allows it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
+			text            "With roleplay on you play a character, of the Heroes, the Villains or the Neutral, with a description and a bio.\nACCOUNT: make one on the Characters page (or /new name password), then /login name password.\nCHARACTERS: pick one; what you wear and set in the Force menu stays with it - Grey too, where the server allows it.\nCOMPANIONS: up to 6 a character (Profile, Companions); 2 come out with you.\nWHEEL: hold Y. Up: Say... Right: Poses. Down: Companions. Left: Roleplay - a bio, a duel, give up, this menu. Up-right: Force. Down-left: the console.\nCHAT: talk reaches those near you; /me for actions; out of character: team chat or /ooc."
 			font            4
 			textscale       1
 			textalign       ITEM_ALIGN_LEFT

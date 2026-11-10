@@ -24,6 +24,9 @@ one. Out of the middle:
                          more than seven (a Grey Jedi's, a Force Master's,
                          both sides' in a team game), six and More >, the
                          rest there
+  down    Console        the console (in the headset, on the menu screen
+  and left               with its keyboard: cl_vrkeyboard.cpp - Close or
+                         B shuts it)
 
 Resting on a ring (>) for a moment opens it; Back, up and to the left,
 goes back. A ring that opens waits for the stick to move before it picks
@@ -64,7 +67,8 @@ enum {
 	PWA_GIVEUP,		// give up, down (cg_vrdown.c)
 	PWA_MENU,		// the Roleplay menu
 	PWA_COMPANION,	// an order to your companions (arg: cg_vrcomp.c's)
-	PWA_FORCE		// a Force power picked (arg: FP_*)
+	PWA_FORCE,		// a Force power picked (arg: FP_*)
+	PWA_CONSOLE		// the console
 };
 
 enum { PW_MAIN, PW_POSES, PW_COMPANIONS, PW_ROLEPLAY, PW_FORCE, PW_FORCE_MORE, PW_RINGS };
@@ -81,6 +85,7 @@ static const pwSlot_t pwMain[] = {
 	{ 1, "Force",			PWA_RING,		PW_FORCE },
 	{ 2, "Poses",			PWA_RING,		PW_POSES },
 	{ 4, "Companions",		PWA_RING,		PW_COMPANIONS },
+	{ 5, "Console",			PWA_CONSOLE,	0 },
 	{ 6, "Roleplay",		PWA_RING,		PW_ROLEPLAY },
 };
 static const pwSlot_t pwPoses[] = {
@@ -320,6 +325,9 @@ static void CG_PW_Do( const pwSlot_t *slot ) {
 	case PWA_SAY:
 		trap->SendConsoleCommand( "messagemode\n" );
 		break;
+	case PWA_CONSOLE:
+		trap->SendConsoleCommand( "toggleconsole\n" );	// (as ~ does: in the headset, on the menu screen with the keyboard)
+		break;
 	case PWA_POSE:
 		if ( slot->arg == BG_VRPose( &cg.predictedPlayerState ) ) {
 			trap->SendClientCommand( "pose stand" );
@@ -528,6 +536,8 @@ void CG_DrawPoseWheel( void ) {
 		hint = "Hold it there to go back";
 	} else if ( pw.pick >= 0 && CG_PW_At( pw.ring, pw.pick )->action == PWA_FORCE ) {
 		hint = pw.mouse ? "Let go to pick it - Use Force uses it" : "Let go of Y to pick it - a quick squeeze of the Force grip uses it";
+	} else if ( pw.pick >= 0 && CG_PW_At( pw.ring, pw.pick )->action == PWA_CONSOLE ) {
+		hint = pw.mouse ? "Let go to open it - Escape shuts it" : "Let go of Y to open it - Close or B shuts it";
 	} else if ( pw.waiting ) {
 		hint = "Move the stick to one";
 	} else if ( pw.mouse ) {
