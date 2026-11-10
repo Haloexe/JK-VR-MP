@@ -93,6 +93,16 @@ qboolean CG_VR_SaberAway( void ) {
 	return (qboolean)( ps->saberInFlight && !ps->saberEntityNum && CG_VR_SaberDropServed() );
 }
 
+// Whether your hands are yours to do anything with, as the server has it
+// (g_vrsaberdrop.c, VRD_Playing): alive, on foot or on a jetpack - not down
+// (roleplay), not held in someone's Grip, not riding something.
+static qboolean CG_VRSD_Playing( void ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+
+	return (qboolean)( ps->stats[STAT_HEALTH] > 0 && !( ps->eFlags & EF_DEAD ) && ( ps->pm_type == PM_NORMAL ||
+		ps->pm_type == PM_JETPACK ) && !ps->m_iVehicleNum && !CG_RP_IsDown() );
+}
+
 /*
 --------------------------------------------------------------------------------
 Let go of
@@ -111,8 +121,8 @@ qboolean CG_VR_SaberDropLetGo( const vrClientState_t *vr, int h, int s ) {
 	if ( cgs.gametype == GT_SIEGE && cgs.clientinfo[cg.clientNum].siegeIndex != -1 ) {
 		return qfalse;	// (a siege class's)
 	}
-	if ( ps->weapon != WP_SABER || ps->saberInFlight || ps->saberLockTime >= cg.time || ps->duelTime >= cg.time ) {
-		return qfalse;
+	if ( ps->weapon != WP_SABER || ps->saberInFlight || ps->saberLockTime >= cg.time || ps->duelTime >= cg.time || !CG_VRSD_Playing() ) {
+		return qfalse;	// (or down, say: as ever, back in its holster - the server wouldn't drop it)
 	}
 	if ( CG_VRH_AtSide( vr, h, s ) ) {
 		return qfalse;	// (at your side, or at a holster it goes in: back in a holster)
@@ -322,6 +332,13 @@ void CG_VR_SaberDropFrame( const vrClientState_t *vr ) {
 	vrsd.frameTime = cg.time;
 	vrsd.hilt = qfalse;
 
+	if ( !CG_VRH_On() ) {
+		// holsters not in play a moment (the headset off, say): all as it was
+		// meanwhile - nothing gone down or come back of it
+		vrsd.zones = 0;
+		vrsd.zone[0] = vrsd.zone[1] = VRSD_ZONE_NONE;
+		return;
+	}
 	if ( down && !vrsd.down ) {
 		// down: your hands empty of it
 		if ( CG_VR_SaberHand( 0 ) >= 0 ) {
@@ -358,7 +375,9 @@ void CG_VR_SaberDropFrame( const vrClientState_t *vr ) {
 		}
 	}
 
-	if ( !down || !vr ) {
+	if ( !down || !vr || !CG_VRSD_Playing() ) {
+		// (nothing down; or down, say - the server takes nothing up nor calls it
+		// meanwhile: no grab at it)
 		vrsd.zones = 0;
 		vrsd.zone[0] = vrsd.zone[1] = VRSD_ZONE_NONE;
 		vrsd.grabWas[0] = vr ? vr->grabbing[0] : qfalse;

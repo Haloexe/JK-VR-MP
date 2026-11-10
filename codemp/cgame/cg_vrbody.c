@@ -7101,6 +7101,9 @@ qboolean CG_VR_OtherHoldsSaber( int clientNum, int s ) {
 static int CG_VRB_WeaponHand( void ) {
 	const int held = CG_VRH_WeaponHand();
 
+	if ( CG_RP_IsDown() ) {
+		return 2;	// (down - roleplay: either trigger gives up, whatever's in your hands or isn't - g_vrdown.c; nothing else of theirs does anything)
+	}
 	if ( held != -2 ) {
 		return held;	// (holsters: -1 your hands empty, 2 a saber in each - cg_vrholster.c)
 	}

@@ -695,15 +695,17 @@ shoulder.
         in your hand till you squeeze and let go. A wall in the way stops
         it, and it drops there: call it again from where you can see it
       - leave it: 20 seconds on, it's back on your belt
-    Either way it comes back unlit: its trigger lights it. A saber
-    knocked out of your hand the game's own way (a saber lock lost, say)
-    lies there the same - the trigger doesn't call it back; pick it up or
-    call it. Meanwhile your hip's empty, and the stick doesn't bring it to
-    your hand. With two sabers both in your hands, letting go of either
-    still puts it back in its holster (as above); one of them alone in
-    your hand drops. A siege class's saber never drops, nor does yours in
-    a saber lock or a duel's countdown. If the server doesn't drop it
-    after all, it's back in its holster a moment later.
+    Either way it comes back unlit: its trigger lights it. A saber knocked
+    out of your hand the game's own way (a saber lock lost, say) lies there
+    the same - the trigger doesn't call it back; pick it up or call it.
+    Meanwhile your hip's empty, and the stick doesn't bring it to your hand.
+    Down (roleplay), letting go puts it back in its holster, and one lying
+    there waits for you to be up again (or comes back to your belt by
+    itself). With two sabers both in your hands, letting go of either still
+    puts it back in its holster (as above); one of them alone in your hand
+    drops. A siege class's saber never drops, nor does yours in a saber lock
+    or a duel's countdown. If the server doesn't drop it after all, it's
+    back in its holster a moment later.
   * The quick draw: hold the trigger as you take a hilt out and it lights
     as it comes out. Otherwise it comes out unlit, and its trigger lights
     it.
@@ -1417,26 +1419,26 @@ off or fists out - for half a second, and their card shows: name, faction
 and description. Their bio: Read their bio on the wheel's Roleplay ring,
 or the menu's People page (everyone here, with their faction and
 description).
-  Down, not dead (Free For All and Team FFA, unless the server's owner
-turns it off: g_rpDowned): playing a character, when your health runs out
-you go down where you stand instead of dying - flat on your back, sabers
-off, able to talk but not to move, fight, switch weapons or use the Force
-- and nothing harms you there. Someone of your faction gets you up: from
-close by (a few steps) they look at you - or aim at you - and hold use (in
-the headset, the right grip) for 3 seconds, and you're up with 25 health;
-a bar fills for both of you as they do. Or you give up: hold attack (the
-trigger) for 1.5 s - a press made after going down - or Give up on the
-wheel's Roleplay ring, or /kill; you die as you would have (the kill is
-whoever put you down's) and respawn; going to spectate, or to another
-team, while you're down is giving up too. A map's own hazards still kill,
-down or not - a door's bump or a breath of water is borne, but not much
-more: a pit, water (lying in it, a hand's depth drowns you in about 16 s
-unless someone gets you up), lava and slime, crushers, kill zones, lasers,
-fire, lightning, things of the map's blowing up. A duel's loser goes down.
-Bots, players not playing a character, and anyone riding a vehicle, at a
-gun or in a monster's jaws die as ever. While you're down your character
-stays as it is: no logging in or out, switching, deleting or changing
-faction.
+  Down, not dead (Free For All and Team FFA, unless the server's owner turns
+it off: g_rpDowned): playing a character, when your health runs out you go
+down where you stand instead of dying - flat on your back, sabers off,
+able to talk but not to move, fight, switch weapons or use the Force - and
+nothing harms you there. Someone of your faction gets you up: from close
+by (a few steps) they look at you - or aim at you - and hold use (in the
+headset, the right grip) for 3 seconds, and you're up with 25 health; a
+bar fills for both of you as they do. Or you give up: hold attack (in the
+headset, either trigger - whatever's in your hands, or nothing) for 1.5 s
+- a press made after going down - or Give up on the wheel's Roleplay ring,
+or /kill; you die as you would have (the kill is whoever put you down's)
+and respawn; going to spectate, or to another team, while you're down is
+giving up too. A map's own hazards still kill, down or not - a door's bump
+or a breath of water is borne, but not much more: a pit, water (lying in
+it, a hand's depth drowns you in about 16 s unless someone gets you up),
+lava and slime, crushers, kill zones, lasers, fire, lightning, things of
+the map's blowing up. A duel's loser goes down. Bots, players not playing
+a character, and anyone riding a vehicle, at a gun or in a monster's jaws
+die as ever. While you're down your character stays as it is: no logging
+in or out, switching, deleting or changing faction.
   NPCs take sides: the light side's (Jedi, rebels) are with the Heroes and
 go after Villains, the dark side's (Sith, stormtroopers, mercenaries) are
 with the Villains and go after Heroes; Neutral characters are left alone -
