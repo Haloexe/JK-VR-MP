@@ -2996,7 +2996,11 @@ void ClientThink_real( gentity_t *ent ) {
 		if (pmove.cmd.generic_cmd != GENCMD_FORCE_THROW &&
 			pmove.cmd.generic_cmd != GENCMD_FORCE_PULL &&
 			pmove.cmd.generic_cmd != GENCMD_VR_SABERSWAP &&
-			pmove.cmd.generic_cmd != GENCMD_VR_SABERON)
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERON &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERDROP &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERTAKE &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERCALL_L &&
+			pmove.cmd.generic_cmd != GENCMD_VR_SABERCALL_R)
 		{ //these are the only two where you wouldn't care about a delay between (OpenJK VR: and a VR player's holsters' - each is meant)
 			ent->client->lastGenCmdTime = level.time + 300; //default 100ms debounce between issuing the same command.
 		}
@@ -3020,6 +3024,19 @@ void ClientThink_real( gentity_t *ent ) {
 		case GENCMD_VR_SABERON:
 			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
 				G_VRHolsterSaberOn(ent);
+			break;
+		case GENCMD_VR_SABERDROP:	// OpenJK VR: a saber let go of (g_vrsaberdrop.c) - once a command
+			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
+				G_VRSaberDropCmd(ent);
+			break;
+		case GENCMD_VR_SABERTAKE:
+			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
+				G_VRSaberTakeCmd(ent);
+			break;
+		case GENCMD_VR_SABERCALL_L:
+		case GENCMD_VR_SABERCALL_R:
+			if ( G_VRHolsterOnce( ent, &pmove.cmd ) )
+				G_VRSaberCallCmd(ent, pmove.cmd.generic_cmd == GENCMD_VR_SABERCALL_L ? VR_HAND_LEFT : VR_HAND_RIGHT);
 			break;
 		case GENCMD_ENGAGE_DUEL:
 			if ( level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL )
@@ -3540,7 +3557,7 @@ void G_RunClient( gentity_t *ent ) {
 		// fill with seemingly valid data
 		ent->client->pers.cmd.serverTime = level.time;
 		ent->client->pers.cmd.buttons &= BUTTONS_VR;	// OpenJK VR: what's in their hands stays so...
-		if ( ent->client->pers.cmd.generic_cmd == GENCMD_VR_SABERSWAP || ent->client->pers.cmd.generic_cmd == GENCMD_VR_SABERON ) {
+		if ( ent->client->pers.cmd.generic_cmd >= GENCMD_VR_SABERSWAP && ent->client->pers.cmd.generic_cmd <= GENCMD_VR_SABERCALL_R ) {
 			ent->client->pers.cmd.generic_cmd = 0;	// ...and their holsters' commands were done (g_vrholster.c)
 		}
 		ent->client->pers.cmd.forwardmove = ent->client->pers.cmd.rightmove = ent->client->pers.cmd.upmove = 0;

@@ -302,6 +302,7 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_VRColorInit();		// OpenJK VR: saber colours (g_vrcolor.c)
 	G_VRGunInit();			// OpenJK VR: shots from VR players' gun barrels (g_vrgun.c)
 	G_VRWallInit();			// OpenJK VR: VR players hanging on to walls (g_vrwall.c)
+	G_VRSaberDropInit();	// OpenJK VR: VR players' sabers let go of (g_vrsaberdrop.c)
 	G_PrivateDuelInit();	// OpenJK VR: duels, any number at a time (g_vrduel.c)
 	G_VRPoseInit();			// OpenJK VR: poses (g_vrpose.c)
 	G_RPInit();				// OpenJK VR: roleplay mode (g_vrrp.c)
@@ -493,6 +494,7 @@ void G_ShutdownGame( int restart ) {
 	G_VRArmsShutdown( restart );	// OpenJK VR: the VR players' stand-ins (g_vrarms.c)
 	G_VRGunShutdown();				// OpenJK VR: no shots from the barrel said, till the game's back (g_vrgun.c)
 	G_VRWallShutdown();				// OpenJK VR: nor walls to hang on to (g_vrwall.c)
+	G_VRSaberDropShutdown();		// OpenJK VR: nor sabers to drop (g_vrsaberdrop.c)
 
 	if (g2SaberInstance && trap->G2API_HaveWeGhoul2Models(g2SaberInstance))
 	{

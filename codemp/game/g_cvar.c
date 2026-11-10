@@ -73,6 +73,11 @@ static void CVU_VRSaberRGB(void) {
 
 static void CVU_VRHolsters(void) {
 	G_VRHolsterPublish();	// OpenJK VR: the serverinfo "vrHolsters" follows it (g_vrholster.c)
+	G_VRSaberDropPublish();	// ...and "vrSaberDrop" (g_vrsaberdrop.c: only with holsters)
+}
+
+static void CVU_VRSaberDrop(void) {
+	G_VRSaberDropPublish();	// OpenJK VR: the serverinfo "vrSaberDrop" follows it (g_vrsaberdrop.c)
 }
 
 static void CVU_VRGunBarrel(void) {

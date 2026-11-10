@@ -7278,9 +7278,10 @@ void CG_VR_BodyEndFrame( void ) {
 	// of something instead of pressing its key
 	CG_VR_GunFrame( vr );
 	CG_VR_WallFrame( vr );
+	CG_VR_SaberDropFrame( vr );	// (your saber down: where a hand takes it up or calls it - cg_vrsaberdrop.c)
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
 		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() | CG_VR_GunZones() |
-			CG_VR_WallZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
+			CG_VR_WallZones() | CG_VR_SaberDropZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
 	CG_VRH_SayButtons();

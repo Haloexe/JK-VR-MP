@@ -2568,6 +2568,7 @@ Ghoul2 Insert End
 	CG_RP_Init();	// OpenJK VR: roleplay (before the serverinfo's read)
 	CG_VRH_Init();	// OpenJK VR: holsters (cg_vrholster.c)
 	CG_VR_WallInit();	// OpenJK VR: hanging on to walls (cg_vrwall.c)
+	CG_VR_SaberDropInit();	// OpenJK VR: your saber let go of (cg_vrsaberdrop.c)
 	CG_VR_Init();	// OpenJK VR: your game's word on shots from your gun's barrel (cg_vr.c)
 
 	cg.renderingThirdPerson = cg_thirdPerson.integer;

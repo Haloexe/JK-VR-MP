@@ -118,8 +118,10 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        squeeze only closes your character's fingers; at a
                        holster, take out or put away (see HOLSTERS);
                        holding your saber (Saber Grip: Hold), it holds it
-                       - no use meanwhile; let go and it's back in its
-                       holster
+                       - no use meanwhile; let go at your side and it's
+                       back in its holster, anywhere else it drops (see
+                       HOLSTERS); at your dropped saber's hilt, pick it
+                       up; pointed at it, call it
   Left grip            the Force grip: hold it and your empty hand reaches
                        out with the Force - thrust, yank, point, the
                        trigger, held still by your body, waved, swung (THE
@@ -128,7 +130,8 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        saber's hilt, take hold of it with both hands; at a
                        holster, take out or put away; holding a saber
                        (Saber Grip: Hold), it holds it - no Force
-                       meanwhile)
+                       meanwhile; at your dropped saber, pick it up or
+                       call it)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
@@ -640,24 +643,25 @@ shoulder.
     your other hand's hilt still takes hold of it with both hands, even
     beside a holster; anywhere else the grips are use and the Force, as
     ever.
-  * Hold the grip (Saber Grip: Hold, as it comes): your saber stays in
-    your hand only while you hold that hand's grip, as in Blade & Sorcery.
-    Let go (a tenth of a second: a moment's slack doesn't count, and a
-    grip that's holding something only lets go once your hand has mostly
-    opened) and it goes straight back to its holster. Let go of a lit
-    saber and it switches off first, with its sound, then goes back (its
-    triggers do nothing meanwhile; mid-swing, or with a Force power's hand
-    out, it goes out as soon as the game lets it); in a saber lock or a
-    duel's countdown it stays in your hand, lit, till you squeeze and let
-    go again. Unlit, let go of over an empty holster, it goes in there
-    instead (from then on it goes back there): a light tick, and that
-    holster's ring bright, say where - over a full one, or lit, it goes
-    back where it's kept. With every holster full (a gun swapped into its
-    own) there's nowhere to put it: it stays in your hand, with a firm
-    buzz. Your headset's own menu doesn't make you let go. While a hand
-    holds a saber its grip only holds it: no use and no Force from that
-    grip, so to use something with that hand let go of the saber first
-    (it's back on your belt at once) - the other hand's grip is as ever.
+  * Hold the grip (Saber Grip: Hold, as it comes): your saber stays in your
+    hand only while you hold that hand's grip, as in Blade & Sorcery. Let go
+    (a tenth of a second: a moment's slack doesn't count, and a grip that's
+    holding something only lets go once your hand has mostly opened) and it
+    goes straight back to its holster - at your side, that is, on a server
+    that drops sabers: anywhere else it drops (below). Let go of a lit saber
+    and it switches off first, with its sound, then goes back (its triggers
+    do nothing meanwhile; mid-swing, or with a Force power's hand out, it
+    goes out as soon as the game lets it); in a saber lock or a duel's
+    countdown it stays in your hand, lit, till you squeeze and let go again.
+    Unlit, let go of over an empty holster, it goes in there instead (from
+    then on it goes back there): a light tick, and that holster's ring
+    bright, say where - over a full one, or lit, it goes back where it's
+    kept. With every holster full (a gun swapped into its own) there's
+    nowhere to put it: it stays in your hand, with a firm buzz. Your
+    headset's own menu doesn't make you let go. While a hand holds a saber
+    its grip only holds it: no use and no Force from that grip, so to use
+    something with that hand let go of the saber first (at your side, it's
+    back on your belt at once) - the other hand's grip is as ever.
       - both hands on the hilt: the hand you use has it (taking it over
         from your other hand once both are on it, unless that one's letting
         go); let go with either and the other goes on holding it
@@ -672,6 +676,34 @@ shoulder.
     Saber Grip: Toggle is the other way: a squeeze takes it out, it stays
     in your hand when you let go, and a squeeze at a holster puts it back.
     Guns are always that way.
+  * Drop it (Saber Grip: Hold, on a server running this build that drops
+    sabers - most do): let go of your saber anywhere but at your side and
+    it drops. At your side - about a hip, a little further from it than
+    you'd reach to take something out - or at a holster it would go in
+    (the one it's kept in, or an empty one: its light tick), it goes back
+    to a holster as above. Anywhere else it switches off (with its sound)
+    and falls from your hand the way you held it, going the way your hand
+    was going, bounces with a clink and comes to rest lying flat - for
+    everyone to see. Then:
+      - pick it up: your empty hand at its hilt (a firm tick there),
+        squeeze - it's in your fist where it closed on it, the way round it
+        closed on it
+      - call it: point an empty hand at it - along the controller, or so
+        you see it through your hand (a light tick, and it lights up a
+        little) - and squeeze. It flies to that hand, faster as it comes,
+        and lands in it: held by its grip if you're still squeezing, else
+        in your hand till you squeeze and let go. A wall in the way stops
+        it, and it drops there: call it again from where you can see it
+      - leave it: 20 seconds on, it's back on your belt
+    Either way it comes back unlit: its trigger lights it. A saber
+    knocked out of your hand the game's own way (a saber lock lost, say)
+    lies there the same - the trigger doesn't call it back; pick it up or
+    call it. Meanwhile your hip's empty, and the stick doesn't bring it to
+    your hand. With two sabers both in your hands, letting go of either
+    still puts it back in its holster (as above); one of them alone in
+    your hand drops. A siege class's saber never drops, nor does yours in
+    a saber lock or a duel's countdown. If the server doesn't drop it
+    after all, it's back in its holster a moment later.
   * The quick draw: hold the trigger as you take a hilt out and it lights
     as it comes out. Otherwise it comes out unlit, and its trigger lights
     it.

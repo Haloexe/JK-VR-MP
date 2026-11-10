@@ -32,6 +32,12 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **The console in the headset:** Console on the wheel (hold Y, down and to
   the left) opens it in a game, with the headset's keyboard to type in it;
   either stick scrolls it, Close or B shuts it.
+- **Drop your saber, pick it up, call it:** holding the grip (Saber Grip:
+  Hold), let go of your saber anywhere but at your side and it drops, switched
+  off, and lies where it lands for everyone to see. Pick it up with your hand,
+  or point an empty hand at it and squeeze to call it: it flies back and
+  lands in your hand. Left alone, it's back on your belt after 20 seconds
+  (servers can turn it off: `g_vrSaberDrop 0`).
 
 ## New since 0.1.4
 

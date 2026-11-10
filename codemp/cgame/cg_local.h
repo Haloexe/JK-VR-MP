@@ -2005,6 +2005,18 @@ void		CG_VRH_SayButtons( void );
 int			CG_VRH_HeldWeapon( int weapon );
 void		CG_VRH_EndFrame( const vrClientState_t *vr );
 void		CG_VRH_AddHolstered( centity_t *cent, vec3_t body[3], int renderfx );
+qboolean	CG_VRH_AtSide( const vrClientState_t *vr, int hand, int saberNum );
+qboolean	CG_VRH_HandEmpty( int hand );
+void		CG_VRH_SaberToHand( int hand, float hilt, float sign );
+void		CG_VRH_LetGoSaber( int hand, int saberNum );
+qboolean	CG_VRH_SaberFrame( int saberNum, vec3_t ownDir, vec3_t ownFace, float *lo, float *hi );
+// cg_vrsaberdrop.c (OpenJK VR: your saber let go of - dropped, taken up again, called)
+qboolean	CG_VR_SaberDropServed( void );
+qboolean	CG_VR_SaberAway( void );
+qboolean	CG_VR_SaberDropLetGo( const vrClientState_t *vr, int hand, int saberNum );
+void		CG_VR_SaberDropFrame( const vrClientState_t *vr );
+int			CG_VR_SaberDropZones( void );
+void		CG_VR_SaberDropInit( void );
 // cg_vrduel.c (OpenJK VR: a saber salute challenges to a private duel)
 void CG_VR_DuelFrame( void );
 void CG_VR_DuelCentrePrint( const char *text );

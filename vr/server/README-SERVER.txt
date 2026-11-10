@@ -450,6 +450,24 @@ GOOD TO KNOW
   only for a wall within about half a metre of the side of their box.
   Getting hurt or Force pushed or pulled knocks them off, as the game's
   debug melee wall hold does. g_vrWallGrip 0: no hanging on.
+* VR players drop their sabers: holding the grip (Saber Grip: Hold), a VR
+  player who lets go of their saber anywhere but at their side drops it -
+  switched off, falling from their hand as it was going (no faster than
+  900 units a second, about 26 m/s; it bounces, and comes to rest lying
+  flat), where everyone sees it. They pick it up again with a hand at
+  its hilt, or call it to an empty hand pointed at it from up to 4096
+  units (about 120 m) away: it flies to that hand, unlit, up to 1000
+  units a second, and a wall in the way stops it there. Left lying 20
+  seconds, it's back on their belt. A VR player's saber knocked away the
+  game's own way (a saber lock lost) lies there the same, instead of
+  their trigger calling it back. Only with holsters on (g_vrHolsters 1)
+  and only from a player whose avatar held it a moment before ("vrSaberDrop
+  1" in the server info; desktop players and bots never) - never a siege
+  class's, nor in a saber lock or a duel's countdown, nor one of two
+  sabers held both at once. games.log says who dropped, picked up or
+  called their saber, and how fast it went (g_vrSaberLog). g_vrSaberDrop
+  0: let go of, a saber goes back to its holster, as before; knocked
+  away, the game's own way.
 * VR players' Force powers come from their Force hand (their empty hand,
   with Force gestures on): Push and Pull the way they thrust or yanked it,
   Grip, Lightning and Drain where it points - each straight at someone

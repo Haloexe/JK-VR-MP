@@ -640,6 +640,15 @@ static void VRS_HiltRange( gentity_t *ent, int s, float *lo, float *hi ) {
 	*hi = vrsHilts[n][s].hi;
 }
 
+// Where along a player's saber s's hilt hands can hold it, from where its tag
+// holds it toward its first blade (g_vrsaberdrop.c: a hand at it takes it up).
+void G_VRSaberHiltRange( gentity_t *ent, int s, float *lo, float *hi ) {
+	if ( !ent || !ent->client || ent->s.number < 0 || ent->s.number >= MAX_CLIENTS ) {
+		return;
+	}
+	VRS_HiltRange( ent, s, lo, hi );
+}
+
 /*
 --------------------------------------------------------------------------------
 Poses
@@ -700,6 +709,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
 		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
 		G_VRArmsClientReset( clientNum );	// (and their arms as the other builds are sent them: g_vrarms.c)
+		G_VRSaberDropClientReset( clientNum );	// (and their saber let go of: g_vrsaberdrop.c)
 	}
 }
 
@@ -1096,6 +1106,7 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 	}
 	VRS_KeepGaze( vs, &pose );		// (where their headset looks: G_VRHeadGaze)
 	VRS_TakeAvatar( ent, &pose );	// (what everyone else sees, saber or not)
+	G_VRSaberDropUsercmd( ent, ucmd );	// (where their hands went: a saber let go of falls as it was going - g_vrsaberdrop.c)
 	if ( !G_VRSaberOn() || !pose.valid ) {
 		vs->count = 0;		// the stream broke: never sweep across the gap
 		vs->inVR = qfalse;	// and the client says there's no saber in its VR hands

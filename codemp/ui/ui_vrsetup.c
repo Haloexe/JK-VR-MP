@@ -24,7 +24,9 @@ Setup) hides them again. The page is otherwise left as it is.
   Vibration       how strongly the controllers vibrate        cg_vrHaptics 0-2
   Holsters        your weapons hang on your body              cg_vrHolsters Yes/No
   Saber Grip      Hold: the saber's in your hand while you    cg_vrGripHold 1/0
-                  hold its grip; Toggle: squeezed in, out
+                  hold its grip (let go at your side, it's
+                  holstered; elsewhere, it drops - on servers
+                  that drop them); Toggle: squeezed in, out
   Holster Reach   how far from a holster a hand reaches it    cg_vrHolsterReach 0.5-2
   Hilts Hang      emitter up, or down                         cg_vrHiltsDown 0/1
   Holster Markers a faint ring at each: off, near a hand,     cg_vrHolsterMarkers 0-2

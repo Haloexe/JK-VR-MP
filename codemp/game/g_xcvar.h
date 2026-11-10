@@ -186,6 +186,7 @@ XCVAR_DEF( g_vrSaber,					"1",			CVU_VRSaber,				CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberRGB,				"1",			CVU_VRSaberRGB,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: saber colours of players' own and black cores passed on (g_vrcolor.c)
 XCVAR_DEF( g_vrSaberDamageScale,		"1",			NULL,						CVAR_ARCHIVE_ND,								qtrue )
 XCVAR_DEF( g_vrSaberDebug,				"0",			NULL,						CVAR_NONE,										qfalse )
+XCVAR_DEF( g_vrSaberDrop,				"1",			CVU_VRSaberDrop,			CVAR_ARCHIVE,									qtrue )	// OpenJK VR: a VR player's saber let go of drops, to be taken up or called (g_vrsaberdrop.c); 0: back in its holster, as before
 XCVAR_DEF( g_vrSaberBolts,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' blades deflect bolts; 0: blocked for them automatically, as before (g_vrsaber.c)
 XCVAR_DEF( g_vrSaberBotGuard,			"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberHeavy,				"3.2 8.8 55 300",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )

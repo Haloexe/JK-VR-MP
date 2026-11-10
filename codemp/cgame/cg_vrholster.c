@@ -269,8 +269,12 @@ static int CG_VRH_InHand( int h ) {
 	return VR_HOLSTER_EMPTY;
 }
 
-// Whether item is out of its holster (in a hand).
+// Whether item is out of its holster (in a hand - or, your first saber, down:
+// let go of or knocked away, cg_vrsaberdrop.c).
 static qboolean CG_VRH_Out( int item ) {
+	if ( item == VR_HOLSTER_SABER && CG_VR_SaberAway() ) {
+		return qtrue;
+	}
 	return (qboolean)( item != VR_HOLSTER_EMPTY && ( CG_VRH_InHand( VR_HAND_LEFT ) == item ||
 		CG_VRH_InHand( VR_HAND_RIGHT ) == item ) );
 }
@@ -1354,6 +1358,9 @@ static void CG_VRH_GripFrame( const vrClientState_t *vr ) {
 		}
 		vrh.held[h] = qfalse;
 		vrh.slackTime[h] = 0;
+		if ( CG_VR_SaberDropLetGo( vr, h, s ) ) {
+			continue;	// (anywhere but at your side, on a server dropping it: it drops - cg_vrsaberdrop.c)
+		}
 		if ( CG_VRH_Homeless( s ) ) {
 			CG_VR_Feel( h, 0.6f, 50, 0.0f, 0 );	// (nowhere to put it: it stays, a firm buzz)
 			CG_VR_Log( "holsters: let go of your %s saber, every holster full - it stays in your hand\n", s ? "second" : "first" );
@@ -1376,6 +1383,104 @@ qboolean CG_VRH_GripHolds( void ) {
 // other hand on it, the hand you use doesn't take the lead of it then).
 qboolean CG_VRH_GripHeld( int h ) {
 	return (qboolean)( CG_VRH_GripHolds() && h >= VR_HAND_LEFT && h <= VR_HAND_RIGHT && vrh.held[h] );
+}
+
+/*
+--------------------------------------------------------------------------------
+Your saber let go of (cg_vrsaberdrop.c)
+--------------------------------------------------------------------------------
+*/
+
+#define VRH_SIDE_SCALE		1.5f	// a hand this many times as far from a hip's holster as it takes out what hangs there is at your side
+
+// Whether hand h, letting go of saber s, is at your side - about a hip's
+// holster (half as far again as an empty hand takes out what hangs there) - or
+// at the holster s is kept in, or an empty one it would go in, wherever it
+// hangs (over a shoulder, say: as near as to put something there): let go of
+// there, it goes back in a holster as ever; anywhere else, on a server
+// dropping it, it drops. Your body not drawn a while (where they hang isn't
+// known): at your side.
+qboolean CG_VRH_AtSide( const vrClientState_t *vr, int h, int s ) {
+	const float span = CG_VRH_ReachScale() * VRH_HIP_SPAN * VRH_SIDE_SCALE;
+	vec3_t pos, rel;
+	float d;
+	int k;
+
+	if ( !vr || cg.time - vrh.hangTime < 0 || cg.time - vrh.hangTime > 100 || !CG_VR_HandGrip( h, pos, NULL ) ) {
+		return qtrue;
+	}
+	for ( k = 0; k < VR_NUM_HOLSTERS; k++ ) {
+		const vrhHang_t *g = &vrh.hang[k];
+		if ( !g->valid ) {
+			continue;
+		}
+		if ( k == VR_HOLSTER_HIP_R || k == VR_HOLSTER_HIP_L ) {
+			VectorSubtract( pos, g->grab, rel );
+			VectorMA( rel, -Com_Clamp( -span, span, DotProduct( rel, g->up ) ), g->up, rel );
+			if ( VectorLength( rel ) <= CG_VRH_Reach( vr, k, qtrue ) * VRH_SIDE_SCALE ) {
+				return qtrue;
+			}
+		} else if ( ( vrh.layout[k] == VR_HOLSTER_SABER + s || vrh.layout[k] == VR_HOLSTER_EMPTY ) &&
+			CG_VRH_Reaches( vr, k, pos, qfalse, &d ) ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// Whether hand h has nothing in it (nor holds your first saber's hilt with the
+// other hand).
+qboolean CG_VRH_HandEmpty( int h ) {
+	if ( h < VR_HAND_LEFT || h > VR_HAND_RIGHT || CG_VRH_InHand( h ) != VR_HOLSTER_EMPTY ) {
+		return qfalse;
+	}
+	return (qboolean)!( CG_VR_BothHandsHold() && CG_VR_SaberHand( 0 ) >= 0 );
+}
+
+// Your first saber into hand h - taken up where it lay, or called to it: held
+// t along its hilt from where its tag holds it, the usual way round (sign 1)
+// or reversed; the game's weapon again (a gun in hand back in its holster).
+void CG_VRH_SaberToHand( int h, float t, float sign ) {
+	CG_VR_TakeSaber( 0, h, t, sign );
+	CG_VRH_Select( WP_SABER );
+}
+
+// Saber s let go of by hand h as before (the server not dropping it after
+// all): back to its holster.
+void CG_VRH_LetGoSaber( int h, int s ) {
+	vrh.slackNear[h] = -1;
+	CG_VRH_LetGo( h, s );
+}
+
+// Your saber s's model as it lies in its own frame (cg_vrsaberdrop.c: one
+// down, where its hilt is): its blade's way from where its tag holds it, its
+// face, and where hands hold it along that way (lo..hi) - as its hilt hangs.
+qboolean CG_VRH_SaberFrame( int s, vec3_t ownDir, vec3_t ownFace, float *lo, float *hi ) {
+	vrhModel_t *m = CG_VRH_ItemModel( cg.clientNum, VR_HOLSTER_SABER + s );
+	vec3_t o, own[3], e2, ax2[3];
+
+	if ( !m || !CG_VRH_BoltRest( m->g2, m->blade[0], o, own ) ) {
+		return qfalse;
+	}
+	VectorScale( own[1], -1.0f, ownDir );	// (a blade runs along its bolt's -Y)
+	VectorCopy( own[0], ownFace );
+	if ( VectorNormalize( ownDir ) < 0.5f ) {
+		return qfalse;
+	}
+	VectorMA( ownFace, -DotProduct( ownFace, ownDir ), ownDir, ownFace );
+	if ( VectorNormalize( ownFace ) < 0.1f ) {
+		PerpendicularVector( ownFace, ownDir );
+	}
+	*hi = Q_max( 0.0f, DotProduct( o, ownDir ) - 1.5f );
+	*lo = -6.5f;
+	if ( CG_VRH_BoltRest( m->g2, m->blade[1], e2, ax2 ) ) {
+		const float e = DotProduct( e2, ownDir );
+		if ( e < 0.0f ) {
+			*lo = e + 1.5f;
+		}
+	}
+	*lo = Q_min( 0.0f, *lo );
+	return qtrue;
 }
 
 /*
@@ -1474,7 +1579,7 @@ static void CG_VRH_FollowWeapon( qboolean alive ) {
 	}
 	vrh.wantTime = 0;
 	if ( w == WP_SABER && ( BG_VRHolsterWeapon( was ) || was == WP_MELEE ) && CG_VR_SaberHand( 0 ) < 0 &&
-		CG_VR_SaberHand( 1 ) < 0 ) {
+		CG_VR_SaberHand( 1 ) < 0 && !CG_VR_SaberAway() ) {	// (not one that's down: it's taken up or called)
 		CG_VR_TakeSaber( 0, CG_VR_GunHand(), 0.0f, 1.0f );
 		if ( CG_VRH_Have( VR_HOLSTER_SABER + 1 ) ) {
 			CG_VR_TakeSaber( 1, CG_VR_GunHand() ^ 1, 0.0f, 1.0f );

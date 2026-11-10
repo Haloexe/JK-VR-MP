@@ -819,6 +819,12 @@ void G_RunMissile( gentity_t *ent ) {
 	int			passent;
 	qboolean	isKnockedSaber = qfalse;
 
+	if ( G_VRSaberDownRun( ent ) )
+	{ //OpenJK VR: a VR player's saber down - its think moves it (g_vrsaberdrop.c)
+		G_RunThink( ent );
+		return;
+	}
+
 	if ( G_VRSaberBoltHeld( ent ) )
 	{ //OpenJK VR: waiting where it met something for VR players' moves (G_VRSaberHoldsBolt)
 		return;

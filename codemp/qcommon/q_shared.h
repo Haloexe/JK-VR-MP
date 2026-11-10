@@ -1442,7 +1442,12 @@ typedef enum
 	GENCMD_GLOAT,
 	// OpenJK VR (holsters, g_vrholster.c)
 	GENCMD_VR_SABERSWAP,	// the second saber becomes the first: the one of two taken out first is in hand
-	GENCMD_VR_SABERON		// light the sabers in hand (a quick draw)
+	GENCMD_VR_SABERON,		// light the sabers in hand (a quick draw)
+	// OpenJK VR (a saber let go of, g_vrsaberdrop.c)
+	GENCMD_VR_SABERDROP,	// let go of: it falls from the hand
+	GENCMD_VR_SABERTAKE,	// taken up again by a hand at its hilt
+	GENCMD_VR_SABERCALL_L,	// called to the left hand...
+	GENCMD_VR_SABERCALL_R	// ...or the right
 } genCmds_t;
 
 // usercmd_t is sent to the server each client frame

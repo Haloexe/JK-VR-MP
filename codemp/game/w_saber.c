@@ -6498,6 +6498,11 @@ void DownedSaberThink(gentity_t *saberent)
 		return;
 	}
 
+	if ( G_VRSaberDownThink( saberent, saberOwn ) )
+	{ //OpenJK VR: a VR player's, theirs to take up or call (g_vrsaberdrop.c)
+		return;
+	}
+
 	if (saberOwn->client->saberKnockedTime < level.time && (saberOwn->client->pers.cmd.buttons & BUTTON_ATTACK))
 	{ //He wants us back
 		pullBack = qtrue;
