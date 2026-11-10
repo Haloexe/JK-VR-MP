@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-20"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-21"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -60,6 +60,10 @@ General Public License version 2, like the rest of OpenJK.
 												//     sent otherwise to some clients - a roleplay
 												//     companion's look, to the players who said they
 												//     have its model)
+												// -21: ext.VR_SetSaberTriggers, vrClientState_t.slide
+												//     (a hand on a saber's hilt: its trigger tapped,
+												//     the saber's switch; held, the hand slides along
+												//     the hilt)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)
@@ -387,7 +391,15 @@ typedef struct vrClientState_s {
 	// gone a while (it's in front of you again).
 	qboolean	hudWrist;
 	qboolean	wristPass;
+
+	// the hand slides along the hilt it's on (ext.VR_SetSaberTriggers: its
+	// trigger held VR_SLIDE_MS and on, the cgame's said it's on a saber's
+	// hilt) - a tap was the saber's switch instead
+	qboolean	slide[2];
 } vrClientState_t;
+
+// ext.VR_SetSaberTriggers: a trigger held this long (ms) is a slide, not a tap
+#define VR_SLIDE_MS				250
 
 // Heading of a view axis; well defined even looking straight up/down.
 // Shared by the engine, renderer and cgame so they always agree.

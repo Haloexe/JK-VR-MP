@@ -84,6 +84,10 @@ void		VR_SetGrabZones( int handMask );
 // hands are empty, the triggers press nothing; 2: a saber in each hand,
 // either trigger attacks.
 void		VR_SetWeaponHand( int hand );
+// The hands on a saber's hilt (bit per hand): each trigger, tapped, is the
+// saber's switch; held VR_SLIDE_MS, the hand slides along the hilt
+// (vrClientState_t.slide) - cgameImport_t.ext.VR_SetSaberTriggers, every frame.
+void		VR_SetSaberTriggers( int handMask );
 // Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
 // wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );

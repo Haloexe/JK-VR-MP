@@ -106,9 +106,10 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
   Right stick up/down  next / previous weapon (straight to your hand)
   Right stick click    change saber style
   Right trigger        attack (saber in your hand, where blades are real:
-                       switch it on and off) - the trigger of the hand that
-                       holds your weapon: your saber in your left hand, the
-                       left one
+                       tap it to switch it on and off, hold it to slide
+                       your hand along the hilt - HILT SLIDE) - the trigger
+                       of the hand that holds your weapon: your saber in
+                       your left hand, the left one
   Left trigger         alternate attack (the other trigger) - but while
                        you hold the Force grip, Lightning (on your chest,
                        Rage; over your head, Team Energize: THE FORCE,
@@ -419,8 +420,9 @@ LIGHTSABER: with the saber out you stay in first person. The hilt is
 locked in your right fist - your left, left-handed (a second saber in the
 other) - the fingers closed round it whatever your body is doing, and the
 blade points along your fist the way you would hold a real hilt, so it
-follows every turn of your wrist. Its trigger lights it and puts it out;
-the other trigger is the alternate attack.
+follows every turn of your wrist. Its trigger lights it and puts it out
+(where blades are real: a tap - held, your hand slides along the hilt, see
+HILT SLIDE); the other trigger is the alternate attack.
 Through flips, force jumps, cartwheels and rolls your body stays upright
 (in an in-air pose, or a crouch for a roll) with the saber in your hands,
 so you can keep fighting mid-air. In a roll your view goes down with your
@@ -446,11 +448,11 @@ and while you hold the grip the saber is in both hands:
   * The blade follows both wrists, and the further apart your hands are,
     the more it follows the line between them, so pushing with one hand
     and pulling with the other levers it round like a real two-handed hilt.
-  * Your second hand grips the hilt where it took hold: it doesn't slide
-    along it. It turns round it as your hand turns (the hilt is round) -
-    not as the wrist of the hand you use turns the hilt - so its arm stays
-    where your own arm is. To hold it somewhere else, let go and take hold
-    again.
+  * Your second hand grips the hilt where it took hold. It turns round it
+    as your hand turns (the hilt is round) - not as the wrist of the hand
+    you use turns the hilt - so its arm stays where your own arm is. To
+    hold it somewhere else, hold its trigger and slide it there (HILT
+    SLIDE), or let go and take hold again.
   * Let go of the grip to let go. Moving your hands about doesn't make it
     slip off: only pulling that hand a long way (about 70 cm) from where it
     holds breaks the hold. Taking hold and letting go settle smoothly over
@@ -495,6 +497,33 @@ and while you hold the grip the saber is in both hands:
     in both hands wins clashes against a one-handed heavy), and either hand
     drives the swing (sliding your second hand along the hilt doesn't count
     as a swing). Hits and clashes buzz both hands.
+
+HILT SLIDE: where blades are real (SABER COMBAT, below), a hand's trigger on
+a saber's hilt does two things. A quick tap switches the saber on or off, as
+you let go of it. Held a moment (a quarter of a second) it loosens that
+hand's grip instead - a soft tick - and your hand slides along the hilt as
+you move it, the saber staying where it is along its length:
+  * Move your hand along the blade's line to slide; moving it any other
+    way, or turning your wrist, carries the saber with it as ever. Walking,
+    turning or the stick moving you doesn't slide it - only your hand
+    moving in your room.
+  * It slides from the pommel up to a hand's width short of the emitter (a
+    staff: from one emitter to the other). At either end you feel a firmer
+    tick and your hand takes the saber along. A light buzz says your grip
+    is loose; it buzzes more as it slides.
+  * Let go of the trigger and your hand grips the hilt where it is now -
+    the blade reaching as far beyond your hand as that puts it - and
+    everyone else sees your hand there too.
+  * A saber in each hand: each hand slides on its own hilt. Both hands on
+    one hilt: your second hand slides along its side of the first, from a
+    hand's width from it to that end of the hilt (slide it on off the end
+    and it lets go); your first hand slides as far as a hand's width from
+    the second, which keeps its place on the hilt.
+  * A trigger pressed before your hand took hold of the hilt goes on doing
+    what it did until you let go of it (the quick draw: HOLSTERS).
+  * In the console: cg_vrSaberSlide 0 turns it off - the trigger then
+    switches the saber the moment you press it, as before. On normal
+    servers the trigger swings, as it always has.
 
 BOTH HANDS ON YOUR GUN: bring your other hand (the one without the gun -
 your Force hand) to the gun in your gun hand and squeeze its grip. That
@@ -807,8 +836,9 @@ server running this build: your real blade is the weapon.
     blade out doesn't cut either). You cut the same opponent at most every
     0.3 s, whichever blade it is: two sabers, or a staff's two ends, don't
     double up. Walls stop your blade, even where your real hand goes
-    through them. The trigger switches the saber on and off; it no longer
-    starts the game's canned swings - your arm swings.
+    through them. A tap of the trigger switches the saber on and off (held,
+    it slides your hand along the hilt: HILT SLIDE); it no longer starts
+    the game's canned swings - your arm swings.
   * Block with it. Only what your blade physically stops is blocked, thrown
     sabers included (no automatic blocks, saber locks or disarms while you
     hold it). Blades meet only where their cores really touch, at the same

@@ -1654,6 +1654,8 @@ typedef struct cgs_s {
 	int					vrSaberRGB;		// OpenJK VR: the server passes saber colours on ("vrSaberRGB 1"); 0: it doesn't; -1: it doesn't say (not this build: you see your own)
 	qboolean			vrGunBarrel;	// OpenJK VR: the server fires your shots from your gun's barrel, by your rule ("vrGunBarrel": bg_vrgun.h)
 	qboolean			vrWallGrip;		// OpenJK VR: the server hangs VR players on walls they grip ("vrWallGrip 1": cg_vrwall.c)
+	qboolean			vrRealBlades;	// OpenJK VR: the server fights with the blades in VR players' hands ("vrSaber 1": the
+										// trigger isn't the attack button there - a tap's the saber's switch, cg_vrbody.c)
 
 } cgs_t;
 

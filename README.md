@@ -38,6 +38,13 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   or point an empty hand at it and squeeze to call it: it flies back and
   lands in your hand. Left alone, it's back on your belt after 20 seconds
   (servers can turn it off: `g_vrSaberDrop 0`).
+- **Slide your hand along the hilt:** where blades are real, hold a saber's
+  trigger and your grip loosens: move your hand along the blade and it slides
+  along the hilt, from the pommel to just short of the emitter, a tick at
+  either end; let go of the trigger to grip it there. A quick tap still
+  switches the saber on and off. Each hand slides on its own saber, and a
+  second hand slides along a two-handed hilt (`cg_vrSaberSlide 0` turns it
+  off).
 
 ## New since 0.1.4
 

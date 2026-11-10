@@ -782,6 +782,13 @@ typedef struct cgameImport_s {
 		// it), and say it here too, as it's drawn - the engine fills the rest
 		// of each eye's picture, around that screen, with it the same way
 		void			(*VR_TintView)							( const float *rgba );
+		// OpenJK VR: the hands on a saber's hilt (1 << VR_HAND_*), whose
+		// trigger is the saber's switch as it's tapped - lit, the game's switch
+		// puts it out; out, the attack button lights it, as the game's own does
+		// - and held VR_SLIDE_MS lets the hand slide along the hilt instead
+		// (vrClientState_t.slide), switching nothing. Call every frame; unsaid
+		// lately, none (each trigger as VR_SetWeaponHand says).
+		void			(*VR_SetSaberTriggers)					( int handMask );
 	} ext;
 } cgameImport_t;
 

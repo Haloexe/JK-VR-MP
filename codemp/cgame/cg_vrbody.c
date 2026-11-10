@@ -3247,6 +3247,157 @@ static void CG_VRB_TakeLead( centity_t *cent, const vrClientState_t *vr, int fro
 		vrb.twoHandSide > 0.0f ? "above" : "below", lent ? " (the saber's that one's, lent)" : "" );
 }
 
+/*
+=================
+CG_VRB_Slide
+
+A hand sliding along the hilt it holds: its trigger held on the hilt (the
+engine's vrClientState_t.slide: VR_SLIDE_MS on - tapped, the trigger's the
+saber's switch instead; CG_VRB_SaberTriggers). The saber stays where it is
+along its length as the hand goes along it - as the hand moves in your room:
+walking, turning or the stick moving you don't slide it - from the pommel up
+to a hand's width short of the emitter (a staff: between its emitters), and
+goes with the hand every other way, turning with it; at either end the hand
+takes it along. A soft tick as the grip loosens, a light buzz while it's
+loose (more, the faster it slides), a firmer tick at either end; the trigger
+let go of, it's held where the hand is. The first hand sliding on a hilt both
+hold, the other keeps its place on the hilt (this one stops a hand's width
+from it); the other sliding: CG_VRB_TwoHandHold (it slides off the end, and
+lets go, as far as a pull away would).
+=================
+*/
+
+#define VRB_SLIDE_BUZZ		0.05f	// the buzz of a hand loose on its hilt...
+#define VRB_SLIDE_RUB		0.002f	// ...and more for each unit a second it slides...
+#define VRB_SLIDE_RUB_MAX	0.2f	// ...up to this much
+
+static struct {
+	int			time;			// cg.time worked out for (the second eye: not again)
+	qboolean	on[2];			// that hand sliding on the saber it holds, as of then...
+	vec3_t		from[2];		// ...its grip then (the engine's: tracking space)...
+	int			end[2];			// ...at an end of the hilt: -1 the pommel's (a staff's other emitter's), 1 the emitter's
+	qboolean	twoOn;			// the other hand on the first saber's hilt sliding (CG_VRB_TwoHandHold)...
+	int			twoEnd;			// ...at an end of where it can hold it (-1 the lower, 1 the upper)...
+	float		twoProj;		// ...and its controller along it from the first hand's fist, last frame
+} vrbSlide;
+
+static void CG_VRB_FeelSteady( int hand, float amp, float grain );
+
+// Where on the hilt of the saber in hand h (grip) a hand can hold it, along it
+// from where its own tag holds it, the way its first blade points: up to a
+// hand's width short of the emitter; down to the pommel - a single hilt's isn't
+// known: a hand's length or two - or down a staff to its other emitter (as
+// CG_VRB_TwoHandHold has it); where its tag holds it always on it. And the way
+// that blade points (the hilt's own line, however it's held: blade).
+static qboolean CG_VRB_HiltRange( centity_t *cent, int h, const vrbGrip_t *grip, float *lo, float *hi, vec3_t blade ) {
+	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
+	vrbBone_t tag;
+	mdxaBone_t m;
+	vec3_t emitter, tmp;
+
+	if ( grip->kind != VRB_GRIP_SABER || grip->saber < 0 || grip->saber >= MAX_SABERS ||
+		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) ||
+		!trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 0, &m, cent->turAngles, cent->lerpOrigin, cg.time,
+			cgs.gameModels, cent->modelScale ) ) {
+		return qfalse;
+	}
+	BG_GiveMeVectorFromMatrix( &m, ORIGIN, emitter );
+	BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, blade );
+	if ( VectorNormalize( blade ) < 0.5f ) {
+		return qfalse;
+	}
+	VectorSubtract( emitter, tag.origin, tmp );
+	*hi = DotProduct( tmp, blade ) - VRB_HILT_TOP;
+	*lo = -VRB_HILT_BELOW;
+	if ( ci->saber[grip->saber].numBlades > 1 && trap->G2API_GetBoltMatrix( cent->ghoul2, grip->saberModel, 1, &m,
+			cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale ) ) {
+		vec3_t blade2;
+		BG_GiveMeVectorFromMatrix( &m, ORIGIN, emitter );
+		BG_GiveMeVectorFromMatrix( &m, NEGATIVE_Y, blade2 );
+		VectorSubtract( emitter, tag.origin, tmp );
+		if ( VectorNormalize( blade2 ) > 0.5f && DotProduct( blade2, blade ) < -0.5f && DotProduct( tmp, blade ) < 0.0f ) {
+			*lo = DotProduct( tmp, blade ) + VRB_HILT_TOP;	// (a staff: down to its other emitter)
+		}
+	}
+	*lo = Q_min( *lo, 0.0f );
+	*hi = Q_max( *hi, 0.0f );
+	return qtrue;
+}
+
+static void CG_VRB_Slide( centity_t *cent, const vrClientState_t *vr ) {
+	const float dt = Com_Clamp( 0.001f, 0.1f, ( cg.time - vrbSlide.time ) * 0.001f );
+	int h;
+
+	if ( vrbSlide.time == cg.time ) {
+		return;	// (second eye)
+	}
+	vrbSlide.time = cg.time;
+	for ( h = 0; h < 2; h++ ) {
+		const int s = ( CG_VRB_SaberHand( 0 ) == h ) ? 0 : ( CG_VRB_SaberHand( 1 ) == h ) ? 1 : -1;
+		qboolean twoHanded;
+		vrbGrip_t grip;
+		vec3_t from, to, d, dir;
+		float lo, hi, t;
+		int end;
+
+		if ( !vr->slide[h] || !vr->handValid[h] || s < 0 ) {
+			if ( vrbSlide.on[h] && s >= 0 ) {
+				CG_VRB_Log( "slide: the %s hand holds it %.1f along its hilt\n", VRB_HandName( h ), vrb.hold[s].t );
+			}
+			vrbSlide.on[h] = qfalse;
+			continue;
+		}
+		CG_VRB_Grip( cent, h, &grip );
+		if ( grip.saber != s || !CG_VRB_HiltRange( cent, h, &grip, &lo, &hi, dir ) ) {
+			vrbSlide.on[h] = qfalse;
+			continue;
+		}
+		if ( !vrbSlide.on[h] ) {
+			// loosened: it slides from here
+			vrbSlide.on[h] = qtrue;
+			VectorCopy( vr->gripOrigin[h], vrbSlide.from[h] );
+			vrbSlide.end[h] = 0;
+			CG_VRB_Feel( h, 0.25f, 15, 0.0f, 0, 0.0f );
+			CG_VRB_Log( "slide: the %s hand loosened on its hilt (%.1f along it)\n", VRB_HandName( h ), vrb.hold[s].t );
+			continue;
+		}
+		// the way the hand went since, in your room (as you're turned now),
+		// along the hilt
+		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vrbSlide.from[h], NULL, from, NULL );
+		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->gripOrigin[h], NULL, to, NULL );
+		VectorCopy( vr->gripOrigin[h], vrbSlide.from[h] );
+		VectorSubtract( to, from, d );
+		twoHanded = (qboolean)( s == 0 && CG_VRB_TwoHanded() );
+		if ( twoHanded ) {
+			// the other hand on it too: this one stops a hand's width from it
+			// (or VRB_HAND_SPAN away)
+			const float other = vrb.hold[0].t + vrb.twoHandT;
+			if ( vrb.twoHandSide > 0.0f ) {
+				hi = Q_min( hi, other - VRB_HAND_GAP );
+				lo = Q_max( lo, other - VRB_HAND_SPAN );
+			} else {
+				lo = Q_max( lo, other + VRB_HAND_GAP );
+				hi = Q_min( hi, other + VRB_HAND_SPAN );
+			}
+			if ( lo > hi ) {
+				lo = hi = vrb.hold[0].t;	// (no room: where it is)
+			}
+		}
+		t = vrb.hold[s].t + DotProduct( d, dir );
+		end = ( t <= lo ) ? -1 : ( t >= hi ) ? 1 : 0;
+		t = Com_Clamp( lo, hi, t );
+		if ( end && end != vrbSlide.end[h] ) {
+			CG_VRB_Feel( h, 0.45f, 25, 0.0f, 0, 0.0f );	// (an end of the hilt)
+		}
+		vrbSlide.end[h] = end;
+		CG_VRB_FeelSteady( h, VRB_SLIDE_BUZZ + Q_min( VRB_SLIDE_RUB_MAX, VRB_SLIDE_RUB * fabsf( t - vrb.hold[s].t ) / dt ), 0.6f );
+		if ( twoHanded && !vr->slide[vrb.twoHandOff] ) {
+			vrb.twoHandT -= t - vrb.hold[0].t;	// (the other hand keeps its place on the hilt - sliding too, it goes by its own way)
+		}
+		vrb.hold[s].t = t;
+	}
+}
+
 // The hold this frame (was: held with both hands last frame; squeezed: the
 // grips squeezed anew, taken as grabs). qtrue: the hand you use has just
 // taken the lead - worked out again from there (again: the hilt as it was
@@ -3420,9 +3571,32 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 			VectorCopy( avg, dir );
 		}
 
-		// The other hand grips the hilt where it took hold of it: it doesn't
-		// slide along it (let go and take hold again to move it); it turns
-		// round it as its controller does (CG_VRB_HiltHold).
+		// The other hand grips the hilt where it took hold of it - its trigger
+		// held, it slides along it as far as it goes along it (a light buzz, a
+		// tick at either end: CG_VRB_Slide); it turns round it as its
+		// controller does (CG_VRB_HiltHold).
+		const float slidFrom = vrb.twoHandT;
+		const qboolean sliding = (qboolean)( was && vr->slide[off] );
+		if ( sliding ) {
+			float proj;
+			VectorSubtract( posO, fistM, tmp );
+			proj = DotProduct( tmp, dir );
+			if ( !vrbSlide.twoOn ) {
+				// loosened: it slides from where it holds it (not to where its
+				// controller is)
+				vrbSlide.twoOn = qtrue;
+				vrbSlide.twoEnd = 0;
+				CG_VRB_Feel( off, 0.25f, 15, 0.0f, 0, 0.0f );
+			} else {
+				vrb.twoHandT += proj - vrbSlide.twoProj;	// (as far as it went along it, from the first hand)
+			}
+			vrbSlide.twoProj = proj;
+		} else {
+			if ( vrbSlide.twoOn ) {
+				CG_VRB_Log( "slide: the %s hand holds it %.1f from the %s\n", VRB_HandName( off ), vrb.twoHandT, VRB_HandName( main ) );
+			}
+			vrbSlide.twoOn = qfalse;
+		}
 		if ( !was ) {
 			vec3_t e[3];
 			int k;
@@ -3440,6 +3614,17 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 		}
 		t = ( vrb.twoHandSide > 0.0f ) ? Com_Clamp( tAbove[0], tAbove[1], vrb.twoHandT ) :
 			Com_Clamp( tBelow[0], tBelow[1], vrb.twoHandT );
+		if ( sliding ) {
+			// (at an end of where it can hold it - the hilt's, a hand's width from the other: a tick as it gets there)
+			const float *range = ( vrb.twoHandSide > 0.0f ) ? tAbove : tBelow;
+			const int end = ( vrb.twoHandT <= range[0] ) ? -1 : ( vrb.twoHandT >= range[1] ) ? 1 : 0;
+			if ( end && end != vrbSlide.twoEnd ) {
+				CG_VRB_Feel( off, 0.45f, 25, 0.0f, 0, 0.0f );
+			}
+			vrbSlide.twoEnd = end;
+			CG_VRB_FeelSteady( off, VRB_SLIDE_BUZZ + Q_min( VRB_SLIDE_RUB_MAX, VRB_SLIDE_RUB * fabsf( t - slidFrom ) /
+				Q_max( dt, 0.001f ) ), 0.6f );
+		}
 		vrb.twoHandT = t;
 		VectorMA( fistM, t, dir, point );
 
@@ -5249,6 +5434,7 @@ static void CG_VRB_Arms( centity_t *cent, const vrClientState_t *vr, float bodyY
 	CG_VRB_ProbeHands( cent );
 	if ( !vrbRemote ) {
 		// (another player's: their avatar says, CG_VRB_OtherArms)
+		CG_VRB_Slide( cent, vr );
 		CG_VRB_TwoHand( cent, vr );
 		CG_VRB_BladeInertia( cent, vr );
 		CG_VRB_EaseFingers( cent, vr );
@@ -7096,6 +7282,39 @@ qboolean CG_VR_OtherHoldsSaber( int clientNum, int s ) {
 	return qfalse;
 }
 
+// The hands on a saber's hilt (ext.VR_SetSaberTriggers): each one's trigger,
+// tapped, is the saber's switch, and held slides the hand along the hilt
+// (CG_VRB_Slide) - cg_vrSaberSlide on, on a server fighting with the blades in
+// your hands ("vrSaber": the trigger isn't the attack button there) and the
+// sabers in your VR hands (cg_vrSaber, cg_vrBodyArms), playing
+// with the saber, alive and not down (attack gives up): each hand holding a
+// saber (the first one's not while it's thrown or knocked away - its trigger
+// calls it back), and the other one on the first saber's hilt too.
+static int CG_VRB_SaberTriggers( const vrClientState_t *vr ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	const clientInfo_t *ci = &cgs.clientinfo[( ps->clientNum >= 0 && ps->clientNum < MAX_CLIENTS ) ? ps->clientNum : 0];
+	int mask = 0, s, h;
+
+	if ( !vr || !cg_vrSaberSlide.integer || !cgs.vrRealBlades || !cg_vrSaber.integer || !cg_vrBodyArms.integer || !cg.snap ||
+		( cg.snap->ps.pm_flags & PMF_FOLLOW ) ||
+		ps->persistant[PERS_TEAM] == TEAM_SPECTATOR || ps->weapon != WP_SABER || ps->stats[STAT_HEALTH] <= 0 || ( ps->eFlags & EF_DEAD ) ||
+		ps->pm_type == PM_DEAD || CG_RP_IsDown() || !vrbSelf.init || cg.time - vrbSelf.holdTime < 0 ||
+		cg.time - vrbSelf.holdTime > 500 ) {
+		return 0;
+	}
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		h = vrbSelf.hold[s].hand;
+		if ( ( h == VR_HAND_LEFT || h == VR_HAND_RIGHT ) && ci->saber[s].model[0] && !( s == 0 && ps->saberInFlight ) ) {
+			mask |= 1 << h;	// (no second saber: the other hand's as ever; the first thrown or knocked away: not in hand - its trigger as ever)
+		}
+	}
+	if ( vrbSelf.twoHand && cg.time - vrbSelf.twoHandTime >= 0 && cg.time - vrbSelf.twoHandTime < 300 &&
+		( vrbSelf.twoHandOff == VR_HAND_LEFT || vrbSelf.twoHandOff == VR_HAND_RIGHT ) ) {
+		mask |= 1 << vrbSelf.twoHandOff;
+	}
+	return mask;
+}
+
 // The hand holding your weapon, for its trigger: a saber's as your body holds
 // it lately; else the gun hand.
 static int CG_VRB_WeaponHand( void ) {
@@ -7293,6 +7512,10 @@ void CG_VR_BodyEndFrame( void ) {
 	// a saber), the other one alt-attacks
 	if ( CG_VR_Engine() && trap->ext.VR_SetWeaponHand ) {
 		trap->ext.VR_SetWeaponHand( CG_VRB_WeaponHand() );
+	}
+	// the hands on a saber's hilt: their triggers tapped, its switch; held, they slide along it
+	if ( CG_VR_Engine() && trap->ext.VR_SetSaberTriggers ) {
+		trap->ext.VR_SetSaberTriggers( CG_VRB_SaberTriggers( vr ) );
 	}
 
 	// and what your hands feel this frame (the Force hand's with the rest:

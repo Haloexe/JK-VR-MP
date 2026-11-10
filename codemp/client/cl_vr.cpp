@@ -552,6 +552,11 @@ typedef struct vrState_s {
 	int						weaponHand;		// the hand the cgame says holds your weapon (-1: hands empty; 2: both)...
 	int						weaponHandTime;	// ...as of this cls.realtime...
 	qboolean				weaponHandSaid;	// ...(it has said)
+	int						saberTriggers;	// the hands the cgame says are on a saber's hilt (bit per hand)...
+	int						saberTriggersTime;	// ...as of this cls.realtime
+	int						slidePress[2];	// a hand's trigger pressed on a saber's hilt (Sys_Milliseconds; 0: not):
+	qboolean				sliding[2];		// held VR_SLIDE_MS, the hand slides along it; let go sooner, a tap...
+	qboolean				saberTap;		// ...the saber's switch, going with the next command (VR_FillCmdPose)
 	int						cmdButtons;		// buttons the cgame sets on every command (BUTTON_VR_*)...
 	int						cmdButtonsTime;	// ...as of this cls.realtime
 	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
@@ -2227,9 +2232,15 @@ the game's attack button does in your hands), the other one alt-attacks.
 With your hands empty (holsters: every weapon on your body) neither trigger
 presses anything; with a saber in each, either one attacks (lights or puts
 out both).
+A hand on a saber's hilt - the cgame says which, every frame
+(ext.VR_SetSaberTriggers) - presses no key with its trigger: tapped, it's
+the saber's switch as it's let go (VR_SaberTapCmd); held VR_SLIDE_MS, the
+hand slides along the hilt instead (vrClientState_t.slide: the cgame moves
+it), switching nothing.
 The grips are Use and the Force: the right and the left, or the left and the
 right when left-handed. A trigger or grip goes on pressing the key it
-pressed until it's let go, whatever changes meanwhile.
+pressed until it's let go, whatever changes meanwhile - and a trigger
+pressed on a hilt goes on being a tap or a slide till it's let go.
 */
 static int VR_GunHand( void ) {
 	return ( vr_leftHanded && vr_leftHanded->integer ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
@@ -2263,6 +2274,18 @@ void VR_SetWeaponHand( int hand ) {
 	vr.weaponHand = ( hand == -1 || hand == 2 ) ? hand : ( hand == VR_HAND_LEFT ) ? VR_HAND_LEFT : VR_HAND_RIGHT;
 	vr.weaponHandTime = cls.realtime;
 	vr.weaponHandSaid = qtrue;
+}
+
+void VR_SetSaberTriggers( int handMask ) {
+	vr.saberTriggers = handMask & ( ( 1 << VR_HAND_LEFT ) | ( 1 << VR_HAND_RIGHT ) );
+	vr.saberTriggersTime = cls.realtime;
+}
+
+// Whether hand h is on a saber's hilt, as the cgame said lately (its trigger:
+// a tap or a slide), out of the menu.
+static qboolean VR_SaberTrigger( int h ) {
+	return (qboolean)( !vr.pointerMode && cls.state == CA_ACTIVE && ( vr.saberTriggers & ( 1 << h ) ) &&
+		cls.realtime - vr.saberTriggersTime >= 0 && cls.realtime - vr.saberTriggersTime < 500 );
 }
 
 // The key hand h's trigger or grip presses if pressed now (in the menu each
@@ -2329,12 +2352,40 @@ static void VR_HandControl( int control, int h, float value ) {
 	}
 	const qboolean down = (qboolean)( value > pressAt || ( was && value > letGo ) );
 
+	if ( control == VR_CTL_TRIGGER && vr.slidePress[h] ) {
+		// pressed on a saber's hilt: held on, a slide; let go before, a tap
+		const int held = Sys_Milliseconds() - vr.slidePress[h];
+		if ( vr.pointerMode ) {
+			vr.slidePress[h] = 0;	// (the menu up meanwhile: neither - nothing till it's let go)
+			vr.sliding[h] = qfalse;
+		} else if ( down ) {
+			if ( !vr.sliding[h] && ( held < 0 || held >= VR_SLIDE_MS ) ) {
+				vr.sliding[h] = qtrue;
+			}
+		} else {
+			if ( !vr.sliding[h] && held >= 0 && held < VR_SLIDE_MS && VR_SaberTrigger( h ) ) {
+				vr.saberTap = qtrue;	// (still on it: not knocked out of the hand meanwhile)
+			}
+			vr.slidePress[h] = 0;
+			vr.sliding[h] = qfalse;
+		}
+		vr.ctlDown[control][h] = down;
+		return;
+	}
 	if ( down && !was ) {
 		const int other = h ^ 1;
 		if ( control == VR_CTL_TRIGGER && VR_ForceTakesTrigger( h ) ) {
 			// (the Force hand's trigger, its Force grip held: Lightning or
 			// Drain - the gestures', till it's let go)
 			vr.forceTrigger[h] = qtrue;
+			vr.ctlDown[control][h] = down;
+			return;
+		}
+		if ( control == VR_CTL_TRIGGER && VR_SaberTrigger( h ) ) {
+			// (on a saber's hilt: no key - a tap or a slide, as it's held)
+			const int now = Sys_Milliseconds();
+			vr.slidePress[h] = now ? now : 1;
+			vr.sliding[h] = qfalse;
 			vr.ctlDown[control][h] = down;
 			return;
 		}
@@ -4383,6 +4434,8 @@ static void VR_UpdateTracking( void ) {
 	vrClient.grabbing[VR_HAND_RIGHT] = vr.grabbing[VR_HAND_RIGHT];
 	vrClient.trigger[VR_HAND_LEFT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_LEFT];
 	vrClient.trigger[VR_HAND_RIGHT] = vr.ctlDown[VR_CTL_TRIGGER][VR_HAND_RIGHT];
+	vrClient.slide[VR_HAND_LEFT] = vr.sliding[VR_HAND_LEFT];
+	vrClient.slide[VR_HAND_RIGHT] = vr.sliding[VR_HAND_RIGHT];
 	vrClient.stick[VR_HAND_LEFT][0] = vr.stick[VR_HAND_LEFT][0];	// (each hand's, whichever moves you)
 	vrClient.stick[VR_HAND_LEFT][1] = vr.stick[VR_HAND_LEFT][1];
 	vrClient.stick[VR_HAND_RIGHT][0] = vr.stick[VR_HAND_RIGHT][0];
@@ -4606,12 +4659,13 @@ static float VR_PoseTurn( void ) {
 // with the saber lit in your hands the trigger switches it off (the game's
 // own switch, as the saber's weapon key does); with it off, the trigger
 // lights it (the attack button, as in the normal game: predicted, so the
-// blade is there at once).
+// blade is there at once). (A trigger on a hilt - Hilt Slide - is tapped
+// instead: VR_SaberTapCmd.)
 static qboolean		vrAttackHeld;		// the attack button was down for the last command
 static qboolean		vrAttackSwallowed;	// ...and switched the saber off: it does nothing more until let go
 static qboolean		vrSaberSwitchQueued;	// switching it off waits for a command with no other generic command
 
-void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
+static void VR_FillCmdPoseMain( usercmd_t *cmd, vrUserPose_t *out ) {
 	const qboolean attack = ( cmd->buttons & BUTTON_ATTACK ) ? qtrue : qfalse;
 	const qboolean pressed = ( attack && !vrAttackHeld ) ? qtrue : qfalse;
 	qboolean thrown = qfalse;
@@ -4714,6 +4768,56 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
 			}
 		}
 	}
+}
+
+// A trigger on a saber's hilt tapped (VR_HandControl): the saber's switch.
+// Lit in your hands, the game's switch puts it out (thrown, it would knock it
+// out of the air instead: nothing). Out, the attack button lights it, as the
+// game's own does (predicted: the blade's there at once) - on every command
+// till it's lit in your hands, VR_TAP_LIGHT_MS at most (the game won't light
+// it while a swing or a parry's still going).
+#define VR_TAP_LIGHT_MS		300
+static int			vrSaberLightUntil;	// (the cls.realtime the attack button's on till; 0: not)
+
+static void VR_SaberTapCmd( usercmd_t *cmd, const vrUserPose_t *out, qboolean tap ) {
+	const qboolean lit = (qboolean)( clc.vrPoseExt && out->valid );
+
+	if ( !VR_IsRunning() || cls.state != CA_ACTIVE ) {
+		vrSaberLightUntil = 0;
+		return;
+	}
+	if ( tap ) {
+		vrSaberLightUntil = 0;
+		if ( lit ) {
+			if ( !cl.snap.ps.saberInFlight ) {
+				if ( !cmd->generic_cmd ) {
+					cmd->generic_cmd = GENCMD_SABERSWITCH;
+				} else {
+					vrSaberSwitchQueued = qtrue;	// (a Force power went in this one)
+				}
+			}
+			return;
+		}
+		vrSaberLightUntil = cls.realtime + VR_TAP_LIGHT_MS;
+		if ( !vrSaberLightUntil ) {
+			vrSaberLightUntil = 1;
+		}
+	}
+	if ( vrSaberLightUntil ) {
+		if ( lit || cls.realtime - vrSaberLightUntil >= 0 ) {
+			vrSaberLightUntil = 0;	// (lit, or the moment's gone: tap again)
+		} else {
+			cmd->buttons |= BUTTON_ATTACK;
+		}
+	}
+}
+
+void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) {
+	const qboolean tap = vr.saberTap;
+
+	vr.saberTap = qfalse;
+	VR_FillCmdPoseMain( cmd, out );
+	VR_SaberTapCmd( cmd, out, tap );
 }
 
 void VR_Haptic( int hand, float seconds, float amplitude ) {
@@ -5528,6 +5632,7 @@ void VR_FillCmdPose( usercmd_t *cmd, vrUserPose_t *out ) { Com_Memset( out, 0, s
 void VR_Haptic( int hand, float seconds, float amplitude ) {}
 void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
+void VR_SetSaberTriggers( int handMask ) {}
 void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}
