@@ -31,6 +31,14 @@ holsters in play:
   hand that called it (lands there: the usual way round), if that's still
   empty; else on your belt (left lying, it came back by itself). Unlit,
   either way: its trigger lights it.
+- Let go of lit mid-swing, the server may throw it instead (g_vrsaberdrop.c:
+  out - ps.saberInFlight with its entity - not down): it's not put back in
+  its holster - it comes back to the hand it left (cg_vrholster.c keeps it
+  that hand's, cg_vrbody.c draws the hand empty meanwhile), a firm bump as
+  it lands there, lit. That hand squeezed meanwhile calls it back sooner
+  (GENCMD_VR_SABERCALL_L, _R: once, a light pull) - its squeeze a grab all
+  the while (not Use nor the Force): squeezed as it lands, it's held by its
+  grip. Knocked out of the air: down, as any.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -50,7 +58,8 @@ General Public License version 2, like the rest of OpenJK.
 enum {
 	VRSD_ZONE_NONE,
 	VRSD_ZONE_TAKE,		// at its hilt: a squeeze takes it up
-	VRSD_ZONE_CALL		// pointed at it: a squeeze calls it
+	VRSD_ZONE_CALL,		// pointed at it: a squeeze calls it
+	VRSD_ZONE_RECALL	// thrown, the hand it left: a squeeze calls it back sooner
 };
 
 static struct {
@@ -69,6 +78,8 @@ static struct {
 	int			takeTime, takeHand;	// taken up (GENCMD_VR_SABERTAKE asked)...
 	float		takeT, takeSign;	// ...where the hand closed on it, the way round
 	int			callTime, callHand;	// called (GENCMD_VR_SABERCALL_*)
+	int			throwTime, throwHand;	// let go of and thrown: seen out then, from that hand (0: not out)
+	qboolean	recalled;			// ...called back (its hand squeezed)
 } vrsd;
 
 /*
@@ -306,6 +317,34 @@ static void CG_VRSD_Hands( const vrClientState_t *vr ) {
 	}
 }
 
+// Thrown, out: the hand it left squeezed calls it back sooner, once - a light
+// pull. A grab there all the while (the engine's: offered last frame - not
+// one another grab has first), so a squeeze isn't Use or the Force, and the
+// hand's squeezed on it as it lands: held by its grip (cg_vrholster.c).
+static void CG_VRSD_Recall( const vrClientState_t *vr ) {
+	const int claimed = CG_VR_TwoHandZones() | CG_VRH_Zones() | CG_VR_GunZones() | CG_VR_WallZones();
+	const int offered = ( cg.time - vrsd.zoneTime >= 0 && cg.time - vrsd.zoneTime <= 100 ) ? vrsd.zones : 0;
+	const int h = vrsd.throwHand;
+	const int was = ( h >= VR_HAND_LEFT && h <= VR_HAND_RIGHT ) ? vrsd.zone[h] : VRSD_ZONE_NONE;
+
+	vrsd.zones = 0;
+	vrsd.zoneTime = cg.time;
+	vrsd.zone[0] = vrsd.zone[1] = VRSD_ZONE_NONE;
+	if ( was == VRSD_ZONE_RECALL && vr->grabbing[h] && !vrsd.grabWas[h] && ( offered & ( 1 << h ) ) && !vrsd.recalled ) {
+		vrsd.recalled = qtrue;
+		trap->ext.VR_GenericCmd( h == VR_HAND_LEFT ? GENCMD_VR_SABERCALL_L : GENCMD_VR_SABERCALL_R );
+		CG_VR_Feel( h, 0.45f, 80, 0.25f, 200 );	// (a pull)
+		CG_VR_Log( "saber: thrown - called back to the %s hand\n", h == VR_HAND_LEFT ? "left" : "right" );
+	}
+	vrsd.grabWas[0] = vr->grabbing[0];
+	vrsd.grabWas[1] = vr->grabbing[1];
+	if ( h < VR_HAND_LEFT || h > VR_HAND_RIGHT || !vr->handValid[h] || CG_VR_SaberHand( 0 ) != h || ( claimed & ( 1 << h ) ) ) {
+		return;
+	}
+	vrsd.zone[h] = VRSD_ZONE_RECALL;
+	vrsd.zones = 1 << h;
+}
+
 // Pointed at to be called: it lights up a little (in each eye's scene).
 static void CG_VRSD_Light( void ) {
 	vec3_t mid;
@@ -364,6 +403,30 @@ void CG_VR_SaberDropFrame( const vrClientState_t *vr ) {
 		vrsd.takeTime = vrsd.callTime = 0;
 	}
 	vrsd.down = down;
+
+	// let go of and thrown (out - not down): it comes back to that hand, not put back in its holster
+	{
+		const playerState_t *ps = &cg.predictedPlayerState;
+		const qboolean out = (qboolean)( ps->saberInFlight && ps->saberEntityNum );
+		if ( vrsd.dropTime && out ) {
+			vrsd.throwTime = cg.time ? cg.time : 1;
+			vrsd.throwHand = vrsd.dropHand;
+			vrsd.recalled = qfalse;
+			vrsd.dropTime = 0;
+			CG_VR_Log( "saber: thrown from the %s hand\n", vrsd.throwHand == VR_HAND_LEFT ? "left" : "right" );
+		} else if ( vrsd.throwTime && !out ) {
+			// back: caught in that hand (a firm bump, lit) - or knocked out of the air: down, as any
+			if ( !ps->saberInFlight && CG_VR_SaberHand( 0 ) == vrsd.throwHand ) {
+				CG_VR_Feel( vrsd.throwHand, 0.7f, 40, 0.25f, 90 );
+				CG_VR_Log( "saber: thrown - caught in the %s hand\n", vrsd.throwHand == VR_HAND_LEFT ? "left" : "right" );
+			}
+			vrsd.throwTime = 0;
+		}
+		if ( vrsd.throwTime && vr && CG_VRSD_Playing() ) {
+			CG_VRSD_Recall( vr );
+			return;
+		}
+	}
 
 	// let go of, the server not dropping it after all: as before, back to its holster
 	if ( vrsd.dropTime && !down && ( cg.time - vrsd.dropTime < 0 || cg.time - vrsd.dropTime >= VRSD_DROP_MS ) ) {

@@ -2429,6 +2429,7 @@ static QINLINE qboolean G_SaberInBackAttack(int move)
 }
 
 qboolean saberCheckKnockdown_Thrown(gentity_t *saberent, gentity_t *saberOwner, gentity_t *other);
+void saberKnockDown(gentity_t *saberent, gentity_t *saberOwner, gentity_t *other);
 qboolean saberCheckKnockdown_Smashed(gentity_t *saberent, gentity_t *saberOwner, gentity_t *other, int damage);
 qboolean saberCheckKnockdown_BrokenParry(gentity_t *saberent, gentity_t *saberOwner, gentity_t *other);
 
@@ -5991,6 +5992,17 @@ static QINLINE qboolean CheckThrownSaberDamaged(gentity_t *saberent, gentity_t *
 						te->s.weapon = vrSaberNum;
 					}
 
+					if ( vrBlocker || G_VRSaberThrownFromVR( saberent, saberOwner ) )
+					{ //OpenJK VR: a VR player's blade - or any, meeting a saber thrown from VR hands - knocks it out of the air
+						if ( g_vrSaberLog.integer )
+						{
+							G_LogPrintf( "VRSaber: thrown %i \"%s\"'s saber blocked by %i \"%s\" - knocked down\n", saberOwner->s.number,
+								saberOwner->client->pers.netname, ent->s.number, ent->client->pers.netname );
+						}
+						saberKnockDown( saberent, saberOwner, ent );
+						return qfalse;
+					}
+
 					if (saberCheckKnockdown_Thrown(saberent, saberOwner, &g_entities[tr.entityNum]))
 					{ //it was knocked out of the air
 						return qfalse;
@@ -6185,6 +6197,11 @@ static QINLINE void saberCheckRadiusDamage(gentity_t *saberent, int returning)
 
 	if (!saberOwner || !saberOwner->client)
 	{
+		return;
+	}
+
+	if ( G_VRSaberStrikesThrown( saberent ) )
+	{ //OpenJK VR: a VR blade met it on its way - knocked out of the air (g_vrsaber.c)
 		return;
 	}
 
@@ -6955,6 +6972,17 @@ qboolean saberCheckKnockdown_Smashed(gentity_t *saberent, gentity_t *saberOwner,
 		return qfalse;
 	}
 
+	if ( G_VRSaberThrownFromVR( saberent, saberOwner ) )
+	{ //OpenJK VR: thrown from VR hands, any blade it meets knocks it out of the air
+		if ( g_vrSaberLog.integer )
+		{
+			G_LogPrintf( "VRSaber: thrown %i \"%s\"'s saber struck by %i \"%s\" - knocked down\n", saberOwner->s.number,
+				saberOwner->client->pers.netname, other->s.number, other->client->pers.netname );
+		}
+		saberKnockDown(saberent, saberOwner, other);
+		return qtrue;
+	}
+
 	if ( other
 		&& other->inuse
 		&& other->client
@@ -7061,6 +7089,18 @@ void saberBackToOwner(gentity_t *saberent)
 		saberOwner->client->ps.saberCanThrow = qfalse;
 
 		return;
+	}
+
+	{ //OpenJK VR: a VR player's throw comes back its own way, into the hand it left (g_vrsaberdrop.c)
+		const int vrThrow = G_VRSaberThrownBack( saberent, saberOwner );
+		if ( vrThrow != -1 )
+		{
+			if ( vrThrow >= 0 )
+			{
+				saberCheckRadiusDamage( saberent, vrThrow );
+			}
+			return;
+		}
 	}
 
 	//make sure this is set alright
@@ -7262,6 +7302,18 @@ void saberFirstThrown(gentity_t *saberent)
 		saberOwn->client->ps.saberCanThrow = qfalse;
 
 		return;
+	}
+
+	{ //OpenJK VR: a VR player's throw (let go of mid-swing) flies its own way (g_vrsaberdrop.c)
+		const int vrThrow = G_VRSaberThrownOut( saberent, saberOwn );
+		if ( vrThrow != -1 )
+		{
+			if ( vrThrow >= 0 )
+			{
+				saberCheckRadiusDamage( saberent, vrThrow );
+			}
+			return;
+		}
 	}
 
 	if ((level.time - saberOwn->client->ps.saberDidThrowTime) > 500)

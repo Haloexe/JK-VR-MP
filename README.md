@@ -45,6 +45,12 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   switches the saber on and off. Each hand slides on its own saber, and a
   second hand slides along a two-handed hilt (`cg_vrSaberSlide 0` turns it
   off).
+- **Throw your saber:** let go of it lit in the middle of a swing and it flies
+  off spinning the way your hand was going, cutting whoever it passes, out as
+  far as your Saber Throw lets it, then curves back like a boomerang into the
+  hand it left. Squeeze that hand to call it back early. A blade that meets a
+  thrown saber - swung into it or held in its way - knocks it out of the air
+  (servers can turn throwing off: `g_vrSaberThrow 0`).
 
 ## New since 0.1.4
 

@@ -120,9 +120,11 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        holster, take out or put away (see HOLSTERS);
                        holding your saber (Saber Grip: Hold), it holds it
                        - no use meanwhile; let go at your side and it's
-                       back in its holster, anywhere else it drops (see
-                       HOLSTERS); at your dropped saber's hilt, pick it
-                       up; pointed at it, call it
+                       back in its holster, anywhere else it drops - let
+                       go of mid-swing, lit, it's thrown (see HOLSTERS);
+                       at your dropped saber's hilt, pick it up; pointed
+                       at it, call it; your saber thrown from that hand,
+                       call it back
   Left grip            the Force grip: hold it and your empty hand reaches
                        out with the Force - thrust, yank, point, the
                        trigger, held still by your body, waved, swung (THE
@@ -736,6 +738,29 @@ shoulder.
     drops. A siege class's saber never drops, nor does yours in a saber lock
     or a duel's countdown. If the server doesn't drop it after all, it's
     back in its holster a moment later.
+  * Throw it (the same servers): let go of it lit in the middle of a swing
+    - your hand going faster than 2.5 m/s in your room (walking, jumping or
+    turning doesn't count: only your arm) - and, if Saber Throw is yours
+    with the Force for it (20, as the game's throw), it flies off spinning
+    and lit the way your hand was going, three times as fast (13 to 26
+    m/s). It cuts whoever it passes, as the game's thrown saber does, and
+    goes on straight - as far as your Saber Throw lets it (11 m at level 1,
+    17 m at 2, 23 m at 3; not as far if you threw it softly: a second's
+    flight at most) - then swings round like a boomerang, slowing as it
+    turns and speeding up as it heads home, and lands back in the hand it
+    left: lit, with a firm bump (held by its grip if you're squeezing).
+    Squeeze that hand while it's out and it comes back now (a light pull;
+    any squeeze of it meanwhile is a grab - not Use, not the Force - so
+    hold it squeezed to catch it held). Meeting a wall or someone on the
+    way out, it comes back from there; on the way back nothing stops it
+    (as the game's). A blade it meets knocks it out of the air - a VR
+    player's swung into it or held in its way, or anyone's guard: it
+    switches off and drops, to pick up or call as above. Let go slowly, or
+    unlit, or without Saber Throw (or its Force), it drops instead - and so
+    it does straight after a catch (the game's 0.3 s), in a duel (the game
+    has no throws there), or as a saber the game says can't be thrown (a
+    staff with both blades lit, say). Your left trigger still throws it
+    the game's own way, as ever.
   * The quick draw: hold the trigger as you take a hilt out and it lights
     as it comes out. Otherwise it comes out unlit, and its trigger lights
     it.
@@ -842,10 +867,13 @@ server running this build: your real blade is the weapon.
     the game's canned swings - your arm swings.
   * Block with it. Only what your blade physically stops is blocked, thrown
     sabers included (no automatic blocks, saber locks or disarms while you
-    hold it). Blades meet only where their cores really touch, at the same
-    moment - not their glow, and not the box round the saber - whether you
-    swing into a bot's blade or its swing comes at yours, and one blade
-    never passes through another (except a heavy blow breaking a guard).
+    hold it) - and a thrown saber your blade meets anywhere in its flight,
+    swung into it or held in its way, is knocked out of the air: it
+    switches off and drops where it is (yours, see Throw it). Blades meet
+    only where their cores really touch, at the same moment - not their
+    glow, and not the box round the saber - whether you swing into a bot's
+    blade or its swing comes at yours, and one blade never passes through
+    another (except a heavy blow breaking a guard).
     When they meet they spark, your hand buzzes hard, and the swinging
     blade can't cut for a moment while it recovers. The stronger blow wins:
     weight, plus one if the swing was at full speed. Your swing into a

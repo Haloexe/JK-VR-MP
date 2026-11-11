@@ -468,6 +468,29 @@ GOOD TO KNOW
   called their saber, and how fast it went (g_vrSaberLog). g_vrSaberDrop
   0: let go of, a saber goes back to its holster, as before; knocked
   away, the game's own way.
+* VR players throw their sabers: let go of lit in the middle of a swing -
+  their hand going 2.5 m/s or faster in their room (85 units a second;
+  walking, jumping or turning doesn't count) - by a player with Saber
+  Throw and the Force for it (the game's 20), a saber is thrown instead
+  of dropped: the game's own thrown saber (lit, spinning, cutting whoever
+  it passes for the game's 30, blocked as the game's), off the way their
+  hand swung at three times its speed (450 to 900 units a second). Out as
+  far as their Saber Throw lets it - 384 units at level 1, 576 at 2, 768
+  at 3 (11, 17, 23 m), or a second's flight if that's shorter - then
+  round like a boomerang and back into the hand it left, lit (as the
+  game's return: 700 units a second, 900 at level 3; through anything in
+  its way). Meeting a wall or someone on the way out, it comes back from
+  there; the hand it left squeezed calls it back early. No throws in a
+  duel, from a saber the game says can't be thrown, nor in the game's 0.3
+  s after a catch: those drop. Any thrown saber a VR player's blade meets
+  in its flight - swung into it or held in its way, as the player saw it
+  (lag compensation as for their cuts) - is knocked out of the air; one
+  thrown by a VR player is knocked down by whatever blade meets it (the
+  game's own throws, between players without VR, keep the game's odds).
+  Knocked down, a VR player's lies there to pick up or call. games.log
+  says who threw, how hard and how far it could go, who caught or called
+  it back, and whose blade knocked it down (g_vrSaberLog). g_vrSaberThrow
+  0: let go of mid-swing, a saber drops like any other.
 * VR players' Force powers come from their Force hand (their empty hand,
   with Force gestures on): Push and Pull the way they thrust or yanked it,
   Grip, Lightning and Drain where it points - each straight at someone

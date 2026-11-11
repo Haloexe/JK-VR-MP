@@ -194,6 +194,7 @@ XCVAR_DEF( g_vrSaberLight,				"1.8 5.3 25 150",	CVU_VRSaberWeights,	CVAR_ARCHIVE
 XCVAR_DEF( g_vrSaberLog,					"1",			NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_vrSaberMedium,				"2.5 7.1 40 220",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
 XCVAR_DEF( g_vrSaberSpeedScale,			"1",			NULL,						CVAR_ARCHIVE_ND,								qtrue )
+XCVAR_DEF( g_vrSaberThrow,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: a VR player's saber let go of lit mid-swing is thrown, and comes back (g_vrsaberdrop.c); 0: dropped, as any let go of
 XCVAR_DEF( g_vrSaberUnlag,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrWallGrip,				"1",			CVU_VRWallGrip,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players hang on to walls they grip in mid-air (g_vrwall.c); 0: they don't
 XCVAR_DEF( g_warmup,					"20",			NULL,						CVAR_ARCHIVE,									qtrue )

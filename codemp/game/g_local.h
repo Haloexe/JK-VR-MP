@@ -1533,12 +1533,15 @@ void		G_VRSaberDropInit( void );
 void		G_VRSaberDropPublish( void );
 void		G_VRSaberDropShutdown( void );
 void		G_VRSaberDropClientReset( int clientNum );
-void		G_VRSaberDropUsercmd( gentity_t *ent, const usercmd_t *ucmd );
+void		G_VRSaberDropUsercmd( gentity_t *ent, const usercmd_t *ucmd, float trackYaw );
 void		G_VRSaberDropCmd( gentity_t *ent );
 void		G_VRSaberTakeCmd( gentity_t *ent );
 void		G_VRSaberCallCmd( gentity_t *ent, int hand );
 qboolean	G_VRSaberDownThink( gentity_t *saberent, gentity_t *owner );
 qboolean	G_VRSaberDownRun( gentity_t *ent );
+int			G_VRSaberThrownOut( gentity_t *saberent, gentity_t *owner );
+int			G_VRSaberThrownBack( gentity_t *saberent, gentity_t *owner );
+qboolean	G_VRSaberThrownFromVR( gentity_t *saberent, gentity_t *owner );
 void		G_VRAxisToAngles( vec3_t ax[3], vec3_t angles );
 
 // g_vrholster.c (OpenJK VR: holsters - a VR player's weapons hang on their body)
@@ -1574,6 +1577,7 @@ qboolean	G_VRSaberStandingAnim( gentity_t *ent, int anim );
 qboolean	G_VRSaberClient( gentity_t *ent );
 qboolean	G_VRHeadGaze( const gentity_t *ent, vec3_t start, vec3_t dir );
 qboolean	G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point, int *saberNum );
+qboolean	G_VRSaberStrikesThrown( gentity_t *saberent );
 qboolean	G_VRSaberActive( gentity_t *ent );
 qboolean	G_VRSaberArmBroken( gentity_t *ent, int s );
 qboolean	G_VRGunHandLeft( const gentity_t *ent );

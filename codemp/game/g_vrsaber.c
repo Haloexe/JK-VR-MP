@@ -75,6 +75,7 @@ qboolean BG_SabersOff( playerState_t *ps );
 qboolean WP_SaberBladeUseSecondBladeStyle( saberInfo_t *saber, int bladeNum );
 void G_Knockdown( gentity_t *victim );
 void G_MissileImpact( gentity_t *ent, trace_t *trace );	// (g_missile.c)
+void saberKnockDown( gentity_t *saberent, gentity_t *saberOwner, gentity_t *other );	// (w_saber.c)
 
 #define VR_SABER_SAMPLES	32		// poses kept per player (about a third of a second)
 #define VR_SABER_MIN_GAP	4		// ms: a pose closer than this to the last one isn't kept
@@ -227,7 +228,26 @@ typedef struct {
 } vrsHeldBolt_t;
 static vrsHeldBolt_t	vrsHeld[VR_BOLT_HELD];
 
+// A thrown saber's way as the VR players saw it (G_VRSaberStrikesThrown).
+#define VR_THROWN_HIST		16		// a thrown saber's places kept (one a frame it's judged)
+#define VR_THROWN_GAP		150		// ms: places this far apart aren't the same flight
+#define VR_THROWN_NEAR		160.0f	// a VR player this near its way could meet it (a reach, a blade, its spin)
+#define VR_THROWN_STEP		6.0f	// max blade or saber travel per test step (units)
+#define VR_THROWN_MAX_STEPS	24
+
+typedef struct {
+	int		ent;					// the saber (0: none)
+	int		count, head;
+	int		time[VR_THROWN_HIST];	// level.time
+	vec3_t	pos[VR_THROWN_HIST];
+	int		seen[MAX_CLIENTS];		// each VR player's poses met against it up to this time
+} vrsThrown_t;
+
+static vrsThrown_t	vrsThrown[MAX_CLIENTS];	// (by its owner)
+
 static void VRS_ResetUnlag( int clientNum );			// (lag compensation, below)
+static qboolean VRS_Unlag( void );
+static float VRS_UnlagTime( float t );
 static void VRS_SettleBolts( void );					// (bolts, below)
 static void VRS_LandBolt( int i );
 static void VRS_RecordHistory( void );
@@ -663,6 +683,7 @@ void G_VRSaberInit( void ) {
 	memset( vrsGunLeft, 0, sizeof( vrsGunLeft ) );
 	memset( vrsHilts, 0, sizeof( vrsHilts ) );
 	memset( vrsHeld, 0, sizeof( vrsHeld ) );
+	memset( vrsThrown, 0, sizeof( vrsThrown ) );
 	VRS_ResetUnlag( -1 );
 
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
@@ -707,6 +728,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		vrsAvatarSet[clientNum] = qfalse;
 		vrsGunLeft[clientNum] = qfalse;
 		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
+		memset( &vrsThrown[clientNum], 0, sizeof( vrsThrown[clientNum] ) );
 		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
 		G_VRArmsClientReset( clientNum );	// (and their arms as the other builds are sent them: g_vrarms.c)
 		G_VRSaberDropClientReset( clientNum );	// (and their saber let go of: g_vrsaberdrop.c)
@@ -1106,7 +1128,7 @@ void G_VRSaberUsercmd( gentity_t *ent, usercmd_t *ucmd ) {
 	}
 	VRS_KeepGaze( vs, &pose );		// (where their headset looks: G_VRHeadGaze)
 	VRS_TakeAvatar( ent, &pose );	// (what everyone else sees, saber or not)
-	G_VRSaberDropUsercmd( ent, ucmd );	// (where their hands went: a saber let go of falls as it was going - g_vrsaberdrop.c)
+	G_VRSaberDropUsercmd( ent, ucmd, pose.trackYaw );	// (where their hands went: a saber let go of falls as it was going - g_vrsaberdrop.c)
 	if ( !G_VRSaberOn() || !pose.valid ) {
 		vs->count = 0;		// the stream broke: never sweep across the gap
 		vs->inVR = qfalse;	// and the client says there's no saber in its VR hands
@@ -2011,6 +2033,194 @@ qboolean G_VRSaberStopsThrown( gentity_t *ent, const vec3_t thrown, vec3_t point
 		}
 	}
 	return found;
+}
+
+/*
+--------------------------------------------------------------------------------
+Blade against a thrown saber
+
+A thrown saber (anyone's) that a VR blade meets - swung into it, or held in
+its way, anywhere it flies - is knocked out of the air: down, switched off
+(w_saber.c saberKnockDown; a VR player's, theirs to take up or call:
+g_vrsaberdrop.c). Its way as the VR players saw it - its places of the last
+frames - against their blades' poses since they were last met against it,
+step by step (G_VRSaberStrikesThrown: as it flies, every frame it's judged -
+w_saber.c saberCheckRadiusDamage).
+--------------------------------------------------------------------------------
+*/
+
+// Where it is now, kept (a new flight: what was kept goes).
+static void VRS_ThrownKeep( vrsThrown_t *th, gentity_t *saberent ) {
+	const int last = th->count ? th->time[th->head] : 0;
+
+	if ( th->ent != saberent->s.number || !th->count || level.time - last > VR_THROWN_GAP || level.time < last ) {
+		memset( th, 0, sizeof( *th ) );
+		th->ent = saberent->s.number;
+	} else if ( level.time == last ) {
+		VectorCopy( saberent->r.currentOrigin, th->pos[th->head] );	// (judged again this frame: where it is now)
+		return;
+	}
+	th->head = ( th->head + 1 ) % VR_THROWN_HIST;
+	th->count = Q_min( th->count + 1, VR_THROWN_HIST );
+	th->time[th->head] = level.time;
+	VectorCopy( saberent->r.currentOrigin, th->pos[th->head] );
+}
+
+// Where it was at time t: between the places kept round it (before them all,
+// the first; after them, the last).
+static void VRS_ThrownAt( const vrsThrown_t *th, float t, vec3_t out ) {
+	int i, k = th->head;
+
+	for ( i = 0; i < th->count; i++ ) {
+		k = ( th->head - i + VR_THROWN_HIST ) % VR_THROWN_HIST;
+		if ( th->time[k] <= t ) {
+			if ( i > 0 ) {
+				const int k1 = ( k + 1 ) % VR_THROWN_HIST;
+				VRS_Lerp( th->pos[k], ( t - th->time[k] ) / (float)( th->time[k1] - th->time[k] ), th->pos[k1], out );
+			} else {
+				VectorCopy( th->pos[k], out );
+			}
+			return;
+		}
+	}
+	VectorCopy( th->pos[k], out );
+}
+
+// Whether this VR player's blades met it (their poses since last seen against
+// it); where on which blade, and where it was then.
+static qboolean VRS_ThrownMeets( vrsThrown_t *th, gentity_t *p, vec3_t point, vec3_t at, int *saberNum, int *bladeNum ) {
+	vrSaberState_t *vs = VRS_State( p );
+	const vrSaberSample_t *hist[VR_SABER_SAMPLES];
+	const int c = p->s.number, first = th->time[( th->head - th->count + 1 + VR_THROWN_HIST ) % VR_THROWN_HIST];
+	const int newest = vs->count ? VRS_Sample( vs, 0 )->time : 0;
+	const float shift = VRS_Unlag() ? 0.0f : (float)( level.time - newest );	// (no lag compensation: their newest counts as now)
+	int s, b, i, j, n;
+
+	for ( s = 0; s < MAX_SABERS && s < VR_POSE_MAX_SABERS; s++ ) {
+		for ( b = 0; b < MAX_BLADES && b < VR_POSE_MAX_BLADES; b++ ) {
+			const float len = p->client->saber[s].blade[b].lengthMax;
+			if ( !VRS_BladeOn( p->client, s, b ) ) {
+				continue;
+			}
+			n = VRS_BladeHistory( vs, s, b, hist );
+			for ( i = n - 1; i > 0; i-- ) {
+				const vrSaberSample_t *A = hist[i], *B = hist[i - 1];
+				const float ta = VRS_Unlag() ? VRS_UnlagTime( A->time ) : A->time + shift;
+				const float tb = VRS_Unlag() ? VRS_UnlagTime( B->time ) : B->time + shift;
+				vec3_t tipA, tipB, sa, sb;
+				float travel;
+				int steps;
+				if ( B->time <= th->seen[c] || B->time - A->time > VR_SABER_GAP || tb < first ) {
+					continue;	// (met against it already; lag - not swept across the gap; before it was thrown)
+				}
+				VectorMA( A->base[s][b], len, A->dir[s][b], tipA );
+				VectorMA( B->base[s][b], len, B->dir[s][b], tipB );
+				VRS_ThrownAt( th, ta, sa );
+				VRS_ThrownAt( th, tb, sb );
+				travel = Q_max( Q_max( Distance( A->base[s][b], B->base[s][b] ), Distance( tipA, tipB ) ), Distance( sa, sb ) );
+				steps = Com_Clampi( 1, VR_THROWN_MAX_STEPS, (int)ceilf( travel / VR_THROWN_STEP ) );
+				for ( j = 0; j <= steps; j++ ) {
+					const float f = j / (float)steps;
+					vec3_t base, dir, tip, clip, c1, c2;
+					VRS_Lerp( A->base[s][b], f, B->base[s][b], base );
+					VRS_SlerpDir( A->dir[s][b], B->dir[s][b], f, dir );
+					VectorMA( base, len, dir, tip );
+					VRS_ThrownAt( th, ta + f * ( tb - ta ), at );
+					if ( VRS_SegSegClosest( base, tip, at, at, c1, c2 ) > VR_SABER_THROWN_REACH ) {
+						continue;
+					}
+					VRS_ClipBlade( c, base, tip, clip );
+					if ( Distance( base, c1 ) > Distance( base, clip ) + 1.0f ) {
+						continue;	// (where it'd meet it, the blade's in a wall)
+					}
+					VectorCopy( c1, point );
+					*saberNum = s;
+					*bladeNum = b;
+					return qtrue;
+				}
+			}
+		}
+	}
+	return qfalse;
+}
+
+// A thrown saber judged (every frame it flies - w_saber.c
+// saberCheckRadiusDamage): qtrue - a VR blade met it, and it's knocked out of
+// the air (judged no more).
+qboolean G_VRSaberStrikesThrown( gentity_t *saberent ) {
+	const int ownerNum = saberent ? saberent->r.ownerNum : -1;
+	gentity_t *owner;
+	vrsThrown_t *th;
+	vec3_t lo, hi, point, at, normal;
+	int c, i, s, b;
+
+	if ( ownerNum < 0 || ownerNum >= MAX_CLIENTS || !vrPosesAvailable || !G_VRSaberOn() ) {
+		return qfalse;
+	}
+	owner = &g_entities[ownerNum];
+	if ( !owner->inuse || !owner->client || !owner->client->ps.saberInFlight || owner->client->ps.saberEntityNum != saberent->s.number ) {
+		return qfalse;
+	}
+	th = &vrsThrown[ownerNum];
+	VRS_ThrownKeep( th, saberent );
+	if ( th->count < 2 ) {
+		return qfalse;
+	}
+	ClearBounds( lo, hi );
+	for ( i = 0; i < th->count; i++ ) {
+		AddPointToBounds( th->pos[( th->head - i + VR_THROWN_HIST ) % VR_THROWN_HIST], lo, hi );
+	}
+	for ( c = 0; c < MAX_CLIENTS; c++ ) {
+		gentity_t *p = &g_entities[c];
+		vrSaberState_t *vs;
+		qboolean apart = qfalse, met;
+		int k;
+		if ( c == ownerNum || !G_VRSaberActive( p ) || p->client->sess.sessionTeam == TEAM_SPECTATOR ) {
+			continue;
+		}
+		if ( ( p->client->ps.duelInProgress && p->client->ps.duelIndex != ownerNum ) ||
+			( owner->client->ps.duelInProgress && owner->client->ps.duelIndex != c ) ) {
+			continue;	// (a duel: only the two of them - as the game's thrown saber hurts)
+		}
+		for ( k = 0; k < 3; k++ ) {
+			if ( p->r.currentOrigin[k] < lo[k] - VR_THROWN_NEAR || p->r.currentOrigin[k] > hi[k] + VR_THROWN_NEAR ) {
+				apart = qtrue;
+			}
+		}
+		vs = VRS_State( p );
+		if ( apart ) {
+			th->seen[c] = vs->count ? VRS_Sample( vs, 0 )->time : th->seen[c];
+			continue;
+		}
+		met = VRS_ThrownMeets( th, p, point, at, &s, &b );
+		th->seen[c] = vs->count ? VRS_Sample( vs, 0 )->time : th->seen[c];
+		if ( !met ) {
+			continue;
+		}
+		// knocked out of the air there: the clash on the blade it met (the blocker's hand feels it)
+		G_SetOrigin( saberent, at );
+		trap->LinkEntity( (sharedEntity_t *)saberent );
+		VectorSubtract( at, point, normal );
+		if ( VectorNormalize( normal ) < 1e-3f ) {
+			VectorSet( normal, 0.0f, 0.0f, 1.0f );
+		}
+		{
+			gentity_t *te = G_TempEntity( point, EV_SABER_BLOCK );
+			VectorCopy( point, te->s.origin );
+			VectorCopy( normal, te->s.angles );
+			te->s.eventParm = 1;
+			te->s.weapon = s;
+			te->s.legsAnim = b;
+			te->s.otherEntityNum2 = c;
+		}
+		if ( g_vrSaberLog.integer ) {
+			G_LogPrintf( "VRSaber: thrown %i \"%s\"'s saber knocked down by %i \"%s\"'s blade\n", ownerNum, owner->client->pers.netname, c,
+				p->client->pers.netname );
+		}
+		saberKnockDown( saberent, owner, p );
+		return qtrue;
+	}
+	return qfalse;
 }
 
 /*
