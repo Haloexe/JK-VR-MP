@@ -139,7 +139,8 @@ typedef struct {
 
 // both hands on one saber
 #define VRB_GRAB_REACH		5.0f	// a hand this close to the other hand's hilt can take hold of it
-#define VRB_GRAB_BREAK		24.0f	// ...and lets go only when pulled this far from its place on it
+#define VRB_GRAB_BREAK		24.0f	// ...and lets go only when pulled this far from its place on it...
+#define VRB_GRAB_BREAK_MS	150		// ...for this long (a fast swing's tracking flicker doesn't)
 #define VRB_HAND_GAP		3.5f	// two hands on a hilt are at least a hand's width apart...
 #define VRB_HAND_SPAN		60.0f	// ...and no more than this
 #define VRB_HILT_BELOW		6.5f	// a single saber's hilt is held this far below where its tag holds it at most (the pommel)
@@ -312,6 +313,7 @@ typedef struct vrbState_s {
 									// you use lets go...
 	int			twoHandSlack;		// ...its grip let go since (cg.time; 0: held) - not long enough yet (VRB_LET_GO_MS)
 	int			twoHandHeldTime;	// cg.time both hands last held it (lent, a hand's tracking lost: a moment, it goes on)
+	int			twoHandAway;		// cg.time the other hand's controller went VRB_GRAB_BREAK off its place on the hilt (0: not)
 	qboolean	twoHandOffKept;		// the other hand points the blade as it held it, not along its fist (it held it first,
 	vec3_t		twoHandOffDir;		// the hand you use leading now: CG_VRB_TakeLead) - this way, in its controller's frame
 	float		twoHandHilt[2];		// where on the hilt hands can hold it, from where its tag holds it (as found this frame)
@@ -3287,13 +3289,12 @@ static void CG_VRB_FeelSteady( int hand, float amp, float grain );
 // from where its own tag holds it, the way its first blade points: up to a
 // hand's width short of the emitter; down to the pommel - a single hilt's isn't
 // known: a hand's length or two - or down a staff to its other emitter (as
-// CG_VRB_TwoHandHold has it); where its tag holds it always on it. And the way
-// that blade points (the hilt's own line, however it's held: blade).
-static qboolean CG_VRB_HiltRange( centity_t *cent, int h, const vrbGrip_t *grip, float *lo, float *hi, vec3_t blade ) {
+// CG_VRB_TwoHandHold has it); where its tag holds it always on it.
+static qboolean CG_VRB_HiltRange( centity_t *cent, int h, const vrbGrip_t *grip, float *lo, float *hi ) {
 	const clientInfo_t *ci = &cgs.clientinfo[cent->currentState.number];
 	vrbBone_t tag;
 	mdxaBone_t m;
-	vec3_t emitter, tmp;
+	vec3_t emitter, blade, tmp;
 
 	if ( grip->kind != VRB_GRIP_SABER || grip->saber < 0 || grip->saber >= MAX_SABERS ||
 		!CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) ||
@@ -3348,7 +3349,7 @@ static void CG_VRB_Slide( centity_t *cent, const vrClientState_t *vr ) {
 			continue;
 		}
 		CG_VRB_Grip( cent, h, &grip );
-		if ( grip.saber != s || !CG_VRB_HiltRange( cent, h, &grip, &lo, &hi, dir ) ) {
+		if ( grip.saber != s || !CG_VRB_HiltRange( cent, h, &grip, &lo, &hi ) ) {
 			vrbSlide.on[h] = qfalse;
 			continue;
 		}
@@ -3362,16 +3363,24 @@ static void CG_VRB_Slide( centity_t *cent, const vrClientState_t *vr ) {
 			continue;
 		}
 		// the way the hand went since, in your room (as you're turned now),
-		// along the hilt
+		// along the hilt as the hands hold it - both of them, the line through
+		// them (as last held); one, as its controller points it. Not the blade
+		// as it's drawn: that trails a swing, or rests on another blade - the
+		// hand swung across it doesn't slide along it.
 		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vrbSlide.from[h], NULL, from, NULL );
 		VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->gripOrigin[h], NULL, to, NULL );
 		VectorCopy( vr->gripOrigin[h], vrbSlide.from[h] );
 		VectorSubtract( to, from, d );
 		twoHanded = (qboolean)( s == 0 && CG_VRB_TwoHanded() );
-		if ( twoHanded ) {
+		if ( !twoHanded ) {
+			vec3_t pos, ax[3];
+			CG_VRB_Controller( vr, h, pos, ax );
+			CG_VRB_HeldBladeDir( &grip, ax, dir );
+		} else {
 			// the other hand on it too: this one stops a hand's width from it
 			// (or VRB_HAND_SPAN away)
 			const float other = vrb.hold[0].t + vrb.twoHandT;
+			VectorCopy( vrb.twoHandDir, dir );
 			if ( vrb.twoHandSide > 0.0f ) {
 				hi = Q_min( hi, other - VRB_HAND_GAP );
 				lo = Q_max( lo, other - VRB_HAND_SPAN );
@@ -3539,6 +3548,7 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 			vrb.twoHandSign = ( DotProduct( blade, dirO ) < 0.0f ) ? -1.0f : 1.0f;
 			vrb.twoHandSide = ( dAbove < dBelow ) ? 1.0f : -1.0f;
 			vrb.twoHandOffKept = qfalse;
+			vrb.twoHandAway = 0;
 		}
 
 		// the wrists: the first one, and the other as far as it agrees (along
@@ -3629,9 +3639,18 @@ static qboolean CG_VRB_TwoHandHold( centity_t *cent, const vrClientState_t *vr, 
 		VectorMA( fistM, t, dir, point );
 
 		if ( Distance( posO, point ) > VRB_GRAB_BREAK && !( vrb.twoHandOffKept && CG_VRB_PassEase( 0 ) < 1.0f ) ) {
-			// pulled well away: it lets go (until the grip is let go and squeezed again) - not as the fist of the hand
-			// you use settles onto its controller, the lead just taken (the hilt it took over from where it was drawn,
-			// trailing the hands with the blade's weight: CG_VRB_TakeLead)
+			if ( !vrb.twoHandAway ) {
+				vrb.twoHandAway = cg.time ? cg.time : 1;
+			}
+		} else {
+			vrb.twoHandAway = 0;
+		}
+		if ( vrb.twoHandAway && !( cg.time - vrb.twoHandAway >= 0 && cg.time - vrb.twoHandAway < VRB_GRAB_BREAK_MS ) ) {
+			// pulled well away, a moment on: it lets go (until the grip is let go and squeezed again) - not as the fist
+			// of the hand you use settles onto its controller, the lead just taken (the hilt it took over from where it
+			// was drawn, trailing the hands with the blade's weight: CG_VRB_TakeLead); not as a controller's tracking
+			// flickers off in a fast swing (both hands far apart, a staff's: a moment's error there carries a long way)
+			vrb.twoHandAway = 0;
 			vrb.grabBlocked[off] = qtrue;
 			pulled = qtrue;
 		} else {

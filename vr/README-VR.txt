@@ -455,8 +455,9 @@ and while you hold the grip the saber is in both hands:
     SLIDE), or let go and take hold again.
   * Let go of the grip to let go. Moving your hands about doesn't make it
     slip off: only pulling that hand a long way (about 70 cm) from where it
-    holds breaks the hold. Taking hold and letting go settle smoothly over
-    a few frames.
+    holds, for more than a moment (0.15 s - a controller's tracking
+    flickering off in a fast swing doesn't), breaks the hold. Taking hold
+    and letting go settle smoothly over a few frames.
   * Passing it over: holding it with both hands, squeeze the grip of the
     hand that has it (the hand you use). That hand lets go, and the saber
     stays in the other one - where it holds it on the hilt, and the way
