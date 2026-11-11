@@ -51,6 +51,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   hand it left. Squeeze that hand to call it back early. A blade that meets a
   thrown saber - swung into it or held in its way - knocks it out of the air
   (servers can turn throwing off: `g_vrSaberThrow 0`).
+- **The Force with two sabers:** a saber in your Force hand no longer stops
+  your Force gestures. With Saber Grip on Toggle, use the Force grip as
+  usual; on Hold (the grip holds the saber), hold X and gesture instead.
 
 ## New since 0.1.4
 

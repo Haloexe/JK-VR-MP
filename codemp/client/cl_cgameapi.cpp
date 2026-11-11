@@ -1942,6 +1942,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetWristHud					= VR_SetWristHud;
 		cgi.ext.VR_TintView						= VR_TintView;
 		cgi.ext.VR_SetSaberTriggers				= VR_SetSaberTriggers;
+		cgi.ext.VR_SetSaberForce				= VR_SetSaberForce;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
@@ -1958,6 +1959,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetWristHud					= NULL;
 		cgi.ext.VR_TintView						= NULL;
 		cgi.ext.VR_SetSaberTriggers				= NULL;
+		cgi.ext.VR_SetSaberForce				= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

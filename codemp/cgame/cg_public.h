@@ -789,6 +789,12 @@ typedef struct cgameImport_s {
 		// (vrClientState_t.slide), switching nothing. Call every frame; unsaid
 		// lately, none (each trigger as VR_SetWeaponHand says).
 		void			(*VR_SetSaberTriggers)					( int handMask );
+		// OpenJK VR: your Force hand holds a saber of its own (dual sabers,
+		// say): it reaches out with the Force all the same - how
+		// (VR_SABER_FORCE_*: with its Force grip, or X held). Call every
+		// frame; unsaid lately, not at all (no Force hand while it holds a
+		// weapon, as VR_SetWeaponHand says).
+		void			(*VR_SetSaberForce)						( int how );
 	} ext;
 } cgameImport_t;
 

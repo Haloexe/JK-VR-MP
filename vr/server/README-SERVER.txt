@@ -491,13 +491,14 @@ GOOD TO KNOW
   says who threw, how hard and how far it could go, who caught or called
   it back, and whose blade knocked it down (g_vrSaberLog). g_vrSaberThrow
   0: let go of mid-swing, a saber drops like any other.
-* VR players' Force powers come from their Force hand (their empty hand,
-  with Force gestures on): Push and Pull the way they thrust or yanked it,
-  Grip, Lightning and Drain where it points - each straight at someone
-  within 10 degrees of that (Grip: 15), anywhere on them, whom it works on
-  (never onto, or off, someone cloaked or mind-tricking them) - and
-  everyone on this build sees them leave that hand ("vrForce 2" in the
-  server info; 1, an earlier build's). Each power keeps the
+* VR players' Force powers come from their Force hand (their empty hand -
+  or one holding its own saber, a second one say - with Force gestures
+  on): Push and Pull the way they thrust or yanked it, Grip, Lightning and
+  Drain where it points - each straight at someone within 10 degrees of
+  that (Grip: 15), anywhere on them, whom it works on (never onto, or off,
+  someone cloaked or mind-tricking them) - and everyone on this build sees
+  them leave that hand ("vrForce 2" in the server info; 1, an earlier
+  build's). Each power keeps the
   game's own levels and costs, and its reach - but Grip from the hand, a
   quarter further (320 units, about 9 m; the game's 256 for everyone
   else), catching nobody the game's hold would let go of at once (out of

@@ -88,6 +88,9 @@ void		VR_SetWeaponHand( int hand );
 // saber's switch; held VR_SLIDE_MS, the hand slides along the hilt
 // (vrClientState_t.slide) - cgameImport_t.ext.VR_SetSaberTriggers, every frame.
 void		VR_SetSaberTriggers( int handMask );
+// A saber in your Force hand: how it reaches out with the Force
+// (VR_SABER_FORCE_*) - cgameImport_t.ext.VR_SetSaberForce, every frame.
+void		VR_SetSaberForce( int how );
 // Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
 // wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );

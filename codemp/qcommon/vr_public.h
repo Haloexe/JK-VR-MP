@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-21"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-22"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -64,6 +64,9 @@ General Public License version 2, like the rest of OpenJK.
 												//     (a hand on a saber's hilt: its trigger tapped,
 												//     the saber's switch; held, the hand slides along
 												//     the hilt)
+												// -22: ext.VR_SetSaberForce (a saber in the Force
+												//     hand: it reaches out with the Force all the
+												//     same - its Force grip, or X held)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)
@@ -204,7 +207,8 @@ typedef struct vrAvatar_s {
 									// (all 0: none - an older build's demo)
 	vrAvatarHand_t	hand[2];		// VR_HAND_LEFT, VR_HAND_RIGHT
 	// the hand the player's Force powers come from and aim with - their Force gestures on, that hand empty
-	// (FREE): forceHand (VR_HAND_*) - and where it points (forceDir: world axes, unit; the cgame's, from its aim)
+	// (FREE) or holding a saber of its own (SABER: ext.VR_SetSaberForce): forceHand (VR_HAND_*) - and where it
+	// points (forceDir: world axes, unit; the cgame's, from its aim)
 	qboolean		forceValid;
 	int				forceHand;
 	vec3_t			forceDir;
@@ -400,6 +404,13 @@ typedef struct vrClientState_s {
 
 // ext.VR_SetSaberTriggers: a trigger held this long (ms) is a slide, not a tap
 #define VR_SLIDE_MS				250
+
+// ext.VR_SetSaberForce( how ): your Force hand holds a saber of its own (dual
+// sabers, say) - said every frame; unsaid a moment, not at all. It reaches out
+// with the Force (Force gestures) all the same...
+#define VR_SABER_FORCE_NONE		0	// ...not: no Force hand while it holds a weapon
+#define VR_SABER_FORCE_GRIP		1	// ...with its Force grip held, as an empty hand (Saber Grip: Toggle)
+#define VR_SABER_FORCE_X		2	// ...with X held (Saber Grip: Hold - its grip holds the saber): X tapped is X's own
 
 // Heading of a view axis; well defined even looking straight up/down.
 // Shared by the engine, renderer and cgame so they always agree.

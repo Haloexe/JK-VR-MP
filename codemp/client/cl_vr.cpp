@@ -570,6 +570,10 @@ typedef struct vrState_s {
 	qboolean				forceGrip;		// the Force grip's press went to the gestures, not its key (VR_SetKey): it's
 	int						forceGripHand;	// reaching out, with that hand, till it's let go...
 	qboolean				forceGripDead;	// ...or it counts no more (the hand stopped being the Force hand): nothing then
+	qboolean				forceByX;		// ...the press X's, not the Force grip's (VR_SABER_FORCE_X): a quick tap's X's own
+	int						forceTapKey;	// the key a quick tap holds a moment (VR_KEY_GRIP_L: Use Force; VR_KEY_X)
+	int						saberForce;		// the cgame says your Force hand holds a saber, reaching out with... (VR_SABER_FORCE_*)
+	int						saberForceTime;	// ...as of this cls.realtime
 	qboolean				forceTrigger[2];	// a hand's trigger press went to the gestures (VR_HandControl), till let go
 	int						forceHeld;		// VR_FORCE_*: the buttons the gestures hold down
 	int						forceTapUntil;	// a quick squeeze: Use Force held till then (Sys_Milliseconds; 0: not)
@@ -1501,6 +1505,7 @@ static int VR_GripHand( int key ) {
 }
 
 static int VR_ForceHand( void );
+static int VR_SaberForce( void );
 static void VR_ForceTapRelease( qboolean now );
 static float VR_PoseTurn( void );
 static void VR_ForceDrop( void );
@@ -1543,20 +1548,42 @@ static void VR_SetKey( int key, qboolean down ) {
 	}
 	if ( key == VR_KEY_GRIP_L ) {
 		// The Force grip of the Force hand reaches out with the Force (the
-		// gestures: VR_ForcePoll) instead of pressing its key, till it's let go.
-		if ( !down && vr.forceGrip ) {
+		// gestures: VR_ForcePoll) instead of pressing its key, till it's let go
+		// - not a saber's grip holding it (VR_SABER_FORCE_X: X does).
+		if ( !down && vr.forceGrip && !vr.forceByX ) {
 			vr.forceGrip = vr.forceGripDead = qfalse;
 			return;
 		}
-		if ( down && gripHand >= 0 && gripHand == VR_ForceHand() ) {
+		if ( down && gripHand >= 0 && gripHand == VR_ForceHand() && !vr.forceGrip && VR_SaberForce() != VR_SABER_FORCE_X ) {
 			vr.forceGrip = qtrue;
 			vr.forceGripDead = qfalse;
 			vr.forceGripHand = gripHand;
+			vr.forceByX = qfalse;
 			vr.keySent[key] = 0;
 			return;
 		}
 		if ( down ) {
 			VR_ForceTapRelease( qtrue );	// (a quick squeeze's Use Force still held: let go of it first)
+		}
+	}
+	if ( key == VR_KEY_X ) {
+		// A saber in the Force hand, its grip holding it (VR_SABER_FORCE_X): X
+		// held reaches out with the Force instead (the gestures), till it's let
+		// go - a quick tap, X's own (the previous Force power).
+		if ( !down && vr.forceGrip && vr.forceByX ) {
+			vr.forceGrip = vr.forceGripDead = qfalse;
+			return;
+		}
+		if ( down && VR_SaberForce() == VR_SABER_FORCE_X && VR_ForceHand() >= 0 && !vr.forceGrip ) {
+			vr.forceGrip = qtrue;
+			vr.forceGripDead = qfalse;
+			vr.forceGripHand = VR_ForceHand();
+			vr.forceByX = qtrue;
+			vr.keySent[key] = 0;
+			return;
+		}
+		if ( down ) {
+			VR_ForceTapRelease( qtrue );	// (a quick tap's still held: let go of it first)
 		}
 	}
 
@@ -2453,14 +2480,33 @@ still a grab - and so does that hand's trigger pressed while it's held
 
 #define VR_FORCE_LOST_MS	200		// a hand not tracked this long isn't the Force hand
 
+// A saber in the Force hand, how it reaches out with the Force, as the cgame
+// said lately (ext.VR_SetSaberForce: every frame - unsaid a moment, not at
+// all): VR_SABER_FORCE_*.
+void VR_SetSaberForce( int how ) {
+	vr.saberForce = ( how == VR_SABER_FORCE_GRIP || how == VR_SABER_FORCE_X ) ? how : VR_SABER_FORCE_NONE;
+	vr.saberForceTime = cls.realtime;
+}
+
+static int VR_SaberForce( void ) {
+	if ( cls.realtime - vr.saberForceTime < 0 || cls.realtime - vr.saberForceTime >= 500 ) {
+		return VR_SABER_FORCE_NONE;
+	}
+	return vr.saberForce;
+}
+
 // The Force hand: the hand whose grip is the Force grip (the left; the right,
 // left-handed), while Force gestures are on and it's empty - not holding a
 // saber, a hilt or your gun, not taking hold of one - and tracked, in a game,
 // out of the menu, your view yours, with the Force grip bound to Use Force
-// (+useforce, as it is unless you change it). -1: none.
+// (+useforce, as it is unless you change it). A saber of its own in it, as the
+// cgame says (VR_SaberForce): it reaches out all the same - with its Force grip
+// (Saber Grip: Toggle), or X held (Saber Grip: Hold - its grip holds the
+// saber; whatever that's bound to). -1: none.
 static int VR_ForceHand( void ) {
 	const int h = ( VR_GunHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
 	const int weaponHand = VR_WeaponHand();
+	const int saberForce = VR_SaberForce();
 	const char *b;
 
 	if ( !vr_forceGestures || vr_forceGestures->integer <= VRF_MODE_OFF || vr_forceGestures->integer > VRF_MODE_OPEN ) {
@@ -2469,9 +2515,12 @@ static int VR_ForceHand( void ) {
 	if ( vr.pointerMode || cls.state != CA_ACTIVE || VR_GameOwnsView() ) {
 		return -1;
 	}
-	if ( weaponHand == h || weaponHand == 2 || vr.grabbing[h] || !vr.handTrackTime[h] ||
-		Sys_Milliseconds() - vr.handTrackTime[h] > VR_FORCE_LOST_MS ) {
+	if ( ( ( weaponHand == h || weaponHand == 2 ) && saberForce == VR_SABER_FORCE_NONE ) || ( vr.grabbing[h] && saberForce != VR_SABER_FORCE_X ) ||
+		!vr.handTrackTime[h] || Sys_Milliseconds() - vr.handTrackTime[h] > VR_FORCE_LOST_MS ) {
 		return -1;
+	}
+	if ( saberForce == VR_SABER_FORCE_X ) {
+		return h;
 	}
 	b = Key_GetBinding( VR_FIRST_KEY + VR_KEY_GRIP_L );
 	return ( b && !Q_stricmp( b, "+useforce" ) ) ? h : -1;
@@ -2484,19 +2533,24 @@ static qboolean VR_ForceTakesTrigger( int h ) {
 }
 
 // A quick squeeze of the Force grip: what it's bound to (Use Force) held for a
-// moment, so the server sees it whatever its pace - and let go.
+// moment, so the server sees it whatever its pace - and let go. (Reached out
+// with X - a saber in the Force hand, VR_SABER_FORCE_X - a quick tap of X:
+// X's own, the previous Force power.)
 static void VR_ForceTap( void ) {
 	if ( vr.forceTapUntil ) {
 		return;	// (one's held already)
 	}
-	VR_QueueKey( VR_FIRST_KEY + VR_KEY_GRIP_L, qtrue );
+	vr.forceTapKey = vr.forceByX ? VR_KEY_X : VR_KEY_GRIP_L;
+	VR_QueueKey( VR_FIRST_KEY + vr.forceTapKey, qtrue );
 	vr.forceTapUntil = Q_max( 1, Sys_Milliseconds() + VRF_TAP_HOLD_MS );
-	vr.forceTaps++;
+	if ( !vr.forceByX ) {
+		vr.forceTaps++;	// (Use Force: the cgame feels it)
+	}
 }
 
 static void VR_ForceTapRelease( qboolean now ) {
 	if ( vr.forceTapUntil && ( now || Sys_Milliseconds() - vr.forceTapUntil >= 0 ) ) {
-		VR_QueueKey( VR_FIRST_KEY + VR_KEY_GRIP_L, qfalse );
+		VR_QueueKey( VR_FIRST_KEY + vr.forceTapKey, qfalse );
 		vr.forceTapUntil = 0;
 	}
 }
@@ -5633,6 +5687,7 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {}
 void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
 void VR_SetSaberTriggers( int handMask ) {}
+void VR_SetSaberForce( int how ) {}
 void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}

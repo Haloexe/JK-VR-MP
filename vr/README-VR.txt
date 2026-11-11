@@ -132,16 +132,18 @@ CONTROLS (Quest / Touch layout; other controllers are similar)
                        Force power - squeezed as far as Use (or, at your
                        saber's hilt, take hold of it with both hands; at a
                        holster, take out or put away; holding a saber
-                       (Saber Grip: Hold), it holds it - no Force
-                       meanwhile; at your dropped saber, pick it up or
-                       call it)
+                       (Saber Grip: Hold), it holds it - hold X to reach
+                       out with the Force instead (THE FORCE); at your
+                       dropped saber, pick it up or call it)
                        Taking hold of something - a hilt, a holster - takes
                        only the usual squeeze (past 60%), squeezed afresh
                        where your hand can take hold
   A / B                jump / crouch (or crouch for real: Real Crouch,
                        below)
   X / Y                previous / next Force power (or pick one on the
-                       wheel's Force ring)
+                       wheel's Force ring) - a saber in your Force hand
+                       (Saber Grip: Hold), X held reaches out with the
+                       Force (THE FORCE); a quick tap still steps back
   Left menu button     game menu (press again to close it)
 LEFT-HANDED (Setup > VR, or vr_leftHanded 1): your guns go in your left hand
 and you aim with it, your saber goes in your left fist, and the grips swap:
@@ -693,7 +695,8 @@ shoulder.
     headset's own menu doesn't make you let go. While a hand holds a saber
     its grip only holds it: no use and no Force from that grip, so to use
     something with that hand let go of the saber first (at your side, it's
-    back on your belt at once) - the other hand's grip is as ever.
+    back on your belt at once) - the other hand's grip is as ever. (A saber
+    in your Force hand: hold X to reach out with the Force - THE FORCE.)
       - both hands on the hilt: the hand you use has it (taking it over
         from your other hand once both are on it, unless that one's letting
         go); let go with either and the other goes on holding it
@@ -1035,7 +1038,12 @@ way ("3.2 8.8 50.0 300").
 
 THE FORCE: your Force hand - the left (the right, left-handed), whenever
 it's empty - reaches out with the Force while you hold its grip (the Force
-grip, squeezed as far as Use):
+grip, squeezed as far as Use). With a saber of its own in it (two sabers,
+say) it reaches out all the same, the saber still in your fist: Saber
+Grip: Toggle (or your holsters off), with its grip as an empty hand's;
+Saber Grip: Hold (its grip holds the saber), with X held instead - its
+trigger the gestures' while you hold X, as the Force grip's, and a quick
+tap of X still the previous Force power. Its gestures:
   Push             thrust it out, fast and far (from near your chest - with
                    Body Gestures, not steeply up: a hand raised fast to
                    your face or over your head isn't a Push): Push goes

@@ -269,7 +269,7 @@ void G_VRForceTake( gentity_t *ent, vrAvatar_t *a, const vrUserPose_t *pose ) {
 	f = &vrForce[n];
 	h = a->forceHand;
 	if ( !a->forceValid || !G_VRForceOn() || ( h != VR_HAND_LEFT && h != VR_HAND_RIGHT ) ||
-		a->hand[h].grip != VR_GRIP_FREE || !VRF_UnitDir( a->forceDir, dir ) ) {
+		( a->hand[h].grip != VR_GRIP_FREE && a->hand[h].grip != VR_GRIP_SABER ) || !VRF_UnitDir( a->forceDir, dir ) ) {
 		a->forceValid = qfalse;
 		a->forceHand = 0;
 		VectorClear( a->forceDir );

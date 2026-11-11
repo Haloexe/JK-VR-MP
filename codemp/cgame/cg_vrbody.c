@@ -7334,6 +7334,31 @@ static int CG_VRB_SaberTriggers( const vrClientState_t *vr ) {
 	return mask;
 }
 
+// Your Force hand (the one your gun's not in) holding a saber of its own - dual
+// sabers, say; not one thrown, nor your hand on the other's hilt - alive, in a
+// game: it reaches out with the Force all the same (ext.VR_SetSaberForce) -
+// with its Force grip held, as an empty hand (Saber Grip: Toggle; or no
+// holsters - the grip holds nothing then), or X held (Saber Grip: Hold, your
+// holsters in play: its grip holds the saber - CG_VRH_GripHolds).
+static int CG_VRB_SaberForce( const vrClientState_t *vr ) {
+	const playerState_t *ps = &cg.predictedPlayerState;
+	const clientInfo_t *ci = &cgs.clientinfo[cg.clientNum];
+	const int fh = ( CG_VR_GunHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+	int s;
+
+	if ( !vr || !cg_vrSaber.integer || !cg_vrBodyArms.integer || !cg.snap || ( cg.snap->ps.pm_flags & PMF_FOLLOW ) ||
+		ps->persistant[PERS_TEAM] == TEAM_SPECTATOR || ps->weapon != WP_SABER || ps->stats[STAT_HEALTH] <= 0 || ( ps->eFlags & EF_DEAD ) ||
+		ps->pm_type == PM_DEAD || CG_RP_IsDown() || !vrbSelf.init || cg.time - vrbSelf.holdTime < 0 || cg.time - vrbSelf.holdTime > 500 ) {
+		return VR_SABER_FORCE_NONE;
+	}
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		if ( vrbSelf.hold[s].hand == fh && ci->saber[s].model[0] && !( s == 0 && ps->saberInFlight ) ) {
+			return CG_VRH_GripHolds() ? VR_SABER_FORCE_X : VR_SABER_FORCE_GRIP;
+		}
+	}
+	return VR_SABER_FORCE_NONE;
+}
+
 // The hand holding your weapon, for its trigger: a saber's as your body holds
 // it lately; else the gun hand.
 static int CG_VRB_WeaponHand( void ) {
@@ -7384,10 +7409,12 @@ static void CG_VRB_FillAvatar( const vrClientState_t *vr, const vec3_t shift, vr
 			VectorSubtract( a->hand[h].origin, cg.refdef.vieworg, a->hand[h].origin );
 		}
 	}
-	// your Force hand (Force gestures on, the hand empty - and drawn so): where
-	// it aims (cg_vrforce.c) - from where it's drawn, its controller's line
+	// your Force hand (Force gestures on, the hand empty - or holding a saber
+	// of its own, CG_VRB_SaberForce - and drawn so): where it aims
+	// (cg_vrforce.c) - from where it's drawn, its controller's line
 	h = vr->force.hand;
-	if ( ( h == VR_HAND_LEFT || h == VR_HAND_RIGHT ) && vr->handValid[h] && a->hand[h].grip == VR_GRIP_FREE ) {
+	if ( ( h == VR_HAND_LEFT || h == VR_HAND_RIGHT ) && vr->handValid[h] && ( a->hand[h].grip == VR_GRIP_FREE ||
+		a->hand[h].grip == VR_GRIP_SABER ) ) {
 		for ( i = 0; i < 3; i++ ) {
 			VectorCopy( vr->aimAxis[h][i], head[i] );
 		}
@@ -7410,7 +7437,7 @@ int CG_VR_AvatarForce( centity_t *cent, vec3_t dir ) {
 	}
 	a = &vrbOthers[n].avatar;
 	if ( !a->forceValid || ( a->forceHand != VR_HAND_LEFT && a->forceHand != VR_HAND_RIGHT ) ||
-		a->hand[a->forceHand].grip != VR_GRIP_FREE ) {
+		( a->hand[a->forceHand].grip != VR_GRIP_FREE && a->hand[a->forceHand].grip != VR_GRIP_SABER ) ) {
 		return -1;
 	}
 	VectorCopy( a->forceDir, dir );
@@ -7535,6 +7562,10 @@ void CG_VR_BodyEndFrame( void ) {
 	// the hands on a saber's hilt: their triggers tapped, its switch; held, they slide along it
 	if ( CG_VR_Engine() && trap->ext.VR_SetSaberTriggers ) {
 		trap->ext.VR_SetSaberTriggers( CG_VRB_SaberTriggers( vr ) );
+	}
+	// your Force hand holding a saber of its own: it reaches out with the Force all the same
+	if ( CG_VR_Engine() && trap->ext.VR_SetSaberForce ) {
+		trap->ext.VR_SetSaberForce( CG_VRB_SaberForce( vr ) );
 	}
 
 	// and what your hands feel this frame (the Force hand's with the rest:
