@@ -26,10 +26,14 @@ class's, nor in a saber lock or a duel's countdown.
     as it gets there - or, meeting a wall on the way, falls there;
     left lying VRD_BELT_MS: back (on their belt).
 - Let go of lit mid-swing - the hand swinging VRD_THROW_SPEED or faster in
-  their room (walking, jumping or turning doesn't swing it) - with Saber
-  Throw to use and the Force for it (g_vrSaberThrow on): thrown. Off from
-  where the hand held it, the way the hand swung, faster the faster it
-  swung (VRD_THROW_SCALE times, VRD_THROW_MIN to _MAX), spinning, lit: the
+  their room (walking, jumping or turning doesn't swing it) at its fastest
+  in the last VRD_THROW_LOOK_MS (a hand opens late in a throw, slowing past
+  its fastest - often sweeping down already) - with Saber Throw to use and
+  the Force for it (g_vrSaberThrow on): thrown. Off from where the hand held
+  it, the way the hand swung then - where they look, swung near that way
+  (VRD_THROW_AIM_FULL, _NONE), and never down into the floor at their feet
+  (VRD_THROW_DOWN) - faster the faster it swung (VRD_THROW_SCALE times,
+  VRD_THROW_MIN to _MAX), spinning, lit: the
   game's thrown saber (its cuts on whoever it passes, what blocks it, what
   it meets - w_saber.c), flying our way. Straight out, as far as their
   Saber Throw takes it (vrdThrowRange - nearer, thrown softly), then round
@@ -54,7 +58,7 @@ General Public License version 2, like the rest of OpenJK.
 #include "g_local.h"
 #include "w_saber.h"
 
-#define VRD_HIST			8		// each hand's latest places kept (one a command)
+#define VRD_HIST			40		// each hand's latest places kept (one a command: VRD_THROW_LOOK_MS and a VRD_VEL_MS before it, at 144 a second)
 #define VRD_VEL_MS			60		// a hand's speed: over this long (ms)...
 #define VRD_HELD_MS			400		// ...the saber in it this lately to be let go of
 #define VRD_MAX_SPEED		900.0f	// units a second: let go of no faster than this...
@@ -80,6 +84,10 @@ General Public License version 2, like the rest of OpenJK.
 #define VRD_UNITS_PER_METRE	34.0f	// (the default vr_worldScale) for the speeds logged
 
 #define VRD_THROW_SPEED		85.0f	// units a second (2.5 m/s): let go of lit, the hand swinging this fast in their room, it's thrown...
+#define VRD_THROW_LOOK_MS	200		// ...at its fastest (a VRD_VEL_MS's going, ending no longer ago than this as it's let go of)...
+#define VRD_THROW_AIM_FULL	45.0f	// ...where they look, swung no further off it than this (degrees)...
+#define VRD_THROW_AIM_NONE	90.0f	// ...as it swung, this far off it (between: some of each)...
+#define VRD_THROW_DOWN		15.0f	// ...never more than this below level - as far down as they look, further...
 #define VRD_THROW_SCALE		3.0f	// ...off at this many times the hand's speed...
 #define VRD_THROW_MIN		450.0f	// ...no slower than this...
 #define VRD_THROW_MAX		900.0f	// ...nor faster than this
@@ -353,25 +361,58 @@ static void VRD_HandMotion( const vrDrop_t *d, int h, vec3_t vel, vec3_t spin ) 
 	}
 }
 
-// How hand h swung lately (units a second, the world's way round as their
-// room's turned now): over about VRD_VEL_MS, as it moved off where they stand
-// in their room - walking, jumping, falling or turning doesn't swing it.
-static void VRD_HandSwing( const vrDrop_t *d, int h, vec3_t vel ) {
-	const int k1 = d->histHead, k0 = VRD_HandSince( d, h );
-	vec3_t room;
-	float c, s;
+// How fast hand h swung at its fastest lately (units a second; its way, the
+// world's way round as their room's turned now: vel): over each VRD_VEL_MS
+// ending in the last VRD_THROW_LOOK_MS, the fastest, as it moved off where
+// they stand in their room - walking, jumping, falling or turning doesn't
+// swing it. A throw's own speed and way: the hand opens late in it, past its
+// fastest - slowing, often already sweeping down.
+static float VRD_HandSwing( const vrDrop_t *d, int h, vec3_t vel ) {
+	const int k1 = d->histHead;
+	vec3_t room, fastest;
+	float best = 0.0f, c, s;
+	int i, j;
 
 	VectorClear( vel );
-	if ( k0 < 0 ) {
-		return;
+	VectorClear( fastest );
+	if ( d->histCount < 2 || !d->histValid[k1][h] ) {
+		return 0.0f;
 	}
-	VectorSubtract( d->histRoom[k1][h], d->histRoom[k0][h], room );
-	VectorScale( room, 1000.0f / ( d->histTime[k1] - d->histTime[k0] ), room );
+	for ( i = 0; i < d->histCount - 1; i++ ) {
+		const int k = ( k1 - i + VRD_HIST ) % VRD_HIST;	// (each place this lately: a VRD_VEL_MS to it)
+		int k0 = -1;
+		float speed;
+
+		if ( !d->histValid[k][h] || d->histTime[k1] - d->histTime[k] > VRD_THROW_LOOK_MS ) {
+			break;
+		}
+		for ( j = i + 1; j < d->histCount; j++ ) {
+			const int kj = ( k1 - j + VRD_HIST ) % VRD_HIST;
+			if ( !d->histValid[kj][h] ) {
+				break;
+			}
+			k0 = kj;
+			if ( d->histTime[k] - d->histTime[kj] >= VRD_VEL_MS ) {
+				break;
+			}
+		}
+		if ( k0 < 0 || d->histTime[k] - d->histTime[k0] < VRD_VEL_MS / 2 ) {
+			continue;	// (too short to say: the hand there only lately)
+		}
+		VectorSubtract( d->histRoom[k][h], d->histRoom[k0][h], room );
+		VectorScale( room, 1000.0f / ( d->histTime[k] - d->histTime[k0] ), room );
+		speed = VectorLength( room );
+		if ( speed > best ) {
+			best = speed;
+			VectorCopy( room, fastest );
+		}
+	}
 	c = cosf( DEG2RAD( d->histYaw[k1] ) );
 	s = sinf( DEG2RAD( d->histYaw[k1] ) );
-	vel[0] = room[0] * c - room[1] * s;
-	vel[1] = room[0] * s + room[1] * c;
-	vel[2] = room[2];
+	vel[0] = fastest[0] * c - fastest[1] * s;
+	vel[1] = fastest[0] * s + fastest[1] * c;
+	vel[2] = fastest[2];
+	return best;
 }
 
 /*
@@ -701,17 +742,58 @@ static qboolean VRD_CanThrow( gentity_t *ent ) {
 		BG_CanUseFPNow( level.gametype, &cl->ps, level.time, FP_SABERTHROW ) && cl->ps.fd.forcePower >= forcePowerNeeded[rank][FP_SABERTHROW] );
 }
 
+// The way a saber swung that way (unit) is thrown (unit): where they look,
+// swung within VRD_THROW_AIM_FULL of it - they throw at what they look at -
+// some of each to VRD_THROW_AIM_NONE, as swung further off; and never more
+// than VRD_THROW_DOWN below level (a hand sweeping down as it let go: into
+// the floor at their feet), unless they look further down - then no further
+// down than they look. Returns how far that is off the way it swung
+// (degrees).
+static float VRD_ThrowAim( gentity_t *ent, const vec3_t swung, vec3_t dir ) {
+	const float full = cosf( DEG2RAD( VRD_THROW_AIM_FULL ) ), none = cosf( DEG2RAD( VRD_THROW_AIM_NONE ) );
+	vec3_t look;
+	float w, lowest, flat;
+
+	AngleVectors( ent->client->ps.viewangles, look, NULL, NULL );
+	w = Com_Clamp( 0.0f, 1.0f, ( DotProduct( swung, look ) - none ) / ( full - none ) );
+	VectorScale( swung, 1.0f - w, dir );
+	VectorMA( dir, w, look, dir );
+	if ( VectorNormalize( dir ) < 1e-3f ) {
+		VectorCopy( look, dir );
+	}
+	lowest = Q_min( look[2], -sinf( DEG2RAD( VRD_THROW_DOWN ) ) );
+	if ( dir[2] < lowest ) {
+		flat = sqrtf( dir[0] * dir[0] + dir[1] * dir[1] );
+		if ( flat < 1e-3f ) {	// (straight down: the way they look, level)
+			dir[0] = look[0];
+			dir[1] = look[1];
+			flat = sqrtf( dir[0] * dir[0] + dir[1] * dir[1] );
+			if ( flat < 1e-3f ) {
+				dir[0] = 1.0f;
+				dir[1] = 0.0f;
+				flat = 1.0f;
+			}
+		}
+		dir[0] *= sqrtf( 1.0f - lowest * lowest ) / flat;
+		dir[1] *= sqrtf( 1.0f - lowest * lowest ) / flat;
+		dir[2] = lowest;
+	}
+	return RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, DotProduct( swung, dir ) ) ) );
+}
+
 // Let go of lit mid-swing: thrown - off from where the hand held it, the way
-// the hand swung, spinning: the game's thrown saber, flown our way
-// (G_VRSaberThrownOut, _Back).
+// the hand swung (VRD_ThrowAim), spinning: the game's thrown saber, flown our
+// way (G_VRSaberThrownOut, _Back).
 static void VRD_Throw( gentity_t *ent, gentity_t *saberent, vrDrop_t *d, const vec3_t swing, float swingSpeed ) {
 	gclient_t *cl = ent->client;
 	vrThrow_t *t = &vrThrows[ent->s.number];
 	const int rank = Com_Clampi( FORCE_LEVEL_1, FORCE_LEVEL_3, cl->ps.fd.forcePowerLevel[FP_SABERTHROW] );
 	const float speed = Com_Clamp( VRD_THROW_MIN, VRD_THROW_MAX, swingSpeed * VRD_THROW_SCALE );
-	vec3_t dir, tag, angles;
+	vec3_t swung, dir, tag, angles;
+	float aimed;
 
-	VectorScale( swing, 1.0f / swingSpeed, dir );
+	VectorScale( swing, 1.0f / swingSpeed, swung );
+	aimed = VRD_ThrowAim( ent, swung, dir );
 	VRD_LetGoPlace( ent, d, tag );
 	vectoangles( d->heldDir, angles );
 
@@ -771,9 +853,10 @@ static void VRD_Throw( gentity_t *ent, gentity_t *saberent, vrDrop_t *d, const v
 	t->range = Q_min( vrdThrowRange[rank], speed * VRD_THROW_OUT_MS * 0.001f );
 	d->heldTime = 0;	// (gone from the hand)
 	if ( g_vrSaberLog.integer ) {
-		G_LogPrintf( "VRSaber: throw %i \"%s\" from the %s hand, swung at %.1f m/s - off at %.1f m/s, out %.1f m at most (Saber Throw %i)\n",
-			ent->s.number, cl->pers.netname, t->hand == VR_HAND_LEFT ? "left" : "right", swingSpeed / VRD_UNITS_PER_METRE,
-			speed / VRD_UNITS_PER_METRE, t->range / VRD_UNITS_PER_METRE, rank );
+		G_LogPrintf( "VRSaber: throw %i \"%s\" from the %s hand, swung at %.1f m/s - off at %.1f m/s, %.0f deg off its swing (%.0f %s level), "
+			"out %.1f m at most (Saber Throw %i)\n", ent->s.number, cl->pers.netname, t->hand == VR_HAND_LEFT ? "left" : "right",
+			swingSpeed / VRD_UNITS_PER_METRE, speed / VRD_UNITS_PER_METRE, aimed, fabsf( RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, dir[2] ) ) ) ),
+			dir[2] < 0.0f ? "below" : "above", t->range / VRD_UNITS_PER_METRE, rank );
 	}
 }
 
@@ -1040,8 +1123,7 @@ void G_VRSaberDropCmd( gentity_t *ent ) {
 		return;
 	}
 	lit = (qboolean)!BG_SabersOff( &cl->ps );
-	VRD_HandSwing( d, d->heldHand, swing );
-	swingSpeed = VectorLength( swing );
+	swingSpeed = VRD_HandSwing( d, d->heldHand, swing );
 	if ( lit && swingSpeed >= VRD_THROW_SPEED && VRD_CanThrow( ent ) ) {
 		VRD_Throw( ent, saberent, d, swing, swingSpeed );	// (lit, mid-swing)
 		return;

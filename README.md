@@ -46,11 +46,13 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   second hand slides along a two-handed hilt (`cg_vrSaberSlide 0` turns it
   off).
 - **Throw your saber:** let go of it lit in the middle of a swing and it flies
-  off spinning the way your hand was going, cutting whoever it passes, out as
-  far as your Saber Throw lets it, then curves back like a boomerang into the
-  hand it left. Squeeze that hand to call it back early. A blade that meets a
-  thrown saber - swung into it or held in its way - knocks it out of the air
-  (servers can turn throwing off: `g_vrSaberThrow 0`).
+  off spinning where you're looking (if you swung roughly that way; else the
+  way your hand went), as fast as your swing was at its fastest, cutting
+  whoever it passes, out as far as your Saber Throw lets it, then curves back
+  like a boomerang into the hand it left. Squeeze that hand to call it back
+  early. A blade that meets a thrown saber - swung into it or held in its
+  way - knocks it out of the air (servers can turn throwing off:
+  `g_vrSaberThrow 0`).
 - **The Force with two sabers:** a saber in your Force hand no longer stops
   your Force gestures. With Saber Grip on Toggle, use the Force grip as
   usual; on Hold (the grip holds the saber), hold X and gesture instead.

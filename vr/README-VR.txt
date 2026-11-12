@@ -741,28 +741,33 @@ shoulder.
     drops. A siege class's saber never drops, nor does yours in a saber lock
     or a duel's countdown. If the server doesn't drop it after all, it's
     back in its holster a moment later.
-  * Throw it (the same servers): let go of it lit in the middle of a swing
-    - your hand going faster than 2.5 m/s in your room (walking, jumping or
-    turning doesn't count: only your arm) - and, if Saber Throw is yours
-    with the Force for it (20, as the game's throw), it flies off spinning
-    and lit the way your hand was going, three times as fast (13 to 26
-    m/s). It cuts whoever it passes, as the game's thrown saber does, and
-    goes on straight - as far as your Saber Throw lets it (11 m at level 1,
-    17 m at 2, 23 m at 3; not as far if you threw it softly: a second's
-    flight at most) - then swings round like a boomerang, slowing as it
-    turns and speeding up as it heads home, and lands back in the hand it
-    left: lit, with a firm bump (held by its grip if you're squeezing).
-    Squeeze that hand while it's out and it comes back now (a light pull;
-    any squeeze of it meanwhile is a grab - not Use, not the Force - so
-    hold it squeezed to catch it held). Meeting a wall or someone on the
-    way out, it comes back from there; on the way back nothing stops it
-    (as the game's). A blade it meets knocks it out of the air - a VR
-    player's swung into it or held in its way, or anyone's guard: it
-    switches off and drops, to pick up or call as above. Let go slowly, or
-    unlit, or without Saber Throw (or its Force), it drops instead - and so
-    it does straight after a catch (the game's 0.3 s), in a duel (the game
-    has no throws there), or as a saber the game says can't be thrown (a
-    staff with both blades lit, say). Your left trigger still throws it
+  * Throw it (the same servers): let go of it lit in the middle of a swing -
+    your hand going faster than 2.5 m/s in your room at its fastest in the
+    moment before you let go (walking, jumping or turning doesn't count:
+    only your arm; and a hand opens a little late in a throw, so it's the
+    swing you made, not the slowing as you let go, that counts) - and, if
+    Saber Throw is yours with the Force for it (20, as the game's throw), it
+    flies off spinning and lit, three times as fast as your hand went (13 to
+    26 m/s): where you're looking, if you swung roughly that way (within 45
+    degrees, some of each out to 90), else the way your hand was going - and
+    never down into the floor at your feet (15 degrees below level at most,
+    unless you look further down). It cuts whoever it passes, as the game's
+    thrown saber does, and goes on straight - as far as your Saber Throw
+    lets it (11 m at level 1, 17 m at 2, 23 m at 3; not as far if you threw
+    it softly: a second's flight at most) - then swings round like a
+    boomerang, slowing as it turns and speeding up as it heads home, and
+    lands back in the hand it left: lit, with a firm bump (held by its grip
+    if you're squeezing). Squeeze that hand while it's out and it comes back
+    now (a light pull; any squeeze of it meanwhile is a grab - not Use, not
+    the Force - so hold it squeezed to catch it held). Meeting a wall or
+    someone on the way out, it comes back from there; on the way back
+    nothing stops it (as the game's). A blade it meets knocks it out of the
+    air - a VR player's swung into it or held in its way, or anyone's guard:
+    it switches off and drops, to pick up or call as above. Let go slowly,
+    or unlit, or without Saber Throw (or its Force), it drops instead - and
+    so it does straight after a catch (the game's 0.3 s), in a duel (the
+    game has no throws there), or as a saber the game says can't be thrown
+    (a staff with both blades lit, say). Your left trigger still throws it
     the game's own way, as ever.
   * The quick draw: hold the trigger as you take a hilt out and it lights
     as it comes out. Otherwise it comes out unlit, and its trigger lights
