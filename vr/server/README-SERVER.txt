@@ -409,6 +409,15 @@ GOOD TO KNOW
   own animations. Players on this build see VR players as they really
   move either way. g_vrArmsForAll 0 (or the Server page's "Non-VR players
   see"): the game's saber stance for them, as before.
+* A VR player's heavy blade (red, or any other held with both hands) shoves
+  whoever it cuts, and a blow swung half as fast again as its full-damage
+  speed (red's: 11.3 m/s at the default speeds; with both hands on red, a
+  quarter faster: 9.4) knocks someone without VR off their feet if it
+  leaves them standing - not again until they've been back up 5 seconds,
+  and never anything with no knockdown of its own (a rancor). VR players
+  aren't knocked down by blows. games.log has each knockdown, how hard the
+  blow was and what it needed (g_vrSaberLog). g_vrSaberKnockdown sets how
+  hard (1.5; higher: harder blows; 0: never).
 * A VR player's blade is judged as they saw the others (lag compensation,
   g_vrSaberUnlag, up to a quarter of a second back), so players further
   away still meet what they swing at; a server close to its players still

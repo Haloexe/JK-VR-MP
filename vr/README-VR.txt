@@ -990,8 +990,12 @@ server running this build: your real blade is the weapon.
         players hear your swings too)
       - another blade stops yours dead for a moment; cutting through
         someone drags it
-      - a medium blow nudges whoever it hits, a heavy one shoves them back,
-        and a heavy one near full speed knocks them off their feet
+      - a medium blow nudges whoever it hits and a heavy one shoves them
+        back; a heavy blow swung well past full speed (half as fast
+        again; with both hands on a red blade, a quarter faster) knocks
+        someone without VR off their feet if it leaves them standing -
+        but not again until they've been back up 5 seconds. Players in
+        VR are never knocked down by a blow
       - your hands feel it, the moment it happens as you see it:
           your blade going into someone: a solid blow, as hard as your
           swing (a light touch when it's slow), then the drag of cutting
@@ -1030,13 +1034,16 @@ full-damage-at max-damage recover": swing speeds in m/s, recovery after a
 clash in ms; defaults "1.8 5.3 25 150", "2.5 7.1 40 220", "3.2 8.8 55
 300"), g_vrSaberSpeedScale (1; higher = faster swings needed for every
 weight), g_vrSaberDamageScale (1; e.g. 1.5 hits half as hard again, 0.5
-half as hard), g_vrSaberUnlag (1: blades judged as the VR player saw them,
-below), g_vrSaberBolts (1: VR players' blades deflect blaster bolts; 0:
-bolts are blocked for them automatically, as before), g_vrArmsForAll (1:
-players of the normal game see VR players' sabers where they're held, and
-their arms reaching them; 0: the game's stance), g_vrSaberDebug 1
-(prints every cut's speed and damage, and how every clash ended, to the
-console), and the stock g_dismember 100 if you want limbs to come off.
+half as hard), g_vrSaberKnockdown (1.5: how fast a heavy blow has to be to
+knock someone down, in times its full-damage speed - five sixths of it
+with both hands on a red blade; higher: harder blows; 0: never),
+g_vrSaberUnlag (1: blades judged as the VR player saw them, below),
+g_vrSaberBolts (1: VR players' blades deflect blaster bolts; 0: bolts are
+blocked for them automatically, as before), g_vrArmsForAll (1: players of
+the normal game see VR players' sabers where they're held, and their arms
+reaching them; 0: the game's stance), g_vrSaberDebug 1 (prints every
+cut's speed and damage, and how every clash ended, to the console), and
+the stock g_dismember 100 if you want limbs to come off.
 A weight saved in a config at an earlier default (heavy's blows at 50, 60
 or 100) is taken as today's; to keep one on purpose, write it another
 way ("3.2 8.8 50.0 300").
@@ -1772,8 +1779,9 @@ vid_restart: as before).
 LOGS for working out what feels off (both on by default):
   games.log    (g_vrSaberLog 1, games you host) every swing - how fast,
                which weight, one or two hands - every cut and clash, every
-               bot swing your blade stopped, every touch of blades, every
-               guard raised against you (bots, players without VR),
+               knockdown (how hard the blow was, and what it needed),
+               every bot swing your blade stopped, every touch of blades,
+               every guard raised against you (bots, players without VR),
                every cut on you your blade stopped as you saw it
                ("blocked"), and every bolt your blade deflected
                ("deflect": whose, your Saber Defense, what became of it)

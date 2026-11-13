@@ -190,6 +190,7 @@ XCVAR_DEF( g_vrSaberDrop,				"1",			CVU_VRSaberDrop,			CVAR_ARCHIVE,									qtr
 XCVAR_DEF( g_vrSaberBolts,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players' blades deflect bolts; 0: blocked for them automatically, as before (g_vrsaber.c)
 XCVAR_DEF( g_vrSaberBotGuard,			"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrSaberHeavy,				"3.2 8.8 55 300",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
+XCVAR_DEF( g_vrSaberKnockdown,			"1.5",			NULL,						CVAR_ARCHIVE_ND,								qtrue )	// OpenJK VR: a VR player's heavy blow this many times its full-damage speed knocks someone without VR down (five sixths of it with both hands on a red blade; g_vrsaber.c); 0: never
 XCVAR_DEF( g_vrSaberLight,				"1.8 5.3 25 150",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )
 XCVAR_DEF( g_vrSaberLog,					"1",			NULL,						CVAR_ARCHIVE,									qfalse )
 XCVAR_DEF( g_vrSaberMedium,				"2.5 7.1 40 220",	CVU_VRSaberWeights,	CVAR_ARCHIVE_ND,								qtrue )

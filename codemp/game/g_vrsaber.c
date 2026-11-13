@@ -245,6 +245,15 @@ typedef struct {
 
 static vrsThrown_t	vrsThrown[MAX_CLIENTS];	// (by its owner)
 
+// Each player or NPC a VR blade knocked off their feet (VRS_Knockdown), till
+// they've been back on them a while.
+typedef struct {
+	int		time;		// level.time they were last down (0: none)
+	int		spawn;		// their PERS_SPAWN_COUNT (respawned since: a new life)
+} vrsKnockdown_t;
+static vrsKnockdown_t	vrsKnockdowns[MAX_GENTITIES];
+static void VRS_TrackKnockdowns( void );
+
 static void VRS_ResetUnlag( int clientNum );			// (lag compensation, below)
 static qboolean VRS_Unlag( void );
 static float VRS_UnlagTime( float t );
@@ -684,6 +693,7 @@ void G_VRSaberInit( void ) {
 	memset( vrsHilts, 0, sizeof( vrsHilts ) );
 	memset( vrsHeld, 0, sizeof( vrsHeld ) );
 	memset( vrsThrown, 0, sizeof( vrsThrown ) );
+	memset( vrsKnockdowns, 0, sizeof( vrsKnockdowns ) );
 	VRS_ResetUnlag( -1 );
 
 	// Only this engine has gameImport_t.ext: it sets vr_engine itself (never
@@ -729,6 +739,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		vrsGunLeft[clientNum] = qfalse;
 		memset( vrsHilts[clientNum], 0, sizeof( vrsHilts[clientNum] ) );
 		memset( &vrsThrown[clientNum], 0, sizeof( vrsThrown[clientNum] ) );
+		memset( &vrsKnockdowns[clientNum], 0, sizeof( vrsKnockdowns[clientNum] ) );
 		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
 		G_VRArmsClientReset( clientNum );	// (and their arms as the other builds are sent them: g_vrarms.c)
 		G_VRSaberDropClientReset( clientNum );	// (and their saber let go of: g_vrsaberdrop.c)
@@ -1095,6 +1106,7 @@ void G_VRSaberEndFrame( void ) {
 	VRS_SettlePending();
 	VRS_SettleBolts();
 	VRS_RecordHistory();
+	VRS_TrackKnockdowns();
 	if ( !trap->ext.VR_SetAvatar ) {
 		return;
 	}
@@ -2257,20 +2269,110 @@ static void VRS_NoteCut( vrSaberState_t *vs, int victim ) {
 	vs->cuts[slot].time = level.time;
 }
 
+// A heavy blow knocks whoever it cuts off their feet only swung well past
+// full speed: at g_vrSaberKnockdown times the speed its weight does full
+// damage at, or faster (1.5: half as fast again) - with both hands on a red
+// blade, a fifth more behind it, five sixths of that (1.25). Not if it
+// doesn't leave them standing, nor anyone in a headset (it would throw their
+// view about), nor anyone not built as a person, or down already - nor
+// anyone a VR blade knocked down until they've been back on their feet
+// VRS_KNOCKDOWN_AGAIN. (It was any heavy blow from near full speed, or from
+// well short of it with both hands on a red blade - played, half of those
+// that left someone standing knocked them down - and down again the moment
+// they were up.)
+#define VRS_KNOCKDOWN_TWO_HANDS	1.2f	// (VRS_HEAVY2)
+#define VRS_KNOCKDOWN_AGAIN		5000	// ms
+
+// A name for the log: a player's - an NPC's if it has one, else its NPC
+// type (most have none) - or the entity's classname.
+static const char *VRS_Name( const gentity_t *ent ) {
+	if ( ent->client && ent->client->pers.netname[0] ) {
+		return ent->client->pers.netname;
+	}
+	if ( ent->NPC_type && ent->NPC_type[0] ) {
+		return ent->NPC_type;
+	}
+	return ent->classname ? ent->classname : "?";
+}
+
+// How fast a blow of that weight has to be to knock someone down, in times
+// its full speed (0 or less: it can't).
+static float VRS_KnockdownNeeds( const vrSaberWeight_t *w ) {
+	const int weight = (int)( w - vrSaberWeights );
+
+	if ( weight < VRS_HEAVY ) {
+		return 0.0f;
+	}
+	return ( weight == VRS_HEAVY2 ) ? g_vrSaberKnockdown.value / VRS_KNOCKDOWN_TWO_HANDS : g_vrSaberKnockdown.value;
+}
+
+// Whether a blow of that weight and power (its speed, in times its weight's
+// full speed) that does dmg knocks the victim down - and if so, does.
+static qboolean VRS_Knockdown( const vrSaberWeight_t *w, gentity_t *victim, float power, float dmg ) {
+	const float needs = VRS_KnockdownNeeds( w );
+	playerState_t *ps = &victim->client->ps;
+	vrsKnockdown_t *kd = &vrsKnockdowns[victim->s.number];
+
+	if ( !( needs > 0.0f ) || power < needs || victim->health <= dmg || G_VRSaberClient( victim ) ) {
+		return qfalse;
+	}
+	if ( victim->localAnimIndex || ps->forceHandExtend == HANDEXTEND_KNOCKDOWN ) {
+		return qfalse;	// (no knockdown of its own - a rancor, a droid - or down already)
+	}
+	if ( kd->time ) {
+		return qfalse;	// still down from the last, or not long back on their feet (VRS_TrackKnockdowns)
+	}
+	G_Knockdown( victim );
+	if ( ps->forceHandExtend != HANDEXTEND_KNOCKDOWN ) {
+		return qfalse;	// (they can't be: riding, on a gun, down in roleplay)
+	}
+	kd->time = level.time;
+	kd->spawn = ps->persistant[PERS_SPAWN_COUNT];
+	return qtrue;
+}
+
+// Every frame: whether those a VR blade knocked down are still down (lying
+// there, then getting up: a couple of seconds, as the game has it - more
+// if they don't move - or down again, whatever put them there), and when
+// they last were; forgotten once they've been back on their feet
+// VRS_KNOCKDOWN_AGAIN, or died, respawned or left.
+static void VRS_TrackKnockdowns( void ) {
+	int i;
+
+	for ( i = 0; i < level.num_entities && i < MAX_GENTITIES; i++ ) {
+		vrsKnockdown_t *kd = &vrsKnockdowns[i];
+		const gentity_t *ent = &g_entities[i];
+
+		if ( !kd->time ) {
+			continue;
+		}
+		if ( !ent->inuse || !ent->client || ent->health <= 0 || ent->client->ps.persistant[PERS_SPAWN_COUNT] != kd->spawn ) {
+			memset( kd, 0, sizeof( *kd ) );
+			continue;
+		}
+		if ( ent->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN ) {
+			kd->time = level.time;	// still down
+		} else if ( level.time < kd->time || level.time - kd->time >= VRS_KNOCKDOWN_AGAIN ) {
+			memset( kd, 0, sizeof( *kd ) );	// long enough on their feet (or the clock's gone back)
+		}
+	}
+}
+
 // The weight of a blow on whoever it cut: a medium blade nudges them, a heavy
-// one shoves them back, and a heavy blow near full speed (two hands: well
-// short of it) knocks them off their feet. (frac: how near full speed it was, 0..1)
-static void VRS_Impact( gentity_t *self, const vrSaberWeight_t *w, gentity_t *victim, const vec3_t moveDir, float frac,
-	float dmg ) {
+// one shoves them back - and one swung well past full speed can knock them
+// off their feet (above). (frac: how near full speed it was, 0..1; power: its
+// speed, in times its weight's full speed.) Whether it knocked them down.
+static qboolean VRS_Impact( gentity_t *self, const vrSaberWeight_t *w, gentity_t *victim, const vec3_t moveDir, float frac,
+	float power, float dmg ) {
 	const int weight = (int)( w - vrSaberWeights );
 	vec3_t dir, away;
 	float push;
 
 	if ( !victim->client || victim->health <= 0 || ( OnSameTeam( self, victim ) && !g_friendlySaber.integer ) ) {
-		return;
+		return qfalse;
 	}
 	if ( victim->client->ps.duelInProgress && victim->client->ps.duelIndex != self->s.number ) {
-		return;
+		return qfalse;
 	}
 	switch ( weight ) {
 	case VRS_LIGHT:		push = 0.0f;					break;
@@ -2278,7 +2380,7 @@ static void VRS_Impact( gentity_t *self, const vrSaberWeight_t *w, gentity_t *vi
 	default:			push = 25.0f + 35.0f * frac;	break;	// heavy
 	}
 	if ( push <= 0.0f ) {
-		return;
+		return qfalse;
 	}
 	// along the swing, and away from the attacker
 	VectorSubtract( victim->r.currentOrigin, self->r.currentOrigin, away );
@@ -2294,10 +2396,7 @@ static void VRS_Impact( gentity_t *self, const vrSaberWeight_t *w, gentity_t *vi
 		push *= 0.5f;	// (gentler on someone in a headset)
 	}
 	G_Throw( victim, dir, push );
-	if ( weight >= VRS_HEAVY && frac >= ( weight == VRS_HEAVY2 ? 0.6f : 0.8f ) && victim->health > dmg &&
-		!G_VRSaberClient( victim ) ) {
-		G_Knockdown( victim );
-	}
+	return VRS_Knockdown( w, victim, power, dmg );
 }
 
 static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t point, const vec3_t base, const vec3_t dir,
@@ -2310,7 +2409,7 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 	const qboolean style2 = WP_SaberBladeUseSecondBladeStyle( saber, b );
 	vec3_t rel;
 	float along, speed, dmg, frac = 0.0f;
-	qboolean doDismember;
+	qboolean doDismember, knockedDown = qfalse;
 	int knockback = 0;
 
 	if ( level.time < vs->recoverTime ) {
@@ -2404,22 +2503,27 @@ static void VRS_Hit( gentity_t *self, int s, int b, gentity_t *victim, vec3_t po
 		self->client->ps.saberEventFlags |= ( self->enemy == victim ) ? SEF_HITENEMY : SEF_HITOBJECT;
 	}
 	if ( dmg > VR_SABER_BURN ) {
-		VRS_Impact( self, w, victim, moveDir, frac, dmg );
+		knockedDown = VRS_Impact( self, w, victim, moveDir, frac, speed / fullSpeed, dmg );
 		if ( vs->swing.on ) {
 			vs->swing.cuts++;
 		}
 	}
 	if ( g_vrSaberLog.integer && dmg > VR_SABER_BURN ) {
 		G_LogPrintf( "VRSaber: cut %i \"%s\" -> \"%s\" %s%s %.1f m/s (cuts from %.1f, full at %.1f): %i damage\n",
-			self->s.number, self->client->pers.netname,
-			victim->client ? victim->client->pers.netname : ( victim->classname ? victim->classname : "?" ), w->name,
+			self->s.number, self->client->pers.netname, VRS_Name( victim ), w->name,
 			VRS_TwoHanded( self ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE,
 			minSpeed / VR_UNITS_PER_METRE, fullSpeed / VR_UNITS_PER_METRE, (int)( dmg + 0.5f ) );
+		if ( knockedDown ) {
+			G_LogPrintf( "VRSaber: knockdown %i \"%s\" -> %i \"%s\" %s%s %.1f m/s: %.2f times full speed (knocks down from %.2f)\n",
+				self->s.number, self->client->pers.netname, victim->s.number, VRS_Name( victim ), w->name,
+				VRS_TwoHanded( self ) ? " two-handed" : "", speed / VR_UNITS_PER_METRE, speed / fullSpeed,
+				VRS_KnockdownNeeds( w ) );
+		}
 	}
 	if ( g_vrSaberDebug.integer && dmg > VR_SABER_BURN ) {
-		Com_Printf( "VR saber: %s cut %s at %.1f m/s with a %s%s blade: %d damage\n", self->client->pers.netname,
-			victim->client ? victim->client->pers.netname : ( victim->classname ? victim->classname : "?" ), speed / VR_UNITS_PER_METRE,
-			w->name, VRS_TwoHanded( self ) ? " (two hands)" : "", (int)( dmg + 0.5f ) );
+		Com_Printf( "VR saber: %s cut %s at %.1f m/s with a %s%s blade: %d damage%s\n", self->client->pers.netname,
+			VRS_Name( victim ), speed / VR_UNITS_PER_METRE,
+			w->name, VRS_TwoHanded( self ) ? " (two hands)" : "", (int)( dmg + 0.5f ), knockedDown ? ", knocked down" : "" );
 	}
 }
 
