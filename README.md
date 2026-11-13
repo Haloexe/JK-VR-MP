@@ -20,6 +20,30 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 
 ## New since 0.1.5
 
+- **Throw your saber:** let go of it lit in the middle of a swing and it flies
+  off spinning where you're looking (if you swung roughly that way; else the
+  way your hand went), as fast as your swing was at its fastest, cutting
+  whoever it passes, out as far as your Saber Throw lets it, then curves back
+  like a boomerang into the hand it left. Squeeze that hand to call it back
+  early. A blade that meets a thrown saber - swung into it or held in its
+  way - knocks it out of the air (servers can turn throwing off:
+  `g_vrSaberThrow 0`).
+- **Drop your saber, pick it up, call it:** holding the grip (Saber Grip:
+  Hold), let go of your saber anywhere but at your side and it drops, switched
+  off, and lies where it lands for everyone to see. Pick it up with your hand,
+  or point an empty hand at it and squeeze to call it: it flies back and
+  lands in your hand. Left alone, it's back on your belt after 20 seconds
+  (servers can turn it off: `g_vrSaberDrop 0`).
+- **The Force with two sabers:** a saber in your Force hand no longer stops
+  your Force gestures. With Saber Grip on Toggle, use the Force grip as
+  usual; on Hold (the grip holds the saber), hold X and gesture instead.
+- **Slide your hand along the hilt:** where blades are real, hold a saber's
+  trigger and your grip loosens: move your hand along the blade and it slides
+  along the hilt, from the pommel to just short of the emitter, a tick at
+  either end; let go of the trigger to grip it there. A quick tap still
+  switches the saber on and off. Each hand slides on its own saber, and a
+  second hand slides along a two-handed hilt (`cg_vrSaberSlide 0` turns it
+  off).
 - **Hang on to walls:** in mid-air, squeeze the grip with an empty hand on a
   wall and you hang there until you let go; press jump to push off. Anyone
   can, Force or not (servers can turn it off: `g_vrWallGrip 0`).
@@ -32,30 +56,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **The console in the headset:** Console on the wheel (hold Y, down and to
   the left) opens it in a game, with the headset's keyboard to type in it;
   either stick scrolls it, Close or B shuts it.
-- **Drop your saber, pick it up, call it:** holding the grip (Saber Grip:
-  Hold), let go of your saber anywhere but at your side and it drops, switched
-  off, and lies where it lands for everyone to see. Pick it up with your hand,
-  or point an empty hand at it and squeeze to call it: it flies back and
-  lands in your hand. Left alone, it's back on your belt after 20 seconds
-  (servers can turn it off: `g_vrSaberDrop 0`).
-- **Slide your hand along the hilt:** where blades are real, hold a saber's
-  trigger and your grip loosens: move your hand along the blade and it slides
-  along the hilt, from the pommel to just short of the emitter, a tick at
-  either end; let go of the trigger to grip it there. A quick tap still
-  switches the saber on and off. Each hand slides on its own saber, and a
-  second hand slides along a two-handed hilt (`cg_vrSaberSlide 0` turns it
-  off).
-- **Throw your saber:** let go of it lit in the middle of a swing and it flies
-  off spinning where you're looking (if you swung roughly that way; else the
-  way your hand went), as fast as your swing was at its fastest, cutting
-  whoever it passes, out as far as your Saber Throw lets it, then curves back
-  like a boomerang into the hand it left. Squeeze that hand to call it back
-  early. A blade that meets a thrown saber - swung into it or held in its
-  way - knocks it out of the air (servers can turn throwing off:
-  `g_vrSaberThrow 0`).
-- **The Force with two sabers:** a saber in your Force hand no longer stops
-  your Force gestures. With Saber Grip on Toggle, use the Force grip as
-  usual; on Hold (the grip holds the saber), hold X and gesture instead.
+- **Also new:** down in roleplay, either trigger gives up, whatever's in your
+  hands; and a staff held in both hands no longer slips along its length as
+  you swing it.
 
 ## New since 0.1.4
 
@@ -103,11 +106,14 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   back onto the shooter. Blades are solid: yours rests on another blade and
   slides along it instead of passing through. Saber styles become the blade's
   weight (light, medium, heavy), and a heavy blade lags behind a fast swing.
-  Hold a saber in either hand, anywhere along the hilt, the usual way or
-  reversed; pass it from hand to hand or grip it with both. The controllers
-  rumble with every hit.
+  Hold a saber in either hand, anywhere along the hilt (slide your hand along
+  it), the usual way or reversed; pass it from hand to hand or grip it with
+  both. Let go of it mid-swing to throw it - it boomerangs back to your hand,
+  unless a blade knocks it out of the air - or drop it, and pick it up or
+  call it back to your hand. The controllers rumble with every hit.
 - **The Force in your hand:** hold the Force grip and your empty hand reaches
-  out with the Force - thrust it out to Push, reach and yank it back to Pull,
+  out with the Force (a hand holding a second saber too: hold X if its grip
+  holds the saber) - thrust it out to Push, reach and yank it back to Pull,
   point and hold it still to Grip, pull its trigger for Lightning (palm up:
   Drain), wave it for Mind Trick, swing it back past your hip for Speed, or
   hold it still on your body for Heal, Protect, Absorb, Seeing, Rage and the
@@ -136,7 +142,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   follow yours on the controllers, so you can point, give a thumbs up or make
   a fist. Standing still, it leans, bows, turns and crouches the way you do,
   its feet planted. It works with any player model on the standard skeleton,
-  custom models included.
+  custom models included. In mid-air, grab a wall with an empty hand and hang
+  on, then jump off it.
 - **Multiplayer that shows it:** other players see you as you really move
   (head, body, arms, fingers and saber), and lag compensation judges blades as
   each player saw them. On a server running this build, players without VR
@@ -162,7 +169,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **A wheel and a keyboard in the headset:** hold Y for a wheel to talk, take
   a pose (sit, sit cross-legged, kneel or lie down, with your view at your
   character's eyes and your head and arms still tracked), reach roleplay or
-  open the console; a keyboard comes up whenever something takes typing.
+  open the console in the headset; a keyboard comes up whenever something
+  takes typing.
   Players without VR get the wheel on a key.
 - **Menus in the headset:** point at them with a controller and pull the
   trigger to click (the other trigger right-clicks). Setup has a VR page for
