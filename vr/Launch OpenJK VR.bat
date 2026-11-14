@@ -6,6 +6,7 @@ rem  1. Connect your headset and start SteamVR (or the Meta Quest Link /
 rem     Oculus app) first.
 rem  2. Run this file. The game reads the original Jedi Academy files from
 rem     the GameData folder one level up; nothing there is modified.
+rem     Its logs (vrdebug.log, games.log) are in the logs folder here.
 rem
 rem  Extra arguments are passed on, e.g.:
 rem     "Launch OpenJK VR.bat" +connect 1.2.3.4

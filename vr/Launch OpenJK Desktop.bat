@@ -8,9 +8,10 @@ rem  host, then run this and in its console (Shift+~) type
 rem     connect 127.0.0.1
 rem  (see "Watching yourself" in README-VR.txt).
 rem
-rem  It keeps its own settings and logs in
+rem  It keeps its own settings in
 rem     Documents\My Games\OpenJK-VR-Desktop
-rem  so it never changes your VR setup. Extra arguments are passed on,
+rem  so it never changes your VR setup, and its logs in logs\Desktop in
+rem  this folder. Extra arguments are passed on,
 rem  e.g.  "Launch OpenJK Desktop.bat" +connect 1.2.3.4
 rem ------------------------------------------------------------------
 setlocal
@@ -25,4 +26,4 @@ if not exist "%GAMEDATA%\base\assets0.pk3" (
 )
 
 cd /d "%HERE%"
-start "" "%HERE%openjk.x86_64.exe" +set fs_cdpath "%GAMEDATA%" +set com_homepath "OpenJK-VR-Desktop" +set vr_enabled 0 %*
+start "" "%HERE%openjk.x86_64.exe" +set fs_cdpath "%GAMEDATA%" +set com_homepath "OpenJK-VR-Desktop" +set fs_logpath "logs\Desktop" +set vr_enabled 0 %*

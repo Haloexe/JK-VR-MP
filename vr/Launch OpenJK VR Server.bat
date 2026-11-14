@@ -4,7 +4,8 @@ rem  OpenJK VR dedicated server
 rem
 rem  Runs a server for VR players (and players without VR) to join -
 rem  no game window, no headset, it keeps going while nobody plays.
-rem  Settings: base\server.cfg in this folder (open it in Notepad).
+rem  Settings: base\server.cfg in this folder (open it in Notepad). Its
+rem  log, games.log: logs\Server in this folder.
 rem  Type server commands in its window: status, map mp/ffa3,
 rem  kick <name>, addbot <name>, svsay <text>, quit ...
 rem  See README-SERVER.txt.
@@ -40,7 +41,7 @@ if not errorlevel 1 (
 
 title OpenJK VR Server
 cd /d "%HERE%"
-"%HERE%openjkded.x86_64.exe" +set fs_cdpath "%GAMEDATA%" +set com_homepath "OpenJK-VR-Server" +set dedicated %DEDICATED% +set net_port %PORT% +exec server.cfg %*
+"%HERE%openjkded.x86_64.exe" +set fs_cdpath "%GAMEDATA%" +set com_homepath "OpenJK-VR-Server" +set fs_logpath "logs\Server" +set dedicated %DEDICATED% +set net_port %PORT% +exec server.cfg %*
 echo.
 echo The server has stopped.
 pause

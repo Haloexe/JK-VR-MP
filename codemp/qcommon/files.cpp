@@ -245,6 +245,7 @@ static cvar_t		*fs_copyfiles;
 static cvar_t		*fs_gamedirvar;
 static cvar_t		*fs_dirbeforepak; //rww - when building search path, keep directories at top and insert pk3's under them
 static cvar_t		*fs_forcegame;
+static cvar_t		*fs_logpath;	// OpenJK VR: where logs are written (FS_OpenLog)
 static searchpath_t	*fs_searchpaths;
 static int			fs_readCount;			// total bytes read
 static int			fs_loadCount;			// total files read
@@ -1057,6 +1058,54 @@ void FS_FCloseFile( fileHandle_t f ) {
 
 /*
 ===========
+FS_OpenLog
+
+OpenJK VR: a log (*.log - games.log, qconsole.log, vrdebug.log...) is
+written in fs_logpath: by default the install's own "logs" folder (the
+launchers of the desktop game and the server: logs\Desktop, logs\Server),
+quicker to find than with the settings and kept apart from another
+install's - a mod's (fs_game) in a folder of its own there. A whole path is
+taken as it is. Empty, or where it can't be written (an install in Program
+Files), the log goes with the settings in fs_homepath as it always did:
+the file opened (mode "wb" or "ab"), or NULL to open it there.
+===========
+*/
+static FILE *FS_OpenLog( const char *filename, const char *mode ) {
+	const char *lp = fs_logpath ? fs_logpath->string : "";
+	const qboolean whole = (qboolean)( lp[0] == '/' || lp[0] == '\\' || ( lp[0] && lp[1] == ':' ) );	// (/var/log/jka, D:\logs)
+	char ospath[MAX_OSPATH], *ofs;
+	int len;
+
+	if ( !lp[0] || !fs_basepath->string[0] || !COM_CompareExtension( filename, ".log" ) ) {
+		return NULL;
+	}
+	len = Com_sprintf( ospath, sizeof( ospath ), "%s%s%s/%s/%s", whole ? "" : fs_basepath->string, whole ? "" : "/", lp,
+		Q_stricmp( fs_gamedir, BASEGAME ) ? fs_gamedir : "", filename );
+	if ( len < 0 || len >= (int)sizeof( ospath ) ) {
+		return NULL;	// (too long: some vsnprintfs say -1)
+	}
+	FS_ReplaceSeparators( ospath );	// (and the doubled separator for base's gone)
+
+	if ( fs_debug->integer ) {
+		Com_Printf( "FS_OpenLog: %s\n", ospath );
+	}
+	if ( strstr( ospath, ".." ) || strstr( ospath, "::" ) ) {
+		return NULL;	// (never anywhere but where it says)
+	}
+	// its folders, as FS_CreatePath does - but one that can't be made (fopen then fails) isn't the end
+	// of the game, only of this
+	for ( ofs = strchr( ospath, PATH_SEP ) ? strchr( ospath, PATH_SEP ) + 1 : NULL; ofs && *ofs; ofs++ ) {
+		if ( *ofs == PATH_SEP ) {
+			*ofs = 0;
+			Sys_Mkdir( ospath );
+			*ofs = PATH_SEP;
+		}
+	}
+	return fopen( ospath, mode );
+}
+
+/*
+===========
 FS_FOpenFileWrite
 
 ===========
@@ -1070,24 +1119,27 @@ fileHandle_t FS_FOpenFileWrite( const char *filename, qboolean safe ) {
 	f = FS_HandleForFile();
 	fsh[f].zipFile = qfalse;
 
-	ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename );
+	fsh[f].handleFiles.file.o = FS_OpenLog( filename, "wb" );	// OpenJK VR: a log, where logs go
+	if ( !fsh[f].handleFiles.file.o ) {
+		ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename );
 
-	if ( fs_debug->integer ) {
-		Com_Printf( "FS_FOpenFileWrite: %s\n", ospath );
+		if ( fs_debug->integer ) {
+			Com_Printf( "FS_FOpenFileWrite: %s\n", ospath );
+		}
+
+		if ( safe ) {
+			FS_CheckFilenameIsMutable( ospath, __func__ );
+		}
+
+		if( FS_CreatePath( ospath ) ) {
+			return 0;
+		}
+
+		// enabling the following line causes a recursive function call loop
+		// when running with +set logfile 1 +set developer 1
+		//Com_DPrintf( "writing to: %s\n", ospath );
+		fsh[f].handleFiles.file.o = fopen( ospath, "wb" );
 	}
-
-	if ( safe ) {
-		FS_CheckFilenameIsMutable( ospath, __func__ );
-	}
-
-	if( FS_CreatePath( ospath ) ) {
-		return 0;
-	}
-
-	// enabling the following line causes a recursive function call loop
-	// when running with +set logfile 1 +set developer 1
-	//Com_DPrintf( "writing to: %s\n", ospath );
-	fsh[f].handleFiles.file.o = fopen( ospath, "wb" );
 
 	Q_strncpyz( fsh[f].name, filename, sizeof( fsh[f].name ) );
 
@@ -1118,19 +1170,22 @@ fileHandle_t FS_FOpenFileAppend( const char *filename ) {
 	// don't let sound stutter
 	S_ClearSoundBuffer();
 
-	ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename );
+	fsh[f].handleFiles.file.o = FS_OpenLog( filename, "ab" );	// OpenJK VR: a log, where logs go
+	if ( !fsh[f].handleFiles.file.o ) {
+		ospath = FS_BuildOSPath( fs_homepath->string, fs_gamedir, filename );
 
-	if ( fs_debug->integer ) {
-		Com_Printf( "FS_FOpenFileAppend: %s\n", ospath );
+		if ( fs_debug->integer ) {
+			Com_Printf( "FS_FOpenFileAppend: %s\n", ospath );
+		}
+
+		FS_CheckFilenameIsMutable( ospath, __func__ );
+
+		if( FS_CreatePath( ospath ) ) {
+			return 0;
+		}
+
+		fsh[f].handleFiles.file.o = fopen( ospath, "ab" );
 	}
-
-	FS_CheckFilenameIsMutable( ospath, __func__ );
-
-	if( FS_CreatePath( ospath ) ) {
-		return 0;
-	}
-
-	fsh[f].handleFiles.file.o = fopen( ospath, "ab" );
 	fsh[f].handleSync = qfalse;
 	if (!fsh[f].handleFiles.file.o) {
 		f = 0;
@@ -3594,6 +3649,7 @@ void FS_Startup( const char *gameName ) {
 		homePath = fs_basepath->string;
 	}
 	fs_homepath = Cvar_Get ("fs_homepath", homePath, CVAR_INIT|CVAR_PROTECTED, "(Read/Write) Location for user generated files" );
+	fs_logpath = Cvar_Get ("fs_logpath", "logs", CVAR_INIT|CVAR_PROTECTED, "(Read Only) Location for logs (*.log): in fs_basepath, unless a whole path; empty: in fs_homepath" );
 	fs_gamedirvar = Cvar_Get ("fs_game", "", CVAR_INIT|CVAR_SYSTEMINFO, "Mod directory" );
 
 	fs_dirbeforepak = Cvar_Get("fs_dirbeforepak", "0", CVAR_INIT|CVAR_PROTECTED, "Prioritize directories before paks if not pure" );

@@ -457,9 +457,10 @@ static void CG_VRB_FeelFrame( void );
 
 /*
 --------------------------------------------------------------------------------
-The VR log (cg_vrLog 1): vrdebug.log next to the settings, saying what your
-body and saber did - two-handed holds, swings, clashes, and the animation and
-fingers of the hand holding the saber - for working out what feels wrong.
+The VR log (cg_vrLog 1): vrdebug.log in the logs folder (fs_logpath), saying
+what your body and saber did - two-handed holds, swings, clashes, and the
+animation and fingers of the hand holding the saber - for working out what
+feels wrong.
 --------------------------------------------------------------------------------
 */
 

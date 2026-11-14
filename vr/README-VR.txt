@@ -1737,7 +1737,8 @@ menu), and a line that would cut a password short doesn't run.
 Watching yourself: "Launch OpenJK Desktop.bat" starts the same game
 without the headset (also for friends without VR). It keeps its own
 settings (Documents\My Games\OpenJK-VR-Desktop), so it never changes your
-VR setup. Start the VR game first and host, then in the desktop copy:
+VR setup, and its own logs (logs\Desktop). Start the VR game first and
+host, then in the desktop copy:
   name Watcher           (so the two of you aren't both "Padawan")
   connect 127.0.0.1      (not "localhost": that only reaches the same copy)
   team s                 (spectate)
@@ -1795,7 +1796,13 @@ LOGS for working out what feels off (both on by default):
                and every 10 s how smoothly the game arrives ("net:" -
                snapshots a second, ping, and how often others had to
                stand still because the next snapshot was late)
-Both are in Documents\My Games\OpenJK-VR\base.
+Both are in the logs folder inside OpenJK-VR, next to the launchers (the
+desktop game's in logs\Desktop, the server's in logs\Server), so each copy
+of the game you have keeps its own. Where the game can't write in its own
+folder (installed in Program Files) they're in
+Documents\My Games\OpenJK-VR\base, as they used to be. To put them
+elsewhere:  "Launch OpenJK VR.bat" +set fs_logpath "D:\jka logs"  (or ""
+for Documents).
 
 The controller buttons are ordinary keys named AUX16-AUX27, so you can
 rebind them in the console, e.g.  bind AUX23 force_throw
@@ -1921,7 +1928,7 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
 On first start the VR build turns off view bobbing (cg_bobPitch/Roll/Up);
 the camera dip on landing is also skipped in the headset.
 Settings and downloads live in Documents\My Games\OpenJK-VR, separate from
-regular OpenJK.
+regular OpenJK; logs in the logs folder here (LOGS, above).
 
 Camera: guns, the lightsaber and force powers are first person. The game
 itself switches to a third-person camera (behind your character) with fists

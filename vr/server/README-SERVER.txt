@@ -43,9 +43,9 @@ It is in the OpenJK-VR folder (inside Jedi Academy's GameData folder).
    this PC. They then connect to your public address (search "what is my
    IP"), or find the server in the server list under Internet.
 
-Its settings: base\server.cfg in the OpenJK-VR folder. Its own files - the
-log games.log and the settings it remembers - are in
-Documents\My Games\OpenJK-VR-Server\base.
+Its settings: base\server.cfg in the OpenJK-VR folder. Its log, games.log
+(and qconsole.log, with  seta logfile 1), is in logs\Server there; the
+settings it remembers are in Documents\My Games\OpenJK-VR-Server\base.
 Close it by typing  quit  (or closing the window).
 
 
@@ -68,7 +68,9 @@ RHEL 9, or newer). Nothing else is needed.
 4. Let UDP port 29070 in, e.g.  sudo ufw allow 29070/udp  (and in your
    hosting company's firewall, if it has one).
 
-Its settings: base/server.cfg. Its own files: home/base.
+Its settings: base/server.cfg. Its logs (games.log): logs - elsewhere with
+./start-server.sh +set fs_logpath /var/log/jka, say. Its own files:
+home/base.
 For a server only on your own network:  ./start-server.sh +set dedicated 1
 
 
@@ -373,7 +375,8 @@ can't carry it. So keep the rcon password long and random (20 letters
 and digits, say) and to yourself: anyone who has it can make admins, and
 do anything else rcon can. Wrong guesses show in the server's console as
 "Bad rcon from <address>" - its window, or a service's journal - and
-with  seta logfile 1  in server.cfg in qconsole.log too, by games.log.
+with  seta logfile 1  in server.cfg in qconsole.log too, by games.log
+(in the logs folder: Windows, logs\Server).
 Passwords never reach the server: it keeps a key made from each, over
 this server's salt. The accounts are in rp/accounts and the salt in
 rp/server.txt, in the server's own files (Linux: home/base/rp; Windows:
