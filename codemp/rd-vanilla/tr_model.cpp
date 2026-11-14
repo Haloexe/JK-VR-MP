@@ -166,6 +166,13 @@ qboolean RE_RegisterModels_GetDiskFile( const char *psModelFileName, void **ppvB
 				return qtrue;
 			}
 
+			// OpenJK VR: the AT-ST cockpit's models, the renderer's own (tr_vratst.cpp)
+			if ( R_VR_AtstModel( sModelName, ppvBuffer ) )
+			{
+				*pqbAlreadyCached = qfalse;
+				return qtrue;
+			}
+
 		ri.FS_ReadFile( sModelName, ppvBuffer );
 		*pqbAlreadyCached = qfalse;
 		qboolean bSuccess = !!(*ppvBuffer)?qtrue:qfalse;

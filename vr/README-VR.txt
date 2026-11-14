@@ -68,6 +68,10 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     up; NPCs that take sides by faction; companions of your own - up to 6
     a character, 2 out with you - that follow you, fight for you, get you
     up and take orders from the wheel (see ROLEPLAY)
+  * An AT-ST you drive from its cockpit: you sit in its head, look out of
+    its viewport, and drive it with the yoke in front of you - push it to
+    walk, pull it to back up, twist it to turn - its guns aiming where you
+    look (see AN AT-ST'S COCKPIT)
   * A keyboard in the headset for typing in menus, chat and the console
     (the wheel opens the console in a game - hold Y)
   * A dedicated server to run your own servers with all of the above, on
@@ -603,6 +607,38 @@ as long as you hold the grip - anyone, Force or not:
   * Only on servers running this build ("vrWallGrip 1" in the server info:
     g_vrWallGrip 0 turns it off - README-SERVER.txt). Near a wall on the
     ground, the grip does what it always does (your Force grip).
+
+AN AT-ST'S COCKPIT: get into an AT-ST (Use, as ever) and you sit in its
+head, in the cockpit - the left seat, looking out of the left viewport -
+instead of watching it from behind. It's a cockpit made for this mod (the
+AT-ST Cockpit Test: simple shapes, nothing from the films or other games),
+built into the game, so it's there on any server running this build:
+  * Your view turns as the AT-ST turns, and else only as your head does -
+    the way you faced as you got in is its front (Recenter: the way you
+    face now). Lean in toward the viewport to see more (as far as Head
+    Reach); the visor over it cuts off the view upward. With Play Seated,
+    your real chair is where the seat is. The AT-ST itself isn't drawn in
+    your view - you're in it - and as it strides its head's sway from side
+    to side and back and forth isn't yours: only a gentle rise and fall.
+  * The yoke in front of you drives it. Reach for its grips and squeeze
+    your grips to take hold (a buzz): push it forward to walk - as fast as
+    it's pushed - pull it back to back up, twist it to turn (your right
+    hand forward and your left back turns left; it turns on the spot too,
+    slower). Let go and it springs back. Holding neither grip, the sticks
+    drive it instead: the moving stick walks it and backs it up, the
+    turning stick turns it (no snap turning in it). Your hands are drawn
+    as gloves - on the grips while they hold them.
+  * The right trigger fires the main guns (left-handed: the left), the
+    other trigger - or A - the second weapon. They aim where you look, as
+    far round as the AT-ST lets its driver look, a floating dot showing
+    where they'll hit. Others see its head tip up and down as you look.
+  * To get out, hold your Use grip a moment (away from the yoke) - a slip
+    of the grip doesn't throw you out.
+  * Only on servers running this build ("vrWalker 1" in the server info:
+    g_vrWalker 0 turns it off - README-SERVER.txt), and only an AT-ST.
+    Anywhere else, and in other vehicles, you watch from behind and it
+    turns toward where you look, as ever. cg_vrCockpit 0: the same, by
+    your choice.
 
 SHOTS FROM YOUR GUN'S BARREL: on servers running this build (and games you
 host with it) your shots leave your gun at its muzzle - where its flash is
@@ -1855,6 +1891,8 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
                          the floor (vr_setHeight measures it; 0 = not known)
   vr_realCrouch 1        your head below 70% of vr_height crouches you
   cg_vrAimDot 1          the floating crosshair (cg_vrAimDotSize to resize)
+  cg_vrCockpit 1         0 = drive an AT-ST from behind it, as the game has
+                         it, not from its cockpit (AN AT-ST'S COCKPIT)
   cg_vrGunX/Y/Z 0        nudge the gun in your hand (forward/left/up units)
   cg_vrWorldGun 1        0 = hold the old first-person gun models instead
   vr_gunPitch 0          tilt the gun (and its aim) in your hand, + = up
@@ -1940,6 +1978,11 @@ camera. "cg_thirdPerson 1" gives third person all the time.
 
 KNOWN LIMITATIONS
 -----------------
+  * The AT-ST's cockpit: its screens show their names and gauges but not
+    what's going on yet (the ground camera, the target, the hull's
+    damage, the heading), its hatch doesn't open, and your hands in it are
+    plain gloves. Only the AT-ST has one; you drive other vehicles from
+    behind, as ever.
   * Shots start at your gun's muzzle only on servers running this build
     (and games hosted with it); elsewhere they start at your eye (they go
     exactly where the aim dot shows either way). Round a corner, the
@@ -2113,6 +2156,17 @@ no client. Source files:
                                swapping, two sabers, everyone's hilts
   codemp/game/g_vrholster.c    holsters, the server's side (shared rules:
                                game/bg_vrholster.h, bg_pmove.c, bg_saber.c)
+  codemp/cgame/cg_vrwalker.c   an AT-ST's cockpit, the driver's side: where
+                               it is, its yoke, the view and aim from it
+                               (the engine's: cl_vr.cpp VR_SetCockpit)
+  codemp/game/g_vrwalker.c     ...the server's side: whose yoke drives it
+                               (the rules both go by: game/bg_vrwalker.h;
+                               WalkerNPC.c turns it, g_weapon.c aims it)
+  codemp/rd-vanilla/tr_vratst.cpp  ...its models, pictures and shaders,
+                               built in (the models made by
+                               vr/atst/make_cockpit.py from the study's
+                               vr/atst/cockpit.json; the pictures drawn by
+                               tr_vratst_art.cpp)
   codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,
                                receiving (clc_voice / svc_voice, only with
                                servers whose systeminfo has sv_voice)

@@ -91,6 +91,9 @@ void		VR_SetSaberTriggers( int handMask );
 // A saber in your Force hand: how it reaches out with the Force
 // (VR_SABER_FORCE_*) - cgameImport_t.ext.VR_SetSaberForce, every frame.
 void		VR_SetSaberForce( int how );
+// You sit in a cockpit (driving an AT-ST), which way it faces and how its yoke
+// drives it - cgameImport_t.ext.VR_SetCockpit, every frame (NULL: you don't).
+void		VR_SetCockpit( const vrCockpit_t *cockpit );
 // Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
 // wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );

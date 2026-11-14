@@ -88,6 +88,10 @@ static void CVU_VRWallGrip(void) {
 	G_VRWallPublish();	// OpenJK VR: the serverinfo "vrWallGrip" follows it (g_vrwall.c)
 }
 
+static void CVU_VRWalker(void) {
+	G_VRWalkerPublish();	// OpenJK VR: the serverinfo "vrWalker" follows it (g_vrwalker.c)
+}
+
 static void CVU_PrivateDuel(void) {
 	G_PrivateDuelPublish();	// OpenJK VR: the serverinfo "vrDuel" follows it
 }

@@ -4999,8 +4999,8 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 		return;
 	}
 
-	if ( CG_VR_HandAim() )
-	{ // OpenJK VR: the gun is aimed with the hand; a 3D dot replaces this
+	if ( CG_VR_HandAim() || CG_VR_InCockpit() )
+	{ // OpenJK VR: the gun is aimed with the hand - or an AT-ST's guns from its cockpit; a 3D dot replaces this
 		return;
 	}
 
@@ -6076,7 +6076,13 @@ extern void CG_CalcVehMuzzle(Vehicle_t *pVeh, centity_t *ent, int muzzleNum);
 qboolean CG_CalcVehicleMuzzlePoint( int entityNum, vec3_t start, vec3_t d_f, vec3_t d_rt, vec3_t d_up)
 {
 	centity_t *vehCent = &cg_entities[entityNum];
-	if ( vehCent->m_pVehicle && vehCent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER )
+	if ( CG_VR_WalkerAim( entityNum, start, d_f ) )
+	{//OpenJK VR: driven from its cockpit, by its yoke - from its eyes, where you look (cg_vrwalker.c)
+		vec3_t angles;
+		vectoangles( d_f, angles );
+		AngleVectors( angles, NULL, d_rt, d_up );
+	}
+	else if ( vehCent->m_pVehicle && vehCent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER )
 	{//draw from barrels
 		VectorCopy( vehCent->lerpOrigin, start );
 		start[2] += vehCent->m_pVehicle->m_pVehicleInfo->height-DEFAULT_MINS_2-48;

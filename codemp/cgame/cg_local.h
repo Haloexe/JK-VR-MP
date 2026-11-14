@@ -1654,6 +1654,7 @@ typedef struct cgs_s {
 	int					vrSaberRGB;		// OpenJK VR: the server passes saber colours on ("vrSaberRGB 1"); 0: it doesn't; -1: it doesn't say (not this build: you see your own)
 	qboolean			vrGunBarrel;	// OpenJK VR: the server fires your shots from your gun's barrel, by your rule ("vrGunBarrel": bg_vrgun.h)
 	qboolean			vrWallGrip;		// OpenJK VR: the server hangs VR players on walls they grip ("vrWallGrip 1": cg_vrwall.c)
+	qboolean			vrWalker;		// OpenJK VR: the server lets VR players drive an AT-ST from its cockpit ("vrWalker 1": cg_vrwalker.c)
 	qboolean			vrRealBlades;	// OpenJK VR: the server fights with the blades in VR players' hands ("vrSaber 1": the
 										// trigger isn't the attack button there - a tap's the saber's switch, cg_vrbody.c)
 
@@ -1938,6 +1939,19 @@ void		CG_VR_WallFrame( const vrClientState_t *vr );
 int			CG_VR_WallZones( void );
 int			CG_VR_WallButtons( void );
 void		CG_VR_WallInit( void );
+// cg_vrwalker.c (OpenJK VR: driving an AT-ST from its cockpit)
+void		CG_VR_WalkerRegister( void );
+void		CG_VR_WalkerInit( void );
+qboolean	CG_VR_WalkerWanted( void );
+qboolean	CG_VR_WalkerView( void );
+qboolean	CG_VR_InCockpit( void );
+qboolean	CG_VR_WalkerHides( const centity_t *cent );
+void		CG_VR_WalkerFrame( const vrClientState_t *vr );
+int			CG_VR_WalkerZones( void );
+int			CG_VR_WalkerButtons( void );
+int			CG_VR_WalkerWeaponHand( void );
+qboolean	CG_VR_WalkerAim( int vehNum, vec3_t start, vec3_t dir );
+void		CG_VR_WalkerAimDot( void );
 // cg_vrgun.c (OpenJK VR: both hands on your gun)
 void		CG_VR_GunFrame( const vrClientState_t *vr );
 int			CG_VR_GunZones( void );

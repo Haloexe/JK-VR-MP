@@ -795,6 +795,10 @@ typedef struct cgameImport_s {
 		// frame; unsaid lately, not at all (no Force hand while it holds a
 		// weapon, as VR_SetWeaponHand says).
 		void			(*VR_SetSaberForce)						( int how );
+		// OpenJK VR: you sit in a cockpit (driving an AT-ST: cg_vrwalker.c) -
+		// which way it faces, and how its yoke drives it (vrCockpit_t). Call
+		// every frame; NULL, or unsaid lately, you don't.
+		void			(*VR_SetCockpit)						( const vrCockpit_t *cockpit );
 	} ext;
 } cgameImport_t;
 

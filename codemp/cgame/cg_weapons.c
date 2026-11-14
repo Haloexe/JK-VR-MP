@@ -1094,6 +1094,10 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		return;
 	}
 
+	if ( CG_VR_InCockpit() ) {
+		return;	// OpenJK VR: in an AT-ST's cockpit - its guns are yours (cg_vrwalker.c)
+	}
+
 	// OpenJK VR: a first-person saber is in your body's hand (cg_vrbody.c). With
 	// holsters (cg_vrholster.c) what's in your hand is what you took out, at once
 	// (the game's switch still under way) - and empty hands, or fists, are your

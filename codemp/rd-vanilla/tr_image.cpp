@@ -1395,8 +1395,10 @@ void R_CreateBuiltinImages( void ) {
 
 	R_CreateFogImage();
 
-	// OpenJK VR: the blades of any colour, and black cores (tr_vrsaber.cpp)
+	// OpenJK VR: the blades of any colour, and black cores (tr_vrsaber.cpp);
+	// the AT-ST cockpit's pictures (tr_vratst.cpp)
 	R_VR_CreateSaberImages();
+	R_VR_CreateAtstImages();
 }
 
 

@@ -7364,7 +7364,11 @@ static int CG_VRB_SaberForce( const vrClientState_t *vr ) {
 // it lately; else the gun hand.
 static int CG_VRB_WeaponHand( void ) {
 	const int held = CG_VRH_WeaponHand();
+	const int walker = CG_VR_WalkerWeaponHand();
 
+	if ( walker != -2 ) {
+		return walker;	// (an AT-ST's cockpit: your gun hand's trigger its main guns, the other its second weapon - cg_vrwalker.c)
+	}
 	if ( CG_RP_IsDown() ) {
 		return 2;	// (down - roleplay: either trigger gives up, whatever's in your hands or isn't - g_vrdown.c; nothing else of theirs does anything)
 	}
@@ -7548,9 +7552,10 @@ void CG_VR_BodyEndFrame( void ) {
 	CG_VR_GunFrame( vr );
 	CG_VR_WallFrame( vr );
 	CG_VR_SaberDropFrame( vr );	// (your saber down: where a hand takes it up or calls it - cg_vrsaberdrop.c)
+	CG_VR_WalkerFrame( vr );	// (an AT-ST's cockpit: its yoke, what's drawn of it - cg_vrwalker.c)
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
 		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() | CG_VR_GunZones() |
-			CG_VR_WallZones() | CG_VR_SaberDropZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
+			CG_VR_WallZones() | CG_VR_SaberDropZones() | CG_VR_WalkerZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
 	CG_VRH_SayButtons();

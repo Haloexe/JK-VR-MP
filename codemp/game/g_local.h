@@ -1528,6 +1528,13 @@ void		G_VRWallPublish( void );
 void		G_VRWallShutdown( void );
 void		G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd );
 
+// g_vrwalker.c (OpenJK VR: driving an AT-ST from its cockpit - bg_vrwalker.h)
+void		G_VRWalkerInit( void );
+void		G_VRWalkerPublish( void );
+void		G_VRWalkerShutdown( void );
+qboolean	G_VRWalkerYoke( gentity_t *ent );
+void		G_VRWalkerCmd( gentity_t *ent, usercmd_t *ucmd );
+
 // g_vrsaberdrop.c (OpenJK VR: a VR player's saber let go of - dropped, taken up again, called)
 void		G_VRSaberDropInit( void );
 void		G_VRSaberDropPublish( void );

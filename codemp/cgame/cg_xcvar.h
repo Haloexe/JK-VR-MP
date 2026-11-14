@@ -155,6 +155,7 @@ XCVAR_DEF( cg_vrBodyBend,						"1",					NULL,					CVAR_ARCHIVE )
 XCVAR_DEF( cg_vrBodyDebug,						"0",					NULL,					CVAR_NONE )
 XCVAR_DEF( cg_vrBodyTwist,						"45",					NULL,					CVAR_ARCHIVE )
 XCVAR_DEF( cg_vrBodyWrist,						"1",					NULL,					CVAR_ARCHIVE )
+XCVAR_DEF( cg_vrCockpit,						"1",					NULL,					CVAR_ARCHIVE )	// OpenJK VR: drive an AT-ST from its cockpit, in VR (cg_vrwalker.c); 0: watching it from behind, as the game has it
 XCVAR_DEF( cg_vrDuelSalute,						"1",					NULL,					CVAR_ARCHIVE )
 XCVAR_DEF( cg_vrFingers,						"1",					NULL,					CVAR_ARCHIVE )
 XCVAR_DEF( cg_vrForceGlow,						"1",					NULL,					CVAR_ARCHIVE )

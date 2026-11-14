@@ -27,6 +27,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #include "g_local.h"
 #include "botlib/be_aas.h"
 #include "bg_saga.h"
+#include "bg_vrwalker.h"
 #include "ghoul2/G2.h"
 #include "qcommon/q_shared.h"
 
@@ -4174,7 +4175,15 @@ qboolean WP_VehCheckTraceFromCamPos( gentity_t *ent, const vec3_t shotStart, vec
 		//FIRST: simulate the normal crosshair trace from the center of the veh straight forward
 		trace_t trace;
 		vec3_t	dir, start, end;
-		if ( ent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER )
+		if ( ent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER
+			&& ( ent->m_pVehicle->m_ucmd.buttons & BUTTON_VR_YOKE )
+			&& BG_VRWalkerCockpit( ent->m_pVehicle->m_pVehicleInfo ) )
+		{//OpenJK VR: an AT-ST its VR driver's yoke drives (bg_vrwalker.h) - from the cockpit's eyes, where they look
+			BG_VRWalkerEye( ent->r.currentOrigin, ent->m_pVehicle->m_vOrientation[YAW], start );
+			BG_VRWalkerAim( ((gentity_t *)ent->m_pVehicle->m_pPilot)->client->ps.viewangles, ent->m_pVehicle->m_vOrientation[YAW],
+				ent->m_pVehicle->m_pVehicleInfo->lookYaw, ent->m_pVehicle->m_pVehicleInfo->lookPitch, dir );
+		}
+		else if ( ent->m_pVehicle->m_pVehicleInfo->type == VH_WALKER )
 		{//for some reason, the walker always draws the crosshair out from from the first muzzle point
 			AngleVectors( ent->client->ps.viewangles, dir, NULL, NULL );
 			VectorCopy( ent->r.currentOrigin, start );

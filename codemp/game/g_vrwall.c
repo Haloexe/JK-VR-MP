@@ -16,6 +16,7 @@ both sides go by: bg_pmove.c PM_VRWallGrip; a player's game's: cg_vrwall.c).
   off: the grip's taken out of the command.
 - Hanging on, getting hurt or Force pushed or pulled knocks them off, as
   the game's own debug melee wall hold (g_debugMelee): g_combat.c, w_force.c.
+- Riding something, the same bit's a VR driver's yoke: g_vrwalker.c.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -81,6 +82,10 @@ static qboolean G_VRWallHandAt( gentity_t *ent ) {
 // still held (PMF_VR_WALLGRIP), it goes by as it is.
 void G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd ) {
 	if ( !( ucmd->buttons & BUTTON_VR_WALLGRIP ) ) {
+		return;
+	}
+	if ( ent->client && ent->client->ps.m_iVehicleNum ) {
+		G_VRWalkerCmd( ent, ucmd );	// (riding something: the bit's the yoke's - g_vrwalker.c)
 		return;
 	}
 	if ( g_vrWallGrip.integer <= 0 || !ent->client || ( ent->r.svFlags & SVF_BOT ) || ent->s.number < 0 || ent->s.number >= MAX_CLIENTS ||

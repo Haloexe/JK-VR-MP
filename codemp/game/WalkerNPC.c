@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "bg_public.h"
 #include "bg_vehicles.h"
+#include "bg_vrwalker.h"
 
 #ifdef _GAME //we only want a few of these functions for BG
 
@@ -86,6 +87,9 @@ static void ProcessMoveCommands( Vehicle_t *pVeh )
 	float fWalkSpeedMax;
 	bgEntity_t *parent = pVeh->m_pParentEntity;
 	playerState_t *parentPS = parent->playerState;
+	// OpenJK VR: a VR driver's yoke (bg_vrwalker.h) - pushed part way, as fast
+	// as that; its twist kept, standing (its turning on the spot: AnimateVehicle)
+	const qboolean yoke = (qboolean)( ( pVeh->m_ucmd.buttons & BUTTON_VR_YOKE ) && BG_VRWalkerCockpit( pVeh->m_pVehicleInfo ) );
 
 	speedIdleDec = pVeh->m_pVehicleInfo->decelIdle * pVeh->m_fTimeModifier;
 	speedMax = pVeh->m_pVehicleInfo->speedMax;
@@ -108,7 +112,47 @@ static void ProcessMoveCommands( Vehicle_t *pVeh )
 	if ( parentPS->speed || parentPS->groundEntityNum == ENTITYNUM_NONE  ||
 		 pVeh->m_ucmd.forwardmove || pVeh->m_ucmd.upmove > 0 )
 	{
-		if ( pVeh->m_ucmd.forwardmove > 0 && speedInc )
+		if ( yoke && pVeh->m_ucmd.forwardmove > 0 && speedInc )
+		{//OpenJK VR: the yoke pushed part way - up to as fast as that, or slowing to it (backing up: speeding up out of it, as ever)
+			const float want = speedMax * pVeh->m_ucmd.forwardmove / 127.0f;
+			if ( parentPS->speed < want )
+			{
+				parentPS->speed += speedInc;
+				if ( parentPS->speed > want )
+				{
+					parentPS->speed = want;
+				}
+			}
+			else
+			{
+				parentPS->speed -= speedIdleDec;
+				if ( parentPS->speed < want )
+				{
+					parentPS->speed = want;
+				}
+			}
+		}
+		else if ( yoke && pVeh->m_ucmd.forwardmove < 0 && parentPS->speed <= speedIdle )
+		{//OpenJK VR: ...pulled back part way: backing up as fast as that
+			const float want = speedMin * -pVeh->m_ucmd.forwardmove / 127.0f;
+			if ( parentPS->speed > want )
+			{
+				parentPS->speed -= speedIdleDec;
+				if ( parentPS->speed < want )
+				{
+					parentPS->speed = want;
+				}
+			}
+			else
+			{
+				parentPS->speed += speedIdleDec;
+				if ( parentPS->speed > want )
+				{
+					parentPS->speed = want;
+				}
+			}
+		}
+		else if ( pVeh->m_ucmd.forwardmove > 0 && speedInc )
 		{
 			parentPS->speed += speedInc;
 		}
@@ -152,7 +196,10 @@ static void ProcessMoveCommands( Vehicle_t *pVeh )
 			pVeh->m_ucmd.upmove = 0;
 		}
 
-		pVeh->m_ucmd.rightmove = 0;
+		if ( !yoke )
+		{//(OpenJK VR: a yoke's twist turns it on the spot - not a strafe: it doesn't)
+			pVeh->m_ucmd.rightmove = 0;
+		}
 
 		/*if ( !pVeh->m_pVehicleInfo->strafePerc
 			|| (!g_speederControlScheme->value && !parent->s.number) )
@@ -244,6 +291,22 @@ void WalkerPitchAdjust(Vehicle_t *pVeh, playerState_t *riderPS, playerState_t *p
 }
 */
 
+// OpenJK VR: a VR driver's yoke (BUTTON_VR_YOKE: bg_vrwalker.h) turns their
+// AT-ST - as far as it's twisted (their rightmove: + right, - left), at the
+// rate it turns at full speed toward a mouse's view, standing too (slower) -
+// never toward where they look.
+static void WalkerYokeTurn( Vehicle_t *pVeh, playerState_t *parentPS )
+{
+	float turn = Com_Clamp( -1.0f, 1.0f, pVeh->m_ucmd.rightmove / 127.0f );	// (-128: as -127)
+
+	turn *= pVeh->m_pVehicleInfo->turningSpeed * VR_WALKER_TURN * pVeh->m_fTimeModifier;
+	if ( !parentPS->speed )
+	{
+		turn *= VR_WALKER_STAND_TURN;
+	}
+	pVeh->m_vOrientation[YAW] = AngleNormalize180( pVeh->m_vOrientation[YAW] - turn );
+}
+
 //MP RULE - ALL PROCESSORIENTCOMMANDS FUNCTIONS MUST BE BG-COMPATIBLE!!!
 //If you really need to violate this rule for SP, then use ifdefs.
 //By BG-compatible, I mean no use of game-specific data - ONLY use
@@ -276,7 +339,14 @@ static void ProcessOrientCommands( Vehicle_t *pVeh )
 	// If the player is the rider...
 	if ( rider->s.number < MAX_CLIENTS )
 	{//FIXME: use the vehicle's turning stat in this calc
-		WalkerYawAdjust(pVeh, riderPS, parentPS);
+		if ( ( pVeh->m_ucmd.buttons & BUTTON_VR_YOKE ) && BG_VRWalkerCockpit( pVeh->m_pVehicleInfo ) )
+		{//OpenJK VR: their yoke turns it, their view only aims
+			WalkerYokeTurn( pVeh, parentPS );
+		}
+		else
+		{
+			WalkerYawAdjust(pVeh, riderPS, parentPS);
+		}
 		//FighterPitchAdjust(pVeh, riderPS, parentPS);
 		pVeh->m_vOrientation[PITCH] = riderPS->viewangles[PITCH];
 	}
@@ -418,6 +488,13 @@ static void AnimateVehicle( Vehicle_t *pVeh )
 			iFlags = SETANIM_FLAG_NORMAL;
 			Anim = BOTH_WALKBACK1;
 			iBlend = 500;
+		}
+		// OpenJK VR: turned on the spot by a VR driver's yoke (bg_vrwalker.h): stepping round
+		else if ( ( pVeh->m_ucmd.buttons & BUTTON_VR_YOKE ) && pVeh->m_ucmd.rightmove && BG_VRWalkerCockpit( pVeh->m_pVehicleInfo ) )
+		{
+			iFlags = SETANIM_FLAG_OVERRIDE;
+			Anim = BOTH_WALK1;
+			iBlend = 300;
 		}
 		else
 		{

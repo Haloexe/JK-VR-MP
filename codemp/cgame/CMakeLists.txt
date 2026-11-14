@@ -91,6 +91,7 @@ set(MPCGameCgameFiles
 	"${MPDir}/cgame/cg_vrforce.c"
 	"${MPDir}/cgame/cg_vrgun.c"
 	"${MPDir}/cgame/cg_vrwall.c"
+	"${MPDir}/cgame/cg_vrwalker.c"
 	"${MPDir}/cgame/cg_vrsaberdrop.c"
 	"${MPDir}/cgame/cg_vrwrist.c"
 	"${MPDir}/cgame/cg_vrholster.c"

@@ -47,6 +47,12 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Hang on to walls:** in mid-air, squeeze the grip with an empty hand on a
   wall and you hang there until you let go; press jump to push off. Anyone
   can, Force or not (servers can turn it off: `g_vrWallGrip 0`).
+- **Drive an AT-ST from its cockpit:** get into an AT-ST and you sit in its
+  head, looking out of its viewport, in a cockpit made for this mod. Take hold
+  of the yoke in front of you and push it to walk, pull it back to back up,
+  twist it to turn (or drive with the sticks); its guns aim where you look,
+  and its stride's sway is smoothed to a gentle rise and fall (servers can
+  turn it off: `g_vrWalker 0`).
 - **Rolls and crouch jumps:** in a roll your view goes down with your body,
   so your arms no longer stretch down to reach it; crouched in mid-air, your
   body crouches too, its head where your eyes are.
@@ -196,6 +202,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   left-handed), with a 3D aim dot, or take hold of a rifle's barrel with your
   other hand and aim it with both. On a server running this build your shots
   leave the barrel, so you can shoot round a corner.
+- **An AT-ST's cockpit:** drive an AT-ST from inside its head, with a yoke you
+  hold in both hands and its guns aiming where you look.
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a

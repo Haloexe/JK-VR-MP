@@ -462,6 +462,14 @@ GOOD TO KNOW
   only for a wall within about half a metre of the side of their box.
   Getting hurt or Force pushed or pulled knocks them off, as the game's
   debug melee wall hold does. g_vrWallGrip 0: no hanging on.
+* VR players drive an AT-ST from its cockpit: its driver's yoke turns it -
+  standing too, half as fast - not where they look, and pushed part way it
+  walks no faster than that; its guns aim where they look from the
+  cockpit's eyes, as far round as the AT-ST lets its driver look (its
+  vehicle file's lookYaw and lookPitch). Only from its driver, playing this
+  build in VR ("vrWalker 1" in the server info; bots never, nor anyone
+  in another vehicle, which drive as ever). g_vrWalker 0: AT-STs driven as
+  the game has them, by everyone.
 * VR players drop their sabers: holding the grip (Saber Grip: Hold), a VR
   player who lets go of their saber anywhere but at their side drops it -
   switched off, falling from their hand as it was going (no faster than

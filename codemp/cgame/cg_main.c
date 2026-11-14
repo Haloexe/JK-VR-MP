@@ -1209,6 +1209,8 @@ static void CG_RegisterGraphics( void ) {
 		cgs.media.crosshairShader[i] = trap->R_RegisterShaderNoMip( va("gfx/2d/crosshair%c", 'a'+i) );
 	}
 
+	CG_VR_WalkerRegister();	// OpenJK VR: an AT-ST's cockpit, the renderer's own models (cg_vrwalker.c)
+
 	cg.loadLCARSStage = 4;
 
 	cgs.media.backTileShader = trap->R_RegisterShader( "gfx/2d/backtile" );
@@ -2568,6 +2570,7 @@ Ghoul2 Insert End
 	CG_RP_Init();	// OpenJK VR: roleplay (before the serverinfo's read)
 	CG_VRH_Init();	// OpenJK VR: holsters (cg_vrholster.c)
 	CG_VR_WallInit();	// OpenJK VR: hanging on to walls (cg_vrwall.c)
+	CG_VR_WalkerInit();	// OpenJK VR: an AT-ST's cockpit (cg_vrwalker.c)
 	CG_VR_SaberDropInit();	// OpenJK VR: your saber let go of (cg_vrsaberdrop.c)
 	CG_VR_Init();	// OpenJK VR: your game's word on shots from your gun's barrel (cg_vr.c)
 

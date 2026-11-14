@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-22"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-23"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -67,6 +67,29 @@ General Public License version 2, like the rest of OpenJK.
 												// -22: ext.VR_SetSaberForce (a saber in the Force
 												//     hand: it reaches out with the Force all the
 												//     same - its Force grip, or X held)
+												// -23: ext.VR_SetCockpit, vrClientState_t.cockpit,
+												//     cockpitYaw (driving an AT-ST from its cockpit:
+												//     cg_vrwalker.c)
+
+// ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
+// cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
+// The cgame draws the cockpit and places the game's eyes in it; in it:
+// - your view turns as it turns, and only your head turns it else (no snap or
+//   smooth turning: the sticks drive it) - the way you faced as you sat down
+//   (or at Recenter) its front (vrClientState_t.cockpitYaw), your view's
+//   angles where your head looks from it (they aim);
+// - your commands go as it says (move, turn: its yoke's, or the sticks'),
+//   not as the sticks move you; A (jump) fires the second weapon; Use (its
+//   grip) gets you out only held a moment (VR_COCKPIT_USE_MS).
+typedef struct vrCockpit_s {
+	float		yaw;		// which way it faces in the world (degrees)
+	float		move;		// -1..1: walking (+) or backing up (-), as far as it's pushed
+	float		turn;		// -1..1: turning left (+) or right (-), as far as it's twisted
+	float		lookPitch;	// how far up and down your view's angles go (degrees: as far as the game lets its driver
+							// look - beyond, it holds them there, and they'd spin round as it does; 0: as far as ever)
+} vrCockpit_t;
+
+#define VR_COCKPIT_USE_MS		700		// Use held this long, in a cockpit, before it's pressed (no getting out by a slip of the grip)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)
@@ -400,6 +423,13 @@ typedef struct vrClientState_s {
 	// trigger held VR_SLIDE_MS and on, the cgame's said it's on a saber's
 	// hilt) - a tap was the saber's switch instead
 	qboolean	slide[2];
+
+	// you sit in a cockpit, as the cgame says (ext.VR_SetCockpit), and the
+	// tracking yaw its front's at: the way you faced as you sat down, or at
+	// Recenter - the game's view yaw is the cockpit's yaw plus your head's
+	// (referenceYaw: always your head's, in it) from that
+	qboolean	cockpit;
+	float		cockpitYaw;
 } vrClientState_t;
 
 // ext.VR_SetSaberTriggers: a trigger held this long (ms) is a slide, not a tap

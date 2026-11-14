@@ -9194,6 +9194,10 @@ void CG_Player( centity_t *cent ) {
 		}
 	}
 
+	if ( CG_VR_WalkerHides( cent ) ) {
+		renderfx = RF_THIRD_PERSON;	// OpenJK VR: the AT-ST you drive from its cockpit - you're in it (cg_vrwalker.c): only in mirrors
+	}
+
 	// Update the player's client entity information regarding weapons.
 	// Explanation:  The entitystate has a weapond defined on it.  The cliententity does as well.
 	// The cliententity's weapon tells us what the ghoul2 instance on the cliententity has bolted to it.

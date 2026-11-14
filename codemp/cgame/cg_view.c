@@ -1676,7 +1676,10 @@ static int CG_CalcViewValues( void ) {
 
 	if ( !manningTurret )
 	{
-		if ( cg.predictedPlayerState.m_iVehicleNum //in a vehicle
+		if ( CG_VR_WalkerView() )
+		{//OpenJK VR: in an AT-ST's cockpit - from its eyes, its way (cg_vrwalker.c)
+		}
+		else if ( cg.predictedPlayerState.m_iVehicleNum //in a vehicle
 			&& BG_UnrestrainedPitchRoll( &cg.predictedPlayerState, cg_entities[cg.predictedPlayerState.m_iVehicleNum].m_pVehicle ) )//can roll/pitch without restriction
 		{//use the vehicle's viewangles to render view!
 			CG_OffsetFighterView();
@@ -2724,6 +2727,11 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 		cg.renderingThirdPerson = 0;
 	}
 
+	if ( CG_VR_WalkerWanted() )
+	{ //OpenJK VR: driving an AT-ST from its cockpit - your view's from in it (cg_vrwalker.c)
+		cg.renderingThirdPerson = 0;
+	}
+
 	if (cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR)
 	{
 		cg.renderingThirdPerson = 0;
@@ -2795,6 +2803,7 @@ static void CG_DrawActiveFrameEye( int serverTime, stereoFrame_t stereoView, qbo
 	// server has them - not where other VR players' bodies are drawn (spectators and the intermission: none, as for the gun)
 	if ( cg.predictedPlayerState.persistant[PERS_TEAM] != TEAM_SPECTATOR && cg.predictedPlayerState.pm_type != PM_INTERMISSION ) {
 		CG_VR_AddAimDot();
+		CG_VR_WalkerAimDot();	// (in an AT-ST's cockpit, its guns': cg_vrwalker.c)
 	}
 	CG_VR_DuelFrame();
 	CG_PoseWheelFrame();	// (the pose wheel, if it's up: cg_vrpose.c)

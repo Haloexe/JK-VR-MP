@@ -647,6 +647,14 @@ typedef struct vrState_s {
 	byte					eyeTints[VR_MAX_TINTS][4];	// the cgame's tints across this eye's view (VR_TintView), as the
 														// renderer has the 2D's colours (bytes)...
 	int						numEyeTints;	// ...how many
+
+	// a cockpit you sit in (VR_SetCockpit: the cgame's word, every frame)
+	vrCockpit_t				cockpit;		// as it said last...
+	int						cockpitTime;	// ...as of this cls.realtime (0: it said you don't)
+	float					cockpitTurnRate;	// how fast it's turning (degrees a second, as said: the Comfort Vignette)
+	qboolean				inCockpit;		// in one this frame (VR_InCockpit, as tracking's updated)...
+	float					cockpitRef;		// ...the tracking yaw its front's at (as you sat down, or at Recenter)
+	int						cockpitUse;		// Use held in it since (Sys_Milliseconds; 0: not held)
 } vrState_t;
 
 static vrState_t		vr;
@@ -2480,6 +2488,79 @@ still a grab - and so does that hand's trigger pressed while it's held
 
 #define VR_FORCE_LOST_MS	200		// a hand not tracked this long isn't the Force hand
 
+/*
+================================================================================
+
+A cockpit (an AT-ST's, driving it: the cgame's cg_vrwalker.c)
+
+The cgame says every frame you sit in one (ext.VR_SetCockpit), which way it
+faces in the world and how its yoke drives it - it draws the cockpit, and
+puts the game's eyes in it. In it:
+- your view turns as it turns, and else only as your head does: no snap or
+  smooth turning (the sticks are the cgame's to drive it with). Its front is
+  the way you faced as you sat down - or at Recenter (cockpitRef) - and the
+  game's view is its yaw and your head's from there (the renderer's
+  referenceYaw your head's, always): your view's angles, which aim, where
+  you look from it;
+- your commands go as the cgame says (its yoke's or the sticks'), not as
+  the moving stick moves you; A (jump) fires the second weapon; Use - its
+  grip, away from the yoke - gets you out only held VR_COCKPIT_USE_MS.
+
+================================================================================
+*/
+
+#define VR_COCKPIT_FRESH		200		// ms the cgame's word that you sit in one holds
+
+void VR_SetCockpit( const vrCockpit_t *cockpit ) {
+	if ( !cockpit ) {
+		vr.cockpitTime = 0;
+		vr.cockpitTurnRate = 0.0f;
+		return;
+	}
+	if ( vr.cockpitTime && cls.realtime - vr.cockpitTime > 0 && cls.realtime - vr.cockpitTime <= VR_COCKPIT_FRESH ) {
+		vr.cockpitTurnRate = fabsf( AngleSubtract( cockpit->yaw, vr.cockpit.yaw ) ) * 1000.0f / ( cls.realtime - vr.cockpitTime );
+	} else if ( !vr.cockpitTime || cls.realtime - vr.cockpitTime > VR_COCKPIT_FRESH ) {
+		vr.cockpitTurnRate = 0.0f;
+	}
+	vr.cockpit = *cockpit;
+	vr.cockpit.move = Com_Clamp( -1.0f, 1.0f, vr.cockpit.move );
+	vr.cockpit.turn = Com_Clamp( -1.0f, 1.0f, vr.cockpit.turn );
+	vr.cockpitTime = cls.realtime ? cls.realtime : 1;
+}
+
+// Whether you sit in one now: the cgame's said so lately, you riding
+// something in a game of your own (not a demo, the game steering your view).
+static qboolean VR_InCockpit( void ) {
+	return (qboolean)( vr.cockpitTime && cls.realtime - vr.cockpitTime >= 0 && cls.realtime - vr.cockpitTime <= VR_COCKPIT_FRESH &&
+		cls.state == CA_ACTIVE && cl.snap.valid && cl.snap.ps.m_iVehicleNum && !VR_GameOwnsView() );
+}
+
+// Your command, in one (VR_AddMovement): as the cgame says it drives it.
+static void VR_CockpitMovement( usercmd_t *cmd ) {
+	const int now = Sys_Milliseconds();
+
+	cmd->forwardmove = ClampChar( (int)( vr.cockpit.move * 127.0f ) );
+	cmd->rightmove = ClampChar( (int)( -vr.cockpit.turn * 127.0f ) );
+	if ( cmd->upmove > 0 ) {
+		cmd->buttons |= BUTTON_ALT_ATTACK;	// (A, jump: the second weapon)
+	}
+	cmd->upmove = 0;
+	if ( cmd->buttons & BUTTON_USE ) {
+		if ( !vr.cockpitUse ) {
+			vr.cockpitUse = now ? now : 1;
+		}
+		if ( now - vr.cockpitUse < VR_COCKPIT_USE_MS ) {
+			cmd->buttons &= ~BUTTON_USE;	// (held a moment first: no getting out by a slip of the grip)
+		}
+	} else {
+		vr.cockpitUse = 0;
+	}
+	if ( vr.cockpit.move != 0.0f ) {
+		vr.comfortMove = fabsf( vr.cockpit.move );	// (the Comfort Vignette: as hard as it's driven)
+		vr.comfortMoveTime = now;
+	}
+}
+
 // A saber in the Force hand, how it reaches out with the Force, as the cgame
 // said lately (ext.VR_SetSaberForce: every frame - unsaid a moment, not at
 // all): VR_SABER_FORCE_*.
@@ -3214,6 +3295,13 @@ static void VR_PollInput( void ) {
 	// menu it scrolls instead, and turning is dropped by VR_ApplyHeadAim)
 	if ( VR_GameOwnsView() ) {
 		vr.pendingTurn = 0.0f;	// e.g. paused: don't pile up turns
+	}
+	if ( vr.inCockpit ) {
+		// (in a cockpit both sticks drive it - the cgame's - and it turns you)
+		vr.pendingTurn = 0.0f;
+		vr.comfortTurn = vr.cockpitTurnRate / VR_COMFORT_TURN_FULL;
+		vr.lastPollTime = Sys_Milliseconds();
+		return;
 	}
 	const float ax = fabsf( vr.turnX ), ay = fabsf( vr.turnY );
 	if ( vr.wheelState == VR_WHEEL_OPEN ) {
@@ -4422,6 +4510,15 @@ static void VR_UpdateTracking( void ) {
 	vr.headYaw = VR_AxisYaw( headAxis );
 	vr.headPitch = RAD2DEG( asinf( Com_Clamp( -1.0f, 1.0f, -headAxis[0][2] ) ) );
 
+	// a cockpit: sat down in it just now, or Recenter - its front the way you face
+	{
+		const qboolean inCockpit = VR_InCockpit();
+		if ( inCockpit && ( !vr.inCockpit || recentred ) ) {
+			vr.cockpitRef = vr.headYaw;
+		}
+		vr.inCockpit = inCockpit;
+	}
+
 	// Your height (Real Crouch decided), and the eyes: the head's offset from
 	// the game's eyes - placed again as the cgame says where they are now
 	// (VR_SetEyeDrop)
@@ -4474,6 +4571,12 @@ static void VR_UpdateTracking( void ) {
 	}
 	vr.viewLocked = locked;
 	vrRender.referenceYaw = locked ? vr.lockYaw : ( vr.aimFromHand ? vr.handAimYaw : vr.headYaw );
+	if ( vr.inCockpit ) {
+		// (in a cockpit, your head: the game's view is the cockpit's yaw and
+		// your head's from its front - VR_ApplyHeadAim; locked again after,
+		// from here)
+		vrRender.referenceYaw = vr.lockYaw = vr.headYaw;
+	}
 
 	vrRender.worldScale = Com_Clamp( 1.0f, 1000.0f, vr_worldScale->value );
 
@@ -4509,6 +4612,8 @@ static void VR_UpdateTracking( void ) {
 	vrClient.poseWheel = ( vr.wheelState == VR_WHEEL_OPEN ) ? qtrue : qfalse;
 	vrClient.referenceYaw = vrRender.referenceYaw;
 	vrClient.worldScale = vrRender.worldScale;
+	vrClient.cockpit = vr.inCockpit;
+	vrClient.cockpitYaw = vr.cockpitRef;
 	VectorCopy( headAxis[0], vrClient.headAxis[0] );
 	VectorCopy( headAxis[1], vrClient.headAxis[1] );
 	VectorCopy( headAxis[2], vrClient.headAxis[2] );
@@ -4611,6 +4716,16 @@ void VR_ApplyHeadAim( void ) {
 		return;
 	}
 
+	if ( vr.inCockpit ) {
+		// in a cockpit: its yaw and your head's from its front, your head's
+		// pitch - where you look from it, which aims (the server's delta
+		// taken out: its view's those)
+		const float pitchMax = ( vr.cockpit.lookPitch > 1.0f && vr.cockpit.lookPitch < 88.0f ) ? vr.cockpit.lookPitch - 0.5f : 88.0f;
+		cl.viewangles[YAW] = vr.cockpit.yaw + AngleSubtract( vr.headYaw, vr.cockpitRef ) - SHORT2ANGLE( cl.snap.ps.delta_angles[YAW] );
+		cl.viewangles[PITCH] = Com_Clamp( -pitchMax, pitchMax, vr.headPitch ) - SHORT2ANGLE( cl.snap.ps.delta_angles[PITCH] );
+		return;
+	}
+
 	// thumbstick turning rotates the body; the head/hand adds on top
 	cl.viewangles[YAW] += turn + deltaYaw;
 
@@ -4628,6 +4743,10 @@ void VR_ApplyHeadAim( void ) {
 void VR_AddMovement( usercmd_t *cmd ) {
 	vr.keyCrouch = (qboolean)( cmd->upmove < 0 );	// (B, as the keys have it: VR_SetEyeDrop)
 	if ( !VR_IsRunning() || !vr.inputAttached || VR_UseScreenLayer() || ( Key_GetCatcher() & KEYCATCH_MESSAGE ) ) {
+		return;
+	}
+	if ( vr.inCockpit ) {
+		VR_CockpitMovement( cmd );	// (in a cockpit: as it's driven)
 		return;
 	}
 	// Real Crouch: crouched by your head (VR_HeadRise) - jumping (A) stands
@@ -5688,6 +5807,7 @@ void VR_SetGrabZones( int handMask ) {}
 void VR_SetWeaponHand( int hand ) {}
 void VR_SetSaberTriggers( int handMask ) {}
 void VR_SetSaberForce( int how ) {}
+void VR_SetCockpit( const vrCockpit_t *cockpit ) {}
 void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}

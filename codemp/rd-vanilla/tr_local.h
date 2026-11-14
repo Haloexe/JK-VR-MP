@@ -1447,6 +1447,10 @@ void	R_InitImages( void );
 // OpenJK VR: the renderer's own images and shaders for blades of any colour (tr_vrsaber.cpp)
 void		R_VR_CreateSaberImages( void );
 const char	*R_VR_BuiltinShaderText( void );
+// OpenJK VR: the AT-ST cockpit, built in (tr_vratst.cpp)
+qboolean	R_VR_AtstModel( const char *name, void **buffer );
+void		R_VR_CreateAtstImages( void );
+const char	*R_VR_AtstShaderText( void );
 void	R_DeleteTextures( void );
 float	R_SumOfUsedImages( qboolean bUseFormat );
 void	R_InitSkins( void );
