@@ -2313,12 +2313,15 @@ void CG_PlayerAnimEventDo( centity_t *cent, animevent_t *animEvent )
 	case AEV_SOUNDCHAN:
 		channel = (soundChannel_t)animEvent->eventData[AED_SOUNDCHANNEL];
 	case AEV_SOUND:
+		if ( CG_VR_WalkerStepSound( cent, animEvent->keyFrame ) )
+		{//OpenJK VR: a step of the AT-ST you drive from its cockpit - the cockpit plays those (cg_vrwalker.c)
+			break;
+		}
 		{	// are there variations on the sound?
 			const int holdSnd = animEvent->eventData[ AED_SOUNDINDEX_START+Q_irand( 0, animEvent->eventData[AED_SOUND_NUMRANDOMSNDS] ) ];
 			if ( holdSnd > 0 )
 			{
 				trap->S_StartSound( NULL, cent->currentState.number, channel, holdSnd );
-				CG_VR_WalkerHeard( cent );	// OpenJK VR: (the AT-ST you drive from its cockpit's steps, for its log: cg_vrwalker.c)
 			}
 		}
 		break;

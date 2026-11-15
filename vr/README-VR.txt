@@ -619,7 +619,9 @@ built into the game, so it's there on any server running this build:
     Reach); the visor over it cuts off the view upward. With Play Seated,
     your real chair is where the seat is. The AT-ST itself isn't drawn in
     your view - you're in it - and as it strides its head's sway from side
-    to side and back and forth isn't yours: only a gentle rise and fall.
+    to side and back and forth isn't yours: only a gentle rise and fall,
+    and the thump of its steps as its feet come down (walking, backing up,
+    turning on the spot).
   * The yoke in front of you drives it. Reach for its grips and squeeze
     your grips to take hold (a buzz): push it forward to walk - as fast as
     it's pushed - pull it back to back up, twist it to turn (your right

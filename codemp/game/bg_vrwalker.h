@@ -84,4 +84,26 @@ static QINLINE void BG_VRWalkerAim( const vec3_t viewangles, float walkerYaw, fl
 	AngleVectors( a, dir, NULL, NULL );
 }
 
+// An AT-ST's steps, as its driver hears them in the cockpit (cg_vrwalker.c):
+// its feet come down at these frames of its walk - one cycle its run, its
+// walk and backing up all play (forward, or back) - as its animevents.cfg
+// has its steps (the game's own sounds: sound/chars/atst/fs_atst_01..04).
+#define VR_WALKER_STEP_1		3
+#define VR_WALKER_STEP_2		22
+#define VR_WALKER_STEP_SOUNDS	4
+
+// Whether an AT-ST's legs, going from frame 'from' to frame 'to' of its walk
+// (a cycle of 'count' frames from 'first'; played back, backing up), passed
+// frame 'key' - the frame they reached too, not the one they left.
+static QINLINE qboolean BG_VRWalkerStepPassed( int from, int to, int key, qboolean back, int first, int count ) {
+	if ( from == to || count <= 0 || key < first || key >= first + count || from < first || from >= first + count ||
+		to < first || to >= first + count ) {
+		return qfalse;
+	}
+	if ( !back ) {
+		return (qboolean)( ( to > from ) ? ( key > from && key <= to ) : ( key > from || key <= to ) );
+	}
+	return (qboolean)( ( to < from ) ? ( key >= to && key < from ) : ( key < from || key >= to ) );
+}
+
 #endif	// BG_VRWALKER_H

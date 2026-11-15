@@ -89,9 +89,14 @@ static struct {
 	int			yokeTime;		// (cg.time it was eased to)
 	qboolean	told;			// the engine's been told you sit in it
 
-	// its walk, as the log has it (CG_VRK_LogWalk)
-	int			steps;			// the sounds its steps played (CG_VR_WalkerHeard)...
-	int			walkLogTime;	// ...since (cg.time; 0: not yet)
+	// its steps (CG_VRK_Steps), and its walk as the log has it (CG_VRK_LogWalk)
+	sfxHandle_t	stepSound[VR_WALKER_STEP_SOUNDS];	// (the game's own)
+	int			stepFrame;		// its walk's frame as last seen (-1: not seen)...
+	int			stepFrameTime;	// ...as of (cg.time; 0: not walking)
+	int			stepTime;		// a step last played (cg.time)
+	int			steps;			// steps played...
+	int			stepsGame;		// ...and the game's own for them not (CG_VR_WalkerStepSound) - since...
+	int			walkLogTime;	// ...this (cg.time; 0: not yet)
 	int			walkLogLegs;	// its legs' animation, as logged
 } vrk;
 
@@ -117,6 +122,9 @@ static void CG_VRK_Register( void ) {
 		return;
 	}
 	vrk.registered = qtrue;
+	for ( i = 0; i < VR_WALKER_STEP_SOUNDS; i++ ) {
+		vrk.stepSound[i] = trap->S_RegisterSound( va( "sound/chars/atst/fs_atst_0%i.wav", i + 1 ) );	// (its steps: CG_VRK_Steps)
+	}
 	vrk.cockpit = trap->R_RegisterModel( "models/vr/atst/cockpit.md3" );
 	vrk.yoke = trap->R_RegisterModel( "models/vr/atst/yoke.md3" );
 	vrk.handModel = trap->R_RegisterModel( "models/vr/atst/hand.md3" );
@@ -209,7 +217,9 @@ static void CG_VRK_Place( centity_t *veh, const vrClientState_t *vr ) {
 		vrk.held[0] = vrk.held[1] = qfalse;
 		vrk.push = vrk.twist = vrk.move = vrk.turn = 0.0f;
 		vrk.yokeTime = 0;
-		vrk.steps = vrk.walkLogTime = 0;
+		vrk.steps = vrk.stepsGame = vrk.walkLogTime = 0;
+		vrk.stepFrame = -1;
+		vrk.stepFrameTime = vrk.stepTime = 0;
 		CG_VR_Log( "walker: in the cockpit of %i\n", veh->currentState.number );
 	}
 	vrk.on = qtrue;
@@ -521,12 +531,111 @@ static void CG_VRK_Draw( void ) {
 	}
 }
 
-// A sound of the AT-ST's own animations played (CG_PlayerAnimEventDo: its
-// steps - two a stride, walking, running or backing up), counted for the log
-// if it's the one you drive from its cockpit.
-void CG_VR_WalkerHeard( const centity_t *cent ) {
-	if ( cent && CG_VR_InCockpit() && cent->currentState.number == vrk.vehNum ) {
-		vrk.steps++;
+/*
+================================================================================
+
+Its steps
+
+The AT-ST's steps as you hear them in its cockpit: the game's own (two a
+stride: its animevents.cfg's), played here as its legs pass the frames its
+feet come down on (bg_vrwalker.h) - walking, running, backing up, turning on
+the spot - not as the game plays them, which in the cockpit didn't always
+come (CG_VR_WalkerStepSound: those not played, so none twice). Its animation's
+frame not to be told, or held a moment, as it walks: a step every half of its
+stride's time all the same.
+
+================================================================================
+*/
+
+#define VRK_STEP_STUCK_MS	300		// its walk's frame held this long, walking: its animation's not going
+
+// The AT-ST's walk - the cycle its legs play walking, running, backing up and
+// turning on the spot: its first frame, how many, how long each is (ms; less
+// than 0: played back) - as its animation.cfg has it, for this animation of
+// its (else the game's: 114, 38, 50).
+static void CG_VRK_Walk( const centity_t *veh, int anim, int *first, int *count, int *lerp ) {
+	*first = 114;
+	*count = 38;
+	*lerp = 50;
+	if ( veh->localAnimIndex >= 0 && veh->localAnimIndex < MAX_ANIM_FILES && bgAllAnims[veh->localAnimIndex].anims &&
+		anim >= 0 && anim < MAX_ANIMATIONS ) {
+		const animation_t *a = &bgAllAnims[veh->localAnimIndex].anims[anim];
+		if ( a->numFrames > 1 && a->frameLerp ) {
+			*first = a->firstFrame;
+			*count = a->numFrames;
+			*lerp = a->frameLerp;
+		}
+	}
+}
+
+static qboolean CG_VRK_Walking( int anim ) {
+	return (qboolean)( anim == BOTH_WALK1 || anim == BOTH_RUN1 || anim == BOTH_WALKBACK1 || anim == BOTH_RUNBACK1 );
+}
+
+// Whether a sound of an animation's (CG_PlayerAnimEventDo) is the cockpit's
+// to play instead: a step of the AT-ST you drive from its cockpit - one on a
+// frame of its walk (CG_VRK_Steps plays them). Counted for the log.
+qboolean CG_VR_WalkerStepSound( const centity_t *cent, int keyFrame ) {
+	int first, count, lerp;
+
+	if ( !cent || !CG_VR_InCockpit() || cent->currentState.number != vrk.vehNum ) {
+		return qfalse;
+	}
+	CG_VRK_Walk( cent, BOTH_RUN1, &first, &count, &lerp );
+	if ( keyFrame < first || keyFrame >= first + count ) {
+		return qfalse;	// (not a step: its fall's, ...)
+	}
+	vrk.stepsGame++;
+	return qtrue;
+}
+
+static void CG_VRK_Step( const centity_t *veh ) {
+	const sfxHandle_t s = vrk.stepSound[Q_irand( 0, VR_WALKER_STEP_SOUNDS - 1 )];
+
+	if ( s ) {
+		trap->S_StartSound( NULL, veh->currentState.number, CHAN_AUTO, s );	// (where the game plays them: from it)
+	}
+	vrk.steps++;
+	vrk.stepTime = cg.time;
+}
+
+// Its steps, once a frame in the cockpit.
+static void CG_VRK_Steps( centity_t *veh ) {
+	const int legs = veh->currentState.legsAnim;
+	int first, count, lerp, frame = -1;
+	qboolean back;
+	float f;
+
+	if ( !CG_VRK_Walking( legs ) || !veh->ghoul2 ) {
+		vrk.stepFrame = -1;
+		vrk.stepFrameTime = 0;
+		return;
+	}
+	CG_VRK_Walk( veh, legs, &first, &count, &lerp );
+	back = (qboolean)( lerp < 0 );
+	if ( trap->G2API_GetBoneFrame( veh->ghoul2, "model_root", cg.time, &f, cgs.gameModels, 0 ) ) {
+		frame = (int)floorf( f );
+		if ( frame < first || frame >= first + count ) {
+			frame = -1;	// (blending in from another animation)
+		}
+	}
+	if ( !vrk.stepFrameTime || cg.time - vrk.stepFrameTime < 0 ) {
+		vrk.stepFrame = frame;	// (walking afresh: from here)
+		vrk.stepFrameTime = cg.time ? cg.time : 1;
+		return;
+	}
+	if ( frame >= 0 && frame != vrk.stepFrame ) {
+		if ( vrk.stepFrame >= 0 && ( BG_VRWalkerStepPassed( vrk.stepFrame, frame, first + VR_WALKER_STEP_1, back, first, count ) ||
+			BG_VRWalkerStepPassed( vrk.stepFrame, frame, first + VR_WALKER_STEP_2, back, first, count ) ) ) {
+			CG_VRK_Step( veh );
+		}
+		vrk.stepFrame = frame;
+		vrk.stepFrameTime = cg.time ? cg.time : 1;
+		return;
+	}
+	// its frame not to be told, or held: by time
+	if ( cg.time - vrk.stepFrameTime > VRK_STEP_STUCK_MS && ( cg.time - vrk.stepTime < 0 || cg.time - vrk.stepTime >= count * abs( lerp ) / 2 ) ) {
+		CG_VRK_Step( veh );
 	}
 }
 
@@ -541,13 +650,13 @@ static void CG_VRK_LogWalk( void ) {
 	const char *name = GetStringForID( animTable, legs );
 
 	if ( vrk.walkLogTime && since >= 0 ) {
-		if ( legs != vrk.walkLogLegs ? ( since < 250 ) : ( since < 2000 || ( !cg.predictedVehicleState.speed && !vrk.steps ) ) ) {
+		if ( legs != vrk.walkLogLegs ? ( since < 250 ) : ( since < 2000 || ( !cg.predictedVehicleState.speed && !vrk.steps && !vrk.stepsGame ) ) ) {
 			return;
 		}
 	}
-	CG_VR_Log( "walker: its legs %s (frame %i), %.0f%% of its top speed; %i steps heard\n", name ? name : "?", veh->pe.legs.frame,
-		top > 0.0f ? cg.predictedVehicleState.speed * 100.0f / top : 0.0f, vrk.steps );
-	vrk.steps = 0;
+	CG_VR_Log( "walker: its legs %s (frame %i), %.0f%% of its top speed; %i steps played (the game's own for them: %i)\n",
+		name ? name : "?", vrk.stepFrame, top > 0.0f ? cg.predictedVehicleState.speed * 100.0f / top : 0.0f, vrk.steps, vrk.stepsGame );
+	vrk.steps = vrk.stepsGame = 0;
 	vrk.walkLogTime = cg.time ? cg.time : 1;
 	vrk.walkLogLegs = legs;
 }
@@ -577,6 +686,7 @@ void CG_VR_WalkerFrame( const vrClientState_t *vr ) {
 	}
 	if ( vrk.yokeTime != cg.time ) {
 		CG_VRK_Yoke( vr );
+		CG_VRK_Steps( &cg_entities[vrk.vehNum] );
 		CG_VRK_LogWalk();
 	}
 	CG_VRK_Draw();
