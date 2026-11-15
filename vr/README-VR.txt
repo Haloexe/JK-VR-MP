@@ -71,7 +71,9 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
   * An AT-ST you drive from its cockpit: you sit in its head, look out of
     its viewport, and drive it with the yoke in front of you - push it to
     walk, pull it to back up, twist it to turn - its guns aiming where you
-    look (see AN AT-ST'S COCKPIT)
+    look, its screens showing its armour, guns, the ground under it, who's
+    before its guns, chat and its heading as you go (see AN AT-ST'S
+    COCKPIT)
   * A keyboard in the headset for typing in menus, chat and the console
     (the wheel opens the console in a game - hold Y)
   * A dedicated server to run your own servers with all of the above, on
@@ -634,6 +636,27 @@ built into the game, so it's there on any server running this build:
     other trigger - or A - the second weapon. They aim where you look, as
     far round as the AT-ST lets its driver look, a floating dot showing
     where they'll hit. Others see its head tip up and down as you look.
+  * Its six screens show how it's doing and what's round it as you go:
+      HULL     its armour left (the legs' bars green, then amber below
+               half, red below a quarter) and STEP WALK or HOLD
+      WEAPONS  the main guns READY, or COOLING once they've spent their
+               charge; HEAT, how much of it they've spent (it comes back
+               as they cool); the second weapon's shots left
+      GROUND   the camera under it looking down: the ground going by, a
+               metre to a square, and its feet - one planted while the
+               other swings - in step with its legs
+      TARGET   who's before its guns - the one nearest where they aim
+               (within about 40 degrees, some 175 m), in sight and not on
+               your side (nor your companions) - their name, how far off,
+               and a box where they are (left or right of where you aim:
+               in the middle, you're on them); with no one there, the box
+               sweeps, searching
+      COMMS    the last two things said in chat, and a wave that rises
+               with the voices you hear
+      HEADING  which way it faces (000 north, 090 east), its compass tape,
+               and how fast it's going (km/h)
+    They're drawn afresh as they change, a few times a second at most, so
+    they cost the game next to nothing.
   * To get out, squeeze either grip away from the yoke and hold it a
     moment - a slip of the grip doesn't throw you out, and holding on
     once you're out doesn't put you back in. (No Force gestures in it: the
@@ -1986,11 +2009,11 @@ camera. "cg_thirdPerson 1" gives third person all the time.
 
 KNOWN LIMITATIONS
 -----------------
-  * The AT-ST's cockpit: its screens show their names and gauges but not
-    what's going on yet (the ground camera, the target, the hull's
-    damage, the heading), its hatch doesn't open, and your hands in it are
-    plain gloves. Only the AT-ST has one; you drive other vehicles from
-    behind, as ever.
+  * The AT-ST's cockpit: its hatch doesn't open, and your hands in it are
+    plain gloves. Its ground screen is drawn from what the AT-ST does, not
+    a real camera; its legs show one armour between them, as the game has
+    it. Only the AT-ST has one; you drive other vehicles from behind, as
+    ever.
   * Shots start at your gun's muzzle only on servers running this build
     (and games hosted with it); elsewhere they start at your eye (they go
     exactly where the aim dot shows either way). Round a corner, the
@@ -2165,8 +2188,9 @@ no client. Source files:
   codemp/game/g_vrholster.c    holsters, the server's side (shared rules:
                                game/bg_vrholster.h, bg_pmove.c, bg_saber.c)
   codemp/cgame/cg_vrwalker.c   an AT-ST's cockpit, the driver's side: where
-                               it is, its yoke, the view and aim from it
-                               (the engine's: cl_vr.cpp VR_SetCockpit)
+                               it is, its yoke, the view and aim from it,
+                               what its screens show (the engine's:
+                               cl_vr.cpp VR_SetCockpit, VR_SetCockpitScreens)
   codemp/game/g_vrwalker.c     ...the server's side: whose yoke drives it
                                (the rules both go by: game/bg_vrwalker.h;
                                WalkerNPC.c turns it, g_weapon.c aims it)
@@ -2174,7 +2198,8 @@ no client. Source files:
                                built in (the models made by
                                vr/atst/make_cockpit.py from the study's
                                vr/atst/cockpit.json; the pictures drawn by
-                               tr_vratst_art.cpp)
+                               tr_vratst_art.cpp), and its screens drawn
+                               afresh as they change
   codemp/client/cl_voice.cpp   voice chat: microphone, Opus, sending,
                                receiving (clc_voice / svc_voice, only with
                                servers whose systeminfo has sv_voice)

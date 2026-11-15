@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-23"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-24"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -70,6 +70,8 @@ General Public License version 2, like the rest of OpenJK.
 												// -23: ext.VR_SetCockpit, vrClientState_t.cockpit,
 												//     cockpitYaw (driving an AT-ST from its cockpit:
 												//     cg_vrwalker.c)
+												// -24: ext.VR_SetCockpitScreens (what the cockpit's
+												//     screens show)
 
 // ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
 // cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
@@ -92,6 +94,47 @@ typedef struct vrCockpit_s {
 } vrCockpit_t;
 
 #define VR_COCKPIT_USE_MS		700		// a grip held this long, in a cockpit, before Use's pressed (no getting out by a slip of it)
+
+// ext.VR_SetCockpitScreens( screens ): what the cockpit's six screens show
+// (the renderer draws them: tr_vratst.cpp) - said every frame you sit in it,
+// with ext.VR_SetCockpit; NULL, or unsaid a moment, they stay as they are.
+#define VR_SCREEN_LINE			80		// a line of their writing, with its end (they show less: what fits)
+#define VR_SCREEN_HEAT			12		// the main guns' heat: so many bars
+#define VR_SCREEN_SECOND		8		// the second weapon's shots left: so many bars, as full as it is
+
+typedef struct vrCockpitScreens_s {
+	int			time;			// ms (the game's): what moves on them of itself goes with it (a sweep, a wave)
+
+	// HULL
+	int			armour;			// its armour left (%)
+	qboolean	walking;		// its legs walking (STEP WALK), not standing (STEP HOLD)
+
+	// WEAPONS
+	qboolean	ready;			// the main guns can fire (READY), or not till they've cooled (COOLING)
+	int			heat;			// how hot they run (0..VR_SCREEN_HEAT: as much of their charge as they've spent)
+	int			second;			// the second weapon's shots left...
+	int			secondMax;		// ...of as many as it holds
+
+	// GROUND
+	float		ground;			// how far it's walked (metres; backing up, back): the ground goes by under it as far
+	float		stride;			// where its legs are in their stride (0..1: the right foot comes down at 0, the left
+								// at 0.5)
+	float		walk;			// how much it walks (0..1: its feet swing as high)
+
+	// TARGET
+	char		target[VR_SCREEN_LINE];	// who's before its guns (the nearest to where they aim; empty: no one)...
+	int			range;			// ...how far off (metres)...
+	float		bearing;		// ...and where: left (-1) to right (1) of where the guns aim, as far as the screen shows
+
+	// COMMS
+	char		comms[2][VR_SCREEN_LINE];	// the last two things said (the chat's), the latest last (empty: nothing)
+	float		voice;			// how loud the voices are that you hear (0..1)
+
+	// HEADING
+	int			heading;		// which way it faces (0..359: a compass's degrees - the map's north, +Y, 0; east,
+								// +X, 90)
+	int			speed;			// how fast it goes (km/h)
+} vrCockpitScreens_t;
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)

@@ -434,6 +434,7 @@ void RE_BeginFrame( stereoFrame_t stereoFrame ) {
 	tr.frameSceneNum = 0;
 
 	RE_Anchor2D( VR_ANCHOR2D_STRETCH );	// OpenJK VR: every frame starts with the 2D stretched
+	R_VR_AtstScreensFrame();			// OpenJK VR: in an AT-ST's cockpit, its screens as they change
 
 	//
 	// do overdraw measurement

@@ -1953,6 +1953,7 @@ int			CG_VR_WalkerButtons( void );
 int			CG_VR_WalkerWeaponHand( void );
 qboolean	CG_VR_WalkerAim( int vehNum, vec3_t start, vec3_t dir );
 void		CG_VR_WalkerAimDot( void );
+void		CG_VR_WalkerChat( const char *text );
 // cg_vrgun.c (OpenJK VR: both hands on your gun)
 void		CG_VR_GunFrame( const vrClientState_t *vr );
 int			CG_VR_GunZones( void );

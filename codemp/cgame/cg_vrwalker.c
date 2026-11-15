@@ -30,6 +30,9 @@ serverinfo), Cockpit on (cg_vrCockpit):
 - either grip squeezed away from the yoke, held a moment, gets you out:
   one press of Use, none more till it's let go (the engine's: held on, the
   game's Use would put you straight back in). No Force gestures in it.
+- its six screens show how it is and what's round it as it goes: its
+  armour and legs, its guns, the ground going by under it, who's before its
+  guns, what's said, which way it faces and how fast (CG_VRK_Screens).
 On a server without it (or Cockpit off) you drive it as the game has it,
 watching it from behind: it turns toward where you look - as you do out of
 VR, always. Your game says it goes by these rules to every server ("vrw 1"
@@ -98,7 +101,20 @@ static struct {
 	int			stepsGame;		// ...and the game's own for them not (CG_VR_WalkerStepSound) - since...
 	int			walkLogTime;	// ...this (cg.time; 0: not yet)
 	int			walkLogLegs;	// its legs' animation, as logged
+	float		legFrame;		// its walk's frame as last seen, between frames (less than 0: not seen)
+
+	// its screens (CG_VRK_Screens)
+	vrCockpitScreens_t	screens;	// what they show (said to the engine every frame)...
+	int			screensTime;	// ...worked out for this cg.time (0: not yet - in it afresh)
+	float		ground;			// metres walked (round again every so often: only where in a metre it is shows)
+	float		stride;			// where its legs are in their stride (0..1)
+	float		walk;			// how much it walks, eased
+	float		voice;			// how loud the voices are that you hear, eased
+	int			target;			// who's before its guns (ENTITYNUM_NONE: no one)
+	char		chat[2][VR_SCREEN_LINE];	// the last two things said (CG_VR_WalkerChat), the latest last
 } vrk;
+
+static void CG_VRK_Screens( centity_t *veh, const vrClientState_t *vr );
 
 extern stringID_table_t animTable[MAX_ANIMATIONS + 1];
 
@@ -220,6 +236,10 @@ static void CG_VRK_Place( centity_t *veh, const vrClientState_t *vr ) {
 		vrk.steps = vrk.stepsGame = vrk.walkLogTime = 0;
 		vrk.stepFrame = -1;
 		vrk.stepFrameTime = vrk.stepTime = 0;
+		vrk.legFrame = -1.0f;
+		vrk.screensTime = 0;
+		vrk.ground = vrk.stride = vrk.walk = vrk.voice = 0.0f;
+		vrk.target = ENTITYNUM_NONE;
 		CG_VR_Log( "walker: in the cockpit of %i\n", veh->currentState.number );
 	}
 	vrk.on = qtrue;
@@ -606,6 +626,7 @@ static void CG_VRK_Steps( centity_t *veh ) {
 	qboolean back;
 	float f;
 
+	vrk.legFrame = -1.0f;
 	if ( !CG_VRK_Walking( legs ) || !veh->ghoul2 ) {
 		vrk.stepFrame = -1;
 		vrk.stepFrameTime = 0;
@@ -617,6 +638,8 @@ static void CG_VRK_Steps( centity_t *veh ) {
 		frame = (int)floorf( f );
 		if ( frame < first || frame >= first + count ) {
 			frame = -1;	// (blending in from another animation)
+		} else {
+			vrk.legFrame = f;	// (its feet on the GROUND screen: CG_VRK_Screens)
 		}
 	}
 	if ( !vrk.stepFrameTime || cg.time - vrk.stepFrameTime < 0 ) {
@@ -679,6 +702,9 @@ void CG_VR_WalkerFrame( const vrClientState_t *vr ) {
 		vrk.zones = 0;
 		if ( vrk.told && CG_VR_Engine() && trap->ext.VR_SetCockpit ) {
 			trap->ext.VR_SetCockpit( NULL );
+			if ( trap->ext.VR_SetCockpitScreens ) {
+				trap->ext.VR_SetCockpitScreens( NULL );
+			}
 			CG_VR_Log( "walker: out of the cockpit\n" );
 		}
 		vrk.told = qfalse;
@@ -688,6 +714,7 @@ void CG_VR_WalkerFrame( const vrClientState_t *vr ) {
 		CG_VRK_Yoke( vr );
 		CG_VRK_Steps( &cg_entities[vrk.vehNum] );
 		CG_VRK_LogWalk();
+		CG_VRK_Screens( &cg_entities[vrk.vehNum], vr );
 	}
 	CG_VRK_Draw();
 
@@ -696,6 +723,9 @@ void CG_VR_WalkerFrame( const vrClientState_t *vr ) {
 	cp.turn = vrk.turn;
 	cp.lookPitch = cg_entities[vrk.vehNum].m_pVehicle ? cg_entities[vrk.vehNum].m_pVehicle->m_pVehicleInfo->lookPitch : 0.0f;
 	trap->ext.VR_SetCockpit( &cp );
+	if ( trap->ext.VR_SetCockpitScreens ) {
+		trap->ext.VR_SetCockpitScreens( &vrk.screens );
+	}
 	vrk.told = qtrue;
 }
 
@@ -756,6 +786,297 @@ void CG_VR_WalkerAimDot( void ) {
 	trap->R_AddRefEntityToScene( &ent );
 }
 
+/*
+================================================================================
+
+Its screens
+
+What the cockpit's six screens show (the renderer draws them: tr_vratst.cpp,
+told it through the engine - ext.VR_SetCockpitScreens), worked out once a
+frame in it:
+- HULL: its armour left, and whether its legs walk;
+- WEAPONS: whether the main guns can fire, how hot they run (as much of
+  their charge as they've spent: it comes back as they cool), and the second
+  weapon's shots left;
+- GROUND: the ground going by under it, a metre to a square, its feet going
+  as its legs do;
+- TARGET: who's before its guns - the one nearest where they aim, in sight,
+  not on your side - how far off, and where;
+- COMMS: the last of what's been said (the chat's), and how loud the voices
+  are that you hear;
+- HEADING: which way it faces, and how fast it goes.
+
+================================================================================
+*/
+
+#define VRK_TARGET_CONE		40.0f	// degrees: who's this near where the guns aim (and the TARGET screen's sides)...
+#define VRK_TARGET_RANGE	6000.0f	// ...and this near them (units) is before them
+#define VRK_TARGET_KEEP		0.8f	// the one before them already, as if this much nearer where they aim (no flicking
+									// between two)
+#define VRK_WALK_SECONDS	0.15f	// its feet's swing, eased this much as it starts and stops walking (a time constant)
+#define VRK_VOICE_SECONDS	0.25f	// the voices' level, falling (rising: at once)
+
+/*
+=================
+CG_VR_WalkerChat
+
+What's said (everything the chat box is told, shown or not:
+CG_ChatBox_AddString): the last two things, for the COMMS screen.
+=================
+*/
+void CG_VR_WalkerChat( const char *text ) {
+	char line[MAX_SAY_TEXT * 2 + 64];
+	int i;
+
+	if ( !text ) {
+		return;
+	}
+	Q_strncpyz( line, text, sizeof( line ) );
+	Q_StripColor( line );
+	for ( i = 0; line[i]; i++ ) {
+		if ( (unsigned char)line[i] < ' ' ) {
+			line[i] = ' ';	// (its lines broken: one)
+		}
+	}
+	for ( i = 0; line[i] == ' '; i++ ) {
+	}
+	if ( !line[i] ) {
+		return;
+	}
+	memcpy( vrk.chat[0], vrk.chat[1], sizeof( vrk.chat[0] ) );
+	Q_strncpyz( vrk.chat[1], line + i, sizeof( vrk.chat[1] ) );
+}
+
+// Whether another player's on your side, as far as this can tell: a team
+// game's team, a Power Duel's pair.
+static qboolean CG_VRK_Friend( int n ) {
+	const int me = cg.clientNum;
+
+	if ( n < 0 || n >= MAX_CLIENTS ) {
+		return qfalse;
+	}
+	if ( n == me ) {
+		return qtrue;
+	}
+	if ( cgs.gametype == GT_POWERDUEL ) {
+		return (qboolean)( cgs.clientinfo[n].duelTeam == cgs.clientinfo[me].duelTeam );
+	}
+	return (qboolean)( cgs.gametype >= GT_TEAM && cgs.clientinfo[n].team == cgs.clientinfo[me].team );
+}
+
+// The middle of someone (their box's), as they're drawn this frame.
+static void CG_VRK_Middle( const centity_t *cent, vec3_t out ) {
+	const int solid = cent->currentState.solid;
+
+	VectorCopy( cent->lerpOrigin, out );
+	if ( solid && solid != SOLID_BMODEL ) {
+		out[2] += ( ( ( ( solid >> 16 ) & 255 ) - 32 ) - ( ( solid >> 8 ) & 255 ) ) * 0.5f;
+	}
+}
+
+// Who they are, as the TARGET screen has it: a player's name; a vehicle's
+// driver's, or what it is; a companion's name; an NPC's kind.
+static void CG_VRK_TargetName( const centity_t *cent, char *out, int size ) {
+	const entityState_t *es = &cent->currentState;
+	const char *name = NULL;
+	int i;
+
+	if ( es->eType == ET_PLAYER && es->number < MAX_CLIENTS ) {
+		name = cgs.clientinfo[es->number].cleanname;
+	} else if ( es->NPC_class == CLASS_VEHICLE && cent->m_pVehicle && cent->m_pVehicle->m_pVehicleInfo ) {
+		if ( es->owner >= 0 && es->owner < MAX_CLIENTS && cgs.clientinfo[es->owner].infoValid ) {
+			name = cgs.clientinfo[es->owner].cleanname;
+		} else {
+			switch ( cent->m_pVehicle->m_pVehicleInfo->type ) {
+			case VH_WALKER:		name = "WALKER";	break;
+			case VH_FIGHTER:	name = "FIGHTER";	break;
+			case VH_SPEEDER:	name = "SPEEDER";	break;
+			case VH_ANIMAL:		name = "ANIMAL";	break;
+			default:			name = "VEHICLE";	break;
+			}
+		}
+	} else if ( ( name = CG_RP_CompName( es->number ) ) == NULL && cent->npcClient ) {
+		name = cent->npcClient->modelName;
+	}
+	Q_strncpyz( out, ( name && name[0] ) ? name : "CONTACT", size );
+	for ( i = 0; out[i]; i++ ) {
+		if ( out[i] == '_' ) {
+			out[i] = ' ';
+		}
+	}
+}
+
+// Who's before the guns: alive, in sight, not on your side (nor yours, nor
+// your side's companion or vehicle) - the one nearest where they aim.
+static void CG_VRK_Target( vrCockpitScreens_t *s, float scale ) {
+	vec3_t start, dir, aim, to, middle, angles;
+	float bestScore = 0.0f, bestYaw = 0.0f, bestDist = 0.0f;
+	int i, best = ENTITYNUM_NONE;
+	trace_t tr;
+
+	s->target[0] = '\0';
+	s->range = 0;
+	s->bearing = 0.0f;
+	if ( !cg.snap || !CG_VR_WalkerAim( vrk.vehNum, start, dir ) ) {
+		vrk.target = ENTITYNUM_NONE;
+		return;
+	}
+	vectoangles( dir, aim );
+	for ( i = 0; i < cg.snap->numEntities; i++ ) {
+		const int n = cg.snap->entities[i].number;
+		const centity_t *cent = &cg_entities[n];
+		const entityState_t *es = &cent->currentState;
+		float dist, off, score;
+		if ( n == vrk.vehNum || !cent->currentValid || ( es->eFlags & EF_DEAD ) ) {
+			continue;
+		}
+		if ( es->eType == ET_PLAYER ) {
+			if ( n >= MAX_CLIENTS || es->m_iVehicleNum || ( es->powerups & ( 1 << PW_CLOAKED ) ) || CG_VRK_Friend( n ) ) {
+				continue;	// (riding something: that's who's before them; you: on your side)
+			}
+		} else if ( es->eType == ET_NPC ) {
+			const int owner = CG_RP_CompOwner( n );
+			if ( owner >= 0 && CG_VRK_Friend( owner ) ) {
+				continue;
+			}
+			if ( es->NPC_class == CLASS_VEHICLE && es->owner >= 0 && es->owner < MAX_CLIENTS && CG_VRK_Friend( es->owner ) ) {
+				continue;
+			}
+		} else {
+			continue;
+		}
+		CG_VRK_Middle( cent, middle );
+		VectorSubtract( middle, start, to );
+		dist = VectorNormalize( to );
+		if ( dist < 1.0f || dist > VRK_TARGET_RANGE ) {
+			continue;
+		}
+		off = RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, DotProduct( to, dir ) ) ) );
+		if ( off > VRK_TARGET_CONE ) {
+			continue;
+		}
+		score = ( n == vrk.target ) ? off * VRK_TARGET_KEEP : off;
+		if ( best != ENTITYNUM_NONE && score >= bestScore ) {
+			continue;
+		}
+		CG_Trace( &tr, start, NULL, NULL, middle, vrk.vehNum, CONTENTS_SOLID );
+		if ( tr.fraction < 1.0f && tr.entityNum != n ) {
+			continue;	// (out of sight)
+		}
+		vectoangles( to, angles );
+		best = n;
+		bestScore = score;
+		bestDist = dist;
+		bestYaw = AngleSubtract( angles[YAW], aim[YAW] );
+	}
+	vrk.target = best;
+	if ( best == ENTITYNUM_NONE ) {
+		return;
+	}
+	CG_VRK_TargetName( &cg_entities[best], s->target, sizeof( s->target ) );
+	s->range = (int)( bestDist / scale + 0.5f );
+	s->bearing = Com_Clamp( -1.0f, 1.0f, -bestYaw / VRK_TARGET_CONE );	// (to its left: the screen's)
+}
+
+// How loud the voices are that you hear (the voice chat's, the game's own):
+// whoever's loudest (0..1).
+static float CG_VRK_Voices( void ) {
+	static const float level[5] = { 0.0f, 0.3f, 0.55f, 0.8f, 1.0f };	// (the lip sync's levels: 1..4; -1 talking but quiet)
+	float loud = 0.0f;
+	int i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		int v;
+		float l;
+		if ( i == cg.clientNum || !cgs.clientinfo[i].infoValid ) {
+			continue;
+		}
+		v = trap->S_GetVoiceVolume( i );
+		l = ( v < 0 ) ? 0.15f : level[Com_Clampi( 0, 4, v )];
+		if ( l > loud ) {
+			loud = l;
+		}
+	}
+	return loud;
+}
+
+// What its screens show, worked out (once a frame in it).
+static void CG_VRK_Screens( centity_t *veh, const vrClientState_t *vr ) {
+	const vehicleInfo_t *info = ( veh->m_pVehicle ) ? veh->m_pVehicle->m_pVehicleInfo : NULL;
+	const playerState_t *vps = &cg.predictedVehicleState;
+	const float scale = ( vr && vr->worldScale > 1.0f ) ? vr->worldScale : 34.0f;	// (units a metre)
+	vrCockpitScreens_t *s = &vrk.screens;
+	const int legs = veh->currentState.legsAnim;
+	float dt = 0.0f, along, speed;
+	int first, count, lerp;
+	vec3_t angles, fwd;
+
+	if ( vrk.screensTime && cg.time - vrk.screensTime > 0 ) {
+		dt = Q_min( cg.time - vrk.screensTime, 250 ) * 0.001f;
+	}
+	vrk.screensTime = cg.time ? cg.time : 1;
+	s->time = cg.time;
+
+	// HULL
+	s->armour = 100;
+	if ( info && info->armor > 0 ) {
+		s->armour = Com_Clampi( 0, 100, vps->stats[STAT_HEALTH] * 100 / info->armor );
+		if ( !s->armour && vps->stats[STAT_HEALTH] > 0 ) {
+			s->armour = 1;	// (not gone yet)
+		}
+	}
+	s->walking = CG_VRK_Walking( legs );
+
+	// WEAPONS
+	s->ready = qtrue;
+	s->heat = 0;
+	s->second = s->secondMax = 0;
+	if ( info ) {
+		const int id = info->weapon[0].ID, perShot = ( id >= 0 && id < MAX_VEH_WEAPONS ) ? g_vehWeaponInfo[id].iAmmoPerShot : 1;
+		if ( info->weapon[0].ammoMax > 0 ) {
+			s->ready = (qboolean)( vps->ammo[0] >= perShot );
+			s->heat = Com_Clampi( 0, VR_SCREEN_HEAT, (int)( ( 1.0f - (float)vps->ammo[0] / info->weapon[0].ammoMax ) * VR_SCREEN_HEAT + 0.5f ) );
+		}
+		s->second = Q_max( 0, vps->ammo[1] );
+		s->secondMax = Q_max( 0, info->weapon[1].ammoMax );
+	}
+
+	// GROUND: the ground gone by (along the way it faces: back, backing up),
+	// its feet as its legs are in their stride, the right foot down as their
+	// first step comes (bg_vrwalker.h)
+	VectorSet( angles, 0.0f, vrk.yaw, 0.0f );
+	AngleVectors( angles, fwd, NULL, NULL );
+	along = vps->velocity[0] * fwd[0] + vps->velocity[1] * fwd[1];
+	speed = sqrtf( vps->velocity[0] * vps->velocity[0] + vps->velocity[1] * vps->velocity[1] );
+	vrk.ground = fmodf( vrk.ground + along * dt / scale, 1000.0f );
+	s->ground = vrk.ground;
+	CG_VRK_Walk( veh, legs, &first, &count, &lerp );
+	if ( s->walking && vrk.legFrame >= 0.0f ) {
+		vrk.stride = ( vrk.legFrame - first - VR_WALKER_STEP_1 ) / count;
+	} else if ( s->walking ) {
+		vrk.stride += dt * 1000.0f / ( count * lerp );	// (its frame not to be told: by time - back, backing up)
+	}
+	vrk.stride -= floorf( vrk.stride );
+	s->stride = vrk.stride;
+	vrk.walk += ( ( s->walking ? 1.0f : 0.0f ) - vrk.walk ) * ( 1.0f - expf( -dt / VRK_WALK_SECONDS ) );
+	s->walk = vrk.walk;
+
+	// TARGET
+	CG_VRK_Target( s, scale );
+
+	// COMMS
+	memcpy( s->comms, vrk.chat, sizeof( s->comms ) );
+	{
+		const float loud = CG_VRK_Voices();
+		vrk.voice = ( loud >= vrk.voice ) ? loud : vrk.voice + ( loud - vrk.voice ) * ( 1.0f - expf( -dt / VRK_VOICE_SECONDS ) );
+		s->voice = vrk.voice;
+	}
+
+	// HEADING (a compass's: the map's north, +Y, 0; east, +X, 90)
+	s->heading = ( ( (int)floorf( 90.0f - vrk.yaw + 0.5f ) % 360 ) + 360 ) % 360;
+	s->speed = (int)( speed / scale * 3.6f + 0.5f );
+}
+
 // A map begun: in no cockpit.
 void CG_VR_WalkerInit( void ) {
 	trap->Cvar_Register( NULL, "vrw", XSTRING( VR_WALKER_RULE ), CVAR_USERINFO | CVAR_ROM | CVAR_TEMP );	// (these rules: bg_vrwalker.h)
@@ -765,4 +1086,6 @@ void CG_VR_WalkerInit( void ) {
 	vrk.neckBolt = -1;
 	vrk.held[0] = vrk.held[1] = qfalse;
 	vrk.told = qfalse;
+	vrk.target = ENTITYNUM_NONE;
+	memset( vrk.chat, 0, sizeof( vrk.chat ) );
 }

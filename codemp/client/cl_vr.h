@@ -94,6 +94,9 @@ void		VR_SetSaberForce( int how );
 // You sit in a cockpit (driving an AT-ST), which way it faces and how its yoke
 // drives it - cgameImport_t.ext.VR_SetCockpit, every frame (NULL: you don't).
 void		VR_SetCockpit( const vrCockpit_t *cockpit );
+// What the cockpit's screens show - cgameImport_t.ext.VR_SetCockpitScreens,
+// every frame you sit in it (NULL: they stay as they are).
+void		VR_SetCockpitScreens( const vrCockpitScreens_t *screens );
 // Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
 // wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );

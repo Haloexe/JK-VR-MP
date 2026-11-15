@@ -16,6 +16,7 @@ General Public License version 2, like the rest of OpenJK.
 */
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include "tr_vratst_art.h"
@@ -266,8 +267,8 @@ static void VRA_GlowPx( vraCanvas_t *c, float x, float y, float r, vraColor_t co
 	}
 }
 
-// The canvas as the image's bytes (RGBA), and let go of.
-static void VRA_Close( vraCanvas_t *c, unsigned char *out ) {
+// The canvas as the image's bytes (RGBA)...
+static void VRA_ToBytes( const vraCanvas_t *c, unsigned char *out ) {
 	size_t i, n = (size_t)c->w * c->h * 4;
 
 	for ( i = 0; i < n; i++ ) {
@@ -275,6 +276,11 @@ static void VRA_Close( vraCanvas_t *c, unsigned char *out ) {
 		v = v < 0.0f ? 0.0f : ( v > 1.0f ? 1.0f : v );
 		out[i] = (unsigned char)( v * 255.0f + 0.5f );
 	}
+}
+
+// ...and let go of.
+static void VRA_Close( vraCanvas_t *c, unsigned char *out ) {
+	VRA_ToBytes( c, out );
 	free( c->px );
 	c->px = NULL;
 }
@@ -527,12 +533,15 @@ void VRA_DrawSolid( unsigned char *out, int size, unsigned rgb ) {
 /*
 ================================================================================
 
-The screens, as they stand before the cockpit's moving (the page's screens,
-drawn once: its state at the start - standing, nothing in the sight)
+The screens: as the page draws them, its state at the start - standing,
+nothing in the sight (VRA_DrawScreen) - and as the cockpit goes (what it's
+told: VRA_DrawScreenLive). What on a screen doesn't change is drawn once and
+kept (VRA_OpenScreen); what does, over it, each time.
 
 Their writing in a small square-dotted face of its own, five dots across and
 seven down, as tall as the page's letters stand at that size (its capitals,
-0.73 of the size) and as far apart (0.6 of it).
+0.73 of the size) and as far apart (0.6 of it): capitals (small letters
+written as them), figures and some marks - no more (a gap where another is).
 
 ================================================================================
 */
@@ -580,26 +589,61 @@ static const struct {
 	{ '%', { 0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03 } },
 	{ '-', { 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00 } },
 	{ '/', { 0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x00 } },
+	{ '.', { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x0c } },
+	{ ',', { 0x00, 0x00, 0x00, 0x00, 0x0c, 0x04, 0x08 } },
+	{ ':', { 0x00, 0x0c, 0x0c, 0x00, 0x0c, 0x0c, 0x00 } },
+	{ ';', { 0x00, 0x0c, 0x0c, 0x00, 0x0c, 0x04, 0x08 } },
+	{ '!', { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 } },
+	{ '?', { 0x0e, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04 } },
+	{ '\'', { 0x0c, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00 } },
+	{ '"', { 0x0a, 0x0a, 0x0a, 0x00, 0x00, 0x00, 0x00 } },
+	{ '(', { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 } },
+	{ ')', { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 } },
+	{ '[', { 0x0e, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0e } },
+	{ ']', { 0x0e, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0e } },
+	{ '<', { 0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02 } },
+	{ '>', { 0x08, 0x04, 0x02, 0x01, 0x02, 0x04, 0x08 } },
+	{ '+', { 0x00, 0x04, 0x04, 0x1f, 0x04, 0x04, 0x00 } },
+	{ '=', { 0x00, 0x00, 0x1f, 0x00, 0x1f, 0x00, 0x00 } },
+	{ '_', { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f } },
+	{ '*', { 0x00, 0x04, 0x15, 0x0e, 0x15, 0x04, 0x00 } },
+	{ '#', { 0x0a, 0x0a, 0x1f, 0x0a, 0x1f, 0x0a, 0x0a } },
+	{ '&', { 0x0c, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0d } },
+	{ '@', { 0x0e, 0x11, 0x01, 0x0d, 0x15, 0x15, 0x0e } },
+	{ '$', { 0x04, 0x0f, 0x14, 0x0e, 0x05, 0x1e, 0x04 } },
 };
 
-// fillText( text, x, y ) at a size (px), the baseline at y: the drawing's units.
-// Each dot a little wider than it's tall (VRA_TEXT_BOLD), running into the
-// next: the page's letters are semi-bold.
+#define VRA_GLYPHS	( (int)( sizeof( vraFont ) / sizeof( vraFont[0] ) ) )
+
+// A character's glyph (-1: the face hasn't it - a space, say).
+static int VRA_Glyph( int ch ) {
+	int f;
+
+	if ( ch >= 'a' && ch <= 'z' ) {
+		ch -= 'a' - 'A';
+	}
+	for ( f = 0; f < VRA_GLYPHS; f++ ) {
+		if ( vraFont[f].ch == ch ) {
+			return f;
+		}
+	}
+	return -1;
+}
+
+// fillText( text, x, y ) at a size (px), the baseline at y: the drawing's units
+// - no more than max characters of it (less than 0: all). Each dot a little
+// wider than it's tall (VRA_TEXT_BOLD), running into the next: the page's
+// letters are semi-bold.
 #define VRA_TEXT_BOLD	1.35f
-static void VRA_Text( vraCanvas_t *c, const char *text, float x, float y, float sizePx, vraColor_t col ) {
+static void VRA_TextN( vraCanvas_t *c, const char *text, int max, float x, float y, float sizePx, vraColor_t col ) {
 	const float dot = sizePx * 0.73f / 7.0f;	// (a capital's height in seven dots)
 	const float advance = sizePx * 0.6f;
 	int i, row, bit;
-	size_t f;
 
-	for ( i = 0; text[i]; i++, x += advance ) {
-		for ( f = 0; f < sizeof( vraFont ) / sizeof( vraFont[0] ); f++ ) {
-			if ( vraFont[f].ch == text[i] ) {
-				break;
-			}
-		}
-		if ( f == sizeof( vraFont ) / sizeof( vraFont[0] ) ) {
-			continue;	// (a space, or what the face hasn't)
+	for ( i = 0; text[i] && ( max < 0 || i < max ); i++, x += advance ) {
+		const int f = VRA_Glyph( (unsigned char)text[i] );
+		if ( f < 0 ) {
+			continue;
 		}
 		for ( row = 0; row < 7; row++ ) {
 			for ( bit = 0; bit < 5; bit++ ) {
@@ -617,6 +661,15 @@ static void VRA_Text( vraCanvas_t *c, const char *text, float x, float y, float 
 	}
 }
 
+static void VRA_Text( vraCanvas_t *c, const char *text, float x, float y, float sizePx, vraColor_t col ) {
+	VRA_TextN( c, text, -1, x, y, sizePx, col );
+}
+
+// How many characters fit across a width at a size.
+static int VRA_TextFits( float width, float sizePx ) {
+	return (int)floorf( width / ( sizePx * 0.6f ) + 0.001f );
+}
+
 // frame( g, w, h, ink ): the screen's dark glass and the rule round it.
 static void VRA_ScreenFrame( vraCanvas_t *c, float w, float h, vraColor_t ink ) {
 	const float lw = 2.0f;
@@ -629,11 +682,94 @@ static void VRA_ScreenFrame( vraCanvas_t *c, float w, float h, vraColor_t ink ) 
 	VRA_Rect( c, w - 8.0f - lw / 2, 8.0f + lw / 2, lw, h - 16.0f - lw, ink );
 }
 
-static void VRA_Scanlines( vraCanvas_t *c, float w, float h ) {
-	float y;
+// The scanlines over the canvas's rows r0..r1 (not r1) - the page's: across it,
+// a unit high, every third, VRA_Rect( c, 0, y, w, 1, rgba( 0, 0, 0, 0.22 ) ),
+// last of all - and those rows made bytes (as VRA_ToBytes makes them), in one
+// go: the canvas as it was, not drawn on.
+#define VRA_SCANLINE_A	0.22f
+static void VRA_ScanlinesToBytes( const vraCanvas_t *c, float pw, float ph, unsigned char *out, int r0, int r1 ) {
+	const float xw = 0.0f + pw * c->sx;	// (the lines' right end, in the canvas's pixels: as VRA_Rect has it)
+	const int cols = (int)ceilf( xw ) < c->w ? (int)ceilf( xw ) : c->w;
+	int r, k, x, i;
 
-	for ( y = 0.0f; y < h; y += 3.0f ) {
-		VRA_Rect( c, 0.0f, y, w, 1.0f, VRA_Rgba( 0, 0, 0, 0.22f ) );
+	r0 = r0 < 0 ? 0 : r0;
+	r1 = r1 > c->h ? c->h : r1;
+	for ( r = r0; r < r1; r++ ) {
+		const float *p = c->px + (size_t)r * c->w * 4;
+		unsigned char *o = out + (size_t)r * c->w * 4;
+		float cy[4];
+		int n = 0;
+		// the lines over this row (one, as it is, at most: they're further apart than a pixel's height)
+		for ( k = (int)floorf( ( r / c->sy - 1.0f ) / 3.0f ) - 1; n < 4; k++ ) {
+			float y, y0, y1;
+			if ( k < 0 ) {
+				continue;
+			}
+			y = 3.0f * k;
+			if ( !( y < ph ) ) {
+				break;
+			}
+			y0 = y * c->sy;
+			y1 = y0 + 1.0f * c->sy;
+			if ( y0 >= r + 1.0f ) {
+				break;
+			}
+			if ( r >= (int)floorf( y0 ) && r < (int)ceilf( y1 ) ) {
+				const float cover = VRA_Overlap( (float)r, r + 1.0f, y0, y1 );
+				if ( cover > 0.0f ) {
+					cy[n++] = cover;
+				}
+			}
+		}
+		if ( !n ) {	// (none: the row as it is)
+			for ( i = 0; i < c->w * 4; i++ ) {
+				const float b = p[i] < 0.0f ? 0.0f : ( p[i] > 1.0f ? 1.0f : p[i] );
+				o[i] = (unsigned char)( b * 255.0f + 0.5f );
+			}
+			continue;
+		}
+		// (one line over an opaque pixel all across it - near enough all of
+		// them - as below comes to its colour times 1 - sa, alpha 1: so, quicker)
+		const float sa1 = VRA_SCANLINE_A * ( cy[0] > 1.0f ? 1.0f : cy[0] ), k1 = 1.0f - sa1;
+		const int quick = ( n == 1 && sa1 > 0.0f && sa1 + 1.0f * ( 1.0f - sa1 ) == 1.0f );
+		for ( x = 0; x < c->w; x++, p += 4, o += 4 ) {
+			float v[4] = { p[0], p[1], p[2], p[3] };
+			if ( quick && p[3] == 1.0f && x < cols && VRA_Overlap( (float)x, x + 1.0f, 0.0f, xw ) == 1.0f ) {
+				for ( i = 0; i < 3; i++ ) {
+					const float b = v[i] * k1;
+					o[i] = (unsigned char)( ( b < 0.0f ? 0.0f : ( b > 1.0f ? 1.0f : b ) ) * 255.0f + 0.5f );
+				}
+				o[3] = 255;
+				continue;
+			}
+			if ( x < cols ) {
+				const float cx = VRA_Overlap( (float)x, x + 1.0f, 0.0f, xw );
+				for ( i = 0; i < n; i++ ) {	// (as VRA_Blend has black over it)
+					const float cover = cy[i] * cx;
+					float sa, da, oa;
+					if ( cover <= 0.0f ) {
+						continue;
+					}
+					sa = VRA_SCANLINE_A * ( cover > 1.0f ? 1.0f : cover );
+					if ( sa <= 0.0f ) {
+						continue;
+					}
+					da = v[3];
+					oa = sa + da * ( 1.0f - sa );
+					if ( oa <= 0.0f ) {
+						continue;
+					}
+					v[0] = ( 0.0f * sa + v[0] * da * ( 1.0f - sa ) ) / oa;
+					v[1] = ( 0.0f * sa + v[1] * da * ( 1.0f - sa ) ) / oa;
+					v[2] = ( 0.0f * sa + v[2] * da * ( 1.0f - sa ) ) / oa;
+					v[3] = oa;
+				}
+			}
+			for ( i = 0; i < 4; i++ ) {
+				const float b = v[i] < 0.0f ? 0.0f : ( v[i] > 1.0f ? 1.0f : v[i] );
+				o[i] = (unsigned char)( b * 255.0f + 0.5f );
+			}
+		}
 	}
 }
 
@@ -655,100 +791,305 @@ static void VRA_StrokeRect( vraCanvas_t *c, float x, float y, float w, float h, 
 	VRA_Rect( c, x + w - lw / 2, y + lw / 2, lw, h - lw, ink );
 }
 
-void VRA_DrawScreen( unsigned char *out, int w, int h, int which ) {
-	const vraColor_t AMBER = VRA_Hex( 0xffb44a ), GREEN = VRA_Hex( 0x63f2a1 );
-	const vraColor_t amberDim = VRA_Rgba( 255, 180, 74, 0.7f );
-	vraCanvas_t c;
-	float pw = 512.0f, ph = 256.0f;
+#define VRA_AMBER		0xffb44a
+#define VRA_GREEN		0x63f2a1
+#define VRA_RED			0xff5a43
 
+#define VRA_GRID		40.0f	// the ground's squares (a metre)
+#define VRA_GROUND_TOP	64.0f	// its box, from here down to 18 above the screen's foot (20 in from its sides)
+#define VRA_TAPE		1.4f	// the heading's tape: so far a degree
+#define VRA_CHAT_SIZE	14.0f	// what's said
+#define VRA_WAVE_REST	2.0f	// the voice's wave this high with no one talking (as high again as loud as can be)
+
+// The page a screen's drawn as (its units: the drawing's).
+static void VRA_ScreenPage( int which, float *pw, float *ph ) {
+	*pw = 512.0f;
+	*ph = 256.0f;
 	switch ( which ) {
-	case VRA_SCREEN_HULL:		pw = 512.0f; ph = 300.0f; break;
-	case VRA_SCREEN_WEAPONS:	pw = 512.0f; ph = 260.0f; break;
-	case VRA_SCREEN_GROUND:		pw = 512.0f; ph = 260.0f; break;
-	case VRA_SCREEN_TARGET:		pw = 512.0f; ph = 288.0f; break;
-	case VRA_SCREEN_COMMS:		pw = 320.0f; ph = 256.0f; break;
-	case VRA_SCREEN_HEADING:	pw = 320.0f; ph = 256.0f; break;
+	case VRA_SCREEN_HULL:		*pw = 512.0f; *ph = 300.0f; break;
+	case VRA_SCREEN_WEAPONS:	*pw = 512.0f; *ph = 260.0f; break;
+	case VRA_SCREEN_GROUND:		*pw = 512.0f; *ph = 260.0f; break;
+	case VRA_SCREEN_TARGET:		*pw = 512.0f; *ph = 288.0f; break;
+	case VRA_SCREEN_COMMS:		*pw = 320.0f; *ph = 256.0f; break;
+	case VRA_SCREEN_HEADING:	*pw = 320.0f; *ph = 256.0f; break;
 	}
-	VRA_Open( &c, w, h, pw, ph );
+}
+
+void VRA_ScreenStart( vraScreenState_t *st ) {
+	memset( st, 0, sizeof( *st ) );
+	st->armour = 100;
+	st->ready = 1;
+	st->heat = 3;			// (1 + 3 * (0.5 + 0.5 sin 0), rounded)
+	st->second = 6;
+	st->secondMax = VRA_SECOND_BARS;
+	st->voice = 1.0f;		// (its wave as high as the page's)
+}
+
+static int VRA_Clampi( int v, int lo, int hi ) {
+	return v < lo ? lo : ( v > hi ? hi : v );
+}
+
+static float VRA_Clampf( float v, float lo, float hi ) {
+	return v < lo ? lo : ( v > hi ? hi : v );
+}
+
+// (The live parts, worked out from a state: what's drawn, and what tells
+// whether it's changed.)
+
+static int VRA_LegBars( const vraScreenState_t *st ) {
+	return ( VRA_Clampi( st->armour, 0, 100 ) + 19 ) / 20;
+}
+
+static int VRA_SecondBars( const vraScreenState_t *st ) {
+	const int second = VRA_Clampi( st->second, 0, 99999 ), most = VRA_Clampi( st->secondMax, 0, 99999 );
+
+	if ( most <= 0 || second <= 0 ) {
+		return 0;
+	}
+	return VRA_Clampi( ( second * VRA_SECOND_BARS + most - 1 ) / most, 0, VRA_SECOND_BARS );
+}
+
+// The ground's lines across, from the top of its box: where the first is
+// (0..VRA_GRID) - the ground gone by under it.
+static float VRA_GroundOffset( const vraScreenState_t *st ) {
+	float off = fmodf( st->ground * VRA_GRID, VRA_GRID );
+
+	if ( !( off >= 0.0f ) ) {	// (and NaN: none)
+		off = ( off < 0.0f ) ? off + VRA_GRID : 0.0f;
+	}
+	return off >= VRA_GRID ? 0.0f : off;
+}
+
+// A foot's swing (0: the left, 1: the right): more than 0, up off the ground.
+static float VRA_Swing( const vraScreenState_t *st, int foot ) {
+	return sinf( ( st->stride + foot * 0.5f ) * (float)M_PI * 2.0f ) * VRA_Clampf( st->walk, 0.0f, 1.0f );
+}
+
+// Where the target's box is across the screen: on its bearing, or sweeping
+// side to side for one.
+static float VRA_TargetX( const vraScreenState_t *st, float pw ) {
+	if ( st->target[0] ) {
+		return pw / 2.0f + VRA_Clampf( st->bearing, -1.0f, 1.0f ) * ( pw / 2.0f - 46.0f );
+	}
+	return 46.0f + ( pw - 92.0f ) * ( 0.5f + 0.5f * sinf( st->t * 0.9f ) );
+}
+
+// A message as lines (at most max, as many characters as fit in each:
+// broken where it has a space, the last cut short - ".." - if there's more).
+static int VRA_Wrap( const char *text, int per, int max, char lines[2][VRA_LINE] ) {
+	int n = 0;
+
+	if ( per > VRA_LINE - 1 ) {
+		per = VRA_LINE - 1;
+	}
+	while ( *text == ' ' ) {
+		text++;
+	}
+	while ( *text && n < max && per > 2 ) {
+		const int len = (int)strlen( text );
+		const int last = ( n == max - 1 && len > per );
+		const int room = last ? per - 2 : per;
+		int cut = len, i;
+		if ( len > room ) {
+			cut = room;
+			for ( i = room; i > room / 2; i-- ) {
+				if ( text[i] == ' ' ) {
+					cut = i;	// (at a space, if one's not far back)
+					break;
+				}
+			}
+		}
+		memcpy( lines[n], text, (size_t)cut );
+		lines[n][cut] = '\0';
+		if ( last ) {
+			strcat( lines[n], ".." );
+		}
+		n++;
+		text += cut;
+		while ( *text == ' ' ) {
+			text++;
+		}
+	}
+	return n;
+}
+
+// What's said, as the screen shows it: two lines, the latest message all of
+// it that fits in both, else the one before it too (a line of it, fainter).
+static int VRA_CommsLines( const vraScreenState_t *st, float pw, char lines[2][VRA_LINE], int dim[2] ) {
+	const int per = VRA_TextFits( pw - 40.0f, VRA_CHAT_SIZE );
+	char older[2][VRA_LINE];
+	int n = VRA_Wrap( st->comms[1], per, 2, lines );
+
+	dim[0] = dim[1] = 0;
+	if ( !n ) {
+		return VRA_Wrap( st->comms[0], per, 2, lines );	// (said the other way round: the one there is)
+	}
+	if ( n == 1 && VRA_Wrap( st->comms[0], per, 1, older ) ) {
+		memcpy( lines[1], lines[0], sizeof( lines[1] ) );
+		memcpy( lines[0], older[0], sizeof( lines[0] ) );
+		dim[0] = 1;
+		n = 2;
+	}
+	return n;
+}
+
+static float VRA_WaveHeight( const vraScreenState_t *st ) {
+	return VRA_WAVE_REST + ( 14.0f - VRA_WAVE_REST ) * VRA_Clampf( st->voice, 0.0f, 1.0f );
+}
+
+// What doesn't change: drawn once (VRA_OpenScreen).
+static void VRA_ScreenBase( vraCanvas_t *c, int which, float pw, float ph ) {
+	const vraColor_t AMBER = VRA_Hex( VRA_AMBER ), GREEN = VRA_Hex( VRA_GREEN );
+	const vraColor_t amberDim = VRA_Rgba( 255, 180, 74, 0.7f );
 
 	switch ( which ) {
 	case VRA_SCREEN_HULL:
-		VRA_ScreenFrame( &c, pw, ph, AMBER );
-		VRA_Text( &c, "HULL", 28.0f, 50.0f, 28.0f, AMBER );
-		VRA_Text( &c, "ARMOUR 100%", 316.0f, 50.0f, 19.0f, amberDim );
-		VRA_StrokeRect( &c, 190.0f, 76.0f, 132.0f, 92.0f, 3.0f, AMBER );	// the cabin from above, and where the legs join it
-		VRA_Circle( &c, 230.0f, 196.0f, 12.0f, 3.0f, AMBER );
-		VRA_Circle( &c, 282.0f, 196.0f, 12.0f, 3.0f, AMBER );
-		VRA_Text( &c, "LEFT LEG", 28.0f, 226.0f, 18.0f, AMBER );
-		VRA_Text( &c, "RIGHT LEG", 350.0f, 226.0f, 18.0f, AMBER );
-		VRA_Bars( &c, 28.0f, 238.0f, 130.0f, 5, 5, GREEN );
-		VRA_Bars( &c, 350.0f, 238.0f, 134.0f, 5, 5, GREEN );
-		VRA_Text( &c, "STEP HOLD", 200.0f, 282.0f, 18.0f, AMBER );
+		VRA_ScreenFrame( c, pw, ph, AMBER );
+		VRA_Text( c, "HULL", 28.0f, 50.0f, 28.0f, AMBER );
+		VRA_StrokeRect( c, 190.0f, 76.0f, 132.0f, 92.0f, 3.0f, AMBER );	// the cabin from above, and where the legs join it
+		VRA_Circle( c, 230.0f, 196.0f, 12.0f, 3.0f, AMBER );
+		VRA_Circle( c, 282.0f, 196.0f, 12.0f, 3.0f, AMBER );
+		VRA_Text( c, "LEFT LEG", 28.0f, 226.0f, 18.0f, AMBER );
+		VRA_Text( c, "RIGHT LEG", 350.0f, 226.0f, 18.0f, AMBER );
 		break;
 	case VRA_SCREEN_WEAPONS:
-		VRA_ScreenFrame( &c, pw, ph, AMBER );
-		VRA_Text( &c, "WEAPONS", 28.0f, 48.0f, 28.0f, AMBER );
-		VRA_Text( &c, "MAIN GUNS", 28.0f, 96.0f, 19.0f, AMBER );
-		VRA_Text( &c, "READY", 400.0f, 96.0f, 19.0f, GREEN );
-		VRA_Text( &c, "HEAT", 28.0f, 134.0f, 19.0f, AMBER );
-		VRA_Bars( &c, 120.0f, 120.0f, 360.0f, 12, 3, AMBER );	// (1 + 3 * (0.5 + 0.5 sin 0), rounded)
-		VRA_Text( &c, "SECOND WEAPON", 28.0f, 180.0f, 19.0f, AMBER );
-		VRA_Text( &c, "6", 462.0f, 180.0f, 19.0f, AMBER );
-		VRA_Bars( &c, 28.0f, 192.0f, 456.0f, 8, 6, AMBER );
-		VRA_Text( &c, "TRIGGER  FIRE   THUMB  SECOND", 28.0f, 240.0f, 19.0f, VRA_Rgba( 255, 180, 74, 0.6f ) );
+		VRA_ScreenFrame( c, pw, ph, AMBER );
+		VRA_Text( c, "WEAPONS", 28.0f, 48.0f, 28.0f, AMBER );
+		VRA_Text( c, "MAIN GUNS", 28.0f, 96.0f, 19.0f, AMBER );
+		VRA_Text( c, "HEAT", 28.0f, 134.0f, 19.0f, AMBER );
+		VRA_Text( c, "SECOND WEAPON", 28.0f, 180.0f, 19.0f, AMBER );
+		VRA_Text( c, "TRIGGER  FIRE   THUMB  SECOND", 28.0f, 240.0f, 19.0f, VRA_Rgba( 255, 180, 74, 0.6f ) );
 		break;
 	case VRA_SCREEN_GROUND: {
-		const float top = 64.0f, bottom = ph - 18.0f, cx = pw / 2.0f, sq = 40.0f;
-		const vraColor_t grid = VRA_Rgba( 255, 180, 74, 0.22f );
-		float x, y;
-		int i;
-		VRA_ScreenFrame( &c, pw, ph, AMBER );
-		VRA_Text( &c, "GROUND", 28.0f, 48.0f, 28.0f, AMBER );
-		VRA_Text( &c, "CAM 2  LOOKING DOWN", 262.0f, 48.0f, 18.0f, amberDim );
-		// the ground, a metre to a square (clipped to its box: 20..w-20, top..bottom)
-		for ( y = top - sq; y < bottom; y += sq ) {
-			if ( y >= top && y <= bottom ) {
-				VRA_Rect( &c, 20.0f, y - 1.0f, pw - 40.0f, 2.0f, grid );
-			}
-		}
-		for ( x = cx - sq * 6.0f; x <= cx + sq * 6.0f; x += sq ) {
+		const float top = VRA_GROUND_TOP, bottom = ph - 18.0f, cx = pw / 2.0f;
+		float x;
+		VRA_ScreenFrame( c, pw, ph, AMBER );
+		VRA_Text( c, "GROUND", 28.0f, 48.0f, 28.0f, AMBER );
+		VRA_Text( c, "CAM 2  LOOKING DOWN", 262.0f, 48.0f, 18.0f, amberDim );
+		// the ground, a metre to a square: its lines along (clipped to its box:
+		// 20..w-20 - those going by across, VRA_ScreenLive)
+		for ( x = cx - VRA_GRID * 6.0f; x <= cx + VRA_GRID * 6.0f; x += VRA_GRID ) {
 			if ( x >= 20.0f && x <= pw - 20.0f ) {
-				VRA_Rect( &c, x - 1.0f, top, 2.0f, bottom - top, grid );
+				VRA_Rect( c, x - 1.0f, top, 2.0f, bottom - top, VRA_Rgba( 255, 180, 74, 0.22f ) );
 			}
 		}
-		for ( i = 0; i < 2; i++ ) {	// the feet, both planted
-			const float s = i ? 1.0f : -1.0f, fy = ( top + bottom ) / 2.0f + 22.0f;
-			VRA_StrokeRect( &c, cx + s * 62.0f - 22.0f, fy - 30.0f, 44.0f, 60.0f, 3.0f, AMBER );
-		}
-		// where the main guns' line meets the ground
-		VRA_Line( &c, cx - 12.0f, top + 26.0f, cx + 12.0f, top + 26.0f, 2.0f, GREEN );
-		VRA_Line( &c, cx, top + 14.0f, cx, top + 38.0f, 2.0f, GREEN );
 		break;
 	}
 	case VRA_SCREEN_TARGET: {
-		const float hz = ph * 0.62f, sweep = 46.0f + ( pw - 92.0f ) * 0.5f;
+		const float hz = ph * 0.62f;
 		float x;
-		VRA_ScreenFrame( &c, pw, ph, GREEN );
-		VRA_Line( &c, 20.0f, hz, pw - 20.0f, hz, 2.0f, VRA_Rgba( 99, 242, 161, 0.45f ) );
+		VRA_ScreenFrame( c, pw, ph, GREEN );
+		VRA_Line( c, 20.0f, hz, pw - 20.0f, hz, 2.0f, VRA_Rgba( 99, 242, 161, 0.45f ) );
 		for ( x = 40.0f; x < pw - 20.0f; x += 40.0f ) {
-			VRA_Line( &c, x, hz - 6.0f, x, hz + 6.0f, 2.0f, VRA_Rgba( 99, 242, 161, 0.45f ) );
+			VRA_Line( c, x, hz - 6.0f, x, hz + 6.0f, 2.0f, VRA_Rgba( 99, 242, 161, 0.45f ) );
 		}
-		VRA_StrokeRect( &c, sweep - 26.0f, hz - 38.0f, 52.0f, 52.0f, 3.0f, GREEN );
-		VRA_Line( &c, pw / 2.0f - 16.0f, ph * 0.45f, pw / 2.0f + 16.0f, ph * 0.45f, 3.0f, GREEN );
-		VRA_Line( &c, pw / 2.0f, ph * 0.45f - 16.0f, pw / 2.0f, ph * 0.45f + 16.0f, 3.0f, GREEN );
-		VRA_Text( &c, "NO TARGET", 24.0f, 46.0f, 26.0f, GREEN );
-		VRA_Text( &c, "RANGE ----", pw - 180.0f, 46.0f, 19.0f, GREEN );
+		// where the guns aim (the box over it: the same colour, either way)
+		VRA_Line( c, pw / 2.0f - 16.0f, ph * 0.45f, pw / 2.0f + 16.0f, ph * 0.45f, 3.0f, GREEN );
+		VRA_Line( c, pw / 2.0f, ph * 0.45f - 16.0f, pw / 2.0f, ph * 0.45f + 16.0f, 3.0f, GREEN );
+		break;
+	}
+	case VRA_SCREEN_COMMS:
+		VRA_ScreenFrame( c, pw, ph, GREEN );
+		VRA_Text( c, "COMMS", 20.0f, 44.0f, 24.0f, GREEN );
+		VRA_Text( c, "CH 2  OPEN", 20.0f, 76.0f, 17.0f, GREEN );
+		break;
+	case VRA_SCREEN_HEADING:
+		VRA_ScreenFrame( c, pw, ph, AMBER );
+		VRA_Text( c, "HEADING", 20.0f, 44.0f, 24.0f, AMBER );
+		VRA_Rect( c, 28.0f, 204.0f, 2.0f, 16.0f, AMBER );	// where it faces, on the tape
+		break;
+	}
+}
+
+// What does: drawn over that each time, as the state has it.
+static void VRA_ScreenLive( vraCanvas_t *c, int which, float pw, float ph, const vraScreenState_t *st ) {
+	const vraColor_t AMBER = VRA_Hex( VRA_AMBER ), GREEN = VRA_Hex( VRA_GREEN ), RED = VRA_Hex( VRA_RED );
+	const vraColor_t amberDim = VRA_Rgba( 255, 180, 74, 0.7f );
+	char text[VRA_LINE + 16];
+
+	switch ( which ) {
+	case VRA_SCREEN_HULL: {
+		const int armour = VRA_Clampi( st->armour, 0, 100 );
+		const vraColor_t legs = ( armour > 50 ) ? GREEN : ( armour > 25 ) ? AMBER : RED;
+		snprintf( text, sizeof( text ), "ARMOUR %d%%", armour );
+		VRA_Text( c, text, 316.0f, 50.0f, 19.0f, amberDim );
+		VRA_Bars( c, 28.0f, 238.0f, 130.0f, 5, VRA_LegBars( st ), legs );
+		VRA_Bars( c, 350.0f, 238.0f, 134.0f, 5, VRA_LegBars( st ), legs );
+		VRA_Text( c, st->walking ? "STEP WALK" : "STEP HOLD", 200.0f, 282.0f, 18.0f, AMBER );
+		break;
+	}
+	case VRA_SCREEN_WEAPONS: {
+		const int second = VRA_Clampi( st->second, 0, 999 );
+		VRA_Text( c, st->ready ? "READY" : "COOLING", 400.0f, 96.0f, 19.0f, st->ready ? GREEN : RED );
+		VRA_Bars( c, 120.0f, 120.0f, 360.0f, VRA_HEAT_BARS, VRA_Clampi( st->heat, 0, VRA_HEAT_BARS ), AMBER );
+		snprintf( text, sizeof( text ), "%d", second );
+		VRA_Text( c, text, 462.0f + 19.0f * 0.6f * ( 1 - (int)strlen( text ) ), 180.0f, 19.0f, AMBER );	// (its last figure where the page's one is)
+		VRA_Bars( c, 28.0f, 192.0f, 456.0f, VRA_SECOND_BARS, VRA_SecondBars( st ), AMBER );
+		break;
+	}
+	case VRA_SCREEN_GROUND: {
+		const float top = VRA_GROUND_TOP, bottom = ph - 18.0f, cx = pw / 2.0f;
+		const vraColor_t grid = VRA_Rgba( 255, 180, 74, 0.22f );
+		float y;
+		int i;
+		// the ground going by: its lines across (clipped to its box)
+		for ( y = top + VRA_GroundOffset( st ) - VRA_GRID; y < bottom + 1.0f; y += VRA_GRID ) {
+			const float y0 = ( y - 1.0f > top ) ? y - 1.0f : top, y1 = ( y + 1.0f < bottom ) ? y + 1.0f : bottom;
+			if ( y1 > y0 ) {
+				VRA_Rect( c, 20.0f, y0, pw - 40.0f, y1 - y0, grid );
+			}
+		}
+		for ( i = 0; i < 2; i++ ) {	// the feet: one planted while the other swings
+			const float s = i ? 1.0f : -1.0f, swing = VRA_Swing( st, i );
+			const float fy = ( top + bottom ) / 2.0f + 22.0f - ( swing > 0.0f ? swing : 0.0f ) * 46.0f;
+			vraColor_t ink = AMBER;
+			if ( swing > 0.05f ) {
+				ink.a = 0.55f;
+			}
+			VRA_StrokeRect( c, cx + s * 62.0f - 22.0f, fy - 30.0f, 44.0f, 60.0f, 3.0f, ink );
+		}
+		// where the main guns' line meets the ground
+		VRA_Line( c, cx - 12.0f, top + 26.0f, cx + 12.0f, top + 26.0f, 2.0f, GREEN );
+		VRA_Line( c, cx, top + 14.0f, cx, top + 38.0f, 2.0f, GREEN );
+		break;
+	}
+	case VRA_SCREEN_TARGET: {
+		const float hz = ph * 0.62f, x = VRA_TargetX( st, pw );
+		const float nameX = 24.0f, rangeX = pw - 180.0f;
+		VRA_StrokeRect( c, x - 26.0f, hz - 38.0f, 52.0f, 52.0f, 3.0f, GREEN );
+		if ( st->target[0] ) {
+			const int fits = VRA_TextFits( rangeX - 12.0f - nameX, 26.0f );
+			if ( (int)strlen( st->target ) > fits ) {
+				snprintf( text, sizeof( text ), "%.*s..", fits > 2 ? fits - 2 : 0, st->target );
+				VRA_Text( c, text, nameX, 46.0f, 26.0f, GREEN );
+			} else {
+				VRA_Text( c, st->target, nameX, 46.0f, 26.0f, GREEN );
+			}
+			snprintf( text, sizeof( text ), "RANGE %dM", VRA_Clampi( st->range, 0, 9999 ) );
+			VRA_Text( c, text, rangeX, 46.0f, 19.0f, GREEN );
+		} else {
+			VRA_Text( c, "NO TARGET", nameX, 46.0f, 26.0f, GREEN );
+			VRA_Text( c, "RANGE ----", rangeX, 46.0f, 19.0f, GREEN );
+		}
 		break;
 	}
 	case VRA_SCREEN_COMMS: {
+		const float height = VRA_WaveHeight( st );
+		char lines[2][VRA_LINE];
+		int dim[2], n, i;
 		float x, px = 0.0f, py = 0.0f;
-		VRA_ScreenFrame( &c, pw, ph, GREEN );
-		VRA_Text( &c, "COMMS", 20.0f, 44.0f, 24.0f, GREEN );
-		VRA_Text( &c, "CH 2  OPEN", 20.0f, 76.0f, 17.0f, GREEN );
-		for ( x = 20.0f; x < pw - 20.0f; x += 4.0f ) {	// the wave (t 0)
-			const float y = ph * 0.66f + sinf( x * 0.11f ) * 14.0f * sinf( x * 0.023f );
+		n = VRA_CommsLines( st, pw, lines, dim );
+		for ( i = 0; i < n; i++ ) {
+			vraColor_t ink = GREEN;
+			if ( dim[i] ) {
+				ink.a = 0.6f;
+			}
+			VRA_Text( c, lines[i], 20.0f, 104.0f + i * 20.0f, VRA_CHAT_SIZE, ink );
+		}
+		for ( x = 20.0f; x < pw - 20.0f; x += 4.0f ) {	// the voices' wave
+			const float y = ph * 0.66f + sinf( x * 0.11f + st->t * 6.0f ) * height * sinf( x * 0.023f + st->t );
 			if ( x > 20.0f ) {
-				VRA_Line( &c, px, py, x, y, 2.0f, GREEN );
+				VRA_Line( c, px, py, x, y, 2.0f, GREEN );
 			}
 			px = x;
 			py = y;
@@ -756,19 +1097,223 @@ void VRA_DrawScreen( unsigned char *out, int w, int h, int which ) {
 		break;
 	}
 	case VRA_SCREEN_HEADING: {
-		static const char *marks[] = { "N", "30", "60", "E", "120", "150", "S" };
-		int i;
-		VRA_ScreenFrame( &c, pw, ph, AMBER );
-		VRA_Text( &c, "HEADING", 20.0f, 44.0f, 24.0f, AMBER );
-		VRA_Text( &c, "000", 20.0f, 116.0f, 46.0f, AMBER );
-		for ( i = 0; i < 7; i++ ) {
-			VRA_Text( &c, marks[i], 20.0f + i * 42.0f, 190.0f, 16.0f, AMBER );
+		const int heading = ( ( st->heading % 360 ) + 360 ) % 360;
+		int d;
+		snprintf( text, sizeof( text ), "%03d", heading );
+		VRA_Text( c, text, 20.0f, 116.0f, 46.0f, AMBER );
+		for ( d = 0; d < 360; d += 30 ) {	// the tape: what's ahead of it, round to the right
+			const float x = 20.0f + ( fmodf( (float)( d - heading + 720 + 30 ), 360.0f ) - 30.0f ) * VRA_TAPE;
+			const char *mark = ( d == 0 ) ? "N" : ( d == 90 ) ? "E" : ( d == 180 ) ? "S" : ( d == 270 ) ? "W" : NULL;
+			if ( !mark ) {
+				snprintf( text, sizeof( text ), "%d", d );
+				mark = text;
+			}
+			if ( x >= 14.0f && x + strlen( mark ) * 16.0f * 0.6f <= pw - 14.0f ) {
+				VRA_Text( c, mark, x, 190.0f, 16.0f, AMBER );
+			}
 		}
-		VRA_Rect( &c, 28.0f, 204.0f, 2.0f, 16.0f, AMBER );
-		VRA_Text( &c, "SPEED  0 KM/H", 20.0f, 240.0f, 16.0f, AMBER );
+		snprintf( text, sizeof( text ), "SPEED %2d KM/H", VRA_Clampi( st->speed, 0, 999 ) );
+		VRA_Text( c, text, 20.0f, 240.0f, 16.0f, AMBER );
 		break;
 	}
 	}
-	VRA_Scanlines( &c, pw, ph );
-	VRA_Close( &c, out );
+}
+
+// The rows (the page's units, from, to) each screen's live parts are drawn
+// in, all across it - the rest of it as it was drawn once.
+#define VRA_BANDS	3
+static const float vraBands[VRA_NUM_SCREENS][VRA_BANDS][2] = {
+	{ { 34.0f, 52.0f }, { 236.0f, 284.0f }, { 0.0f, 0.0f } },		// HULL: the armour; the legs, the step
+	{ { 80.0f, 98.0f }, { 118.0f, 138.0f }, { 164.0f, 210.0f } },	// WEAPONS: ready; the heat; the second weapon
+	{ { 62.0f, 244.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f } },			// GROUND: the ground going by, the feet
+	{ { 25.0f, 48.0f }, { 137.0f, 196.0f }, { 0.0f, 0.0f } },		// TARGET: who and how far; the box
+	{ { 92.0f, 186.0f }, { 0.0f, 0.0f }, { 0.0f, 0.0f } },			// COMMS: what's said, the voices' wave
+	{ { 80.0f, 118.0f }, { 176.0f, 192.0f }, { 226.0f, 242.0f } },	// HEADING: which way; the tape; the speed
+};
+
+struct vraScreen_s {
+	int				which;
+	float			pw, ph;			// its page
+	vraCanvas_t		base;			// what doesn't change, drawn...
+	unsigned char	*bytes;			// ...with the scanlines over it, as bytes
+	int				rows[VRA_BANDS][2];	// the canvas's rows its live parts are drawn in (from, to: not it)
+};
+
+static float	*vraWork;		// a screen drawn in (one at a time)...
+static size_t	vraWorkFloats;	// ...room for so many
+static int		vraScreensOpen;
+
+vraScreen_t *VRA_OpenScreen( int w, int h, int which ) {
+	vraScreen_t *s;
+	int b;
+
+	if ( w <= 0 || h <= 0 || which < 0 || which >= VRA_NUM_SCREENS ) {
+		return NULL;
+	}
+	s = (vraScreen_t *)calloc( 1, sizeof( *s ) );
+	if ( !s ) {
+		return NULL;
+	}
+	s->which = which;
+	VRA_ScreenPage( which, &s->pw, &s->ph );
+	VRA_Open( &s->base, w, h, s->pw, s->ph );
+	s->bytes = (unsigned char *)malloc( (size_t)w * h * 4 );
+	if ( !s->base.px || !s->bytes ) {
+		free( s->base.px );
+		free( s->bytes );
+		free( s );
+		return NULL;
+	}
+	VRA_ScreenBase( &s->base, which, s->pw, s->ph );
+	VRA_ScanlinesToBytes( &s->base, s->pw, s->ph, s->bytes, 0, h );
+	for ( b = 0; b < VRA_BANDS; b++ ) {
+		const float y0 = vraBands[which][b][0], y1 = vraBands[which][b][1];
+		if ( y1 > y0 ) {
+			s->rows[b][0] = (int)floorf( y0 * s->base.sy ) - 1;
+			s->rows[b][1] = (int)ceilf( y1 * s->base.sy ) + 1;
+			s->rows[b][0] = s->rows[b][0] < 0 ? 0 : s->rows[b][0];
+			s->rows[b][1] = s->rows[b][1] > h ? h : s->rows[b][1];
+		}
+	}
+	vraScreensOpen++;
+	return s;
+}
+
+void VRA_CloseScreen( vraScreen_t *s ) {
+	if ( !s ) {
+		return;
+	}
+	free( s->base.px );
+	free( s->bytes );
+	free( s );
+	if ( --vraScreensOpen <= 0 ) {
+		vraScreensOpen = 0;
+		free( vraWork );
+		vraWork = NULL;
+		vraWorkFloats = 0;
+	}
+}
+
+// (A number from what's drawn: FNV-1a.)
+static unsigned VRA_HashInt( unsigned h, int v ) {
+	int i;
+
+	for ( i = 0; i < 4; i++ ) {
+		h = ( h ^ ( ( (unsigned)v >> ( i * 8 ) ) & 0xff ) ) * 16777619u;
+	}
+	return h;
+}
+
+static unsigned VRA_HashText( unsigned h, const char *text ) {
+	while ( *text ) {
+		h = ( h ^ (unsigned char)*text++ ) * 16777619u;
+	}
+	return ( h ^ 0x100 ) * 16777619u;
+}
+
+// (A length on the page as a canvas's quarter pixels.)
+static int VRA_Quarter( const vraScreen_t *s, float v ) {
+	return (int)floorf( VRA_Clampf( v, -100000.0f, 100000.0f ) * s->base.sx * 4.0f + 0.5f );
+}
+
+unsigned VRA_ScreenKey( const vraScreen_t *s, const vraScreenState_t *st ) {
+	unsigned h = 2166136261u;
+
+	if ( !s ) {
+		return 0;
+	}
+	h = VRA_HashInt( h, s->which );
+	switch ( s->which ) {
+	case VRA_SCREEN_HULL:
+		h = VRA_HashInt( h, VRA_Clampi( st->armour, 0, 100 ) );
+		h = VRA_HashInt( h, st->walking ? 1 : 0 );
+		break;
+	case VRA_SCREEN_WEAPONS:
+		h = VRA_HashInt( h, st->ready ? 1 : 0 );
+		h = VRA_HashInt( h, VRA_Clampi( st->heat, 0, VRA_HEAT_BARS ) );
+		h = VRA_HashInt( h, VRA_Clampi( st->second, 0, 999 ) );
+		h = VRA_HashInt( h, VRA_SecondBars( st ) );
+		break;
+	case VRA_SCREEN_GROUND: {
+		int i;
+		h = VRA_HashInt( h, VRA_Quarter( s, VRA_GroundOffset( st ) ) );
+		for ( i = 0; i < 2; i++ ) {
+			const float swing = VRA_Swing( st, i );
+			h = VRA_HashInt( h, VRA_Quarter( s, swing > 0.0f ? swing * 46.0f : 0.0f ) );
+			h = VRA_HashInt( h, swing > 0.05f ? 1 : 0 );
+		}
+		break;
+	}
+	case VRA_SCREEN_TARGET:
+		h = VRA_HashText( h, st->target );
+		h = VRA_HashInt( h, st->target[0] ? VRA_Clampi( st->range, 0, 9999 ) : -1 );
+		h = VRA_HashInt( h, VRA_Quarter( s, VRA_TargetX( st, s->pw ) ) );
+		break;
+	case VRA_SCREEN_COMMS: {
+		char lines[2][VRA_LINE];
+		int dim[2], n, i;
+		n = VRA_CommsLines( st, s->pw, lines, dim );
+		for ( i = 0; i < n; i++ ) {
+			h = VRA_HashText( h, lines[i] );
+			h = VRA_HashInt( h, dim[i] );
+		}
+		h = VRA_HashInt( h, VRA_Quarter( s, VRA_WaveHeight( st ) ) );
+		h = VRA_HashInt( h, (int)floorf( st->t * 30.0f ) );	// (the wave moves: as it does, a thirtieth of a second on)
+		break;
+	}
+	case VRA_SCREEN_HEADING:
+		h = VRA_HashInt( h, ( ( st->heading % 360 ) + 360 ) % 360 );
+		h = VRA_HashInt( h, VRA_Clampi( st->speed, 0, 999 ) );
+		break;
+	}
+	return h;
+}
+
+void VRA_DrawScreenLive( vraScreen_t *s, const vraScreenState_t *st, unsigned char *out ) {
+	vraCanvas_t c;
+	size_t n;
+	int b;
+
+	if ( !s ) {
+		return;
+	}
+	c = s->base;
+	n = (size_t)c.w * c.h * 4;
+	memcpy( out, s->bytes, n );	// (what doesn't change, as it is)
+	if ( vraWorkFloats < n ) {
+		free( vraWork );
+		vraWork = (float *)calloc( n, sizeof( float ) );
+		vraWorkFloats = vraWork ? n : 0;
+	}
+	if ( !vraWork ) {
+		return;
+	}
+	// what does, drawn in its rows (those only read back: the rest of the
+	// canvas it's drawn in is another's, or as it was the last time)
+	c.px = vraWork;
+	for ( b = 0; b < VRA_BANDS; b++ ) {
+		if ( s->rows[b][1] > s->rows[b][0] ) {
+			const size_t from = (size_t)s->rows[b][0] * c.w * 4, count = (size_t)( s->rows[b][1] - s->rows[b][0] ) * c.w * 4;
+			memcpy( c.px + from, s->base.px + from, count * sizeof( float ) );
+		}
+	}
+	VRA_ScreenLive( &c, s->which, s->pw, s->ph, st );
+	for ( b = 0; b < VRA_BANDS; b++ ) {
+		if ( s->rows[b][1] > s->rows[b][0] ) {
+			VRA_ScanlinesToBytes( &c, s->pw, s->ph, out, s->rows[b][0], s->rows[b][1] );
+		}
+	}
+}
+
+void VRA_DrawScreen( unsigned char *out, int w, int h, int which ) {
+	vraScreen_t *s = VRA_OpenScreen( w, h, which );
+	vraScreenState_t st;
+
+	if ( !s ) {
+		memset( out, 0, (size_t)w * h * 4 );
+		return;
+	}
+	VRA_ScreenStart( &st );
+	VRA_DrawScreenLive( s, &st, out );
+	VRA_CloseScreen( s );
 }

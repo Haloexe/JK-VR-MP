@@ -771,6 +771,31 @@ done:
 	GL_CheckErrors();
 }
 
+/*
+================
+R_VR_ReloadImage
+
+OpenJK VR: an image made from a picture (R_CreateImage) given another of the
+same size - uploaded as that was, its mipmaps made again (pic changed in the
+doing, as R_CreateImage's is): the AT-ST cockpit's screens (tr_vratst.cpp).
+================
+*/
+void R_VR_ReloadImage( image_t *image, byte *pic, int width, int height ) {
+	int		format;
+	word	w = (word)width, h = (word)height;
+
+	if ( !image || !pic ) {
+		return;
+	}
+	if ( qglActiveTextureARB ) {
+		GL_SelectTexture( 0 );
+	}
+	GL_Bind( image );
+	Upload32( (unsigned *)pic, GL_RGBA, (qboolean)image->mipmap, (qboolean)image->allowPicmip, qfalse, qfalse, &format, &w, &h );
+	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, image->wrapClampMode );
+	qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, image->wrapClampMode );
+}
+
 static void GL_ResetBinds(void)
 {
 	memset( glState.currenttextures, 0, sizeof( glState.currenttextures ) );

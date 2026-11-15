@@ -1451,6 +1451,9 @@ const char	*R_VR_BuiltinShaderText( void );
 qboolean	R_VR_AtstModel( const char *name, void **buffer );
 void		R_VR_CreateAtstImages( void );
 const char	*R_VR_AtstShaderText( void );
+void		R_VR_AtstScreensFrame( void );					// (its screens drawn afresh: RE_BeginFrame)
+void		R_VR_AtstShutdown( qboolean destroyWindow );
+void		R_VR_ReloadImage( image_t *image, byte *pic, int width, int height );	// (tr_image.cpp)
 void	R_DeleteTextures( void );
 float	R_SumOfUsedImages( qboolean bUseFormat );
 void	R_InitSkins( void );

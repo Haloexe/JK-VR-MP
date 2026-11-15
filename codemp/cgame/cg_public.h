@@ -799,6 +799,10 @@ typedef struct cgameImport_s {
 		// which way it faces, and how its yoke drives it (vrCockpit_t). Call
 		// every frame; NULL, or unsaid lately, you don't.
 		void			(*VR_SetCockpit)						( const vrCockpit_t *cockpit );
+		// OpenJK VR: what the cockpit's screens show (vrCockpitScreens_t).
+		// Call every frame you sit in it; NULL, or unsaid lately, they stay as
+		// they are.
+		void			(*VR_SetCockpitScreens)					( const vrCockpitScreens_t *screens );
 	} ext;
 } cgameImport_t;
 

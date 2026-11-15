@@ -657,6 +657,8 @@ typedef struct vrState_s {
 	qboolean				cockpitGrip[2];	// each hand's grip squeezed in it away from its yoke - the way out, not its key - till let go
 	int						cockpitUse;		// ...one of them held since (Sys_Milliseconds; 0: neither)...
 	int						cockpitUseTap;	// ...and Use pressed for it since (0: not yet)
+	vrCockpitScreens_t		screens;		// what its screens show (VR_SetCockpitScreens: the cgame's word, every frame)...
+	int						screensTime;	// ...as of this cls.realtime (0: it said nothing)
 } vrState_t;
 
 static vrState_t		vr;
@@ -2509,7 +2511,8 @@ A cockpit (an AT-ST's, driving it: the cgame's cg_vrwalker.c)
 
 The cgame says every frame you sit in one (ext.VR_SetCockpit), which way it
 faces in the world and how its yoke drives it - it draws the cockpit, and
-puts the game's eyes in it. In it:
+puts the game's eyes in it - and what its screens show (the renderer draws
+them, told it here: ext.VR_SetCockpitScreens). In it:
 - your view turns as it turns, and else only as your head does: no snap or
   smooth turning (the sticks are the cgame's to drive it with). Its front is
   the way you faced as you sat down - or at Recenter (cockpitRef) - and the
@@ -2547,6 +2550,20 @@ void VR_SetCockpit( const vrCockpit_t *cockpit ) {
 	vr.cockpit.move = Com_Clamp( -1.0f, 1.0f, vr.cockpit.move );
 	vr.cockpit.turn = Com_Clamp( -1.0f, 1.0f, vr.cockpit.turn );
 	vr.cockpitTime = cls.realtime ? cls.realtime : 1;
+}
+
+// What its screens show (the renderer draws them, as it's told each frame:
+// vrRenderState_t.cockpitScreens).
+void VR_SetCockpitScreens( const vrCockpitScreens_t *screens ) {
+	if ( !screens ) {
+		vr.screensTime = 0;
+		return;
+	}
+	vr.screens = *screens;
+	vr.screens.target[VR_SCREEN_LINE - 1] = '\0';
+	vr.screens.comms[0][VR_SCREEN_LINE - 1] = '\0';
+	vr.screens.comms[1][VR_SCREEN_LINE - 1] = '\0';
+	vr.screensTime = cls.realtime ? cls.realtime : 1;
 }
 
 // Whether you sit in one now: the cgame's said so lately, you riding
@@ -4647,6 +4664,8 @@ static void VR_UpdateTracking( void ) {
 	vrClient.worldScale = vrRender.worldScale;
 	vrClient.cockpit = vr.inCockpit;
 	vrClient.cockpitYaw = vr.cockpitRef;
+	vrRender.cockpitScreens = ( vr.inCockpit && vr.screensTime && cls.realtime - vr.screensTime >= 0 &&
+		cls.realtime - vr.screensTime <= VR_COCKPIT_FRESH ) ? &vr.screens : NULL;
 	VectorCopy( headAxis[0], vrClient.headAxis[0] );
 	VectorCopy( headAxis[1], vrClient.headAxis[1] );
 	VectorCopy( headAxis[2], vrClient.headAxis[2] );
@@ -5841,6 +5860,7 @@ void VR_SetWeaponHand( int hand ) {}
 void VR_SetSaberTriggers( int handMask ) {}
 void VR_SetSaberForce( int how ) {}
 void VR_SetCockpit( const vrCockpit_t *cockpit ) {}
+void VR_SetCockpitScreens( const vrCockpitScreens_t *screens ) {}
 void VR_SetCmdButtons( int buttons ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}

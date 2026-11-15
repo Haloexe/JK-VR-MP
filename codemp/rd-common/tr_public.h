@@ -34,9 +34,10 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 // OpenJK VR: refimport_t gained VR_GetRenderState and refexport_t.ext gained
 // G2API_SetModelNoRender and G2API_SetBoneVRTransform (1011), then Anchor2D
 // and Aspect2D (1012), then the VR render state the HUD on your wrist's
-// members (1013: wristPass...), so a VR renderer must not be paired with a
-// stock engine or an older VR engine (or vice versa).
-#define	REF_API_VERSION 1013
+// members (1013: wristPass...), then the cockpit's screens (1014:
+// cockpitScreens), so a VR renderer must not be paired with a stock engine or
+// an older VR engine (or vice versa).
+#define	REF_API_VERSION 1014
 
 //
 // these are the functions exported by the refresh module

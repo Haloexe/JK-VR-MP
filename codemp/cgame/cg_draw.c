@@ -7510,6 +7510,8 @@ void CG_ChatBox_AddString(char *chatStr)
 	chatBoxItem_t *chat = &cg.chatItems[cg.chatItemActive];
 	float chatLen;
 
+	CG_VR_WalkerChat( chatStr );	// OpenJK VR: the AT-ST cockpit's COMMS screen shows it too
+
 	if (cg_chatBox.integer<=0)
 	{ //don't bother then.
 		return;

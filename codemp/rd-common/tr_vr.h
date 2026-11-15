@@ -69,4 +69,9 @@ typedef struct vrRenderState_s {
 	qboolean	wristPass;
 	int			wristWidth, wristHeight;
 	float		wristTop, wristBottom;
+
+	// You sit in a cockpit (an AT-ST's): what its screens show, as the cgame
+	// says (qcommon/vr_public.h) - NULL out of one. The renderer draws them
+	// afresh (tr_vratst.cpp) as the frame begins, as they change.
+	const struct vrCockpitScreens_s	*cockpitScreens;
 } vrRenderState_t;

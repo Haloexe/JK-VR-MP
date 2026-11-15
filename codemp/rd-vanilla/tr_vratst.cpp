@@ -27,6 +27,7 @@ General Public License version 2, like the rest of OpenJK.
 */
 
 #include "tr_local.h"
+#include "../qcommon/vr_public.h"	// (vrCockpitScreens_t)
 #include "tr_vratst_art.h"
 #include "tr_vratst_models.h"
 #include <zlib.h>
@@ -154,6 +155,19 @@ static const struct {
 
 static const char *vrtScreens[VRA_NUM_SCREENS] = { "hull", "weapons", "ground", "target", "comms", "heading" };
 
+// The screens as they're drawn afresh (R_VR_AtstScreensFrame)
+static struct {
+	image_t		*image;			// its image (R_VR_CreateAtstImages)
+	vraScreen_t	*art;			// its picture, kept (made as it's first drawn afresh)
+	unsigned	key;			// what it shows (VRA_ScreenKey; 0: as it started)
+	int			drawn;			// as of (ri.Milliseconds)
+} vrtScreen[VRA_NUM_SCREENS];
+static byte		*vrtScreenPic;	// (a picture drawn to be uploaded: R_VR_ReloadImage changes it)
+
+static int R_VR_ScreenWidth( int which ) {
+	return ( which == VRA_SCREEN_COMMS || which == VRA_SCREEN_HEADING ) ? VRT_SCREEN_W / 2 : VRT_SCREEN_W;
+}
+
 /*
 =================
 R_VR_CreateAtstImages
@@ -181,11 +195,145 @@ void R_VR_CreateAtstImages( void ) {
 		R_CreateImage( va( "*vratst_%s", vrtSolids[i].name ), buf, VRT_SOLID, VRT_SOLID, GL_RGBA, qfalse, qfalse, qfalse, GL_REPEAT );
 	}
 	for ( i = 0; i < VRA_NUM_SCREENS; i++ ) {
-		const int w = ( i == VRA_SCREEN_COMMS || i == VRA_SCREEN_HEADING ) ? VRT_SCREEN_W / 2 : VRT_SCREEN_W;
+		const int w = R_VR_ScreenWidth( (int)i );
 		VRA_DrawScreen( buf, w, VRT_SCREEN_H, (int)i );
-		R_CreateImage( va( "*vratst_screen_%s", vrtScreens[i] ), buf, w, VRT_SCREEN_H, GL_RGBA, qtrue, qfalse, qfalse, GL_CLAMP );
+		vrtScreen[i].image = R_CreateImage( va( "*vratst_screen_%s", vrtScreens[i] ), buf, w, VRT_SCREEN_H, GL_RGBA, qtrue, qfalse, qfalse,
+			GL_CLAMP );
+		vrtScreen[i].key = 0;	// (made afresh, or kept as it was - a map's loaded: drawn afresh as it's next seen)
+		vrtScreen[i].drawn = 0;
 	}
 	Z_Free( buf );
+}
+
+/*
+================================================================================
+
+The screens as the cockpit goes
+
+What the cgame says they show (vrRenderState_t.cockpitScreens: you sit in
+the cockpit), each drawn afresh as that changes - as the frame begins (the
+first eye's), one a frame at most, each no more than VRT_SCREEN_HZ times a
+second - and uploaded over its image as it was made (its mipmaps made
+again). What doesn't change on one is drawn once and kept, as it's first
+drawn so (VRA_OpenScreen: one a frame, too).
+
+================================================================================
+*/
+
+#define VRT_SCREEN_HZ	12
+
+static float R_VR_ScreenFloat( float v, float lo, float hi ) {
+	if ( !( v == v ) ) {
+		return 0.0f;	// (NaN)
+	}
+	return v < lo ? lo : ( v > hi ? hi : v );
+}
+
+// What the cgame said, made safe to draw.
+static void R_VR_ScreenState( const vrCockpitScreens_t *in, vraScreenState_t *st ) {
+	memset( st, 0, sizeof( *st ) );
+	st->t = ( in->time & 0x3fffffff ) * 0.001f;
+	st->armour = in->armour;
+	st->walking = in->walking ? 1 : 0;
+	st->ready = in->ready ? 1 : 0;
+	st->heat = in->heat;
+	st->second = Com_Clampi( -1, 99999, in->second );
+	st->secondMax = Com_Clampi( -1, 99999, in->secondMax );
+	st->ground = R_VR_ScreenFloat( in->ground, -1000000.0f, 1000000.0f );
+	st->stride = R_VR_ScreenFloat( in->stride, -1000.0f, 1000.0f );
+	st->walk = R_VR_ScreenFloat( in->walk, 0.0f, 1.0f );
+	Q_strncpyz( st->target, in->target, sizeof( st->target ) );
+	st->range = in->range;
+	st->bearing = R_VR_ScreenFloat( in->bearing, -1.0f, 1.0f );
+	Q_strncpyz( st->comms[0], in->comms[0], sizeof( st->comms[0] ) );
+	Q_strncpyz( st->comms[1], in->comms[1], sizeof( st->comms[1] ) );
+	st->voice = R_VR_ScreenFloat( in->voice, 0.0f, 1.0f );
+	st->heading = in->heading % 360;
+	st->speed = in->speed;
+}
+
+/*
+=================
+R_VR_AtstScreensFrame
+
+As a frame begins (RE_BeginFrame): in the cockpit, a screen drawn afresh
+whose picture's changed (the one waiting longest), if one has.
+=================
+*/
+void R_VR_AtstScreensFrame( void ) {
+	const vrRenderState_t *vrs = ri.VR_GetRenderState ? ri.VR_GetRenderState() : NULL;
+	vraScreenState_t st;
+	unsigned key = 0;
+	int i, pick = -1, now;
+
+	if ( !vrs || !vrs->active || vrs->screenLayer || vrs->wristPass || vrs->eye != 0 || !vrs->cockpitScreens ) {
+		return;
+	}
+	now = ri.Milliseconds();
+	for ( i = 0; i < VRA_NUM_SCREENS; i++ ) {	// (what doesn't change on one, drawn: one a frame)
+		if ( vrtScreen[i].image && !vrtScreen[i].art ) {
+			vrtScreen[i].art = VRA_OpenScreen( R_VR_ScreenWidth( i ), VRT_SCREEN_H, i );
+			if ( !vrtScreen[i].art ) {
+				vrtScreen[i].image = NULL;	// (no room: it stays as it is)
+				ri.Printf( PRINT_WARNING, "The AT-ST cockpit's %s screen can't be drawn: no room\n", vrtScreens[i] );
+			}
+			return;
+		}
+	}
+	if ( !vrtScreenPic ) {
+		vrtScreenPic = (byte *)malloc( VRT_SCREEN_W * VRT_SCREEN_H * 4 );
+		if ( !vrtScreenPic ) {
+			return;
+		}
+	}
+	R_VR_ScreenState( vrs->cockpitScreens, &st );
+	for ( i = 0; i < VRA_NUM_SCREENS; i++ ) {
+		unsigned k;
+		if ( !vrtScreen[i].art || ( vrtScreen[i].drawn && now - vrtScreen[i].drawn >= 0 && now - vrtScreen[i].drawn < 1000 / VRT_SCREEN_HZ ) ) {
+			continue;
+		}
+		k = VRA_ScreenKey( vrtScreen[i].art, &st );
+		if ( k == 0 ) {
+			k = 1;	// (0's a screen as it started)
+		}
+		if ( k != vrtScreen[i].key && ( pick < 0 || now - vrtScreen[i].drawn > now - vrtScreen[pick].drawn ) ) {
+			pick = i;
+			key = k;
+		}
+	}
+	if ( pick < 0 ) {
+		return;
+	}
+	VRA_DrawScreenLive( vrtScreen[pick].art, &st, vrtScreenPic );
+	R_IssuePendingRenderCommands();
+	R_VR_ReloadImage( vrtScreen[pick].image, vrtScreenPic, R_VR_ScreenWidth( pick ), VRT_SCREEN_H );
+	vrtScreen[pick].key = key;
+	vrtScreen[pick].drawn = now ? now : 1;
+}
+
+/*
+=================
+R_VR_AtstShutdown
+
+The renderer shut down: its window too (RE_Shutdown - a vid_restart, or
+quitting), the screens' images with it - what's kept of them let go of.
+=================
+*/
+void R_VR_AtstShutdown( qboolean destroyWindow ) {
+	int i;
+
+	if ( !destroyWindow ) {
+		return;	// (a map's loaded: kept)
+	}
+	for ( i = 0; i < VRA_NUM_SCREENS; i++ ) {
+		VRA_CloseScreen( vrtScreen[i].art );
+		vrtScreen[i].art = NULL;
+		vrtScreen[i].image = NULL;
+		vrtScreen[i].key = 0;
+		vrtScreen[i].drawn = 0;
+	}
+	free( vrtScreenPic );
+	vrtScreenPic = NULL;
 }
 
 // How much the cabin's own lights light it, over what the world's do where it

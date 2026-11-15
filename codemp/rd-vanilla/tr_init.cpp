@@ -1884,6 +1884,7 @@ void RE_Shutdown( qboolean destroyWindow, qboolean restarting ) {
 
 	R_ShutdownWorldEffects();
 	R_ShutdownFonts();
+	R_VR_AtstShutdown( destroyWindow );	// OpenJK VR: the AT-ST cockpit's screens, as kept
 	if ( tr.registered ) {
 		R_IssuePendingRenderCommands();
 		if (destroyWindow)

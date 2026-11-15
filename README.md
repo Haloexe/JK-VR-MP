@@ -51,7 +51,10 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   head, looking out of its viewport, in a cockpit made for this mod. Take hold
   of the yoke in front of you and push it to walk, pull it back to back up,
   twist it to turn (or drive with the sticks); its guns aim where you look,
-  and its stride's sway is smoothed to a gentle rise and fall. Only in VR:
+  and its stride's sway is smoothed to a gentle rise and fall. Its six
+  screens show what's going on: its armour and legs, its guns' heat and
+  rockets, the ground going by under its feet, who's before its guns, chat
+  and the voices you hear, and its heading and speed. Only in VR:
   players on a monitor drive AT-STs as the game has them (servers can turn
   the cockpit off: `g_vrWalker 0`).
 - **Rolls and crouch jumps:** in a roll your view goes down with your body,
@@ -204,7 +207,7 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   other hand and aim it with both. On a server running this build your shots
   leave the barrel, so you can shoot round a corner.
 - **An AT-ST's cockpit:** drive an AT-ST from inside its head, with a yoke you
-  hold in both hands and its guns aiming where you look.
+  hold in both hands, its guns aiming where you look and its screens live.
 - **Dedicated server** for Windows and Linux, so you can run your own.
 - **Plays on a monitor too:** without a headset you get a borderless window,
   every resolution your monitor has (widescreen and ultrawide included) or a
