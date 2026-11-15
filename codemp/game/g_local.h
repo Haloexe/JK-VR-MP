@@ -1532,6 +1532,7 @@ void		G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd );
 void		G_VRWalkerInit( void );
 void		G_VRWalkerPublish( void );
 void		G_VRWalkerShutdown( void );
+void		G_VRWalkerUserinfo( gentity_t *ent, const char *userinfo );
 qboolean	G_VRWalkerYoke( gentity_t *ent );
 void		G_VRWalkerCmd( gentity_t *ent, usercmd_t *ucmd );
 

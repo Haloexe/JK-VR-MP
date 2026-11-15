@@ -51,8 +51,9 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   head, looking out of its viewport, in a cockpit made for this mod. Take hold
   of the yoke in front of you and push it to walk, pull it back to back up,
   twist it to turn (or drive with the sticks); its guns aim where you look,
-  and its stride's sway is smoothed to a gentle rise and fall (servers can
-  turn it off: `g_vrWalker 0`).
+  and its stride's sway is smoothed to a gentle rise and fall. Only in VR:
+  players on a monitor drive AT-STs as the game has them (servers can turn
+  the cockpit off: `g_vrWalker 0`).
 - **Rolls and crouch jumps:** in a roll your view goes down with your body,
   so your arms no longer stretch down to reach it; crouched in mid-air, your
   body crouches too, its head where your eyes are.

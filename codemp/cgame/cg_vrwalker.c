@@ -30,7 +30,11 @@ serverinfo), Cockpit on (cg_vrCockpit):
 - Use - its grip, away from the yoke - held a moment gets you out (the
   engine's).
 On a server without it (or Cockpit off) you drive it as the game has it,
-watching it from behind: it turns toward where you look.
+watching it from behind: it turns toward where you look - as you do out of
+VR, always. Your game says it goes by these rules to every server ("vrw 1"
+in your userinfo), VR or not: the server takes the yoke from no other game
+(and out of VR your engine never sends it - not even from a key bound to
+its button).
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -603,6 +607,7 @@ void CG_VR_WalkerAimDot( void ) {
 
 // A map begun: in no cockpit.
 void CG_VR_WalkerInit( void ) {
+	trap->Cvar_Register( NULL, "vrw", XSTRING( VR_WALKER_RULE ), CVAR_USERINFO | CVAR_ROM | CVAR_TEMP );	// (these rules: bg_vrwalker.h)
 	vrk.on = qfalse;
 	vrk.time = 0;
 	vrk.ghoul2 = NULL;

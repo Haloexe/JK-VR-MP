@@ -1215,6 +1215,12 @@ void CL_CmdButtons( usercmd_t *cmd ) {
 		}
 		in_buttons[i].wasPressed = qfalse;
 	}
+#ifdef OPENJK_VR
+	// the top bit's a VR hand's - on a wall, or an AT-ST's yoke - and only ever
+	// the headset's input sends it (VR_SetCmdButtons, after this), never a key
+	// (+button15): to a server it's a VR player's
+	cmd->buttons &= ~BUTTON_VR_WALLGRIP;
+#endif
 
 	if (cmd->buttons & BUTTON_FORCEPOWER)
 	{ //check for transferring a use force to a use inventory...

@@ -639,6 +639,10 @@ built into the game, so it's there on any server running this build:
     Anywhere else, and in other vehicles, you watch from behind and it
     turns toward where you look, as ever. cg_vrCockpit 0: the same, by
     your choice.
+  * Only in VR: on a monitor (this build's desktop launcher too) you drive
+    an AT-ST from behind as the game has it, as everyone not in VR does.
+    And the cockpit's only in your own view: everyone else sees an AT-ST
+    as ever, whoever drives it.
 
 SHOTS FROM YOUR GUN'S BARREL: on servers running this build (and games you
 host with it) your shots leave your gun at its muzzle - where its flash is

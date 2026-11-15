@@ -468,8 +468,11 @@ GOOD TO KNOW
   cockpit's eyes, as far round as the AT-ST lets its driver look (its
   vehicle file's lookYaw and lookPitch). Only from its driver, playing this
   build in VR ("vrWalker 1" in the server info; bots never, nor anyone
-  in another vehicle, which drive as ever). g_vrWalker 0: AT-STs driven as
-  the game has them, by everyone.
+  in another vehicle, which drive as ever). Players not in VR - in any
+  build, this one's desktop launcher too - always drive AT-STs as the game
+  has them: the yoke's taken only from games of this build ("vrw 1" in
+  their userinfo), which send it from VR alone, never from a key.
+  g_vrWalker 0: AT-STs driven as the game has them, by everyone.
 * VR players drop their sabers: holding the grip (Saber Grip: Hold), a VR
   player who lets go of their saber anywhere but at their side drops it -
   switched off, falling from their hand as it was going (no faster than

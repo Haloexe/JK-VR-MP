@@ -10,14 +10,17 @@ them - pushed forward it walks, pulled back it backs up, twisted it turns -
 or the sticks; their view only looks round, and aims its guns. On a server
 of this build that lets them ("vrWalker 1" in its serverinfo: g_vrWalker)
 their commands say so (BUTTON_VR_YOKE; how far the yoke's twisted, their
-rightmove: + right, - left), and then:
+rightmove: + right, - left) - only ever a VR player's: their engine sends
+it from its VR input alone, never from a key (cl_input.cpp), and the server
+takes it only from a player whose game says it goes by these rules ("vrw 1"
+in their userinfo: g_vrwalker.c) - and then:
 - it turns as the yoke has it, standing too (VR_WALKER_STAND_TURN as fast),
   never toward where they look (WalkerNPC.c);
 - its guns aim where they look, from the cockpit's eyes - as far round from
   its front as the AT-ST lets its driver look (its lookYaw, lookPitch) -
   as the game's crosshair shows (g_weapon.c, cg_draw.c).
 Anywhere else they drive it as the game has it: it turns toward where they
-look, its guns fire where it faces.
+look, its guns fire where it faces - as everyone not in VR does, always.
 
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
@@ -28,6 +31,11 @@ General Public License version 2, like the rest of OpenJK.
 #define BG_VRWALKER_H
 
 #define BUTTON_VR_YOKE			BUTTON_VR_WALLGRIP	// (the same bit: in a vehicle, never a hand on a wall - cg_vrwall.c)
+
+// These rules, as a server and a player's game say they go by them: the
+// serverinfo's "vrWalker" (g_vrWalker on) and the userinfo's "vrw" (every game
+// of this build: in VR it drives an AT-ST from its cockpit)
+#define VR_WALKER_RULE			1
 
 // The cockpit's eyes from an AT-ST's origin, standing, facing its way: forward,
 // left, up (vr/atst/make_cockpit.py, its tags: tag_eye from tag_origin)

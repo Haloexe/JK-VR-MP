@@ -14,6 +14,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #include "cg_local.h"
 #include "game/bg_vrgun.h"
+#include "game/bg_vrwalker.h"
 
 // Whether the engine is the OpenJK VR engine this cgame was built for: only
 // then do the VR members of trap->ext exist at all.
@@ -171,7 +172,7 @@ void CG_VR_Init( void ) {
 void CG_VR_ParseServerinfo( const char *info ) {
 	cgs.vrGunBarrel = (qboolean)( atoi( Info_ValueForKey( info, "vrGunBarrel" ) ) == VR_BARREL_RULE );
 	cgs.vrWallGrip = (qboolean)( atoi( Info_ValueForKey( info, "vrWallGrip" ) ) > 0 );	// (hanging on to walls: cg_vrwall.c)
-	cgs.vrWalker = (qboolean)( atoi( Info_ValueForKey( info, "vrWalker" ) ) > 0 );	// (an AT-ST from its cockpit: cg_vrwalker.c)
+	cgs.vrWalker = (qboolean)( atoi( Info_ValueForKey( info, "vrWalker" ) ) == VR_WALKER_RULE );	// (an AT-ST from its cockpit, by these rules: cg_vrwalker.c)
 	cgs.vrRealBlades = (qboolean)( atoi( Info_ValueForKey( info, "vrSaber" ) ) > 0 );	// (a hilt's trigger: cg_vrbody.c)
 }
 
