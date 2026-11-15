@@ -654,7 +654,9 @@ typedef struct vrState_s {
 	float					cockpitTurnRate;	// how fast it's turning (degrees a second, as said: the Comfort Vignette)
 	qboolean				inCockpit;		// in one this frame (VR_InCockpit, as tracking's updated)...
 	float					cockpitRef;		// ...the tracking yaw its front's at (as you sat down, or at Recenter)
-	int						cockpitUse;		// Use held in it since (Sys_Milliseconds; 0: not held)
+	qboolean				cockpitGrip[2];	// each hand's grip squeezed in it away from its yoke - the way out, not its key - till let go
+	int						cockpitUse;		// ...one of them held since (Sys_Milliseconds; 0: neither)...
+	int						cockpitUseTap;	// ...and Use pressed for it since (0: not yet)
 } vrState_t;
 
 static vrState_t		vr;
@@ -1550,6 +1552,18 @@ static void VR_SetKey( int key, qboolean down ) {
 		}
 		if ( down && VR_GrabZone( gripHand ) ) {
 			vr.grabbing[gripHand] = qtrue;
+			vr.keySent[key] = 0;
+			return;
+		}
+		// In a cockpit, either grip squeezed away from its yoke is the way out
+		// (VR_CockpitMovement) instead of pressing its key - Use, Use Force (no
+		// Force riding anything) - till it's let go, there or out of it.
+		if ( !down && vr.cockpitGrip[gripHand] ) {
+			vr.cockpitGrip[gripHand] = qfalse;
+			return;
+		}
+		if ( down && vr.inCockpit && !vr.pointerMode ) {
+			vr.cockpitGrip[gripHand] = qtrue;
 			vr.keySent[key] = 0;
 			return;
 		}
@@ -2503,13 +2517,20 @@ puts the game's eyes in it. In it:
   referenceYaw your head's, always): your view's angles, which aim, where
   you look from it;
 - your commands go as the cgame says (its yoke's or the sticks'), not as
-  the moving stick moves you; A (jump) fires the second weapon; Use - its
-  grip, away from the yoke - gets you out only held VR_COCKPIT_USE_MS.
+  the moving stick moves you; A (jump) fires the second weapon;
+- either grip squeezed away from the yoke - not its key, Use or Use Force,
+  nor the Force's gestures (the Force isn't used riding anything) - held
+  VR_COCKPIT_USE_MS gets you out: one press of Use, VR_COCKPIT_USE_TAP_MS
+  long, and none after it till that grip's let go (VR_SetKey: still held
+  out of it, it's no Use there either). The game's Use held goes on and
+  on (TryUse, every 100 ms): out of the AT-ST, right behind it, facing it,
+  it'd put you straight back in.
 
 ================================================================================
 */
 
 #define VR_COCKPIT_FRESH		200		// ms the cgame's word that you sit in one holds
+#define VR_COCKPIT_USE_TAP_MS	60		// ...the press of Use that gets you out of it (one, as a key's tap)
 
 void VR_SetCockpit( const vrCockpit_t *cockpit ) {
 	if ( !cockpit ) {
@@ -2545,15 +2566,24 @@ static void VR_CockpitMovement( usercmd_t *cmd ) {
 		cmd->buttons |= BUTTON_ALT_ATTACK;	// (A, jump: the second weapon)
 	}
 	cmd->upmove = 0;
-	if ( cmd->buttons & BUTTON_USE ) {
+	// the way out: a grip held a moment (no getting out by a slip of it), then
+	// one press of Use - nothing else's (a grip held from before it: VR_SetKey)
+	cmd->buttons &= ~( BUTTON_USE | BUTTON_FORCEPOWER );
+	if ( vr.cockpitGrip[VR_HAND_LEFT] || vr.cockpitGrip[VR_HAND_RIGHT] ) {
 		if ( !vr.cockpitUse ) {
 			vr.cockpitUse = now ? now : 1;
+			vr.cockpitUseTap = 0;
 		}
-		if ( now - vr.cockpitUse < VR_COCKPIT_USE_MS ) {
-			cmd->buttons &= ~BUTTON_USE;	// (held a moment first: no getting out by a slip of the grip)
+		if ( now - vr.cockpitUse >= VR_COCKPIT_USE_MS ) {
+			if ( !vr.cockpitUseTap ) {
+				vr.cockpitUseTap = now ? now : 1;
+			}
+			if ( now - vr.cockpitUseTap < VR_COCKPIT_USE_TAP_MS ) {
+				cmd->buttons |= BUTTON_USE;
+			}
 		}
 	} else {
-		vr.cockpitUse = 0;
+		vr.cockpitUse = vr.cockpitUseTap = 0;
 	}
 	if ( vr.cockpit.move != 0.0f ) {
 		vr.comfortMove = fabsf( vr.cockpit.move );	// (the Comfort Vignette: as hard as it's driven)
@@ -2593,8 +2623,8 @@ static int VR_ForceHand( void ) {
 	if ( !vr_forceGestures || vr_forceGestures->integer <= VRF_MODE_OFF || vr_forceGestures->integer > VRF_MODE_OPEN ) {
 		return -1;
 	}
-	if ( vr.pointerMode || cls.state != CA_ACTIVE || VR_GameOwnsView() ) {
-		return -1;
+	if ( vr.pointerMode || cls.state != CA_ACTIVE || VR_GameOwnsView() || vr.inCockpit ) {
+		return -1;	// (in a cockpit: no Force riding anything - its grips get you out, VR_SetKey)
 	}
 	if ( ( ( weaponHand == h || weaponHand == 2 ) && saberForce == VR_SABER_FORCE_NONE ) || ( vr.grabbing[h] && saberForce != VR_SABER_FORCE_X ) ||
 		!vr.handTrackTime[h] || Sys_Milliseconds() - vr.handTrackTime[h] > VR_FORCE_LOST_MS ) {
@@ -4515,6 +4545,9 @@ static void VR_UpdateTracking( void ) {
 		const qboolean inCockpit = VR_InCockpit();
 		if ( inCockpit && ( !vr.inCockpit || recentred ) ) {
 			vr.cockpitRef = vr.headYaw;
+		}
+		if ( !inCockpit ) {
+			vr.cockpitUse = vr.cockpitUseTap = 0;	// (a grip held still from getting out: its own till it's let go - VR_SetKey)
 		}
 		vr.inCockpit = inCockpit;
 	}

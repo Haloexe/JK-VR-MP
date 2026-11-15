@@ -27,8 +27,9 @@ serverinfo), Cockpit on (cg_vrCockpit):
 - the right trigger fires the main guns (left-handed: the left), the other
   trigger - or A - the second weapon. They aim where you look, as far round
   as the AT-ST lets them (bg_vrwalker.h): a dot where they'll hit.
-- Use - its grip, away from the yoke - held a moment gets you out (the
-  engine's).
+- either grip squeezed away from the yoke, held a moment, gets you out:
+  one press of Use, none more till it's let go (the engine's: held on, the
+  game's Use would put you straight back in). No Force gestures in it.
 On a server without it (or Cockpit off) you drive it as the game has it,
 watching it from behind: it turns toward where you look - as you do out of
 VR, always. Your game says it goes by these rules to every server ("vrw 1"
@@ -87,7 +88,14 @@ static struct {
 	float		move, turn;		// what drives the AT-ST (-1..1: walking, turning left) - told the engine
 	int			yokeTime;		// (cg.time it was eased to)
 	qboolean	told;			// the engine's been told you sit in it
+
+	// its walk, as the log has it (CG_VRK_LogWalk)
+	int			steps;			// the sounds its steps played (CG_VR_WalkerHeard)...
+	int			walkLogTime;	// ...since (cg.time; 0: not yet)
+	int			walkLogLegs;	// its legs' animation, as logged
 } vrk;
+
+extern stringID_table_t animTable[MAX_ANIMATIONS + 1];
 
 /*
 ================================================================================
@@ -201,6 +209,7 @@ static void CG_VRK_Place( centity_t *veh, const vrClientState_t *vr ) {
 		vrk.held[0] = vrk.held[1] = qfalse;
 		vrk.push = vrk.twist = vrk.move = vrk.turn = 0.0f;
 		vrk.yokeTime = 0;
+		vrk.steps = vrk.walkLogTime = 0;
 		CG_VR_Log( "walker: in the cockpit of %i\n", veh->currentState.number );
 	}
 	vrk.on = qtrue;
@@ -512,6 +521,37 @@ static void CG_VRK_Draw( void ) {
 	}
 }
 
+// A sound of the AT-ST's own animations played (CG_PlayerAnimEventDo: its
+// steps - two a stride, walking, running or backing up), counted for the log
+// if it's the one you drive from its cockpit.
+void CG_VR_WalkerHeard( const centity_t *cent ) {
+	if ( cent && CG_VR_InCockpit() && cent->currentState.number == vrk.vehNum ) {
+		vrk.steps++;
+	}
+}
+
+// The AT-ST's walk in the log (once a frame, in the cockpit): what its legs
+// do, how fast it goes and how many of its steps were heard - every 2 seconds
+// it moves or steps, and as its legs change (a quarter of a second apart at
+// most).
+static void CG_VRK_LogWalk( void ) {
+	const centity_t *veh = &cg_entities[vrk.vehNum];
+	const float top = ( veh->m_pVehicle && veh->m_pVehicle->m_pVehicleInfo ) ? veh->m_pVehicle->m_pVehicleInfo->speedMax : 0.0f;
+	const int legs = veh->currentState.legsAnim, since = cg.time - vrk.walkLogTime;
+	const char *name = GetStringForID( animTable, legs );
+
+	if ( vrk.walkLogTime && since >= 0 ) {
+		if ( legs != vrk.walkLogLegs ? ( since < 250 ) : ( since < 2000 || ( !cg.predictedVehicleState.speed && !vrk.steps ) ) ) {
+			return;
+		}
+	}
+	CG_VR_Log( "walker: its legs %s (frame %i), %.0f%% of its top speed; %i steps heard\n", name ? name : "?", veh->pe.legs.frame,
+		top > 0.0f ? cg.predictedVehicleState.speed * 100.0f / top : 0.0f, vrk.steps );
+	vrk.steps = 0;
+	vrk.walkLogTime = cg.time ? cg.time : 1;
+	vrk.walkLogLegs = legs;
+}
+
 /*
 =================
 CG_VR_WalkerFrame
@@ -537,6 +577,7 @@ void CG_VR_WalkerFrame( const vrClientState_t *vr ) {
 	}
 	if ( vrk.yokeTime != cg.time ) {
 		CG_VRK_Yoke( vr );
+		CG_VRK_LogWalk();
 	}
 	CG_VRK_Draw();
 

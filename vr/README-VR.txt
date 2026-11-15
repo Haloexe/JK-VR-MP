@@ -632,8 +632,10 @@ built into the game, so it's there on any server running this build:
     other trigger - or A - the second weapon. They aim where you look, as
     far round as the AT-ST lets its driver look, a floating dot showing
     where they'll hit. Others see its head tip up and down as you look.
-  * To get out, hold your Use grip a moment (away from the yoke) - a slip
-    of the grip doesn't throw you out.
+  * To get out, squeeze either grip away from the yoke and hold it a
+    moment - a slip of the grip doesn't throw you out, and holding on
+    once you're out doesn't put you back in. (No Force gestures in it: the
+    game has no Force riding anything.)
   * Only on servers running this build ("vrWalker 1" in the server info:
     g_vrWalker 0 turns it off - README-SERVER.txt), and only an AT-ST.
     Anywhere else, and in other vehicles, you watch from behind and it

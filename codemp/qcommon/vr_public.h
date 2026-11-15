@@ -79,8 +79,10 @@ General Public License version 2, like the rest of OpenJK.
 //   (or at Recenter) its front (vrClientState_t.cockpitYaw), your view's
 //   angles where your head looks from it (they aim);
 // - your commands go as it says (move, turn: its yoke's, or the sticks'),
-//   not as the sticks move you; A (jump) fires the second weapon; Use (its
-//   grip) gets you out only held a moment (VR_COCKPIT_USE_MS).
+//   not as the sticks move you; A (jump) fires the second weapon; either
+//   grip, away from the yoke (not its key, nor the Force's), gets you out
+//   held a moment (VR_COCKPIT_USE_MS): one press of Use, no more till it's
+//   let go.
 typedef struct vrCockpit_s {
 	float		yaw;		// which way it faces in the world (degrees)
 	float		move;		// -1..1: walking (+) or backing up (-), as far as it's pushed
@@ -89,7 +91,7 @@ typedef struct vrCockpit_s {
 							// look - beyond, it holds them there, and they'd spin round as it does; 0: as far as ever)
 } vrCockpit_t;
 
-#define VR_COCKPIT_USE_MS		700		// Use held this long, in a cockpit, before it's pressed (no getting out by a slip of the grip)
+#define VR_COCKPIT_USE_MS		700		// a grip held this long, in a cockpit, before Use's pressed (no getting out by a slip of it)
 
 // ext.VR_SetGunHold( hand, how, boreLeft, boreUp ): how your other hand holds
 // the gun in your gun hand - said every frame (unsaid a moment, not at all)

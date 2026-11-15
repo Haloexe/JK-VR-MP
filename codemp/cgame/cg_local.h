@@ -1946,6 +1946,7 @@ qboolean	CG_VR_WalkerWanted( void );
 qboolean	CG_VR_WalkerView( void );
 qboolean	CG_VR_InCockpit( void );
 qboolean	CG_VR_WalkerHides( const centity_t *cent );
+void		CG_VR_WalkerHeard( const centity_t *cent );
 void		CG_VR_WalkerFrame( const vrClientState_t *vr );
 int			CG_VR_WalkerZones( void );
 int			CG_VR_WalkerButtons( void );
