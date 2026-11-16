@@ -875,10 +875,12 @@ static void CG_VRK_Middle( const centity_t *cent, vec3_t out ) {
 }
 
 // Who they are, as the TARGET screen has it: a player's name; a vehicle's
-// driver's, or what it is; a companion's name; an NPC's kind.
+// driver's, or what it is; a companion's name; an NPC's kind (its model's,
+// as it's sent: "models/players/<model>/...").
 static void CG_VRK_TargetName( const centity_t *cent, char *out, int size ) {
 	const entityState_t *es = &cent->currentState;
 	const char *name = NULL;
+	char kind[MAX_QPATH];
 	int i;
 
 	if ( es->eType == ET_PLAYER && es->number < MAX_CLIENTS ) {
@@ -895,8 +897,15 @@ static void CG_VRK_TargetName( const centity_t *cent, char *out, int size ) {
 			default:			name = "VEHICLE";	break;
 			}
 		}
-	} else if ( ( name = CG_RP_CompName( es->number ) ) == NULL && cent->npcClient ) {
-		name = cent->npcClient->modelName;
+	} else if ( ( name = CG_RP_CompName( es->number ) ) == NULL ) {
+		const char *model = CG_ConfigString( CS_MODELS + es->modelindex );
+		if ( !Q_stricmpn( model, "models/players/", 15 ) ) {
+			Q_strncpyz( kind, model + 15, sizeof( kind ) );
+			for ( i = 0; kind[i] && kind[i] != '/'; i++ ) {
+			}
+			kind[i] = '\0';
+			name = kind;
+		}
 	}
 	Q_strncpyz( out, ( name && name[0] ) ? name : "CONTACT", size );
 	for ( i = 0; out[i]; i++ ) {

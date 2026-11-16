@@ -7238,7 +7238,9 @@ extern playerState_t *cgSendPS[MAX_GENTITIES];
 void CG_G2AnimEntModelLoad(centity_t *cent)
 {
 	const char *cModelName = CG_ConfigString( CS_MODELS+cent->currentState.modelindex );
+	char compLook[MAX_QPATH];	// OpenJK VR: roleplay - a companion's look of its own it's drawn in ("": none)
 
+	compLook[0] = '\0';
 	if (!cent->npcClient)
 	{ //have not init'd client yet
 		return;
@@ -7310,7 +7312,7 @@ void CG_G2AnimEntModelLoad(centity_t *cent)
 			skinID = CG_HandleAppendedSkin(modelName); //get the skin if there is one.
 			if ( CG_RP_CompOwner( cent->currentState.number ) >= 0 || CG_RP_CompLook( cent->currentState.number )[0] )
 			{//OpenJK VR: roleplay - a player's companion (or its body): its look of its own where it's here, else as its type comes, else a stand-in (cg_vrcomp.c)
-				skinID = CG_RP_CompModel( cent, modelName, sizeof( modelName ), skinID );
+				skinID = CG_RP_CompModel( cent, modelName, sizeof( modelName ), skinID, compLook, sizeof( compLook ) );
 			}
 			else
 			{//OpenJK VR: any other NPC whose model this PC hasn't got at all: a stand-in, not a model the game would go down drawing (cg_vrcomp.c)
@@ -7505,7 +7507,10 @@ void CG_G2AnimEntModelLoad(centity_t *cent)
 	}
 
 	trap->S_Shutup(qtrue);
-	CG_HandleNPCSounds(cent); //handle sound loading here as well.
+	if ( !CG_RP_CompSounds( cent, compLook ) )
+	{//OpenJK VR: roleplay - a companion in its look speaks as that look does, not its type (cg_vrcomp.c)
+		CG_HandleNPCSounds(cent); //handle sound loading here as well.
+	}
 	trap->S_Shutup(qfalse);
 }
 

@@ -37,6 +37,11 @@ all; so is any other NPC whose model this PC hasn't got at all, on any
 server (CG_RP_NpcModel). On a server before CS_VR_COMPLOOKS, a look told
 beside its model's configstring (WHOSE, above) is drawn in its skin.
 
+VOICES. A companion drawn in its look, on a model not its type's, speaks
+as that look's character does - as a player of its model, and its NPC's
+lines as the game's own NPC of that character has them - not as the type it
+fights as (CG_RP_CompSounds); drawn as its type comes, as its type does.
+
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
 ===========================================================================
@@ -518,12 +523,17 @@ static int CG_RPC_StandIn( const centity_t *cent, char *modelName, int size ) {
 // A companion's model, as CG_G2AnimEntModelLoad has it ("models/players/<model>/model.glm",
 // its skin taken off - as the server sends it every game: as its type comes):
 // its look of its own instead, where that's here; else as it's sent, where
-// that's here; else a stand-in for its kind - and its skin.
-int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID ) {
+// that's here; else a stand-in for its kind - and its skin. The look it's
+// drawn in on a model not its type's, into drawnLook ("": as its type comes,
+// in its type's model, or a stand-in): its voice (CG_RP_CompSounds).
+int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID, char *drawnLook, int lookSize ) {
 	const char *look = CG_RP_CompLook( cent->currentState.number );
 	const char *told = look[0] ? "" : CG_RPC_ToldLook( cent->currentState.number );	// (a server before CS_VR_COMPLOOKS)
 	char path[MAX_QPATH];
 
+	if ( drawnLook && lookSize > 0 ) {
+		drawnLook[0] = '\0';
+	}
 	if ( look[0] ) {
 		char model[MAX_QPATH], skin[MAX_QPATH];
 		BG_VRCompLookSplit( look, model, sizeof( model ), skin, sizeof( skin ) );
@@ -533,6 +543,9 @@ int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinI
 				va( "models/players/%s/model_%s.skin", model, skin ) );
 			if ( !h ) {	// (its skin's not here: as it's sent where that's the same model, else the model's own)
 				h = !Q_stricmp( path, modelName ) ? skinID : trap->R_RegisterSkin( va( "models/players/%s/model_default.skin", model ) );
+			}
+			if ( drawnLook && lookSize > 0 && Q_stricmp( path, modelName ) ) {
+				Q_strncpyz( drawnLook, look, lookSize );	// (its type's model: its type's voice is its)
 			}
 			Q_strncpyz( modelName, path, size );
 			return h;
@@ -565,6 +578,284 @@ int CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinI
 // beast's - its own animations.)
 int CG_RP_NpcModel( const centity_t *cent, char *modelName, int size, int skinID ) {
 	return CG_RPC_ModelThere( modelName ) ? skinID : CG_RPC_StandIn( cent, modelName, size );
+}
+
+/*
+================================================================================
+Voices (cg_players.c: CG_G2AnimEntModelLoad)
+
+A companion drawn in a look of its own, on a model not its type's, speaks as
+that look's character does - not as the type it fights as (its configstrings
+give it its type's voice: CG_HandleNPCSounds):
+- what a player of its model says (pain, a fall, dying, a taunt...): from
+  its model's sound folder, as the game finds a player's (its sounds.cfg -
+  its skin's own first, sounds_<skin>.cfg: CG_LoadCISounds), else the
+  folder of the NPC type found for it (below), else its model's name; and
+  the game's own voice for any of those it hasn't got, a man's or, its
+  sounds.cfg saying so, a woman's;
+- what an NPC of that character says (in a fight, hunting someone, a Jedi's
+  lines): as the game's own NPC of it has them - the NPC type whose model it
+  is (the one named for it, else the first the files have that speaks),
+  else whose everyday voice its sound folder is - and from its sound folder
+  where that type hasn't a set of them, or none's found (a line not there:
+  not said).
+Drawn as its type comes (the look's model not on this PC, or its type's
+model), it speaks as its type does. The NPC types' voices are read once
+(the NPC files, as the server reads them: the voice of each model and of
+each everyday voice's folder kept).
+================================================================================
+*/
+
+#define RPC_VOICES			1024	// models' and folders' voices kept
+#define RPC_VOICE_DIR		48		// a sound folder (a model) named longer: not kept
+#define RPC_NPC_FILE_MAX	0x40000	// a file of NPC types read: one as big, left out (as the server leaves it out)
+
+extern char *cg_customSoundNames[MAX_CUSTOM_SOUNDS];
+
+typedef struct {
+	char		key[RPC_VOICE_DIR];		// a model, or an everyday voice's folder...
+	qboolean	folder;					// ...which
+	qboolean	named;					// its type's named for it
+	char		snd[4][RPC_VOICE_DIR];	// its type's sound folders: everyday (snd), in a fight (sndcombat), the rest
+										// (sndextra), a Jedi's (sndjedi) - "": none
+} cgcVoice_t;
+
+static struct {
+	qboolean	read;
+	int			count;
+	cgcVoice_t	list[RPC_VOICES];
+} cgcVoices;
+
+// The voice kept for a model (or an everyday voice's folder: folder).
+static const cgcVoice_t *CG_RPC_VoiceOf( const char *key, qboolean folder ) {
+	int i;
+
+	for ( i = 0; key[0] && i < cgcVoices.count; i++ ) {
+		if ( cgcVoices.list[i].folder == folder && !Q_stricmp( cgcVoices.list[i].key, key ) ) {
+			return &cgcVoices.list[i];
+		}
+	}
+	return NULL;
+}
+
+// An NPC type's voice kept for a model (or a folder) - the first type's, but
+// for one named for it.
+static void CG_RPC_KeepVoice( const char *key, qboolean folder, const char *name, char snd[4][RPC_VOICE_DIR] ) {
+	cgcVoice_t *v = (cgcVoice_t *)CG_RPC_VoiceOf( key, folder );
+	const qboolean named = (qboolean)!Q_stricmp( name, key );
+
+	if ( !key[0] || strlen( key ) >= RPC_VOICE_DIR ) {
+		return;
+	}
+	if ( v ) {
+		if ( v->named || !named ) {
+			return;
+		}
+	} else {
+		if ( cgcVoices.count >= RPC_VOICES ) {
+			return;
+		}
+		v = &cgcVoices.list[cgcVoices.count++];
+		Q_strncpyz( v->key, key, sizeof( v->key ) );
+		v->folder = folder;
+	}
+	v->named = named;
+	memcpy( v->snd, snd, sizeof( v->snd ) );
+}
+
+// The voices of the NPC types a file of them defines - as the server reads
+// one, the part of it it keeps (NPC_LoadParms; as the Companions page does:
+// ui_vrcomp.c): each name the game's walk through them finds, then its
+// block ("playerModel", "snd", "sndcombat", "sndextra", "sndjedi" on its
+// lines - a folder to its first '/', as NPC_ParseParms takes it - inner
+// blocks skipped).
+static void CG_RPC_ReadVoiceFile( const char *path ) {
+	static char text[RPC_NPC_FILE_MAX + 1];
+	static const char *keys[4] = { "snd", "sndcombat", "sndextra", "sndjedi" };
+	fileHandle_t f = 0;
+	const char *p, *block, *q;
+	int len;
+
+	len = trap->FS_Open( path, &f, FS_READ );
+	if ( !f ) {
+		return;
+	}
+	if ( len <= 0 || len >= RPC_NPC_FILE_MAX ) {
+		trap->FS_Close( f );
+		return;	// (one this big the server leaves out: NPC_LoadParms)
+	}
+	trap->FS_Read( text, len, f );
+	trap->FS_Close( f );
+	text[len] = '\0';
+	len = BG_VRNPCFileText( text, len );
+	text[BG_VRBlocksInStep( text, len, NULL, 0 )] = '\0';
+	p = text;
+	COM_BeginParseSession( path );
+	while ( p ) {
+		char name[RP_COMP_TYPE_SIZE], model[MAX_QPATH], snd[4][RPC_VOICE_DIR];
+		const char *tok = COM_ParseExt( &p, qtrue );
+		int set;
+
+		if ( !tok[0] ) {
+			break;
+		}
+		Q_strncpyz( name, tok, sizeof( name ) );
+		block = p;
+		if ( strcmp( COM_ParseExt( &p, qtrue ), "{" ) ) {
+			p = block;
+			SkipBracedSection( &p, 0 );	// (no block: past what the game's walk takes for one - not a type)
+			continue;
+		}
+		block = p;
+		if ( !SkipBracedSection( &p, 1 ) || !p ) {
+			break;	// (can't be: what the server keeps closes)
+		}
+		text[p - text - 1] = '\0';	// (its "}" - the walk past it: its keys read up to there)
+		model[0] = '\0';
+		memset( snd, 0, sizeof( snd ) );
+		for ( q = block; ( tok = COM_ParseExt( &q, qtrue ) )[0]; ) {
+			if ( !strcmp( tok, "{" ) ) {
+				SkipBracedSection( &q, 1 );
+				continue;
+			}
+			if ( !Q_stricmp( tok, "playerModel" ) ) {
+				Q_strncpyz( model, COM_ParseExt( &q, qfalse ), sizeof( model ) );
+				continue;
+			}
+			for ( set = 0; set < 4 && Q_stricmp( tok, keys[set] ); set++ ) {
+			}
+			if ( set < 4 ) {
+				char folder[MAX_QPATH], *slash;
+				Q_strncpyz( folder, COM_ParseExt( &q, qfalse ), sizeof( folder ) );
+				if ( ( slash = strchr( folder, '/' ) ) != NULL ) {
+					*slash = '\0';
+				}
+				Q_strncpyz( snd[set], strlen( folder ) < RPC_VOICE_DIR ? folder : "", sizeof( snd[set] ) );
+				continue;
+			}
+			while ( COM_ParseExt( &q, qfalse )[0] ) {
+			}	// (the rest of its line - SkipRestOfLine steps past a '\0': the block's end, on its last line)
+		}
+		if ( !snd[0][0] && !snd[1][0] && !snd[2][0] && !snd[3][0] ) {
+			continue;	// (it says nothing)
+		}
+		CG_RPC_KeepVoice( model, qfalse, name, snd );
+		CG_RPC_KeepVoice( snd[0], qtrue, name, snd );
+	}
+}
+
+// The NPC types' voices, read once.
+static void CG_RPC_ReadVoices( void ) {
+	static char files[0x40000];	// (every file there can be: 4095, the engine's most)
+	const char *p;
+	int i, count;
+
+	if ( cgcVoices.read ) {
+		return;
+	}
+	cgcVoices.read = qtrue;
+	cgcVoices.count = 0;
+	count = trap->FS_GetFileList( "ext_data/NPCs", ".npc", files, sizeof( files ) );
+	for ( i = 0, p = files; i < count && *p; i++, p += strlen( p ) + 1 ) {
+		CG_RPC_ReadVoiceFile( va( "ext_data/NPCs/%s", p ) );
+	}
+	CG_VR_Log( "companions: voices read, %i models' and folders' from %i NPC files\n", cgcVoices.count, count );
+}
+
+// A model's sound folder, as the game finds a player's (CG_LoadCISounds):
+// its skin's own sounds_<skin>.cfg (not a custom character's parts), else
+// its sounds.cfg (the default skin's: else its sounds_default.cfg) - the
+// folder its first line names; a woman's voice where its last line has an
+// "f" (the game's way: taken out of it). qfalse: none of them here.
+static qboolean CG_RPC_SoundsCfg( const char *model, const char *skin, char *folder, int size, qboolean *female ) {
+	char text[MAX_QPATH];
+	fileHandle_t f = 0;
+	int len = 0, i;
+
+	*female = qfalse;
+	folder[0] = '\0';
+	if ( !skin[0] || !Q_stricmp( skin, "default" ) ) {
+		len = trap->FS_Open( va( "models/players/%s/sounds.cfg", model ), &f, FS_READ );
+		if ( !f ) {
+			len = trap->FS_Open( va( "models/players/%s/sounds_default.cfg", model ), &f, FS_READ );
+		}
+	} else {
+		if ( !strchr( skin, '|' ) ) {
+			len = trap->FS_Open( va( "models/players/%s/sounds_%s.cfg", model, skin ), &f, FS_READ );
+		}
+		if ( !f ) {
+			len = trap->FS_Open( va( "models/players/%s/sounds.cfg", model ), &f, FS_READ );
+		}
+	}
+	if ( !f ) {
+		return qfalse;
+	}
+	len = ( len < 0 ) ? 0 : ( ( len >= (int)sizeof( text ) ) ? (int)sizeof( text ) - 1 : len );
+	trap->FS_Read( text, len, f );
+	trap->FS_Close( f );
+	text[len] = '\0';
+	for ( i = len; i >= 0 && text[i] != '\n'; i-- ) {
+		if ( text[i] == 'f' ) {
+			*female = qtrue;
+			text[i] = '\0';
+		}
+	}
+	for ( i = 0; text[i] && text[i] != '\r' && text[i] != '\n'; i++ ) {
+	}
+	text[i] = '\0';
+	Q_strncpyz( folder, text, size );
+	return qtrue;
+}
+
+// A companion's voice, as it's drawn: in a look of its own on a model not
+// its type's (drawnLook: CG_RP_CompModel's), as that look's character
+// speaks - its sound sets set here, qtrue; else qfalse - as its type comes
+// (CG_HandleNPCSounds).
+qboolean CG_RP_CompSounds( centity_t *cent, const char *drawnLook ) {
+	clientInfo_t *ci = cent->npcClient;
+	char model[MAX_QPATH], skin[MAX_QPATH], folder[MAX_QPATH];
+	const char *lines[4];
+	const cgcVoice_t *v;
+	qboolean female, cfg;
+	int set, i;
+
+	if ( !ci || !drawnLook || !drawnLook[0] ) {
+		return qfalse;
+	}
+	BG_VRCompLookSplit( drawnLook, model, sizeof( model ), skin, sizeof( skin ) );
+	if ( !model[0] ) {
+		return qfalse;
+	}
+	CG_RPC_ReadVoices();
+	cfg = CG_RPC_SoundsCfg( model, skin, folder, sizeof( folder ), &female );
+	v = CG_RPC_VoiceOf( model, qfalse );
+	if ( !v ) {
+		v = CG_RPC_VoiceOf( folder, qtrue );
+	}
+	if ( !folder[0] ) {
+		Q_strncpyz( folder, ( v && v->snd[0][0] ) ? v->snd[0] : model, sizeof( folder ) );
+	}
+
+	// what a player of it says
+	CG_RegisterNPCSoundSet( ci, 1, folder );
+	for ( i = 0; i < MAX_CUSTOM_SOUNDS && cg_customSoundNames[i]; i++ ) {
+		if ( !ci->sounds[i] ) {
+			char name[MAX_QPATH];
+			Q_strncpyz( name, cg_customSoundNames[i] + 1, sizeof( name ) );
+			COM_StripExtension( name, name, sizeof( name ) );
+			ci->sounds[i] = trap->S_RegisterSound( va( "sound/chars/%s/misc/%s", female ? "mp_generic_female" : "mp_generic_male", name ) );
+		}
+	}
+
+	// what an NPC of it says
+	lines[0] = folder;
+	for ( set = 1; set < 4; set++ ) {
+		lines[set] = ( v && v->snd[set][0] ) ? v->snd[set] : folder;
+		CG_RegisterNPCSoundSet( ci, set + 1, lines[set] );
+	}
+	CG_VR_Log( "companion %i: in its look (%s), its voice %s%s (%s), in a fight %s, the rest %s, a Jedi's %s\n", cent->currentState.number,
+		model, folder, female ? ", a woman's" : "", cfg ? "its sounds.cfg" : ( v ? "its NPC's" : "its model's name" ), lines[1], lines[2], lines[3] );
+	return qtrue;
 }
 
 /*

@@ -234,7 +234,10 @@ types too, till the map changes or restarts). They're told of it in the
 console a while after they come in on each map, and the log says who's
 said it ("Roleplay: ... says they have the models companions wear"); a
 server demo of one who's said it needs those models to play. Players
-running this build needn't (they see looks anyway). This build's game
+running this build needn't (they see looks anyway), and hear a companion
+they see in its look speak as that look's character (its model's sounds,
+the lines of the game's NPC of it) - the server sends nothing more for
+it; everyone else hears its NPC type, as they see it. This build's game
 and server program (openjkded) go together - update both. An NPC type of
 your own whose model players haven't got still could take theirs down
 (this build draws a stand-in): give companions types whose models

@@ -491,6 +491,24 @@ static void CG_RegisterCustomSounds(clientInfo_t *ci, int setType, const char *p
 	}
 }
 
+// OpenJK VR: one of an NPC's sound sets (1 everyday, 2 in a fight, 3 the
+// rest, 4 a Jedi's) from a folder of sound/chars, as its configstrings would
+// give it (CG_HandleNPCSounds) - none, "" (a companion's look's: cg_vrcomp.c).
+void CG_RegisterNPCSoundSet( clientInfo_t *ci, int setType, const char *dir )
+{
+	int i;
+
+	if ( dir && dir[0] )
+	{
+		CG_RegisterCustomSounds( ci, setType, dir );
+		return;
+	}
+	for ( i = 0; i < MAX_CUSTOM_SOUNDS; i++ )
+	{
+		SetCustomSoundForType( ci, setType, i, 0 );
+	}
+}
+
 void CG_PrecacheNPCSounds(const char *str)
 {
 	char sEnd[MAX_QPATH];

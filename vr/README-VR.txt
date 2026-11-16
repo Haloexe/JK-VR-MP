@@ -1776,6 +1776,14 @@ without that type's model either - or any NPC's, on any server - you see
 a stand-in (a Jedi, a trooper or a rebel). A player of another game who
 has the server's models can see companions' own looks too, by typing
 /setu rpmodels 1 in their console (see README-SERVER.txt); you needn't.
+  A companion in a look of its own sounds like it, too, wherever you see
+it in that look: it cries out, falls and dies as a player of that model
+does (the model's sounds.cfg; the game's own man's or woman's voice for
+what it hasn't got), and says what the game's NPC of that character says
+in a fight, chasing someone or as a Jedi (the NPC whose model it is, else
+whose voice its sounds are) - lines that character hasn't got, it doesn't
+say, rather than say them in the voice of the type it fights as. In its
+type's own model, or seen as its type, it sounds as its type does.
 Without the headset, the same wheel (hold P) and the same page.
   Roleplay needs this build on the server and on your PC: an older OpenJK
 VR on a server with this one is told to update, and can't play a
@@ -2219,7 +2227,8 @@ no client. Source files:
   codemp/game/g_vrcomp.c       roleplay: companions, the server's side -
                                coming out, following, orders, fighting
   codemp/cgame/cg_vrcomp.c     companions, the player's side: the wheel's
-                               orders, whose they are, stand-in models
+                               orders, whose they are, stand-in models,
+                               their looks' voices
   codemp/game/bg_vrcomp.c      what a companion may fight as and look like
   codemp/game/bg_vrcrypt.c     SHA-256, HMAC and PBKDF2 for the logins
   codemp/ui/ui_vrrp.c          the Roleplay menu (base\ui\vr_rp.menu)

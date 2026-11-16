@@ -2088,9 +2088,11 @@ int			CG_RP_CompsUp( void );
 const char	*CG_RP_CompsWhy( void );
 const char	*CG_RP_CompOrderWhy( int order );
 void		CG_RP_CompOrder( int order );
-int			CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID );
+int			CG_RP_CompModel( const centity_t *cent, char *modelName, int size, int skinID, char *drawnLook, int lookSize );
 int			CG_RP_NpcModel( const centity_t *cent, char *modelName, int size, int skinID );
 const char	*CG_RP_CompLook( int entNum );
+qboolean	CG_RP_CompSounds( centity_t *cent, const char *drawnLook );
+void		CG_RegisterNPCSoundSet( clientInfo_t *ci, int setType, const char *dir );	// (cg_servercmds.c)
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );
