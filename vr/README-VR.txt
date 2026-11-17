@@ -430,7 +430,8 @@ LIGHTSABER: with the saber out you stay in first person. The hilt is
 locked in your right fist - your left, left-handed (a second saber in the
 other) - the fingers closed round it whatever your body is doing, and the
 blade points along your fist the way you would hold a real hilt, so it
-follows every turn of your wrist. Its trigger lights it and puts it out
+follows every turn of your wrist; in your left fist it sits as it does in
+your right, mirrored. Its trigger lights it and puts it out
 (where blades are real: a tap - held, your hand slides along the hilt, see
 HILT SLIDE); the other trigger is the alternate attack.
 Through flips, force jumps, cartwheels and rolls your body stays upright

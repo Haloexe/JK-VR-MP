@@ -183,7 +183,13 @@ void CQuickSpriteSystem::StartGroup(textureBundle_t *bundle, uint32_t glbits, in
 		mUseFog = qfalse;
 	}
 
-	qglDisable(GL_CULL_FACE);
+	// OpenJK VR: the sprites drawn from both sides as GL_Cull has it, so the
+	// renderer knows. (It was turned off and then on again behind GL_Cull's
+	// back: after the sprites - grass - of a shader drawn from both sides,
+	// GL went on culling while GL_Cull thought it wasn't, and the next
+	// surfaces drawn from both sides lost every face turned towards you: an
+	// AT-ST cockpit's screens, the near sides of its consoles.)
+	GL_Cull( CT_TWO_SIDED );
 }
 
 
@@ -192,7 +198,7 @@ void CQuickSpriteSystem::EndGroup(void)
 	Flush();
 
 	qglColor4ub(255,255,255,255);
-	qglEnable(GL_CULL_FACE);
+	// (OpenJK VR: culling left as GL_Cull has it - the next surface sets its own)
 }
 
 

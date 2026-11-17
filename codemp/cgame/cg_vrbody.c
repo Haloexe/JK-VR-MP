@@ -330,6 +330,8 @@ typedef struct vrbState_s {
 	void		*fistG2[2];			// the instance that hand's bones were last animated on (CG_VRB_SetHand; NULL: the body's)...
 	int			fistState[2];		// ...and how (VRB_HAND_*)
 	qboolean	fistCheck[2];		// ...its hand bone found then (looked at each frame: CG_VRB_SetHand)
+	qboolean	rightTagOk;			// the right hand's tag as it lies in its fist, closed (CG_VRB_RightTag), on the probed model...
+	vec3_t		rightTag[3];		// ...its axes in the fist's own frame (VRB_HandFrame)
 	void		*bonesLoggedG2;		// the log has said which finger bones this model has
 	vec3_t		twoHandFist;		// the way the hilt runs through the other fist, as drawn
 
@@ -1125,6 +1127,7 @@ static void CG_VRB_ProbeHands( centity_t *cent ) {
 	vrb.probed = qtrue;
 	vrb.probeRetry = cg.time + 2000;	// (only matters if a hand failed)
 	vrb.fistState[0] = vrb.fistState[1] = -1;	// (a model new to the instance: its hands' bones set afresh, CG_VRB_SetHand)
+	vrb.rightTagOk = qfalse;	// (its right hand's fist measured afresh, CG_VRB_RightTag)
 	vrb.probeG2 = g2;
 	Q_strncpyz( vrb.probeModel, ci->modelName, sizeof( vrb.probeModel ) );
 	vrb.wristG2 = NULL;
@@ -1522,6 +1525,8 @@ static void CG_VRB_ModelMove( centity_t *cent, vrbMat_t R, const vec3_t from, co
 }
 
 static qboolean CG_VRB_KeptFace( const vrbGrip_t *grip, int h, vec3_t ax[3], vec3_t fist[3], const vec3_t want, vec3_t out );
+static qboolean CG_VRB_MirroredFace( centity_t *cent, const vrbGrip_t *grip, const vrbBone_t *tag, const vec3_t blade,
+	const vec3_t face, vec3_t fist[3], const vec3_t want, vec3_t out );
 
 /*
 The saber held in hand h (grip) where the hilt runs through the fist (after
@@ -1535,11 +1540,13 @@ the thumb).
 Turned about itself: its face (its blade bolt's +X, a line square to the
 blade that turns with the hilt) the way it lay as it was passed into this
 hand (CG_VRB_KeptFace; the pass that's drawn - commit - then keeps it in the
-fist) - else as the hand's tag hangs it, turned the least that puts its
-blade along the fist; held reversed, that then turned end over end about
+fist) - else as the right hand's tag hangs it, turned the least that puts
+its blade along the fist; held reversed, that then turned end over end about
 the palm's axis (the least turn straight from the tag would be a half turn
-about no axis in particular: it would spin as the hand moved). How it ends
-up is noted (drawnBlade, drawnFace), for the other hand.
+about no axis in particular: it would spin as the hand moved). In the left
+hand, that's the right hand's mirror image (CG_VRB_MirroredFace: the game's
+left tag hangs a saber turned otherwise). How it ends up is noted
+(drawnBlade, drawnFace), for the other hand.
 */
 static qboolean CG_VRB_PlaceSaber( centity_t *cent, int h, const mdxaBone_t *H, const vrbGrip_t *grip, vec3_t ctrl[3],
 	qboolean commit, vec3_t o, vec3_t dir ) {
@@ -1574,8 +1581,10 @@ static qboolean CG_VRB_PlaceSaber( centity_t *cent, int h, const mdxaBone_t *H, 
 	VectorScale( dir, ( grip->sign < 0.0f ) ? -1.0f : 1.0f, want );
 	VectorMA( o, -grip->hilt, want, at );
 	if ( haveFace && CG_VRB_KeptFace( grip, h, ctrl, ax, want, faceWant ) ) {
-		vec3_t from[3], to[3];
 		kept = qtrue;
+	}
+	if ( kept || ( haveFace && h == VR_HAND_LEFT && CG_VRB_MirroredFace( cent, grip, &tag, blade, faceNow, ax, want, faceWant ) ) ) {
+		vec3_t from[3], to[3];
 		VectorCopy( blade, from[0] );
 		VectorCopy( faceNow, from[1] );
 		CrossProduct( blade, faceNow, from[2] );
@@ -2924,6 +2933,119 @@ static void CG_VRB_HandPoses( centity_t *cent, const vrClientState_t *vr ) {
 				( h == vrb.twoHandOff && vrb.twoHand && vrb.twoHandTime == cg.time ) ) ? VRB_HAND_CLOSED : VRB_HAND_OPEN );
 		}
 	}
+}
+
+/*
+The right hand's tag as it lies in the right fist's own frame
+(VRB_HandFrame), closed round a hilt - the way the right hand holds a saber
+- once for the model (afresh as CG_VRB_ProbeHands finds a new one): a
+saber in the left hand is turned as the right would hold it
+(CG_VRB_MirroredFace). (Open, the right hand's own bones are STAND5's, its
+tag turned some 20 degrees otherwise in it on the humanoid skeleton.)
+Measured as the right hand is closed - holding a hilt, or the saber in it
+with the arm the body's - or, open, closed for the moment (its own bones as
+the fist has them, then open again: CG_VRB_SetHand); not while the body's
+animation has it. The hand as the animation poses it, the arms reset
+(CG_VRB_SolveArms: the left arm is solved first) - though a wrist turned
+turns the whole hand, the tag with it.
+*/
+static qboolean CG_VRB_RightTag( centity_t *cent, vec3_t out[3] ) {
+	const int h = VR_HAND_RIGHT;
+	vrbBone_t w, t, i, l, tag;
+	vec3_t ax[3];
+	float length;
+	qboolean ok;
+	int state, a;
+
+	if ( vrb.probeG2 != cent->ghoul2 ) {
+		return qfalse;
+	}
+	if ( !vrb.rightTagOk ) {
+		state = ( vrb.fistG2[h] == cent->ghoul2 ) ? vrb.fistState[h] : VRB_HAND_BODY;
+		if ( state != VRB_HAND_OPEN && state != VRB_HAND_CLOSED && state != VRB_HAND_HOLDS ) {
+			return qfalse;
+		}
+		if ( state == VRB_HAND_OPEN ) {
+			CG_VRB_SetHand( cent, h, VRB_HAND_CLOSED );
+		}
+		ok = (qboolean)( CG_VRB_Bone( cent, vrbArmBones[h][VRB_HAND], 1, &w ) && CG_VRB_Bone( cent, vrbArmBones[h][VRB_THUMB], 1, &t ) &&
+			CG_VRB_Bone( cent, vrbArmBones[h][VRB_INDEX], 1, &i ) && CG_VRB_Bone( cent, vrbArmBones[h][VRB_LITTLE], 1, &l ) &&
+			CG_VRB_Bone( cent, vrbArmBones[h][VRB_TAG], 1, &tag ) &&
+			VRB_HandFrame( w.origin, t.origin, i.origin, l.origin, ax, &length ) );
+		if ( state == VRB_HAND_OPEN ) {
+			CG_VRB_SetHand( cent, h, VRB_HAND_OPEN );
+		}
+		if ( !ok ) {
+			return qfalse;
+		}
+		for ( a = 0; a < 3; a++ ) {
+			VectorSet( vrb.rightTag[a], DotProduct( tag.axis[a], ax[0] ), DotProduct( tag.axis[a], ax[1] ),
+				DotProduct( tag.axis[a], ax[2] ) );
+		}
+		vrb.rightTagOk = qtrue;
+	}
+	for ( a = 0; a < 3; a++ ) {
+		VectorCopy( vrb.rightTag[a], out[a] );
+	}
+	return qtrue;
+}
+
+/*
+Which way the face of a saber the left hand holds is to be turned (not
+passed into it: CG_VRB_KeptFace), its blade drawn pointing want along the
+fist (fist: the left hand's own frame, VRB_HandFrame): as the right hand
+would hold it, mirrored. The game's left tag hangs a saber turned otherwise
+than the right's mirror image (on the humanoid skeleton, its hilt turned
+some 65 degrees about itself from it) - so the way the saber lies on the
+left tag (blade, face; tag) is put on the right one as the right fist holds
+it (CG_VRB_RightTag), turned the least that puts its blade along that fist
+(as CG_VRB_PlaceSaber turns it there; reversed, then end over end about the
+palm's axis), and its face in that fist's frame is mirrored into the left
+fist's: their first two axes the same (wrist to knuckles, toward the thumb),
+their third the other way round (out of the back of the right hand, out of
+the left's palm - as VRB_GripLine has it). Into out (world, square to want);
+qfalse: as the left tag hangs it.
+*/
+static qboolean CG_VRB_MirroredFace( centity_t *cent, const vrbGrip_t *grip, const vrbBone_t *tag, const vec3_t blade,
+	const vec3_t face, vec3_t fist[3], const vec3_t want, vec3_t out ) {
+	vec3_t T[3], bladeR, faceR, dirR, held;
+	vrbMat_t R;
+	int k;
+
+	if ( !CG_VRB_RightTag( cent, T ) ) {
+		return qfalse;
+	}
+	// the saber as it lies on the left tag, put on the right one: in the right fist's frame
+	VectorClear( bladeR );
+	VectorClear( faceR );
+	for ( k = 0; k < 3; k++ ) {
+		VectorMA( bladeR, DotProduct( blade, tag->axis[k] ), T[k], bladeR );
+		VectorMA( faceR, DotProduct( face, tag->axis[k] ), T[k], faceR );
+	}
+	if ( VectorNormalize( bladeR ) < 0.5f ) {
+		return qfalse;
+	}
+	// turned into the right fist: its line (VRB_GripLine) in its own frame
+	VectorCopy( vrbGripDir, dirR );
+	VectorNormalize( dirR );
+	VRB_Arc( bladeR, dirR, R );
+	if ( grip->sign < 0.0f ) {
+		static const vec3_t back = { 0.0f, 0.0f, 1.0f };
+		vrbMat_t F;
+		vec3_t palm;
+		VectorMA( back, -DotProduct( back, dirR ), dirR, palm );
+		if ( VectorNormalize( palm ) < 0.01f ) {
+			return qfalse;
+		}
+		VRB_AxisAngle( palm, M_PI, F );
+		VRB_Mul( F, R, R );
+	}
+	VRB_Apply( R, faceR, held );
+	// ...mirrored into the left fist
+	held[2] = -held[2];
+	VRB_FromFrame( fist, held, out );
+	VectorMA( out, -DotProduct( out, want ), want, out );
+	return (qboolean)( VectorNormalize( out ) > 0.5f );
 }
 
 static float CG_VRB_SegmentDistance( const vec3_t p, const vec3_t a, const vec3_t b ) {
