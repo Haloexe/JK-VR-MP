@@ -44,7 +44,8 @@ General Public License version 2, like the rest of OpenJK.
 #define VR_JOINT_LITTLE			21
 
 #define VR_JOINT_STRAIGHT		10.0f	// a finger's joints bent this far, added up (degrees): straight...
-#define VR_JOINT_FIST			230.0f	// ...this far: a fist
+#define VR_JOINT_FIST			270.0f	// ...this far: a fist (the Steam Frame's through SteamVR: an open hand's
+										// index finger 8, the other three 19 to 25; a fist's 272 to 292)
 #define VR_JOINT_THUMB_UP		0.7f	// the thumb pointing this far out to its side of the hand: up...
 #define VR_JOINT_THUMB_DOWN		0.0f	// ...this far: down
 #define VR_JOINT_SHORTEST		0.002f	// a bone shorter than this (metres) isn't one
