@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-24"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-25"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -72,6 +72,9 @@ General Public License version 2, like the rest of OpenJK.
 												//     cg_vrwalker.c)
 												// -24: ext.VR_SetCockpitScreens (what the cockpit's
 												//     screens show)
+												// -25: VR_SENSE_JOINTS, vrFingerSense_t.joints (your
+												//     fingers from their joints, where the runtime
+												//     tracks them: qcommon/vr_joints.h)
 
 // ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
 // cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
@@ -368,6 +371,8 @@ enum {
 #define VR_SENSE_INDEX_CURL		4		// ...how far it's curled toward it (indexCurl: Touch Plus, Touch Pro)
 #define VR_SENSE_THUMB_TOUCH	8		// the thumb on a button, the stick, the thumb rest or the trackpad
 #define VR_SENSE_THUMB_NEAR		16		// ...near them (Touch Plus, Touch Pro; Touch with its proximity extension)
+#define VR_SENSE_JOINTS			32		// each finger's joints, as the runtime tracks your hand now (vr_fingerJoints:
+										// SteamVR, from the Valve Index's controllers and the Steam Frame's)
 
 typedef struct vrFingerSense_s {
 	int			sensed;			// VR_SENSE_*: the controller has these sensors
@@ -375,6 +380,8 @@ typedef struct vrFingerSense_s {
 	float		trigger;		// how far the trigger's pulled (0..1)
 	float		squeeze;		// how far the grip's squeezed (0..1; a grip that only clicks: 0 or 1)
 	float		indexCurl;		// VR_SENSE_INDEX_CURL: 0 the index finger straight .. 1 curled onto the trigger
+	float		joints[VR_NUM_FINGERS];	// VR_SENSE_JOINTS: how far each finger's closed, from its joints (VR_FINGER_*:
+										// 0..1, and a little outside it - qcommon/vr_joints.h)
 } vrFingerSense_t;
 
 // The Force hand (Force gestures, vr_forceGestures - qcommon/vr_force.h), as

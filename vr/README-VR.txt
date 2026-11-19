@@ -37,8 +37,10 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     hold (works with any player model on the standard skeleton, custom
     models included)
   * Your fingers: your character's hands follow your fingers on the
-    controllers - point, thumbs up, a fist, an open hand - and everyone
-    running this build sees them (see YOUR FINGERS)
+    controllers - point, thumbs up, a fist, an open hand; with the Valve
+    Index's or the Steam Frame's controllers through SteamVR, each finger
+    as far as it bends - and everyone running this build sees them (see
+    YOUR FINGERS)
   * First-person lightsaber: the hilt in your hand, the blade where your
     controller points - in either hand, held anywhere along the hilt, the
     usual way or reversed, passed from hand to hand
@@ -415,13 +417,33 @@ Grip Press, 85%; 60% is how it was before). A gun hand holds the gun as
 ever, its index finger along the guard until it touches the trigger, then
 on it; a saber hand stays closed round its hilt.
 What your controllers feel depends on them and on the OpenXR runtime:
+  Valve Index, Steam Frame, through SteamVR: each finger's joints (below),
+  the finger on the trigger, the thumb on the controller
   Quest 3 (Touch Plus), with the Meta Quest Link app (Link or Air Link)
   as the runtime: all of the above
-  Quest 3 through SteamVR, Quest 2 and Rift Touch, Valve Index: the
-  finger on the trigger, the thumb on the controller
+  Quest 3 through SteamVR, Quest 2 and Rift Touch: the finger on the
+  trigger, the thumb on the controller
   Vive wands: the thumb on the trackpad
   Windows Mixed Reality: nothing (the fingers rest round the grip)
-vr_status says what each controller feels.
+Each finger's joints: where the runtime tracks the joints of your hands -
+SteamVR does, from the finger sensors of the Index's controllers and the
+Steam Frame's - your fingers follow them instead: the index finger and the
+other three bend as far as yours do, anywhere from open to a fist, not
+just where the trigger and the grip put them (one finger lifted off the
+grip, a loose claw, a slow close). Two things still go by the controller's
+own sensors: your thumb is down while it's on a button or the stick
+(lifted, it goes where its joints say), and a finger resting on the
+trigger joins the fist as the other three close (pulled, it curls at least
+as far). Through SteamVR other controllers may have joints too, worked out
+by SteamVR from the sensors they have. vr_fingerJoints: 1 (the default)
+uses the joints with SteamVR, 2 with any runtime that tracks hands, 0
+never (0 as the game starts, the runtime isn't asked for them at all:
+turning it back on then takes a restart). The game's skeleton moves three
+fingers a hand, so the middle, ring and little fingers close together, as
+far as yours are closed on average.
+vr_status says what each controller feels, and how far the joints close
+each finger now; vrdebug.log notes them too (how far they went, once a
+minute).
 Everyone running this build sees your fingers, in games hosted with it.
 The stock characters' fingers all move; a custom model whose hands have no
 finger bones, or whose fingers don't follow them, keeps its hands as made.
@@ -1968,6 +1990,12 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
   vr_gripPress 0.85      how far a grip must be squeezed for Use and the
                          Force (0.6 to 0.95; Setup, VR: Grip Press) - a
                          lighter squeeze only closes your fingers
+  vr_fingerJoints 1      your fingers from their joints, where the runtime
+                         tracks them (see YOUR FINGERS): 1 = with SteamVR
+                         (the Index's and the Steam Frame's controllers
+                         sense each finger), 2 = with any runtime, 0 =
+                         never (0 at startup, the runtime isn't asked for
+                         them: turning it on takes a restart)
   vr_forceGestures 1     your Force hand's gestures: 1 = while the Force
                          grip's held, 2 = Push and Pull with an open hand
                          too, 0 = off (the Force grip uses the power picked)
@@ -2099,8 +2127,10 @@ KNOWN LIMITATIONS
     Only the Force grip's hand is the Force hand: with your saber in that
     hand (and the other one empty), there's none (switch vr_leftHanded).
   * Fingers: the game's skeleton moves three fingers a hand - the thumb,
-    the index finger, and the other three together - and each follows
-    only what your controller can feel (see YOUR FINGERS).
+    the index finger, and the other three together (as far as yours are
+    closed on average: a middle finger raised alone doesn't show) - and
+    each follows only what your controller, or the runtime's tracking of
+    your joints, can tell (see YOUR FINGERS).
   * Body Bends: the body bends only standing still (moving, the game's
     animation has it), takes no steps (its feet pivot as it turns round),
     can't stand taller than the model stands or crouch lower than the

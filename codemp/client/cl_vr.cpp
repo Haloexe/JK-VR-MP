@@ -33,6 +33,7 @@ General Public License version 2, like the rest of OpenJK.
 #include "cl_uiapi.h"
 #include "sys/sys_public.h"
 #include "qcommon/vr_force.h"	// the Force hand's gestures
+#include "qcommon/vr_joints.h"	// your fingers from their joints
 
 #include <SDL.h>
 
@@ -115,11 +116,18 @@ OpenXR entry points
 	X( xrGetCurrentInteractionProfile ) \
 	X( xrPathToString )
 
+// (an extension's, where it's enabled: without them, it isn't used)
+#define VR_XR_HAND_FUNCS(X) \
+	X( xrCreateHandTrackerEXT ) \
+	X( xrDestroyHandTrackerEXT ) \
+	X( xrLocateHandJointsEXT )
+
 static HMODULE						xrLoaderLib;
 static PFN_xrGetInstanceProcAddr	xrGetInstanceProcAddr;
 #define VR_XR_DECLARE(name) static PFN_##name name;
 VR_XR_GLOBAL_FUNCS( VR_XR_DECLARE )
 VR_XR_INSTANCE_FUNCS( VR_XR_DECLARE )
+VR_XR_HAND_FUNCS( VR_XR_DECLARE )
 #undef VR_XR_DECLARE
 
 static qboolean VR_LoadLoader( void ) {
@@ -164,6 +172,22 @@ static qboolean VR_LoadInstanceFunctions( XrInstance instance ) {
 	return ok;
 }
 
+// XR_EXT_hand_tracking's (enabled): qfalse, any of them missing - none's used
+static qboolean VR_LoadHandFunctions( XrInstance instance ) {
+	qboolean ok = qtrue;
+#define VR_XR_LOAD(name) \
+	if ( XR_FAILED( xrGetInstanceProcAddr( instance, #name, (PFN_xrVoidFunction *)&name ) ) || !name ) { \
+		Com_Printf( S_COLOR_YELLOW "VR: OpenXR function %s unavailable\n", #name ); ok = qfalse; }
+	VR_XR_HAND_FUNCS( VR_XR_LOAD )
+#undef VR_XR_LOAD
+	if ( !ok ) {
+#define VR_XR_CLEAR(name) name = NULL;
+		VR_XR_HAND_FUNCS( VR_XR_CLEAR )
+#undef VR_XR_CLEAR
+	}
+	return ok;
+}
+
 /*
 ================================================================================
 
@@ -198,6 +222,7 @@ static cvar_t *vr_deadzone;
 static cvar_t *vr_gunPitch;
 static cvar_t *vr_leftHanded;
 static cvar_t *vr_gripPress;
+static cvar_t *vr_fingerJoints;
 static cvar_t *vr_forceGestures;
 static cvar_t *vr_forceThrust;
 static cvar_t *vr_forceBody;
@@ -427,6 +452,10 @@ typedef struct vrState_s {
 	qboolean				extTouchPlus;	// XR_META_touch_controller_plus enabled (Quest 3: the index finger's curl...)
 	qboolean				extTouchPro;	// XR_FB_touch_controller_pro enabled (...Touch Pro the same...)
 	qboolean				extProximity;	// XR_FB_touch_controller_proximity enabled (...Touch: the thumb and finger near)
+	qboolean				extHandTracking;	// XR_EXT_hand_tracking enabled (vr_fingerJoints: your fingers' joints)...
+	qboolean				extMotionRange;	// ...XR_EXT_hand_joints_motion_range (as a hand closes, not round a controller)...
+	qboolean				systemHands;	// ...and the headset's system says it tracks hands
+	qboolean				steamVR;		// the runtime's SteamVR's (vr_fingerJoints 1: its hands' joints)
 
 	// render targets (exist as long as the renderer runs at eye resolution)
 	qboolean				targetsReady;
@@ -528,6 +557,11 @@ typedef struct vrState_s {
 	XrAction				actTriggerTouch, actThumbTouch;			// your fingers (vrFingerSense_t): the touch sensors...
 	XrAction				actTriggerNear, actThumbNear, actTriggerCurl;	// ...and, where offered, near and curled
 	vrFingerSense_t			fingers[2];		// what each controller senses of your fingers, as of the last poll
+	XrHandTrackerEXT		handTracker[2];	// each hand's joints (vr_fingerJoints; XR_NULL_HANDLE: none)...
+	qboolean				handTrackerTried;	// ...made, or tried, this session
+	int						jointsTime[2];	// a hand's joints last made a hand (Sys_Milliseconds; 0: not lately)...
+	float					joints[2][VR_NUM_FINGERS];	// ...how far each finger was closed, from them (vr_joints.h)...
+	qboolean				jointsSeen[2];	// ...ever, this session (the console says so, once)
 	char					profile[2][XR_MAX_PATH_LENGTH];	// each hand's controllers (their interaction profile), as last said
 	XrSpace					gripSpace[2], aimSpace[2];
 	XrPosef					gripPose[2], aimPose[2];
@@ -765,6 +799,113 @@ static qboolean VR_HasExtension( const char *name ) {
 	return found;
 }
 
+/*
+Your fingers' joints (vr_fingerJoints): where the runtime tracks the joints
+of your hands - SteamVR does, from the finger sensors of the Valve Index's
+controllers and the Steam Frame's - each finger goes as they're bent
+(qcommon/vr_joints.h, vr_fingers.h), not just where the trigger and the grip
+put it. 0: never (as the game starts, the runtime isn't even asked for
+them); 1: with SteamVR; 2: with any runtime that tracks them.
+*/
+
+#define VR_JOINTS_HOLD		300		// ms: a hand's joints lost for no longer than this, its fingers stay as they were
+
+// Whether your fingers come from their joints now (wherever they're tracked)
+static qboolean VR_JointsUsed( void ) {
+	if ( !vr.extHandTracking || !vr.systemHands || !vr_fingerJoints ) {
+		return qfalse;
+	}
+	return (qboolean)( vr_fingerJoints->integer >= 2 || ( vr_fingerJoints->integer == 1 && vr.steamVR ) );
+}
+
+static void VR_DestroyHandTrackers( void ) {
+	for ( int h = 0; h < 2; h++ ) {
+		if ( vr.handTracker[h] != XR_NULL_HANDLE && xrDestroyHandTrackerEXT ) {
+			xrDestroyHandTrackerEXT( vr.handTracker[h] );
+		}
+		vr.handTracker[h] = XR_NULL_HANDLE;
+		vr.jointsTime[h] = 0;
+		vr.jointsSeen[h] = qfalse;
+	}
+	vr.handTrackerTried = qfalse;
+}
+
+// (the first time this session they're used)
+static void VR_CreateHandTrackers( void ) {
+	vr.handTrackerTried = qtrue;
+	for ( int h = 0; h < 2; h++ ) {
+		XrHandTrackerCreateInfoEXT hci;
+		memset( &hci, 0, sizeof( hci ) );
+		hci.type = XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT;
+		hci.hand = ( h == VR_HAND_RIGHT ) ? XR_HAND_RIGHT_EXT : XR_HAND_LEFT_EXT;
+		hci.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+		if ( !VR_Check( xrCreateHandTrackerEXT( vr.session, &hci, &vr.handTracker[h] ), "xrCreateHandTrackerEXT" ) ) {
+			vr.handTracker[h] = XR_NULL_HANDLE;
+		}
+	}
+}
+
+// Hand h's fingers from their joints, where the runtime tracks them now: into
+// what its controller senses of them (VR_SENSE_JOINTS - after VR_ReadFingers)
+static void VR_ReadJoints( int h ) {
+	const int now = Sys_Milliseconds();
+
+	if ( !VR_JointsUsed() || vr.session == XR_NULL_HANDLE || vr.localSpace == XR_NULL_HANDLE ) {
+		vr.jointsTime[h] = 0;
+		return;
+	}
+	if ( !vr.handTrackerTried ) {
+		VR_CreateHandTrackers();
+	}
+	if ( vr.handTracker[h] != XR_NULL_HANDLE && vr.frameState.predictedDisplayTime ) {
+		XrHandJointsMotionRangeInfoEXT range;
+		XrHandJointsLocateInfoEXT li;
+		XrHandJointLocationEXT joints[XR_HAND_JOINT_COUNT_EXT];
+		XrHandJointLocationsEXT locs;
+
+		// (as the hand closes, not round the controller: a full fist's a fist)
+		memset( &range, 0, sizeof( range ) );
+		range.type = XR_TYPE_HAND_JOINTS_MOTION_RANGE_INFO_EXT;
+		range.handJointsMotionRange = XR_HAND_JOINTS_MOTION_RANGE_UNOBSTRUCTED_EXT;
+		memset( &li, 0, sizeof( li ) );
+		li.type = XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT;
+		li.next = vr.extMotionRange ? &range : NULL;
+		li.baseSpace = vr.localSpace;
+		li.time = vr.frameState.predictedDisplayTime;
+		memset( joints, 0, sizeof( joints ) );
+		memset( &locs, 0, sizeof( locs ) );
+		locs.type = XR_TYPE_HAND_JOINT_LOCATIONS_EXT;
+		locs.jointCount = XR_HAND_JOINT_COUNT_EXT;
+		locs.jointLocations = joints;
+		if ( XR_SUCCEEDED( xrLocateHandJointsEXT( vr.handTracker[h], &li, &locs ) ) && locs.isActive ) {
+			vec3_t pos[VR_JOINTS];
+			float curl[VR_NUM_FINGERS];
+			qboolean valid = qtrue;
+
+			for ( int j = 0; j < VR_JOINTS; j++ ) {
+				if ( j != XR_HAND_JOINT_PALM_EXT && !( joints[j].locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT ) ) {
+					valid = qfalse;
+				}
+				pos[j][0] = joints[j].pose.position.x;	// (as OpenXR has them: only how they lie to each other counts)
+				pos[j][1] = joints[j].pose.position.y;
+				pos[j][2] = joints[j].pose.position.z;
+			}
+			if ( valid && VR_JointCurls( pos, h == VR_HAND_RIGHT, curl ) ) {
+				memcpy( vr.joints[h], curl, sizeof( vr.joints[h] ) );
+				vr.jointsTime[h] = now ? now : 1;
+				if ( !vr.jointsSeen[h] ) {
+					vr.jointsSeen[h] = qtrue;
+					Com_Printf( "VR: your %s hand's fingers: from their joints\n", h == VR_HAND_RIGHT ? "right" : "left" );
+				}
+			}
+		}
+	}
+	if ( vr.jointsTime[h] && now >= vr.jointsTime[h] && now - vr.jointsTime[h] <= VR_JOINTS_HOLD ) {
+		vr.fingers[h].sensed |= VR_SENSE_JOINTS;
+		memcpy( vr.fingers[h].joints, vr.joints[h], sizeof( vr.fingers[h].joints ) );
+	}
+}
+
 static void VR_CreateInput( void );
 static void VR_DestroyInput( void );
 
@@ -801,12 +942,20 @@ static qboolean VR_CreateInstance( void ) {
 	// sensors: Touch Plus (Quest 3) and Touch Pro read the index finger's curl
 	// and sense the thumb and finger near; Touch, with the proximity extension,
 	// senses them near - each where the runtime offers it
-	const char *extensions[4];
+	// - and the joints of your hands, where the runtime tracks them
+	// (vr_fingerJoints: SteamVR does, from the finger sensors of the Index's
+	// controllers and the Steam Frame's), as a hand closes rather than round a
+	// controller where it can say (not asked for at all, vr_fingerJoints 0)
+	const char *extensions[6];
 	uint32_t numExtensions = 0;
 	extensions[numExtensions++] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
 	vr.extTouchPlus = VR_HasExtension( XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME );
 	vr.extTouchPro = VR_HasExtension( XR_FB_TOUCH_CONTROLLER_PRO_EXTENSION_NAME );
 	vr.extProximity = VR_HasExtension( XR_FB_TOUCH_CONTROLLER_PROXIMITY_EXTENSION_NAME );
+	vr.extHandTracking = (qboolean)( vr_fingerJoints && vr_fingerJoints->integer && VR_HasExtension( XR_EXT_HAND_TRACKING_EXTENSION_NAME ) );
+	vr.extMotionRange = (qboolean)( vr.extHandTracking && VR_HasExtension( XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME ) );
+	vr.systemHands = qfalse;
+	vr.steamVR = qfalse;
 	if ( vr.extTouchPlus ) {
 		extensions[numExtensions++] = XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME;
 	}
@@ -815,6 +964,12 @@ static qboolean VR_CreateInstance( void ) {
 	}
 	if ( vr.extProximity ) {
 		extensions[numExtensions++] = XR_FB_TOUCH_CONTROLLER_PROXIMITY_EXTENSION_NAME;
+	}
+	if ( vr.extHandTracking ) {
+		extensions[numExtensions++] = XR_EXT_HAND_TRACKING_EXTENSION_NAME;
+	}
+	if ( vr.extMotionRange ) {
+		extensions[numExtensions++] = XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME;
 	}
 
 	XrInstanceCreateInfo ici;
@@ -837,6 +992,7 @@ static qboolean VR_CreateInstance( void ) {
 		// (a runtime that lists an extension it then won't enable: without them)
 		Com_Printf( S_COLOR_YELLOW "VR: xrCreateInstance with the controller extensions failed (%d); trying without\n", (int)res );
 		vr.extTouchPlus = vr.extTouchPro = vr.extProximity = qfalse;
+		vr.extHandTracking = vr.extMotionRange = qfalse;
 		ici.enabledExtensionCount = 1;
 		vr.instance = XR_NULL_HANDLE;
 		res = xrCreateInstance( &ici, &vr.instance );
@@ -851,6 +1007,9 @@ static qboolean VR_CreateInstance( void ) {
 		vr.instanceTried = qtrue;
 		return qfalse;
 	}
+	if ( vr.extHandTracking && !VR_LoadHandFunctions( vr.instance ) ) {
+		vr.extHandTracking = vr.extMotionRange = qfalse;
+	}
 
 	XrInstanceProperties ip;
 	memset( &ip, 0, sizeof( ip ) );
@@ -859,6 +1018,7 @@ static qboolean VR_CreateInstance( void ) {
 		Q_strncpyz( vr.runtimeName, ip.runtimeName, sizeof( vr.runtimeName ) );
 		Com_Printf( "VR: OpenXR runtime: %s %u.%u.%u\n", ip.runtimeName,
 			XR_VERSION_MAJOR( ip.runtimeVersion ), XR_VERSION_MINOR( ip.runtimeVersion ), XR_VERSION_PATCH( ip.runtimeVersion ) );
+		vr.steamVR = (qboolean)( Q_stristr( ip.runtimeName, "SteamVR" ) != NULL );
 	}
 	if ( vr.extTouchPlus || vr.extTouchPro || vr.extProximity ) {
 		Com_Printf( "VR: finger sensing beyond touch: %s%s%s\n", vr.extTouchPlus ? "Touch Plus " : "",
@@ -877,11 +1037,24 @@ static qboolean VR_CreateInstance( void ) {
 	}
 
 	XrSystemProperties sp;
+	XrSystemHandTrackingPropertiesEXT hp;
 	memset( &sp, 0, sizeof( sp ) );
+	memset( &hp, 0, sizeof( hp ) );
 	sp.type = XR_TYPE_SYSTEM_PROPERTIES;
+	hp.type = XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT;
+	if ( vr.extHandTracking ) {
+		sp.next = &hp;
+	}
 	if ( XR_SUCCEEDED( xrGetSystemProperties( vr.instance, vr.systemId, &sp ) ) ) {
 		Q_strncpyz( vr.systemName, sp.systemName, sizeof( vr.systemName ) );
 		Com_Printf( "VR: headset: %s\n", sp.systemName );
+		vr.systemHands = (qboolean)( vr.extHandTracking && hp.supportsHandTracking );
+	}
+	if ( vr.extHandTracking ) {
+		Com_Printf( "VR: your fingers' joints: %s\n", !vr.systemHands ? "this headset's system doesn't track hands" :
+			VR_JointsUsed() ? va( "your fingers follow them (vr_fingerJoints %d)%s", vr_fingerJoints->integer,
+				vr.extMotionRange ? "" : " - as they lie round the controllers" ) :
+			"not used with this runtime (vr_fingerJoints 2 uses them)" );
 	}
 
 	uint32_t viewCount = 0;
@@ -3298,9 +3471,12 @@ static void VR_PollInput( void ) {
 	squeeze[VR_HAND_LEFT] = VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_LEFT] );
 	squeeze[VR_HAND_RIGHT] = VR_GetFloat( vr.actSqueeze, vr.handPath[VR_HAND_RIGHT] );
 
-	// your fingers, as the controllers sense them (the cgame's hands follow them)
+	// your fingers, as the controllers sense them (the cgame's hands follow
+	// them) - and their joints, where the runtime tracks them
 	VR_ReadFingers( VR_HAND_LEFT, trigger[VR_HAND_LEFT], squeeze[VR_HAND_LEFT] );
 	VR_ReadFingers( VR_HAND_RIGHT, trigger[VR_HAND_RIGHT], squeeze[VR_HAND_RIGHT] );
+	VR_ReadJoints( VR_HAND_LEFT );
+	VR_ReadJoints( VR_HAND_RIGHT );
 
 	// The menu screen takes the pointer: buttons click where the controller
 	// points, and only a poll at the top of the frame puts the cursor there
@@ -3423,6 +3599,7 @@ static void VR_DestroyXrSession( void ) {
 	vr.frameWaited = qfalse;
 	VR_ReleaseAllKeys();
 	VR_DestroyInputSpaces();
+	VR_DestroyHandTrackers();
 	memset( &vrClient, 0, sizeof( vrClient ) );
 	for ( int e = 0; e < 2; e++ ) {
 		VR_DestroySwapchain( &vr.swapchains[e] );
@@ -5753,9 +5930,10 @@ static void VR_Status_f( void ) {
 			{ VR_SENSE_INDEX_CURL, "the finger's curl" },
 			{ VR_SENSE_THUMB_TOUCH, "the thumb on the controller" },
 			{ VR_SENSE_THUMB_NEAR, "the thumb near it" },
+			{ VR_SENSE_JOINTS, "each finger's joints" },
 		};
 		const vrFingerSense_t *fs = &vr.fingers[h];
-		char list[160] = "";
+		char list[192] = "";
 		for ( size_t i = 0; i < ARRAY_LEN( senses ); i++ ) {
 			if ( fs->sensed & senses[i].bit ) {
 				Q_strcat( list, sizeof( list ), list[0] ? ", " : "" );
@@ -5764,6 +5942,36 @@ static void VR_Status_f( void ) {
 		}
 		Com_Printf( "VR: %s hand: %s; senses %s (trigger %.2f, grip %.2f)\n", h == VR_HAND_RIGHT ? "right" : "left",
 			vr.profile[h][0] ? vr.profile[h] : "no controller", list[0] ? list : "nothing of your fingers", fs->trigger, fs->squeeze );
+	}
+
+	// your fingers' joints (vr_fingerJoints)
+	{
+		const char *why = NULL;
+
+		if ( !vr_fingerJoints->integer ) {
+			why = "off (vr_fingerJoints 0)";
+		} else if ( !vr.extHandTracking ) {
+			why = VR_HasExtension( XR_EXT_HAND_TRACKING_EXTENSION_NAME ) ?
+				"not asked of the runtime (vr_fingerJoints was 0 as the game started: restart it)" : "this runtime doesn't track them";
+		} else if ( !vr.systemHands ) {
+			why = "this headset's system doesn't track hands";
+		} else if ( !VR_JointsUsed() ) {
+			why = "not used with this runtime (vr_fingerJoints 2 uses them)";
+		}
+		if ( why ) {
+			Com_Printf( "VR: your fingers' joints: %s\n", why );
+		}
+		for ( int h = 0; !why && h < 2; h++ ) {
+			const char *side = ( h == VR_HAND_RIGHT ) ? "right" : "left";
+			if ( vr.fingers[h].sensed & VR_SENSE_JOINTS ) {
+				Com_Printf( "VR: your %s hand's joints: the thumb %.2f closed, the index finger %.2f, the other three %.2f%s\n", side,
+					vr.joints[h][VR_FINGER_THUMB], vr.joints[h][VR_FINGER_INDEX], vr.joints[h][VR_FINGER_OTHERS],
+					vr.extMotionRange ? "" : " (round the controller: the runtime can't say otherwise)" );
+			} else {
+				Com_Printf( "VR: your %s hand's joints: %s\n", side, ( vr.handTrackerTried && vr.handTracker[h] == XR_NULL_HANDLE ) ?
+					"the runtime wouldn't track them" : "not tracked now" );
+			}
+		}
 	}
 }
 
@@ -5801,6 +6009,9 @@ void VR_Init( void ) {
 	vr_deadzone			= Cvar_Get( "vr_deadzone",			"0.2",	CVAR_ARCHIVE, "Thumbstick deadzone" );
 	vr_gunPitch			= Cvar_Get( "vr_gunPitch",			"0",	CVAR_ARCHIVE, "Tilt guns in your hand (degrees, + = barrel up); also tilts the aim" );
 	vr_leftHanded		= Cvar_Get( "vr_leftHanded",		"0",	CVAR_ARCHIVE, "Left-handed: guns and the saber in your left hand, the Force on the right grip and Use on the left" );
+	vr_fingerJoints		= Cvar_Get( "vr_fingerJoints",		"1",	CVAR_ARCHIVE, "Your fingers from their joints, where the runtime tracks them - each "
+		"finger as it bends, not only where the trigger and the grip put it: 0 = off (the runtime isn't asked for them: turning it on then "
+		"takes a restart), 1 = with SteamVR (the Valve Index's and the Steam Frame's controllers sense each finger), 2 = with any runtime" );
 	vr_gripPress		= Cvar_Get( "vr_gripPress",			"0.85",	CVAR_ARCHIVE, "How far a grip must be pressed for Use and the Force (0.6 to 0.95): a lighter squeeze only curls your fingers" );
 	vr_forceGestures	= Cvar_Get( "vr_forceGestures",		"1",	CVAR_ARCHIVE, "Force gestures with your Force hand (the Force grip's, empty): 1 = while the Force grip's held - thrust it out "
 		"to Push, reach out and yank it back to Pull, hold it out still to Grip, its trigger for Lightning (palm up: Drain), a quick squeeze "

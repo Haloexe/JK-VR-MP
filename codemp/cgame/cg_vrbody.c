@@ -399,6 +399,10 @@ typedef struct vrbState_s {
 	qboolean	fingersEased[2];
 	int			fingerTime;			// cg.time they were eased to
 	int			fingerSensed[2];	// (the log: what each controller senses of them, as last said, + 1; 0: not yet)
+	float		jointLo[2][VR_NUM_FINGERS];	// (the log: how far your fingers' joints closed them - VR_SENSE_JOINTS -
+	float		jointHi[2][VR_NUM_FINGERS];	// least and most...
+	int			jointSamples[2];	// ...in this many frames...
+	int			jointLogTime;		// ...since it last said: cg.time; 0, not yet)
 
 	// the body bends (cg_vrBodyBend, CG_VRB_Bend): how far (0: upright, as
 	// the game's animation has it; 1: standing still, bent the way you are),
@@ -1800,7 +1804,8 @@ CG_VRB_PoseFingers
 
 An empty hand's fingers - and a gun hand's index finger - follow yours
 (cg_vrFingers; qcommon/vr_fingers.h: how far each is closed, from what your
-controller senses), eased so a light touch doesn't flicker; another VR
+controller senses - or from their joints, where the runtime tracks them:
+qcommon/vr_joints.h), eased so a light touch doesn't flicker; another VR
 player's, as their avatar says. Each finger goes where it says in the hand's
 own frame (VRB_HandFrame), whatever the body's animation has it do: the
 index finger and the other three bend toward the palm at both joints, from
@@ -1813,6 +1818,7 @@ guard until it touches the trigger, then curls onto it.
 */
 
 #define VRB_FINGER_EASE		0.025f	// seconds: a finger eases toward yours (a light touch doesn't flicker)
+#define VRB_JOINT_LOG		60000	// ms: (the log) how far your fingers' joints closed them, said this often
 #define VRB_FINGER_FRESH	100		// ms: your fingers eased this lately are yours as drawn
 #define VRB_GUN_GUARD		0.05f	// a gun hand's index finger along the guard...
 #define VRB_GUN_TRIGGER		0.45f	// ...on the trigger...
@@ -1974,17 +1980,18 @@ static void CG_VRB_Grip( centity_t *cent, int h, vrbGrip_t *grip );
 
 // (the log) what a controller senses of your fingers
 static const char *CG_VRB_SensedText( int sensed ) {
-	static char text[160];
+	static char text[192];
 
 	if ( !sensed ) {
 		return "nothing of them (the trigger and the grip only)";
 	}
-	Com_sprintf( text, sizeof( text ), "%s%s%s%s%s",
+	Com_sprintf( text, sizeof( text ), "%s%s%s%s%s%s",
 		( sensed & VR_SENSE_TRIGGER_TOUCH ) ? "the trigger touched, " : "",
 		( sensed & VR_SENSE_TRIGGER_NEAR ) ? "the finger near it, " : "",
 		( sensed & VR_SENSE_INDEX_CURL ) ? "the finger's curl, " : "",
 		( sensed & VR_SENSE_THUMB_TOUCH ) ? "the thumb on the controller, " : "",
-		( sensed & VR_SENSE_THUMB_NEAR ) ? "the thumb near it, " : "" );
+		( sensed & VR_SENSE_THUMB_NEAR ) ? "the thumb near it, " : "",
+		( sensed & VR_SENSE_JOINTS ) ? "each finger's joints, " : "" );
 	text[strlen( text ) - 2] = 0;	// (", ")
 	return text;
 }
@@ -2030,6 +2037,34 @@ static void CG_VRB_EaseFingers( centity_t *cent, const vrClientState_t *vr ) {
 			CG_VRB_Log( "fingers: the %s controller senses %s\n", h == VR_HAND_RIGHT ? "right" : "left",
 				CG_VRB_SensedText( s->sensed ) );
 		}
+
+		// (the log: how far the joints closed your fingers, least and most -
+		// how far a runtime's hands go)
+		if ( s->sensed & VR_SENSE_JOINTS ) {
+			for ( f = 0; f < VR_NUM_FINGERS; f++ ) {
+				if ( !vrb.jointSamples[h] || s->joints[f] < vrb.jointLo[h][f] ) {
+					vrb.jointLo[h][f] = s->joints[f];
+				}
+				if ( !vrb.jointSamples[h] || s->joints[f] > vrb.jointHi[h][f] ) {
+					vrb.jointHi[h][f] = s->joints[f];
+				}
+			}
+			vrb.jointSamples[h]++;
+		}
+	}
+	if ( !vrb.jointLogTime || cg.time < vrb.jointLogTime ) {
+		vrb.jointLogTime = cg.time ? cg.time : 1;
+	} else if ( cg.time - vrb.jointLogTime >= VRB_JOINT_LOG ) {
+		for ( h = 0; h < 2; h++ ) {
+			if ( vrb.jointSamples[h] ) {
+				CG_VRB_Log( "fingers: the %s hand's joints closed them: the thumb %.2f to %.2f, the index finger %.2f to %.2f, "
+					"the other three %.2f to %.2f\n", h == VR_HAND_RIGHT ? "right" : "left",
+					vrb.jointLo[h][VR_FINGER_THUMB], vrb.jointHi[h][VR_FINGER_THUMB], vrb.jointLo[h][VR_FINGER_INDEX],
+					vrb.jointHi[h][VR_FINGER_INDEX], vrb.jointLo[h][VR_FINGER_OTHERS], vrb.jointHi[h][VR_FINGER_OTHERS] );
+				vrb.jointSamples[h] = 0;
+			}
+		}
+		vrb.jointLogTime = cg.time;
 	}
 	vrb.fingerTime = cg.time;
 }

@@ -35,6 +35,18 @@ So the gestures are there without picking them:
 None of them does anything else: Use and the Force take a grip pressed
 nearly all the way (vr_gripPress, client/cl_vr.cpp).
 
+Where the runtime tracks the joints of your hand (VR_SENSE_JOINTS,
+vr_fingerJoints: SteamVR, from the Valve Index's controllers and the Steam
+Frame's - each finger sensed on its own), every finger goes as its joints
+are bent instead (qcommon/vr_joints.h): the index finger and the other
+three anywhere between open and closed, not just where the trigger and the
+grip put them. Two things stay as the controller has them:
+
+  the thumb        down on a button, the stick or the thumb rest (its
+                   touch sensor); lifted, where its joints are
+  the index finger resting on the trigger, in the fist as the other three
+                   close (as above); pulled, curled at least as far
+
 This file is part of the OpenJK source code and is licensed under the GNU
 General Public License version 2, like the rest of OpenJK.
 ===========================================================================
@@ -68,6 +80,22 @@ static inline int VR_FingerOnTrigger( const vrFingerSense_t *s ) {
 	return ( ( s->sensed & s->touched & VR_SENSE_TRIGGER_TOUCH ) || s->trigger > VR_FINGER_PULLED ) ? 1 : 0;
 }
 
+// How far each finger is closed (VR_FINGER_*, 0..1) from its joints, where
+// the runtime tracks them (above).
+static inline void VR_FingerJoints( const vrFingerSense_t *s, float out[VR_NUM_FINGERS] ) {
+	const float trigger = VR_FingerClamp( s->trigger );
+
+	out[VR_FINGER_OTHERS] = VR_FingerClamp( s->joints[VR_FINGER_OTHERS] );
+	out[VR_FINGER_INDEX] = VR_FingerClamp( s->joints[VR_FINGER_INDEX] );
+	if ( out[VR_FINGER_INDEX] < trigger ) {
+		out[VR_FINGER_INDEX] = trigger;
+	}
+	if ( ( s->sensed & VR_SENSE_TRIGGER_TOUCH ) && VR_FingerOnTrigger( s ) && out[VR_FINGER_INDEX] < out[VR_FINGER_OTHERS] ) {
+		out[VR_FINGER_INDEX] = out[VR_FINGER_OTHERS];
+	}
+	out[VR_FINGER_THUMB] = ( s->sensed & s->touched & VR_SENSE_THUMB_TOUCH ) ? 1.0f : VR_FingerClamp( s->joints[VR_FINGER_THUMB] );
+}
+
 // How far each finger is closed (VR_FINGER_*, 0..1), from what the
 // controller senses.
 static inline void VR_FingerCurls( const vrFingerSense_t *s, float out[VR_NUM_FINGERS] ) {
@@ -75,6 +103,11 @@ static inline void VR_FingerCurls( const vrFingerSense_t *s, float out[VR_NUM_FI
 	const float squeeze = VR_FingerClamp( s->squeeze );
 	const int on = VR_FingerOnTrigger( s );
 	float thumb, rest, others, open;
+
+	if ( s->sensed & VR_SENSE_JOINTS ) {
+		VR_FingerJoints( s, out );
+		return;
+	}
 
 	// the thumb
 	if ( s->sensed & VR_SENSE_THUMB_TOUCH ) {
