@@ -759,10 +759,12 @@ shoulder.
     away. Holster Reach (below) makes all of these further or nearer.
     Squeeze that hand's grip:
       - an empty hand takes out what's there. A hilt is in your fist where
-        it closed on it, the way round you took it (the blade out of your
-        thumb's side of the fist, or the little finger's: reversed), unlit;
-        a gun goes to your gun hand (the right; the left, left-handed) -
-        only that hand takes guns out
+        it closed on it, the way round you took it: the blade out of your
+        thumb's side of the fist - or, taken with your thumb clearly toward
+        its pommel, the little finger's (reversed; a hand that just reaches
+        down to it, its fist across the hilt, takes it the usual way
+        round) - unlit; a gun goes to your gun hand (the right; the left,
+        left-handed) - only that hand takes guns out
       - a hand holding something puts it in an empty holster, and the hand
         is empty; a saber has to be switched off first, so it's never put
         away lit (nor is a gun taken out while a saber in your hands is lit)

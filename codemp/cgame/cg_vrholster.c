@@ -18,9 +18,10 @@ away). cg_vrHolsterReach (0.5 to 2) scales them all. Squeeze that hand's
 grip and:
 
 - an empty hand takes what's in it: a hilt where your hand closed on it,
-  the right way round or reversed as you took it, unlit (the quick draw:
-  the trigger held as you take it lights it as it comes out); a gun goes
-  to your gun hand (only that hand takes guns);
+  the right way round or - your thumb toward its pommel - reversed as you
+  took it (CG_VRH_TakeSaber: square to it, the right way), unlit (the
+  quick draw: the trigger held as you take it lights it as it comes out);
+  a gun goes to your gun hand (only that hand takes guns);
 - a hand holding something puts it in an empty holster (a saber's blade
   must be out first: never put away lit);
 - a hand holding something at a full one swaps them.
@@ -1093,17 +1094,24 @@ static void CG_VRH_FindZones( const vrClientState_t *vr ) {
 }
 
 // Hand h takes saber s out of holster i: where its fist closed on the hilt,
-// the way round it took it (the blade out of the thumb's side, or the little
-// finger's: reversed) - the game's first saber, if it's the only one in hand.
+// the way round it took it - the blade out of the thumb's side, or, the fist
+// turned so its thumb's toward the pommel (VRH_REVERSE: clearly so, not just
+// square to the hilt, as a hand reaching down to a hip comes, its fist
+// across a hilt that hangs up and down), the little finger's: reversed - the
+// game's first saber, if it's the only one in hand.
+#define VRH_REVERSE		-0.5f	// a hilt's taken reversed with the fist this far turned from its blade (the cosine: 120 degrees)
 static void CG_VRH_TakeSaber( const vrClientState_t *vr, int h, int s, int i ) {
 	const vrhHang_t *g = &vrh.hang[i];
 	vec3_t pos, ax[3], rel;
-	float t = 0.0f, sign = 1.0f;
+	float t = 0.0f, sign = 1.0f, turn = -1.0f;
 
 	if ( CG_VR_HandGrip( h, pos, ax ) && g->valid ) {
 		VectorSubtract( pos, g->origin, rel );
 		t = Com_Clamp( g->lo, g->hi, DotProduct( rel, g->blade ) );
-		sign = ( DotProduct( ax[0], g->blade ) < 0.0f ) ? -1.0f : 1.0f;	// (ax[0]: through the fist toward the thumb)
+		turn = DotProduct( ax[0], g->blade );	// (ax[0]: through the fist toward the thumb)
+		sign = ( turn < VRH_REVERSE ) ? -1.0f : 1.0f;
+		CG_VR_Log( "holsters: the %s fist took the hilt %.0f degrees from its blade's way: %s\n", h == VR_HAND_LEFT ? "left" : "right",
+			RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, turn ) ) ), ( sign < 0.0f ) ? "reversed" : "the usual way round" );
 	}
 	CG_VR_TakeSaber( s, h, t, sign );
 	if ( s == 1 && CG_VR_SaberHand( 0 ) < 0 && CG_VRH_Have( VR_HOLSTER_SABER ) ) {
