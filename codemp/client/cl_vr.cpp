@@ -223,6 +223,7 @@ static cvar_t *vr_gunPitch;
 static cvar_t *vr_leftHanded;
 static cvar_t *vr_gripPress;
 static cvar_t *vr_fingerJoints;
+static cvar_t *vr_eyeTracking;
 static cvar_t *vr_forceGestures;
 static cvar_t *vr_forceThrust;
 static cvar_t *vr_forceBody;
@@ -456,6 +457,8 @@ typedef struct vrState_s {
 	qboolean				extMotionRange;	// ...XR_EXT_hand_joints_motion_range (as a hand closes, not round a controller)...
 	qboolean				systemHands;	// ...and the headset's system says it tracks hands
 	qboolean				steamVR;		// the runtime's SteamVR's (vr_fingerJoints 1: its hands' joints)
+	qboolean				extEyeGaze;		// XR_EXT_eye_gaze_interaction enabled (vr_eyeTracking: where you look)...
+	qboolean				systemEyes;		// ...and the headset's system says it tracks your eyes
 
 	// render targets (exist as long as the renderer runs at eye resolution)
 	qboolean				targetsReady;
@@ -562,6 +565,13 @@ typedef struct vrState_s {
 	int						jointsTime[2];	// a hand's joints last made a hand (Sys_Milliseconds; 0: not lately)...
 	float					joints[2][VR_NUM_FINGERS];	// ...how far each finger was closed, from them (vr_joints.h)...
 	qboolean				jointsSeen[2];	// ...ever, this session (the console says so, once)
+	XrAction				actGaze;		// where your eyes look (vr_eyeTracking; XR_NULL_HANDLE: not asked)...
+	XrSpace					gazeSpace;		// ...its space, this session...
+	XrPosef					gazePose;		// ...as last tracked (the local space: from between your eyes, -Z along it)...
+	int						gazeTime;		// ...then (Sys_Milliseconds; 0: not lately)...
+	qboolean				gazeValid;		// ...tracked now, or lost no longer than VR_GAZE_HOLD (a blink)...
+	qboolean				gazeTrackedSeen;	// ...the runtime's said "tracked" of it (from then, only that counts)...
+	qboolean				gazeSeen;		// ...ever, this session (the console says so, once)
 	char					profile[2][XR_MAX_PATH_LENGTH];	// each hand's controllers (their interaction profile), as last said
 	XrSpace					gripSpace[2], aimSpace[2];
 	XrPosef					gripPose[2], aimPose[2];
@@ -906,6 +916,48 @@ static void VR_ReadJoints( int h ) {
 	}
 }
 
+/*
+Where your eyes look (vr_eyeTracking): where the headset tracks them - the
+Steam Frame does, through SteamVR (XR_EXT_eye_gaze_interaction) - from
+between them along where they look, read each poll; lost for no longer than
+VR_GAZE_HOLD (a blink), where they last looked. A runtime that says when
+they're really tracked (the TRACKED bit), only then - not its guess, nor
+straight ahead. The cgame has it (vrClientState_t.gaze*): your Force Grip
+catches whoever you look at (cg_vrforce.c, cg_vrGripGaze).
+*/
+
+#define VR_GAZE_HOLD		300		// ms: your eyes lost for no longer than this, where they last looked still counts
+
+static void VR_ReadGaze( void ) {
+	const int now = Sys_Milliseconds();
+
+	if ( vr.gazeSpace == XR_NULL_HANDLE || !vr_eyeTracking || !vr_eyeTracking->integer ) {
+		vr.gazeTime = 0;
+	} else if ( vr.frameState.predictedDisplayTime ) {
+		const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_ORIENTATION_VALID_BIT | XR_SPACE_LOCATION_POSITION_VALID_BIT;
+		XrSpaceLocation loc;
+
+		memset( &loc, 0, sizeof( loc ) );
+		loc.type = XR_TYPE_SPACE_LOCATION;
+		if ( XR_SUCCEEDED( xrLocateSpace( vr.gazeSpace, vr.localSpace, vr.frameState.predictedDisplayTime, &loc ) ) &&
+			( loc.locationFlags & valid ) == valid ) {
+			const qboolean tracked = (qboolean)( ( loc.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT ) != 0 );
+			if ( tracked ) {
+				vr.gazeTrackedSeen = qtrue;
+			}
+			if ( tracked || !vr.gazeTrackedSeen ) {
+				vr.gazePose = loc.pose;
+				vr.gazeTime = now ? now : 1;
+				if ( !vr.gazeSeen ) {
+					vr.gazeSeen = qtrue;
+					Com_Printf( "VR: your eyes: tracked\n" );
+				}
+			}
+		}
+	}
+	vr.gazeValid = (qboolean)( vr.gazeTime && now >= vr.gazeTime && now - vr.gazeTime <= VR_GAZE_HOLD );
+}
+
 static void VR_CreateInput( void );
 static void VR_DestroyInput( void );
 
@@ -945,8 +997,10 @@ static qboolean VR_CreateInstance( void ) {
 	// - and the joints of your hands, where the runtime tracks them
 	// (vr_fingerJoints: SteamVR does, from the finger sensors of the Index's
 	// controllers and the Steam Frame's), as a hand closes rather than round a
-	// controller where it can say (not asked for at all, vr_fingerJoints 0)
-	const char *extensions[6];
+	// controller where it can say (not asked for at all, vr_fingerJoints 0) -
+	// and where your eyes look, where the headset tracks them (vr_eyeTracking:
+	// the Steam Frame, through SteamVR; not asked for at all, 0)
+	const char *extensions[7];
 	uint32_t numExtensions = 0;
 	extensions[numExtensions++] = XR_KHR_OPENGL_ENABLE_EXTENSION_NAME;
 	vr.extTouchPlus = VR_HasExtension( XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME );
@@ -956,6 +1010,8 @@ static qboolean VR_CreateInstance( void ) {
 	vr.extMotionRange = (qboolean)( vr.extHandTracking && VR_HasExtension( XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME ) );
 	vr.systemHands = qfalse;
 	vr.steamVR = qfalse;
+	vr.extEyeGaze = (qboolean)( vr_eyeTracking && vr_eyeTracking->integer && VR_HasExtension( XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME ) );
+	vr.systemEyes = qfalse;
 	if ( vr.extTouchPlus ) {
 		extensions[numExtensions++] = XR_META_TOUCH_CONTROLLER_PLUS_EXTENSION_NAME;
 	}
@@ -970,6 +1026,9 @@ static qboolean VR_CreateInstance( void ) {
 	}
 	if ( vr.extMotionRange ) {
 		extensions[numExtensions++] = XR_EXT_HAND_JOINTS_MOTION_RANGE_EXTENSION_NAME;
+	}
+	if ( vr.extEyeGaze ) {
+		extensions[numExtensions++] = XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME;
 	}
 
 	XrInstanceCreateInfo ici;
@@ -993,6 +1052,7 @@ static qboolean VR_CreateInstance( void ) {
 		Com_Printf( S_COLOR_YELLOW "VR: xrCreateInstance with the controller extensions failed (%d); trying without\n", (int)res );
 		vr.extTouchPlus = vr.extTouchPro = vr.extProximity = qfalse;
 		vr.extHandTracking = vr.extMotionRange = qfalse;
+		vr.extEyeGaze = qfalse;
 		ici.enabledExtensionCount = 1;
 		vr.instance = XR_NULL_HANDLE;
 		res = xrCreateInstance( &ici, &vr.instance );
@@ -1038,17 +1098,32 @@ static qboolean VR_CreateInstance( void ) {
 
 	XrSystemProperties sp;
 	XrSystemHandTrackingPropertiesEXT hp;
+	XrSystemEyeGazeInteractionPropertiesEXT ep;
+	void *chain = NULL;
 	memset( &sp, 0, sizeof( sp ) );
 	memset( &hp, 0, sizeof( hp ) );
+	memset( &ep, 0, sizeof( ep ) );
 	sp.type = XR_TYPE_SYSTEM_PROPERTIES;
 	hp.type = XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT;
-	if ( vr.extHandTracking ) {
-		sp.next = &hp;
+	ep.type = XR_TYPE_SYSTEM_EYE_GAZE_INTERACTION_PROPERTIES_EXT;
+	if ( vr.extEyeGaze ) {
+		ep.next = chain;
+		chain = &ep;
 	}
+	if ( vr.extHandTracking ) {
+		hp.next = chain;
+		chain = &hp;
+	}
+	sp.next = chain;
 	if ( XR_SUCCEEDED( xrGetSystemProperties( vr.instance, vr.systemId, &sp ) ) ) {
 		Q_strncpyz( vr.systemName, sp.systemName, sizeof( vr.systemName ) );
 		Com_Printf( "VR: headset: %s\n", sp.systemName );
 		vr.systemHands = (qboolean)( vr.extHandTracking && hp.supportsHandTracking );
+		vr.systemEyes = (qboolean)( vr.extEyeGaze && ep.supportsEyeGazeInteraction );
+	}
+	if ( vr.extEyeGaze ) {
+		Com_Printf( "VR: your eyes: %s\n", vr.systemEyes ? "this headset tracks where you look (vr_eyeTracking 1: Grip by Gaze)" :
+			"this headset's system doesn't track them" );
 	}
 	if ( vr.extHandTracking ) {
 		Com_Printf( "VR: your fingers' joints: %s\n", !vr.systemHands ? "this headset's system doesn't track hands" :
@@ -1408,6 +1483,9 @@ static void VR_CreateInput( void ) {
 	vr.actTriggerNear	= VR_CreateAction( "trigger_near",	"Finger near the trigger",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
 	vr.actThumbNear		= VR_CreateAction( "thumb_near",	"Thumb near the buttons",	XR_ACTION_TYPE_BOOLEAN_INPUT,	qtrue );
 	vr.actTriggerCurl	= VR_CreateAction( "trigger_curl",	"Finger curled to the trigger", XR_ACTION_TYPE_FLOAT_INPUT,	qtrue );
+	// where your eyes look (XR_EXT_eye_gaze_interaction, vr_eyeTracking: the headset tracking them)
+	vr.actGaze			= vr.systemEyes ? VR_CreateAction( "eye_gaze", "Where you look", XR_ACTION_TYPE_POSE_INPUT, qfalse ) :
+		XR_NULL_HANDLE;
 
 	// Meta Quest (1/2/3/Pro) Touch and Touch Plus controllers (and, below,
 	// the profiles that sense more of your fingers: the same controls)
@@ -1553,6 +1631,14 @@ static void VR_CreateInput( void ) {
 	};
 	VR_SuggestBindings( "/interaction_profiles/khr/simple_controller", simple, ARRAY_LEN( simple ), NULL, 0 );
 
+	// your eyes (the headset's, not a controller's: a profile of their own)
+	if ( vr.actGaze != XR_NULL_HANDLE ) {
+		const vrBinding_t eyes[] = {
+			{ &vr.actGaze, "/user/eyes_ext/input/gaze_ext/pose" },
+		};
+		VR_SuggestBindings( "/interaction_profiles/ext/eye_gaze_interaction", eyes, ARRAY_LEN( eyes ), NULL, 0 );
+	}
+
 	vr.inputReady = qtrue;
 }
 
@@ -1566,6 +1652,7 @@ static void VR_DestroyInput( void ) {
 	vr.actA = vr.actB = vr.actX = vr.actY = vr.actMenu = XR_NULL_HANDLE;
 	vr.actHaptic = XR_NULL_HANDLE;
 	vr.actTriggerTouch = vr.actThumbTouch = vr.actTriggerNear = vr.actThumbNear = vr.actTriggerCurl = XR_NULL_HANDLE;
+	vr.actGaze = XR_NULL_HANDLE;
 	memset( vr.fingers, 0, sizeof( vr.fingers ) );
 	vr.inputReady = qfalse;
 }
@@ -1601,6 +1688,17 @@ static void VR_AttachInput( void ) {
 			vr.aimSpace[h] = XR_NULL_HANDLE;
 		}
 	}
+	if ( vr.actGaze != XR_NULL_HANDLE ) {
+		XrActionSpaceCreateInfo gsci;
+		memset( &gsci, 0, sizeof( gsci ) );
+		gsci.type = XR_TYPE_ACTION_SPACE_CREATE_INFO;
+		gsci.action = vr.actGaze;
+		gsci.subactionPath = XR_NULL_PATH;
+		gsci.poseInActionSpace = VR_IdentityPose();
+		if ( !VR_Check( xrCreateActionSpace( vr.session, &gsci, &vr.gazeSpace ), "xrCreateActionSpace(gaze)" ) ) {
+			vr.gazeSpace = XR_NULL_HANDLE;
+		}
+	}
 	vr.inputAttached = qtrue;
 }
 
@@ -1617,6 +1715,12 @@ static void VR_DestroyInputSpaces( void ) {
 		vr.handValid[h] = qfalse;
 		vr.profile[h][0] = 0;
 	}
+	if ( vr.gazeSpace != XR_NULL_HANDLE ) {
+		xrDestroySpace( vr.gazeSpace );
+		vr.gazeSpace = XR_NULL_HANDLE;
+	}
+	vr.gazeTime = 0;
+	vr.gazeValid = vr.gazeTrackedSeen = vr.gazeSeen = qfalse;
 	memset( vr.fingers, 0, sizeof( vr.fingers ) );
 	vr.inputAttached = qfalse;
 }
@@ -3427,6 +3531,8 @@ static void VR_PollInput( void ) {
 		vr.handValid[0] = vr.handValid[1] = qfalse;
 		vr.gripFresh[0] = vr.gripFresh[1] = qtrue;
 		memset( vr.fingers, 0, sizeof( vr.fingers ) );
+		vr.gazeTime = 0;
+		vr.gazeValid = qfalse;
 		return;
 	}
 
@@ -3452,6 +3558,7 @@ static void VR_PollInput( void ) {
 			vr.handTracked[h] = qfalse;
 		}
 	}
+	VR_ReadGaze();	// (where your eyes look)
 
 	// sticks (the move action's the left one, the turn action's the right:
 	// which moves you, and which turns you, as vr_swapSticks has it)
@@ -4627,6 +4734,23 @@ static void VR_PlaceHands( void ) {
 	}
 }
 
+// Where your eyes look in the same space: from between them, with the head's
+// offset - and which way (VR_ReadGaze: lost a moment, where they last looked).
+static void VR_PlaceGaze( void ) {
+	vrClient.gazeValid = vr.gazeValid;
+	if ( !vr.gazeValid ) {
+		return;
+	}
+	const XrPosef *g = &vr.gazePose;
+	const float gp[3] = {
+		vr.viewOfs[0] + ( g->position.x - vr.headPose.position.x ),
+		vr.viewOfs[1] + ( g->position.y - vr.headPose.position.y ),
+		vr.viewOfs[2] + ( g->position.z - vr.headPose.position.z )
+	};
+	VR_XrToQuake( gp, vrClient.gazeOrigin );
+	VR_QuatToAxis( &g->orientation, vrClient.gazeAxis );
+}
+
 // Whether the game's eyes going down is yours from now on: Real Crouch on,
 // and your head down by its line (below where it stands you up; your height
 // not known, the floor) - your view stays at your head as they go. (Settled
@@ -4673,6 +4797,7 @@ void VR_SetEyeDrop( float drop, int flags ) {
 	if ( VR_IsRunning() && vr.poseValid ) {
 		VR_PlaceEyes( vrRender.eye );	// (the eye it's drawing for: the other's drawn, or placed in its turn)
 		VR_PlaceHands();
+		VR_PlaceGaze();
 	}
 }
 
@@ -4782,6 +4907,7 @@ static void VR_UpdateTracking( void ) {
 		VR_QuatToAxis( &vr.aimPose[h].orientation, vrClient.aimAxis[h] );
 	}
 	VR_PlaceHands();
+	VR_PlaceGaze();
 	VR_GunAim();
 	vrClient.hudWrist = VR_HudOnWrist();
 
@@ -5973,6 +6099,37 @@ static void VR_Status_f( void ) {
 			}
 		}
 	}
+
+	// your eyes (vr_eyeTracking)
+	{
+		const char *why = NULL;
+
+		if ( !vr_eyeTracking->integer ) {
+			why = "off (vr_eyeTracking 0)";
+		} else if ( !vr.extEyeGaze ) {
+			why = VR_HasExtension( XR_EXT_EYE_GAZE_INTERACTION_EXTENSION_NAME ) ?
+				"not asked of the runtime (vr_eyeTracking was 0 as the game started: restart it)" : "this runtime doesn't track them";
+		} else if ( !vr.systemEyes ) {
+			why = "this headset's system doesn't track them";
+		} else if ( vr.gazeSpace == XR_NULL_HANDLE ) {
+			why = "the runtime wouldn't say where they look";
+		} else if ( !vr.gazeValid ) {
+			why = vr.gazeSeen ? "not tracked now" : "not tracked yet (the runtime may need you to allow it, in its settings)";
+		}
+		if ( why ) {
+			Com_Printf( "VR: your eyes: %s\n", why );
+		} else {
+			// (where they look, from where your head faces)
+			vec3_t head[3], gaze[3];
+			VR_QuatToAxis( &vr.headPose.orientation, head );
+			VR_QuatToAxis( &vr.gazePose.orientation, gaze );
+			const float fwd = DotProduct( gaze[0], head[0] ), right = -DotProduct( gaze[0], head[1] ), up = DotProduct( gaze[0], head[2] );
+			const float yaw = RAD2DEG( atan2f( right, fwd ) ), pitch = RAD2DEG( atan2f( up, fwd ) );
+			Com_Printf( "VR: your eyes: tracked%s - looking %.0f degrees %s and %.0f %s of where your head faces\n",
+				vr.gazeTrackedSeen ? "" : " (the runtime doesn't say when it's sure)", fabsf( yaw ), yaw < 0.0f ? "left" : "right",
+				fabsf( pitch ), pitch < 0.0f ? "down" : "up" );
+		}
+	}
 }
 
 void VR_Init( void ) {
@@ -6012,6 +6169,9 @@ void VR_Init( void ) {
 	vr_fingerJoints		= Cvar_Get( "vr_fingerJoints",		"1",	CVAR_ARCHIVE, "Your fingers from their joints, where the runtime tracks them - each "
 		"finger as it bends, not only where the trigger and the grip put it: 0 = off (the runtime isn't asked for them: turning it on then "
 		"takes a restart), 1 = with SteamVR (the Valve Index's and the Steam Frame's controllers sense each finger), 2 = with any runtime" );
+	vr_eyeTracking		= Cvar_Get( "vr_eyeTracking",		"1",	CVAR_ARCHIVE, "Eye tracking, where the headset has it (the Steam Frame, "
+		"through SteamVR): where you look - your Force Grip catches whoever you look at (cg_vrGripGaze). 0 = off (the runtime isn't asked "
+		"for your eyes: turning it on then takes a restart)" );
 	vr_gripPress		= Cvar_Get( "vr_gripPress",			"0.85",	CVAR_ARCHIVE, "How far a grip must be pressed for Use and the Force (0.6 to 0.95): a lighter squeeze only curls your fingers" );
 	vr_forceGestures	= Cvar_Get( "vr_forceGestures",		"1",	CVAR_ARCHIVE, "Force gestures with your Force hand (the Force grip's, empty): 1 = while the Force grip's held - thrust it out "
 		"to Push, reach out and yank it back to Pull, hold it out still to Grip, its trigger for Lightning (palm up: Drain), a quick squeeze "

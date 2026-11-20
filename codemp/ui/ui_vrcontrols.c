@@ -70,14 +70,17 @@ them again. The page is otherwise left as it is.
     Grip Moves        whom your Grip holds moves with your cg_vrGripMove Yes/No
                       hand (a server of this build's:
                       game/g_vrforce.c)
+    Grip by Gaze      where the headset tracks your eyes   cg_vrGripGaze Yes/No
+                      (the Steam Frame), your Grip catches
+                      whoever you look at (cg_vrforce.c)
 
-They're the engine's settings (but Always Run, Two-Handed Guns, Aim Glow and
-Grip Moves, the game's: those three made here, as they come, before the
-game's there - vrcCvars - Grip Moves in your userinfo, for the server): all there
-before the menus load, and taking effect at once - but Resolution, which
-the headset's picture takes when it's made. (The menus set it as they set
-any: at once - the engine's latching only holds back the console's - and
-the engine reads it only then.)
+They're the engine's settings (but Always Run, Two-Handed Guns, Aim Glow,
+Grip Moves and Grip by Gaze, the game's: those four made here, as they come,
+before the game's there - vrcCvars - Grip Moves in your userinfo, for the
+server): all there before the menus load, and taking effect at once - but
+Resolution, which the headset's picture takes when it's made. (The menus set
+it as they set any: at once - the engine's latching only holds back the
+console's - and the engine reads it only then.)
 
 A page with no room for the buttons or the settings (one a menu mod has
 changed) is left as it is, and says so in the console; the settings still
@@ -116,6 +119,7 @@ static const struct {
 	{ "cg_vrTwoHandGuns",	"1",	CVAR_ARCHIVE },
 	{ "cg_vrForceGlow",		"1",	CVAR_ARCHIVE },
 	{ "cg_vrGripMove",		"1",	CVAR_ARCHIVE | CVAR_USERINFO },
+	{ "cg_vrGripGaze",		"1",	CVAR_ARCHIVE },
 };
 
 static const struct {

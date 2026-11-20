@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-25"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-26"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -75,6 +75,9 @@ General Public License version 2, like the rest of OpenJK.
 												// -25: VR_SENSE_JOINTS, vrFingerSense_t.joints (your
 												//     fingers from their joints, where the runtime
 												//     tracks them: qcommon/vr_joints.h)
+												// -26: vrClientState_t.gazeValid, gazeOrigin,
+												//     gazeAxis (where your eyes look, where the
+												//     headset tracks them: Grip by Gaze)
 
 // ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
 // cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
@@ -482,6 +485,14 @@ typedef struct vrClientState_s {
 	// (referenceYaw: always your head's, in it) from that
 	qboolean	cockpit;
 	float		cockpitYaw;
+
+	// where your eyes look, where the headset tracks them (vr_eyeTracking: the
+	// Steam Frame, through SteamVR): from between them (gazeOrigin), along
+	// gazeAxis[0] - as the head's are (headOrigin, headAxis); lost a moment (a
+	// blink), where they last looked. gazeValid qfalse: not tracked
+	qboolean	gazeValid;
+	vec3_t		gazeOrigin;
+	vec3_t		gazeAxis[3];
 } vrClientState_t;
 
 // ext.VR_SetSaberTriggers: a trigger held this long (ms) is a slide, not a tap

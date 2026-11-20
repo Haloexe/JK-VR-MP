@@ -65,8 +65,11 @@ as this build does (VR_FORCE_SERVED), your hand aims it (CG_VR_ForceAim):
 along where the controller points - and, held up in view, where your hand is
 as you see it: someone on either line, anywhere on them, is whom it goes
 straight at (your avatar's forceDir, which the server snaps the same way).
-Whom your Grip would catch glows while you hold the Force grip out
-(cg_vrForceGlow).
+Where the headset tracks your eyes (the Steam Frame: vr_eyeTracking), your
+Grip goes at whoever you look at instead, your hand held out their way
+(Grip by Gaze, cg_vrGripGaze: CG_VRF_Gazed) - Lightning and Drain still go
+where your hand points. Whom your Grip would catch glows while you hold the
+Force grip out (cg_vrForceGlow).
 
 And the wheel's Force ring (cg_vrpose.c) picks the Force powers that
 aren't Push, Pull, Grip, Lightning or Drain - the one the Force grip's
@@ -105,9 +108,13 @@ static struct {
 	qboolean	stillSaid;				// ...said in the log
 	int			lockActive;				// CGF_LOCKERS going, as last seen...
 	int			lockStart;				// ...and when one last started (cg.time; 0: none seen)
+	int			frames, gazeFrames;		// (the log: frames lately, and those your eyes were tracked in...
+	int			gazeLogTime;			// ...since it last said: cg.time; 0, not yet...
+	qboolean	gazeEver;				// ...they've been, this game)
 } cgf = { qfalse, 0, 0, 0, qfalse, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, { 0.0f, 0.0f, 0.0f }, 0, qfalse, 0, 0 };
 
 #define CGF_TICK_AGAIN	600		// ms: Grip's aim back on whom it was on within this long - no one new (no tick)
+#define CGF_GAZE_LOG	60000	// ms: (the log) how much of the time your eyes were tracked, said this often
 #define CGF_REFUSED		0		// what a place's power cast does now (CG_VRF_CastWorks): nothing...
 #define CGF_WORKS		1		// ...it works...
 #define CGF_ENDS		2		// ...it was going: it's turned off
@@ -143,7 +150,8 @@ typedef struct {
 	int			time;		// cg.time it aimed (0: never)
 	vec3_t		dir;		// where your Force went (world, unit)
 	int			power;		// whose rules it was aimed by (-1: none)...
-	int			pick;		// ...at whom (-1: nobody)
+	int			pick;		// ...at whom (-1: nobody)...
+	qboolean	gazed;		// ...whom your eyes were on (Grip by Gaze)
 } cgfAim_t;
 
 #define CGF_AIM_FRESH	100		// ms: where your Force hand aimed this long ago is where it aims (its effects, the glow)
@@ -166,7 +174,8 @@ static struct {
 	int			gripOver;			// ...when one last ended (as the game begins: long enough ago)...
 	int			letGoTime;			// ...when that was seen (CG_VR_ForceFrame feels it: 0, felt)...
 	float		letGoSpeed;			// ...how fast whom it caught was moved then (CG_VRF_Speed: units a second)
-} cgfa = { { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, { 0, { 0.0f, 0.0f, 0.0f }, -1, -1 }, -1, 0, qfalse, 0, 0, 0, qfalse, -1, -CGF_GRIP_WAIT, 0, 0.0f };
+} cgfa = { { 0, { 0.0f, 0.0f, 0.0f }, -1, -1, qfalse }, { 0, { 0.0f, 0.0f, 0.0f }, -1, -1, qfalse }, -1, 0, qfalse, 0, 0, 0, qfalse, -1,
+	-CGF_GRIP_WAIT, 0, 0.0f };
 
 // Whether you're watching, not playing: following someone (the player state's
 // theirs), spectating, a demo - no Force of your own to feel or pick. (cg.snap:
@@ -658,8 +667,28 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 		cgf.lockActive = ps->fd.forcePowersActive & CGF_LOCKERS;	// (when they started isn't known)
 		memset( &cgfm, 0, sizeof( cgfm ) );
 		cgf.init = qtrue;
+		cgf.gazeLogTime = cg.time ? cg.time : 1;
 	}
 	CG_VRF_Track( vr, ps );
+
+	// (the log: how much of the last minute your eyes were tracked - once they've
+	// been, this game)
+	cgf.frames++;
+	if ( vr->gazeValid ) {
+		cgf.gazeFrames++;
+		cgf.gazeEver = qtrue;
+	}
+	if ( cg.time < cgf.gazeLogTime ) {
+		cgf.gazeLogTime = cg.time;
+		cgf.frames = cgf.gazeFrames = 0;
+	} else if ( cg.time - cgf.gazeLogTime >= CGF_GAZE_LOG ) {
+		if ( cgf.gazeEver ) {
+			CG_VR_Log( "eyes: tracked %.0f%% of the last minute (Grip by Gaze %s)\n", 100.0f * cgf.gazeFrames / cgf.frames,
+				cg_vrGripGaze.integer ? "on" : "off" );
+		}
+		cgf.frames = cgf.gazeFrames = 0;
+		cgf.gazeLogTime = cg.time;
+	}
 	h = vr->force.hand;
 	if ( h != VR_HAND_LEFT && h != VR_HAND_RIGHT ) {
 		h = ( CG_VR_GunHand() == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;	// (the Force grip's)
@@ -682,7 +711,7 @@ void CG_VR_ForceFrame( const vrClientState_t *vr ) {
 	if ( glow >= 0 ) {
 		if ( glow != cgf.ticked || cg.time - cgf.tickedTime > CGF_TICK_AGAIN || cg.time - cgf.tickedTime < 0 ) {
 			CG_VR_Feel( h, 0.2f, 12, 0.0f, 0 );
-			CG_VR_Log( "force: Grip aimed at %i\n", glow );
+			CG_VR_Log( "force: Grip aimed at %i%s\n", glow, cgfa.now.gazed ? " (where you look)" : "" );
 		}
 		cgf.ticked = glow;
 		cgf.tickedTime = cg.time;
@@ -1065,6 +1094,71 @@ static int CG_VRF_Nearest( int shooter, int power, const vec3_t from, float rang
 	return ( kind == CGF_SEEN ) ? pick : -1;	// (hidden: the line as it is)
 }
 
+#define CGF_GAZE_SNAP	4.0f	// degrees: someone this near where your eyes look is whom they're on, far off (an eye
+								// tracker's own error)...
+#define CGF_GAZE_WIDTH	20.0f	// ...near, this near (units: their side of the body, and a little more)
+#define CGF_GAZE_STICK	0.25f	// whom your eyes were on stays so till another's this much nearer (of the way out to that)
+
+// Whom your eyes are on, for your Grip (Grip by Gaze: cg_vrGripGaze, where the
+// headset tracks your eyes) - from 'eye' along 'gaze' (world, unit): someone
+// your Grip works on (CG_VRF_Target) within its reach of you, whose body that
+// line passes within CGF_GAZE_SNAP degrees of, or CGF_GAZE_WIDTH units (the
+// nearest, as far out as that goes - keep, whom it was on, CGF_GAZE_STICK
+// nearer), with your hand held out their way (one of its lines[0..count-1]
+// that would hold them: CG_VRF_InFront) and them in sight of it (the Grip's
+// catch, from 'from' - where they stand, of where you do). at: the point of
+// them your eyes are on (the Grip goes straight at it from the hand, and the
+// server snaps it so: g_vrforce.c). -1: nobody - or, nearest, someone hidden
+// from you (no more caught by your eyes than by your hand).
+static int CG_VRF_Gazed( int shooter, const vec3_t from, float range, const vec3_t eye, const vec3_t gaze, vec3_t lines[],
+	int count, int keep, vec3_t at ) {
+	const float *where = cg.predictedPlayerState.origin;	// (yours: only your eyes)
+	float best = 1.0f;	// (of the way out from where you look to as far as it reaches: the nearest so far)
+	int i, l, pick = -1, kind = CGF_NONE;
+
+	for ( i = 0; i < cg.snap->numEntities; i++ ) {
+		const int n = cg.snap->entities[i].number;
+		cgfBody_t body;
+		vec3_t p, to;
+		trace_t tr;
+		float d, off, out;
+		const int k = CG_VRF_Target( shooter, FP_GRIP, n, &body );
+
+		if ( k == CGF_NONE || DistanceSquared( body.origin, where ) > range * range ) {
+			continue;
+		}
+		for ( l = 0; l < count && !CG_VRF_InFront( from, lines[l], body.origin ); l++ ) {
+		}
+		if ( l == count ) {
+			continue;	// (your hand not held out their way: the Grip wouldn't hold them - let go at once)
+		}
+		VR_ForceBodyPoint( eye, gaze, body.x, body.y, body.bottom, body.top, p );
+		VectorSubtract( p, eye, to );
+		d = VectorNormalize( to );
+		if ( d < 1.0f || Distance( p, from ) > range ) {
+			continue;
+		}
+		off = RAD2DEG( acosf( Com_Clamp( -1.0f, 1.0f, DotProduct( to, gaze ) ) ) );
+		out = off / Q_max( CGF_GAZE_SNAP, RAD2DEG( atanf( CGF_GAZE_WIDTH / d ) ) ) - ( ( n == keep ) ? CGF_GAZE_STICK : 0.0f );
+		if ( out >= best ) {
+			continue;
+		}
+		CG_Trace( &tr, from, NULL, NULL, p, shooter, MASK_PLAYERSOLID );
+		if ( tr.fraction < 1.0f && tr.entityNum != n ) {
+			continue;	// (out of sight of the hand)
+		}
+		CG_Trace( &tr, where, NULL, NULL, body.origin, shooter, MASK_PLAYERSOLID );
+		if ( tr.fraction < 1.0f && tr.entityNum != n ) {
+			continue;	// (where they stand out of sight of where you do: a held Grip lets go at once - DoGripAction)
+		}
+		best = out;
+		VectorCopy( p, at );
+		pick = n;
+		kind = k;
+	}
+	return ( kind == CGF_SEEN ) ? pick : -1;
+}
+
 // Where a VR player's Lightning or Drain (power) goes from 'from' (cg_players.c
 // draws it so): onto whom the server snaps it (g_vrforce.c), as near as this
 // can tell (CG_VRF_Nearest): dir becomes the way to them (nobody, or someone
@@ -1094,9 +1188,11 @@ straight at: your avatar's forceDir, which the server snaps along too
 (g_vrforce.c). Whom it goes at is the power's - the trigger's Lightning or
 Drain held, theirs; else, the Force grip held (Grip, or not yet: the hand
 held out as Grip's gesture wants, CG_VRF_GripPose), Grip's, if it can catch
-anyone now (CG_VRF_GripWorks): whom it would, who glows. Nobody: the
-controller's line. Someone caught, it's held along whichever line is nearer
-them (CG_VRF_HeldLine): a held Grip goes where the hand points.
+anyone now (CG_VRF_GripWorks): whom it would, who glows - where the headset
+tracks your eyes (Grip by Gaze: cg_vrGripGaze), whoever you look at, your
+hand held out their way (CG_VRF_Gazed), else whom the lines find. Nobody:
+the controller's line. Someone caught, it's held along whichever line is
+nearer them (CG_VRF_HeldLine): a held Grip goes where the hand points.
 */
 
 #define CGF_AIM_VIEW	30.0f	// degrees: your hand this near where you look is up in view...
@@ -1157,7 +1253,7 @@ static void CG_VRF_HeldLine( const vec3_t from, vec3_t lines[], int count, vec3_
 void CG_VR_ForceAim( const vrClientState_t *vr, const vec3_t hand, const vec3_t controller, vec3_t dir ) {
 	const playerState_t *ps = &cg.predictedPlayerState;
 	vec3_t head[3], eye, world[3], from, lines[2], at;
-	qboolean out, seen;
+	qboolean out, seen, gazed = qfalse;
 	int i, power = -1, n = -1;
 	float range = 0.0f;
 
@@ -1204,7 +1300,20 @@ void CG_VR_ForceAim( const vrClientState_t *vr, const vec3_t hand, const vec3_t 
 		}
 	}
 	if ( power >= 0 ) {
-		n = CG_VRF_Nearest( ps->clientNum, power, from, range, lines, seen ? 2 : 1, ( cgfa.now.power == power ) ? cgfa.now.pick : -1, at );
+		const int keep = ( cgfa.now.power == power ) ? cgfa.now.pick : -1;
+		if ( power == FP_GRIP && cg_vrGripGaze.integer && vr->gazeValid ) {
+			// whom your eyes are on (where they look, as your eyes are placed)
+			vec3_t gaze[3], gazeEye, gazeWorld[3];
+			for ( i = 0; i < 3; i++ ) {
+				VectorCopy( vr->gazeAxis[i], gaze[i] );
+			}
+			VR_ToWorld( vr, cg.refdef.vieworg, cg.refdef.viewaxis, vr->gazeOrigin, gaze, gazeEye, gazeWorld );
+			n = CG_VRF_Gazed( ps->clientNum, from, range, gazeEye, gazeWorld[0], lines, out ? 2 : 1, keep, at );
+			gazed = (qboolean)( n >= 0 );
+		}
+		if ( n < 0 ) {
+			n = CG_VRF_Nearest( ps->clientNum, power, from, range, lines, seen ? 2 : 1, keep, at );
+		}
 		if ( n >= 0 ) {
 			VectorSubtract( at, from, dir );
 			VectorNormalize( dir );
@@ -1217,6 +1326,7 @@ void CG_VR_ForceAim( const vrClientState_t *vr, const vec3_t hand, const vec3_t 
 	VectorCopy( dir, cgfa.now.dir );
 	cgfa.now.power = power;
 	cgfa.now.pick = n;
+	cgfa.now.gazed = gazed;
 	if ( power == FP_GRIP && n >= 0 ) {
 		cgfa.gripWho = n;
 		cgfa.gripTime = cg.time;

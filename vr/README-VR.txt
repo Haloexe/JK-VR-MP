@@ -25,7 +25,8 @@ on a PC VR headset (OpenXR). Current state (milestone 2):
     head for Heal, Protect, Absorb, Seeing and Team Heal - the trigger on
     your chest for Rage, over your head for Team Energize - a wave across
     your face or chest for Mind Trick, a swing back past your hip for
-    Speed (see THE FORCE)
+    Speed (see THE FORCE) - and with a headset that tracks your eyes (the
+    Steam Frame), your Grip catches whoever you look at (Grip by Gaze)
   * Guns are held in and aimed with your right hand - your left, playing
     left-handed (Setup > VR) - with a 3D aim dot; take hold of a rifle's
     barrel with your other hand and both hands aim it (see BOTH HANDS ON
@@ -267,6 +268,10 @@ stick up or down on a slider to move it a step.
                      fling throws them (Yes, as it comes; THE FORCE,
                      below); No: lifted at level 2 and floated in front of
                      you at level 3, as before
+    Grip by Gaze     with a headset that tracks your eyes (the Steam
+                     Frame), your Grip catches whoever you look at, your
+                     hand held out their way (Yes, as it comes; THE FORCE,
+                     below); No: whoever your hand points at, as before
 Each is a console setting as well (SETTINGS, below).
 
 YOUR HEIGHT. Until the game knows your height, your view goes up and down
@@ -1323,13 +1328,32 @@ hand it won't catch them at all (the game would let go of them at once,
 your Force spent and the wait begun). Once you hold someone, the Grip
 follows your hand along whichever of the two lines holds them. Grip from
 your hand reaches a quarter further than the game's (320 units: about 9 m,
-7.5 m before). A server running an earlier build ("vrForce 1") takes your
-Force from your hand as well, but there it goes where the controller
-points, and nobody glows. On other servers the gestures still work, but
-every power aims where you look (with a gun out, where it points), as in
-the normal game - and a Grip that's caught nobody, held on through a Push
-or a Pull, can still catch whom you look at after it. The Force Gestures,
-Thrust Speed, Aim Glow and Grip Moves settings are under VR Force (above).
+7.5 m before). Grip by Gaze: with a headset that tracks your eyes - the
+Steam Frame does, through SteamVR - your Grip catches whoever you look at
+instead, wherever on them you look (within 4 degrees far off, or a hand's
+breadth off their side close in), with your hand held out their way: the
+controller, or your hand as you see it, within 25 degrees of them side to
+side (up or down doesn't matter - someone on a ledge high over your hand
+can be caught by looking up at them). Glance from one to another and the
+glow and the tick follow your eyes; a blink keeps it where it was, and
+once it's on someone it stays on them till your eyes are clearly on
+someone else. Looking at nobody (or at someone it couldn't catch: too
+far, out of sight of your hand, cloaked), it goes as above, where your
+hand points. Only the Grip: Lightning and Drain still go where your hand
+points, Push and Pull the way it moves. Your eyes pick whom - nothing
+about where you look is sent anywhere but the Grip's own aim at them, as
+your hand's would be. Turn it off under VR Force (Grip by Gaze), or
+vr_eyeTracking 0 to stop the game asking for your eyes at all (a restart
+then to turn it back on); vr_status says what the headset gives (where
+you're looking, from where your head faces). A server running an earlier
+build ("vrForce 1") takes your Force from your hand as well, but there it
+goes where the controller points, and nobody glows (nor does Grip by Gaze
+work there). On other servers the gestures still work, but every power
+aims where your head faces (with a gun out, where it points), as in the
+normal game - and a Grip that's caught nobody, held on through a Push or a
+Pull, can still catch whom your head faces after it. The Force Gestures,
+Thrust Speed, Aim Glow, Grip Moves and Grip by Gaze settings are under VR
+Force (above).
 Whoever your Grip holds moves with your hand, on a server running this
 build (Grip Moves, as it comes) - as if on the end of a long stick your
 hand swings. At level 3, sweep your hand round and they swing round you,
@@ -2015,6 +2039,12 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
   cg_vrGripMove 1        0 = whom your Grip holds doesn't move with your
                          hand: lifted at level 2, floated in front of you
                          at level 3 (Setup, Controls, VR Force: Grip Moves)
+  cg_vrGripGaze 1        0 = your Grip catches whom your hand points at,
+                         not whoever you look at (eye tracking; Setup,
+                         Controls, VR Force: Grip by Gaze)
+  vr_eyeTracking 1       0 = the game doesn't ask the runtime where your
+                         eyes look at all (Grip by Gaze off; 0 as the game
+                         starts, turning it back on takes a restart)
   cg_vrHaptics 1         how strong the controllers' vibration is (0 off,
                          up to 2; Setup, VR: Vibration)
   cg_vrSaberWeight 1     how heavy the saber feels as you swing it (the
