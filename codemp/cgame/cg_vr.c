@@ -171,7 +171,7 @@ void CG_VR_Init( void ) {
 // from your eye).
 void CG_VR_ParseServerinfo( const char *info ) {
 	cgs.vrGunBarrel = (qboolean)( atoi( Info_ValueForKey( info, "vrGunBarrel" ) ) == VR_BARREL_RULE );
-	cgs.vrWallGrip = (qboolean)( atoi( Info_ValueForKey( info, "vrWallGrip" ) ) > 0 );	// (hanging on to walls: cg_vrwall.c)
+	cgs.vrWallGrip = Com_Clampi( 0, 2, atoi( Info_ValueForKey( info, "vrWallGrip" ) ) );	// (hanging on to walls, 2: climbing - cg_vrwall.c)
 	cgs.vrWalker = (qboolean)( atoi( Info_ValueForKey( info, "vrWalker" ) ) == VR_WALKER_RULE );	// (an AT-ST from its cockpit, by these rules: cg_vrwalker.c)
 	cgs.vrRealBlades = (qboolean)( atoi( Info_ValueForKey( info, "vrSaber" ) ) > 0 );	// (a hilt's trigger: cg_vrbody.c)
 }

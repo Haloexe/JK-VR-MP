@@ -603,6 +603,9 @@ typedef struct vrState_s {
 	qboolean				saberTap;		// ...the saber's switch, going with the next command (VR_FillCmdPose)
 	int						cmdButtons;		// buttons the cgame sets on every command (BUTTON_VR_*)...
 	int						cmdButtonsTime;	// ...as of this cls.realtime
+	qboolean				climbing;		// ...climbing, as it said with them last (VR_SetClimb)...
+	vrClimb_t				climb;			// ...how fast your hands move you...
+	int						climbTime;		// ...as of this cls.realtime
 	int						genCmds[4];		// generic commands the cgame asked for, each going with the next
 	int						numGenCmds;		// command that has none, in turn - and the Force gestures' Push and
 	qboolean				genThrown[4];	// Pull (VR_ForceThrow), and Mind Trick's wave (VR_ForceCast): which they
@@ -5193,6 +5196,35 @@ static qboolean		vrAttackHeld;		// the attack button was down for the last comma
 static qboolean		vrAttackSwallowed;	// ...and switched the saber off: it does nothing more until let go
 static qboolean		vrSaberSwitchQueued;	// switching it off waits for a command with no other generic command
 
+// A command with your wall grip, climbing (VR_SetClimb): its moves are how
+// fast your hands move you (vr_public.h VR_CLIMB_*) - the way its angles face
+// as sent, VR_CLIMB_STEP units a second a step; jump pressed, VR_CLIMB_JUMP
+// up (crouching, nothing). Not said lately, still. Riding something, the
+// grip's the yoke's: as it is.
+static void VR_ClimbCmd( usercmd_t *cmd ) {
+	vec3_t vel = { 0.0f, 0.0f, 0.0f };
+	float fx, fy, speed;
+
+	if ( !vr.climbing || cls.state != CA_ACTIVE || cl.snap.ps.m_iVehicleNum || VR_InCockpit() ) {
+		return;
+	}
+	if ( cls.realtime - vr.climbTime >= 0 && cls.realtime - vr.climbTime <= VR_CLIMB_FRESH ) {
+		VectorCopy( vr.climb.vel, vel );
+	}
+	speed = VectorLength( vel );
+	if ( !( speed <= VR_CLIMB_MAX ) ) {
+		if ( speed > VR_CLIMB_MAX && speed < 1e30f ) {
+			VectorScale( vel, VR_CLIMB_MAX / speed, vel );
+		} else {
+			VectorClear( vel );	// (NaN, infinite)
+		}
+	}
+	VR_ClimbAxes( cmd->angles[YAW], &fx, &fy );
+	cmd->forwardmove = (signed char)Com_Clamp( -127.0f, 127.0f, roundf( ( vel[0] * fx + vel[1] * fy ) / VR_CLIMB_STEP ) );
+	cmd->rightmove = (signed char)Com_Clamp( -127.0f, 127.0f, roundf( ( vel[0] * fy - vel[1] * fx ) / VR_CLIMB_STEP ) );
+	cmd->upmove = ( cmd->upmove > 0 ) ? VR_CLIMB_JUMP : (signed char)Com_Clamp( -127.0f, VR_CLIMB_JUMP - 1, roundf( vel[2] / VR_CLIMB_STEP ) );
+}
+
 static void VR_FillCmdPoseMain( usercmd_t *cmd, vrUserPose_t *out ) {
 	const qboolean attack = ( cmd->buttons & BUTTON_ATTACK ) ? qtrue : qfalse;
 	const qboolean pressed = ( attack && !vrAttackHeld ) ? qtrue : qfalse;
@@ -5210,6 +5242,9 @@ static void VR_FillCmdPoseMain( usercmd_t *cmd, vrUserPose_t *out ) {
 	if ( VR_IsRunning() && cls.state >= CA_PRIMED && cls.realtime - vr.cmdButtonsTime >= 0 &&
 		cls.realtime - vr.cmdButtonsTime < 500 ) {
 		cmd->buttons |= vr.cmdButtons;
+		if ( vr.cmdButtons & BUTTON_VR_WALLGRIP ) {
+			VR_ClimbCmd( cmd );	// (climbing: its moves are how fast your hands move you)
+		}
 	}
 	if ( !VR_IsRunning() || cls.state != CA_ACTIVE ) {
 		vrSaberSwitchQueued = qfalse;
@@ -5364,6 +5399,14 @@ void VR_SetGrabZones( int handMask ) {
 void VR_SetCmdButtons( int buttons ) {
 	vr.cmdButtons = buttons & ( BUTTONS_VR | BUTTON_VR_WALLGRIP );	// (a hand on a wall too: cg_vrwall.c)
 	vr.cmdButtonsTime = cls.realtime;
+}
+
+void VR_SetClimb( const vrClimb_t *climb ) {
+	vr.climbing = climb ? qtrue : qfalse;
+	if ( climb ) {
+		vr.climb = *climb;
+		vr.climbTime = cls.realtime;
+	}
 }
 
 void VR_GenericCmd( int genCmd ) {
@@ -6233,6 +6276,7 @@ void VR_SetSaberForce( int how ) {}
 void VR_SetCockpit( const vrCockpit_t *cockpit ) {}
 void VR_SetCockpitScreens( const vrCockpitScreens_t *screens ) {}
 void VR_SetCmdButtons( int buttons ) {}
+void VR_SetClimb( const vrClimb_t *climb ) {}
 void VR_SetEyeDrop( float drop, int flags ) {}
 void VR_SetGunHold( int hand, int how, float boreLeft, float boreUp ) {}
 void VR_SetWristHud( float top, float bottom ) {}

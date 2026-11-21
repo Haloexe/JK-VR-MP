@@ -51,6 +51,8 @@ typedef struct
 	vec3_t		previous_origin;
 	vec3_t		previous_velocity;
 	int			previous_waterlevel;
+
+	qboolean	vrClimbing;		// OpenJK VR: climbing this move - as their hands move them, no falling (bg_pmove.c PM_VRClimbMove)
 } pml_t;
 
 

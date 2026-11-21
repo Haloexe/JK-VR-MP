@@ -743,6 +743,7 @@ void G_VRSaberClientReset( int clientNum ) {
 		G_VRForceClientReset( clientNum );	// (and their Force hand: g_vrforce.c)
 		G_VRArmsClientReset( clientNum );	// (and their arms as the other builds are sent them: g_vrarms.c)
 		G_VRSaberDropClientReset( clientNum );	// (and their saber let go of: g_vrsaberdrop.c)
+		G_VRWallClientReset( clientNum );	// (and whether they climb: g_vrwall.c)
 	}
 }
 

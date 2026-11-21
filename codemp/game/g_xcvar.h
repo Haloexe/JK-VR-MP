@@ -199,6 +199,7 @@ XCVAR_DEF( g_vrSaberThrow,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )	//
 XCVAR_DEF( g_vrSaberUnlag,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_vrWalker,					"1",			CVU_VRWalker,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players drive an AT-ST from its cockpit, by its yoke - their view only aims (g_vrwalker.c); 0: as the game has it
 XCVAR_DEF( g_vrWallGrip,				"1",			CVU_VRWallGrip,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: VR players hang on to walls they grip in mid-air (g_vrwall.c); 0: they don't
+XCVAR_DEF( g_vrClimb,					"1",			CVU_VRWallGrip,				CVAR_ARCHIVE,									qtrue )	// OpenJK VR: with g_vrWallGrip, VR players climb anything they grip - their hands move them (g_vrwall.c); 0: they only hang on to walls
 XCVAR_DEF( g_warmup,					"20",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_weaponDisable,				"0",			NULL,						CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_LATCH,		qtrue )
 XCVAR_DEF( g_weaponRespawn,				"5",			NULL,						CVAR_NONE,										qtrue )

@@ -1945,6 +1945,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetSaberForce				= VR_SetSaberForce;
 		cgi.ext.VR_SetCockpit					= VR_SetCockpit;
 		cgi.ext.VR_SetCockpitScreens			= VR_SetCockpitScreens;
+		cgi.ext.VR_SetClimb						= VR_SetClimb;
 #else
 		cgi.ext.VR_GetClientState				= NULL;
 		cgi.ext.VR_G2SetModelHidden				= NULL;
@@ -1964,6 +1965,7 @@ void CL_BindCGame( void ) {
 		cgi.ext.VR_SetSaberForce				= NULL;
 		cgi.ext.VR_SetCockpit					= NULL;
 		cgi.ext.VR_SetCockpitScreens			= NULL;
+		cgi.ext.VR_SetClimb						= NULL;
 #endif
 
 		GetCGameAPI = (GetCGameAPI_t)cgvm->GetModuleAPI;

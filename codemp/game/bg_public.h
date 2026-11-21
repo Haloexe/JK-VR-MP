@@ -540,6 +540,9 @@ typedef struct pmove_s {
 	int			stepSlideFix;
 	int			noSpecMove;
 
+	qboolean	vrClimb;			// OpenJK VR: a VR player who climbs ("vrWallGrip 2", their cg_vrClimb): their wall grip's
+									// moves are how fast their hands move them (bg_pmove.c PM_VRWallGrip, vr_public.h VR_CLIMB_*)
+
 	animation_t	*animations;
 
 	float		xyspeed;

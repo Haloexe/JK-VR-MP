@@ -24,6 +24,11 @@ them again. The page is otherwise left as it is.
     Move Direction    where you look, or where the hand    vr_moveDirection 0/1
                       holding the moving stick points
     Always Run        the game's own                       cl_run
+    Climbing          an empty hand's grip squeezed on any cg_vrClimb Yes/No
+                      wall or ledge holds on, your hands
+                      move you, a fling as you let go
+                      mid-pull (a server of this build's
+                      saying so: cgame/cg_vrwall.c)
     Swap Sticks       move with the right, turn with the   vr_swapSticks
                       left (cl_vr.cpp)
     Stick Deadzone    0.05-0.5                             vr_deadzone
@@ -74,10 +79,11 @@ them again. The page is otherwise left as it is.
                       (the Steam Frame), your Grip catches
                       whoever you look at (cg_vrforce.c)
 
-They're the engine's settings (but Always Run, Two-Handed Guns, Aim Glow,
-Grip Moves and Grip by Gaze, the game's: those four made here, as they come,
-before the game's there - vrcCvars - Grip Moves in your userinfo, for the
-server): all there before the menus load, and taking effect at once - but
+They're the engine's settings (but Always Run, Climbing, Two-Handed Guns,
+Aim Glow, Grip Moves and Grip by Gaze, the game's: those five made here, as
+they come, before the game's there - vrcCvars - Climbing and Grip Moves in
+your userinfo, for the server): all there before the menus load, and taking
+effect at once - but
 Resolution, which the headset's picture takes when it's made. (The menus set
 it as they set any: at once - the engine's latching only holds back the
 console's - and the engine reads it only then.)
@@ -116,6 +122,7 @@ static const struct {
 	const char	*value;
 	uint32_t	flags;
 } vrcCvars[] = {
+	{ "cg_vrClimb",			"1",	CVAR_ARCHIVE | CVAR_USERINFO },
 	{ "cg_vrTwoHandGuns",	"1",	CVAR_ARCHIVE },
 	{ "cg_vrForceGlow",		"1",	CVAR_ARCHIVE },
 	{ "cg_vrGripMove",		"1",	CVAR_ARCHIVE | CVAR_USERINFO },

@@ -465,6 +465,19 @@ GOOD TO KNOW
   only for a wall within about half a metre of the side of their box.
   Getting hurt or Force pushed or pulled knocks them off, as the game's
   debug melee wall hold does. g_vrWallGrip 0: no hanging on.
+* VR players climb (g_vrClimb 1, with g_vrWallGrip: "vrWallGrip 2" in the
+  server info): an empty hand squeezed on anything solid they can see -
+  not the sky, nor invisible walls - holds on, on the ground or off it,
+  and their hands move them: their game sends how fast in each command's
+  moves while they hold on (at most about 7 m/s), and both sides move them
+  by it, so it's predicted. No falling meanwhile; letting go mid-pull
+  flings them on, Force Jump adding half as fast again a level (5 Force a
+  level); jump pushes off. The server takes the grip only from a player
+  whose avatar has an empty hand at something as they take hold, and lets
+  go of them if no hand of theirs is at anything for 1.5 s. Getting hurt
+  or Force pushed or pulled knocks them off, as hanging on. Players can
+  turn it off for themselves (their cg_vrClimb: they hang on instead), as
+  can older builds' players (they hang on). g_vrClimb 0: hanging on only.
 * VR players drive an AT-ST from its cockpit: its driver's yoke turns it -
   standing too, half as fast - not where they look, and pushed part way it
   walks no faster than that; its guns aim where they look from the

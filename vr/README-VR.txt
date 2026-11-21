@@ -187,6 +187,9 @@ stick up or down on a slider to move it a step.
                      stick points
     Always Run       the game's own: Yes, the moving stick runs, and walks
                      while you hold it in; No, the other way round
+    Climbing         Yes: grip any wall or ledge with an empty hand and
+                     your hands move you (CLIMBING, below); No: you only
+                     hang on to walls in mid-air
     Swap Sticks      move with the right stick, turn and switch weapon with
                      the left - their clicks swap too (the pose wheel still
                      picks with the right stick: moving with it, you stop
@@ -637,6 +640,43 @@ as long as you hold the grip - anyone, Force or not:
   * Only on servers running this build ("vrWallGrip 1" in the server info:
     g_vrWallGrip 0 turns it off - README-SERVER.txt). Near a wall on the
     ground, the grip does what it always does (your Force grip).
+  * On a server that lets you climb ("vrWallGrip 2", as this build's are
+    unless they turn it off) you climb instead (below) - unless you've
+    turned Climbing off.
+
+CLIMBING: reach out to any wall, ledge or other solid surface with an
+empty hand and squeeze its grip. Your hand takes hold with a buzz, and as
+long as you hold the grip your hands move you - anyone, Force or not:
+  * Pull your hand down and you go up; push it away and you go back; move
+    it sideways and you shimmy along. Your hand stays where it took hold,
+    as though it gripped the surface. Climb hand over hand: take hold with
+    one hand, let go with the other.
+  * On the ground too (grab the top of a crate or a ledge in front of you
+    and pull yourself up), in mid-air, and in water (climb out of a pool).
+  * You don't fall while you hold on, and the stick doesn't move you.
+    Turning still turns you - you swing round your hand.
+  * Ledges: once a ledge's top is no higher than about your chest (up to
+    about 1.4 m above your feet), pull yourself toward it and you're
+    lifted up on to it.
+  * Let go of everything and you drop - but let go mid-pull and you keep
+    going the way your hands were moving you: a fling. Your Force Jump adds
+    to it, half as fast again for each level (everyone has level 1, but in
+    Siege), for 5 Force a level.
+  * Press jump to push off: away from a wall as when hanging on, or
+    straight up off anything else.
+  * No stamina - but getting hurt, Force pushed or pulled, gripped or
+    knocked down knocks you off: let go of the grip and squeeze it again
+    to take hold again. A hand pulled away from where it holds (your body
+    stopped by something) slips along with you, and one that's nowhere
+    near anything for about a second loses its hold.
+  * Not the sky, nor invisible walls. Your hand has to be empty (a hand on
+    your saber's hilt or your gun takes hold of that instead) and your VR
+    body drawn - the server checks your hand's at something.
+  * Everyone sees you climbing: the game's wall hold in mid-air, or,
+    running this build, your VR body with its hands where they hold on.
+  * Climbing (Setup > Controls > VR Movement, cg_vrClimb) turns it off for
+    you; a server turns it off for everyone with g_vrClimb 0
+    (README-SERVER.txt).
 
 AN AT-ST'S COCKPIT: get into an AT-ST (Use, as ever) and you sit in its
 head, in the cockpit - the left seat, looking out of the left viewport -
@@ -2258,6 +2298,13 @@ no client. Source files:
                                swapping, two sabers, everyone's hilts
   codemp/game/g_vrholster.c    holsters, the server's side (shared rules:
                                game/bg_vrholster.h, bg_pmove.c, bg_saber.c)
+  codemp/cgame/cg_vrwall.c     hanging on to walls and climbing, your side:
+                               where a squeeze takes hold, how fast your
+                               hands move you (the engine sends it in your
+                               commands: cl_vr.cpp VR_SetClimb)
+  codemp/game/g_vrwall.c       ...the server's side: whose grip it takes
+                               (the rules both go by: bg_pmove.c
+                               PM_VRWallGrip, PM_VRClimb)
   codemp/cgame/cg_vrwalker.c   an AT-ST's cockpit, the driver's side: where
                                it is, its yoke, the view and aim from it,
                                what its screens show (the engine's:

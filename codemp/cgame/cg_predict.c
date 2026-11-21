@@ -1248,6 +1248,8 @@ void CG_PredictPlayerState( void ) {
 		cg_pmove.stepSlideFix = cgs.stepSlideFix;
 		cg_pmove.noSpecMove = cgs.noSpecMove;
 
+		cg_pmove.vrClimb = CG_VR_Climbs();	// OpenJK VR: you climb - your wall grip's moves are how fast your hands move you (cg_vrwall.c)
+
 		cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
 
 		if (cg.snap && cg.snap->ps.saberLockTime > cg.time)

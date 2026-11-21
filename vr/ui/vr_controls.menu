@@ -190,12 +190,34 @@
 
 		itemDef
 		{
+			name			vrmove_climbing
+			group			vrmove
+			type			ITEM_TYPE_YESNO
+			text			"Climbing"
+			cvar			"cg_vrClimb"
+			rect			260 286 340 14
+			textalign		ITEM_ALIGN_RIGHT
+			textalignx		174
+			textaligny		0
+			font			4
+			textscale		1
+			forecolor		0.65 0.65 1 1
+			visible			0
+			descText		"Grip any wall or ledge with an empty hand and pull to climb - let go mid-pull to fling yourself"
+			action
+			{
+				play		"sound/interface/button1.wav" ;
+			}
+		}
+
+		itemDef
+		{
 			name			vrmove_swapsticks
 			group			vrmove
 			type			ITEM_TYPE_YESNO
 			text			"Swap Sticks"
 			cvar			"vr_swapSticks"
-			rect			260 286 340 14
+			rect			260 300 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -219,7 +241,7 @@
 			cvarfloat		"vr_deadzone" 0.2 0.05 0.5
 			showValue
 			valueStep		0.05
-			rect			260 300 340 14
+			rect			260 314 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -241,7 +263,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Play Seated"
 			cvar			"vr_seated"
-			rect			260 314 340 14
+			rect			260 328 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -262,7 +284,7 @@
 			group			vrmove
 			type			ITEM_TYPE_BUTTON
 			text			"Set Height"
-			rect			260 328 340 14
+			rect			260 342 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -287,7 +309,7 @@
 			cvarfloat		"vr_height" 0 1 2.5
 			showValue
 			valueStep		0.01
-			rect			260 342 340 14
+			rect			260 356 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -309,7 +331,7 @@
 			type			ITEM_TYPE_YESNO
 			text			"Real Crouch"
 			cvar			"vr_realCrouch"
-			rect			260 356 340 14
+			rect			260 370 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0
@@ -330,7 +352,7 @@
 			group			vrmove
 			type			ITEM_TYPE_BUTTON
 			text			"Recenter"
-			rect			260 370 340 14
+			rect			260 384 340 14
 			textalign		ITEM_ALIGN_RIGHT
 			textalignx		174
 			textaligny		0

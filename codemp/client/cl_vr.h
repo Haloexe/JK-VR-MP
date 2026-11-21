@@ -100,6 +100,10 @@ void		VR_SetCockpitScreens( const vrCockpitScreens_t *screens );
 // Buttons the cgame sets on every command (BUTTON_VR_*: holsters, a hand on a
 // wall; said every frame - unsaid lately, none).
 void		VR_SetCmdButtons( int buttons );
+// You climb: how fast your hands move you, in the moves of each command with
+// your wall grip - cgameImport_t.ext.VR_SetClimb, every frame with
+// VR_SetCmdButtons (NULL: you don't).
+void		VR_SetClimb( const vrClimb_t *climb );
 // A generic command for the next command that has none.
 void		VR_GenericCmd( int genCmd );
 // How far below standing the game's eyes are as the cgame places its camera

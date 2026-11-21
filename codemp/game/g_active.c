@@ -2774,6 +2774,8 @@ void ClientThink_real( gentity_t *ent ) {
 
 	pmove.noSpecMove = g_noSpecMove.integer;
 
+	pmove.vrClimb = G_VRClimbs( ent );	// OpenJK VR: a VR player who climbs - their wall grip's moves are how fast their hands move them (g_vrwall.c)
+
 	pmove.nonHumanoid = (ent->localAnimIndex > 0);
 
 	VectorCopy( client->ps.origin, client->oldOrigin );

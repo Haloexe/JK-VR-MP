@@ -1807,6 +1807,9 @@ void CG_VRH_SayButtons( void ) {
 	if ( CG_VR_Engine() && trap->ext.VR_SetCmdButtons ) {
 		trap->ext.VR_SetCmdButtons( CG_VRH_CmdButtons() | CG_VR_WallButtons() | CG_VR_WalkerButtons() );	// (and a hand on a wall:
 																											// cg_vrwall.c; an AT-ST's yoke: cg_vrwalker.c)
+		if ( trap->ext.VR_SetClimb ) {
+			trap->ext.VR_SetClimb( CG_VR_WallClimb() );	// (climbing: how fast your hands move you - cg_vrwall.c)
+		}
 	}
 }
 

@@ -2145,6 +2145,7 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 
 	G_VRHolsterUserinfo( ent, userinfo );	// OpenJK VR: what's in a VR player's holsters ("vrh": g_vrholster.c)
 	G_VRForceUserinfo( ent, userinfo );		// OpenJK VR: whether their Grip moves whom it holds with their hand (g_vrforce.c)
+	G_VRWallUserinfo( ent, userinfo );		// OpenJK VR: whether they climb (g_vrwall.c)
 	G_VRGunUserinfo( ent, userinfo );		// OpenJK VR: whether their game goes by this server's barrel rule ("vrb": g_vrgun.c)
 	G_VRWalkerUserinfo( ent, userinfo );	// OpenJK VR: whether their game drives an AT-ST from its cockpit, in VR ("vrw": g_vrwalker.c)
 

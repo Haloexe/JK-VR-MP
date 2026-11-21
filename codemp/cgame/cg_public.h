@@ -803,6 +803,11 @@ typedef struct cgameImport_s {
 		// Call every frame you sit in it; NULL, or unsaid lately, they stay as
 		// they are.
 		void			(*VR_SetCockpitScreens)					( const vrCockpitScreens_t *screens );
+		// OpenJK VR: you climb (a server saying "vrWallGrip 2", cg_vrClimb):
+		// how fast your hands move you (vrClimb_t) - every command with your
+		// wall grip (BUTTON_VR_WALLGRIP) carries it in its moves (VR_CLIMB_*).
+		// Call every frame, with VR_SetCmdButtons; NULL, you don't.
+		void			(*VR_SetClimb)							( const vrClimb_t *climb );
 	} ext;
 } cgameImport_t;
 

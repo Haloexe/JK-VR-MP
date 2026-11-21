@@ -1817,18 +1817,22 @@ static qboolean PM_VRWallHolding( void ) {
 		!BG_InReboundJump( pm->ps->legsAnim ) );
 }
 
-// Whether they could hang on to a wall now: a player, on their feet's terms -
-// off the ground, not swimming, not knocked down, held, gripped, in a saber
-// lock, in a pose, riding or on a jetpack.
-static qboolean PM_VRWallCanHold( void ) {
+// Whether they could hang on to a wall now (climbing: hold on to anything): a
+// player, on their feet's terms - off the ground and not swimming (climbing:
+// either), not knocked down, held, gripped, in a saber lock, in a pose,
+// riding or on a jetpack.
+static qboolean PM_VRWallCanHold( qboolean climbing ) {
 	const playerState_t *ps = pm->ps;
 	vec3_t waist;
 
-	if ( ps->clientNum >= MAX_CLIENTS || ps->pm_type != PM_NORMAL || ps->groundEntityNum != ENTITYNUM_NONE || ps->m_iVehicleNum ||
-		ps->emplacedIndex || ( ps->eFlags2 & EF2_HELD_BY_MONSTER ) || PM_InKnockDown( (playerState_t *)ps ) ||
+	if ( ps->clientNum >= MAX_CLIENTS || ps->pm_type != PM_NORMAL || ( !climbing && ps->groundEntityNum != ENTITYNUM_NONE ) ||
+		ps->m_iVehicleNum || ps->emplacedIndex || ( ps->eFlags2 & EF2_HELD_BY_MONSTER ) || PM_InKnockDown( (playerState_t *)ps ) ||
 		ps->forceHandExtend == HANDEXTEND_KNOCKDOWN || ps->fd.forceGripBeingGripped > pm->cmd.serverTime ||
 		ps->saberLockTime >= pm->cmd.serverTime || BG_VRPose( ps ) || ps->fallingToDeath ) {
 		return qfalse;
+	}
+	if ( climbing ) {
+		return qtrue;	// (on the ground too, and in water: climbing out of it)
 	}
 	VectorSet( waist, ps->origin[0], ps->origin[1], ps->origin[2] + MINS_Z + ( ps->viewheight - MINS_Z ) / 2 );
 	return (qboolean)!( pm->pointcontents( waist, ps->clientNum ) & MASK_WATER );
@@ -1911,13 +1915,174 @@ static void PM_VRWallJumpOff( const vec3_t normal ) {
 		BOTH_FORCEJUMP1, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD );
 }
 
+/*
+=============================================================================
+
+OpenJK VR: climbing
+
+On a server that climbs ("vrWallGrip 2"), a VR player who climbs (their
+cg_vrClimb: pm->vrClimb) moves as their hands do while a hand holds on - to
+anything solid, off the ground or on it, in water or out of it. Their game
+works out how fast their hands move them (cg_vrwall.c) and the engine sends
+it in each command's moves with the grip (BUTTON_VR_WALLGRIP, vr_public.h
+VR_CLIMB_*) - taken out of the moves before anything else looks at them
+(PM_VRClimbCmd), so they never steer. Holding on is hanging on's hold
+(PMF_VR_WALLGRIP | PMF_STUCK_TO_WALL, its animations off the ground): no
+falling, no walking, knocked off the same way - sliding along what they're
+pushed into (their game lifts them on to a low ledge they push on into, in
+how fast their hands move them). Letting go, they keep going as their hands
+moved them - quick enough and not downward, a fling Force Jump adds to (its
+level, its Force). Jumping pushes off a wall as hanging on does, or
+straight up off anything else.
+
+=============================================================================
+*/
+
+#define VR_CLIMB_FLING		60.0f	// units a second: let go of faster than this (not downward), a fling Force Jump adds to
+#define VR_CLIMB_FLING_COST	5		// Force a fling takes, for each level of Force Jump
+
+// This command's climbing (PM_VRClimbCmd): sent - its moves are climbing's;
+// how fast their hands move them; jump pressed.
+static struct {
+	qboolean	sent;
+	vec3_t		vel;
+	qboolean	jump;
+} pm_vrClimbCmd;
+
+// A climber's grip (pm->vrClimb, BUTTON_VR_WALLGRIP): its moves are how fast
+// their hands move them - taken out (zeroed) first thing each move, before
+// anything that steers by them. (Riding something, the grip's the yoke's:
+// g_vrwalker.c.)
+static void PM_VRClimbCmd( void ) {
+	float fx, fy, f, r;
+
+	memset( &pm_vrClimbCmd, 0, sizeof( pm_vrClimbCmd ) );
+	if ( !pm->vrClimb || !( pm->cmd.buttons & BUTTON_VR_WALLGRIP ) || pm->ps->m_iVehicleNum ) {
+		return;
+	}
+	VR_ClimbAxes( pm->cmd.angles[YAW], &fx, &fy );
+	f = pm->cmd.forwardmove * VR_CLIMB_STEP;
+	r = pm->cmd.rightmove * VR_CLIMB_STEP;
+	pm_vrClimbCmd.sent = qtrue;
+	pm_vrClimbCmd.vel[0] = f * fx + r * fy;
+	pm_vrClimbCmd.vel[1] = f * fy - r * fx;
+	if ( pm->cmd.upmove == VR_CLIMB_JUMP ) {
+		pm_vrClimbCmd.jump = qtrue;
+	} else {
+		pm_vrClimbCmd.vel[2] = pm->cmd.upmove * VR_CLIMB_STEP;
+	}
+	pm->cmd.forwardmove = pm->cmd.rightmove = pm->cmd.upmove = 0;
+}
+
+// Letting go while climbing: they keep going as their hands moved them (their
+// last move) - quick enough and not mostly downward, a fling Force Jump adds
+// to: half as fast again for each level, no faster than its own jump, its
+// Force taken.
+static void PM_VRClimbFling( void ) {
+	playerState_t *ps = pm->ps;
+	const int level = ps->fd.forcePowerLevel[FP_LEVITATION];
+	const float speed = VectorLength( ps->velocity );
+	float boosted;
+
+	if ( speed < VR_CLIMB_FLING || ps->velocity[2] < -0.25f * speed || level < FORCE_LEVEL_1 || level > FORCE_LEVEL_3 ||
+		ps->fd.forcePower < VR_CLIMB_FLING_COST * level || !BG_CanUseFPNow( pm->gametype, ps, pm->cmd.serverTime, FP_LEVITATION ) ) {
+		return;
+	}
+	boosted = Q_min( speed * ( 1.0f + 0.5f * level ), forceJumpStrength[level] );
+	if ( boosted <= speed ) {
+		return;
+	}
+	VectorScale( ps->velocity, boosted / speed, ps->velocity );
+	ps->fd.forcePower -= VR_CLIMB_FLING_COST * level;
+	ps->fd.forceJumpSound = 1;
+	PM_SetForceJumpZStart( ps->origin[2] );	// (landing no lower: no harm, as from a Force Jump)
+	PM_SetAnim( SETANIM_BOTH, BOTH_FORCEJUMP1, SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD );
+}
+
+// Climbing's move: as their hands move them - no falling, sliding along what
+// they're pushed into (hanging on's hold doesn't).
+static void PM_VRClimbMove( void ) {
+	playerState_t *ps = pm->ps;
+
+	VectorCopy( pm_vrClimbCmd.vel, ps->velocity );
+	ps->pm_flags &= ~PMF_STUCK_TO_WALL;
+	PM_StepSlideMove( qfalse );
+	ps->pm_flags |= PMF_STUCK_TO_WALL;
+}
+
+// A climber's grip each move (PM_VRWallGrip's, for one who climbs) - qtrue:
+// climbing, this move (PM_VRClimbMove).
+static qboolean PM_VRClimb( void ) {
+	playerState_t *ps = pm->ps;
+	const qboolean holding = PM_VRWallHolding();
+	vec3_t mins, maxs, normal;
+	qboolean wall;
+
+	if ( !holding && ( ps->pm_flags & PMF_VR_WALLGRIP ) && ( BG_InReboundHold( ps->legsAnim ) || BG_InReboundHold( ps->torsoAnim ) ) ) {
+		PM_VRWallLetGo();	// (knocked off - hurt, pushed: G_LetGoOfWall - still in its hold, which falls nowhere: dropping)
+	}
+	if ( !pm_vrClimbCmd.sent ) {
+		// (no grip: letting go, going on as their hands moved them)
+		if ( holding ) {
+			PM_VRWallLetGo();
+			PM_VRClimbFling();
+		}
+		ps->pm_flags &= ~PMF_VR_WALLGRIP;
+		return qfalse;
+	}
+	if ( !PM_VRWallCanHold( qtrue ) ) {
+		if ( holding ) {
+			PM_VRWallLetGo();
+		}
+		return qfalse;
+	}
+	if ( !holding && ( ps->pm_flags & PMF_VR_WALLGRIP ) ) {
+		return qfalse;	// (let go of since, the grip still held: squeezed afresh first)
+	}
+	// (a player's box as it is, before this move ducks it or stands it up)
+	VectorSet( mins, -15.0f, -15.0f, MINS_Z );
+	VectorSet( maxs, 15.0f, 15.0f, ( ps->pm_flags & ( PMF_DUCKED | PMF_ROLLING ) ) ? ps->crouchheight : ps->standheight );
+	wall = BG_VRWallFind( pm->trace, ps->origin, mins, maxs, ps->clientNum, normal );
+	if ( !holding ) {
+		// taking hold (jump held then: pushing off waits for the next press)
+		ps->pm_flags |= PMF_VR_WALLGRIP | PMF_STUCK_TO_WALL;
+		if ( pm_vrClimbCmd.jump ) {
+			ps->pm_flags |= PMF_JUMP_HELD;
+		}
+		if ( ps->groundEntityNum == ENTITYNUM_NONE ) {
+			PM_AddEvent( EV_JUMP );	// (the grab's sound: catching hold in mid-air)
+		}
+	} else if ( pm_vrClimbCmd.jump && !( ps->pm_flags & PMF_JUMP_HELD ) ) {
+		PM_VRWallJumpOff( normal );	// (no wall by them: straight up)
+		return qfalse;
+	}
+	if ( !pm_vrClimbCmd.jump ) {
+		ps->pm_flags &= ~PMF_JUMP_HELD;
+	}
+	VectorCopy( pm_vrClimbCmd.vel, ps->velocity );
+	if ( ps->groundEntityNum == ENTITYNUM_NONE ) {
+		if ( !wall ) {
+			// (holding on to a ledge's top, a ceiling: as though to a wall ahead)
+			const float yaw = DEG2RAD( ps->viewangles[YAW] );
+
+			VectorSet( normal, -cosf( yaw ), -sinf( yaw ), 0.0f );
+		}
+		PM_VRWallHoldAnim( normal );
+	}
+	pml.vrClimbing = qtrue;
+	return qtrue;
+}
+
 // A VR player's wall grip, each move (before the game's own wall jumps:
-// PmoveSingle) - qtrue: hanging on.
+// PmoveSingle) - qtrue: hanging on (climbing, for one who climbs).
 static qboolean PM_VRWallGrip( void ) {
 	playerState_t *ps = pm->ps;
 	const qboolean holding = PM_VRWallHolding();
 	vec3_t mins, maxs, normal;
 
+	if ( pm->vrClimb ) {
+		return PM_VRClimb();
+	}
 	if ( !holding && ( ps->pm_flags & PMF_VR_WALLGRIP ) && ( BG_InReboundHold( ps->legsAnim ) || BG_InReboundHold( ps->torsoAnim ) ) ) {
 		PM_VRWallLetGo();	// (knocked off it - hurt, pushed: G_LetGoOfWall - still in its hold, which falls nowhere: dropping)
 	}
@@ -1929,7 +2094,7 @@ static qboolean PM_VRWallGrip( void ) {
 		ps->pm_flags &= ~PMF_VR_WALLGRIP;
 		return qfalse;
 	}
-	if ( !PM_VRWallCanHold() ) {
+	if ( !PM_VRWallCanHold( qfalse ) ) {
 		if ( holding ) {
 			PM_VRWallLetGo();
 		}
@@ -10426,6 +10591,8 @@ void PmoveSingle (pmove_t *pmove) {
 
 	pm = pmove;
 
+	PM_VRClimbCmd();	// OpenJK VR: a climber's grip - its moves are how fast their hands move them, never steering
+
 	if (pm->cmd.buttons & BUTTON_ATTACK && pm->cmd.buttons & BUTTON_USE_HOLDABLE)
 	{
 		pm->cmd.buttons &= ~BUTTON_ATTACK;
@@ -11307,7 +11474,10 @@ void PmoveSingle (pmove_t *pmove) {
 		}
 		else
 		{
-			if (pm->ps->pm_flags & PMF_TIME_WATERJUMP) {
+			if ( pml.vrClimbing ) {
+				// OpenJK VR: climbing - as their hands move them
+				PM_VRClimbMove();
+			} else if (pm->ps->pm_flags & PMF_TIME_WATERJUMP) {
 				PM_WaterJumpMove();
 			} else if ( pm->waterlevel > 1 ) {
 				// swimming
@@ -11476,7 +11646,20 @@ void Pmove (pmove_t *pmove) {
 		}
 		pmove->cmd.serverTime = pmove->ps->commandTime + msec;
 
-		PmoveSingle( pmove );
+		{
+			// OpenJK VR: a climber's grip - its moves (how fast their hands
+			// move them, PM_VRClimbCmd) the same for the rest of the command
+			const signed char forwardmove = pmove->cmd.forwardmove, rightmove = pmove->cmd.rightmove, upmove = pmove->cmd.upmove;
+
+			PmoveSingle( pmove );
+
+			if ( pm_vrClimbCmd.sent ) {
+				pmove->cmd.forwardmove = forwardmove;
+				pmove->cmd.rightmove = rightmove;
+				pmove->cmd.upmove = upmove;
+				continue;
+			}
+		}
 
 		if ( pmove->ps->pm_flags & PMF_JUMP_HELD ) {
 			pmove->cmd.upmove = 20;

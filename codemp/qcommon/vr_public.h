@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-26"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-27"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -78,6 +78,9 @@ General Public License version 2, like the rest of OpenJK.
 												// -26: vrClientState_t.gazeValid, gazeOrigin,
 												//     gazeAxis (where your eyes look, where the
 												//     headset tracks them: Grip by Gaze)
+												// -27: ext.VR_SetClimb (climbing: how your hands
+												//     move you, into each command's moves -
+												//     VR_CLIMB_*)
 
 // ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
 // cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
@@ -583,4 +586,42 @@ static inline void VR_ForceBodyPoint( const vec3_t from, const vec3_t dir, float
 	point[0] = x;
 	point[1] = y;
 	point[2] = ( z < bottom ) ? bottom : ( z > top ) ? top : z;
+}
+
+/*
+--------------------------------------------------------------------------------
+Climbing (a server of this build's "vrWallGrip 2": the game's
+bg_pmove.c PM_VRWallGrip, the cgame's cg_vrwall.c, the engine's
+VR_SetClimb). While a VR player's hand holds on to something
+(BUTTON_VR_WALLGRIP) and they climb (their userinfo's cg_vrClimb), each
+command's moves are how fast their hands move them - forwardmove along the
+way the command's angles face (its yaw as sent: VR_ClimbAxes),
+rightmove across it to the right, upmove up - VR_CLIMB_STEP units a second
+each; upmove VR_CLIMB_JUMP is jump pressed instead (not a speed: pushing
+off).
+--------------------------------------------------------------------------------
+*/
+#define VR_CLIMB_STEP			2.0f	// units a second, a move's step
+#define VR_CLIMB_JUMP			127		// upmove: jump pressed (a speed up goes no higher than 126 steps)
+#define VR_CLIMB_MAX			250.0f	// units a second: hands move you no faster than this (7 m/s)
+
+// ext.VR_SetClimb( climb ): you climb (a server saying "vrWallGrip 2", your
+// cg_vrClimb) - how fast your hands move you, said every frame with your
+// command buttons (ext.VR_SetCmdButtons): each command with your wall grip
+// (BUTTON_VR_WALLGRIP) carries it in its moves (the sticks don't move you;
+// jump pushes off). NULL, you don't: your wall grip is hanging on's.
+typedef struct vrClimb_s {
+	vec3_t		vel;		// how fast your hands move you (world units a second: VR_CLIMB_MAX at most)
+} vrClimb_t;
+
+#define VR_CLIMB_FRESH			100		// ms how fast your hands move you holds (said no later: still)
+
+// A command's way round for climbing (its yaw as sent, 16 bits - the same
+// on the server, in prediction and in the engine): the world's x and y of
+// its forward (its right's: fy, -fx).
+static inline void VR_ClimbAxes( int cmdYaw, float *fx, float *fy ) {
+	const float yaw = (float)( cmdYaw & 65535 ) * ( 6.28318530718f / 65536.0f );
+
+	*fx = cosf( yaw );
+	*fy = sinf( yaw );
 }
