@@ -645,12 +645,21 @@ as long as you hold the grip - anyone, Force or not:
     turned Climbing off.
 
 CLIMBING: reach out to any wall, ledge or other solid surface with an
-empty hand and squeeze its grip. Your hand takes hold with a buzz, and as
-long as you hold the grip your hands move you - anyone, Force or not:
+empty hand and squeeze its grip. Your hand only has to be close to it -
+within about 20 cm, high or low, in front of you or out to your side, and
+you don't have to look at it. A light tick in your hand says it's close
+enough. It takes hold with a buzz, and as long as you hold the grip your
+hands move you - anyone, Force or not:
   * Pull your hand down and you go up; push it away and you go back; move
     it sideways and you shimmy along. Your hand stays where it took hold,
     as though it gripped the surface. Climb hand over hand: take hold with
-    one hand, let go with the other.
+    one hand, let go with the other. The hand that took hold last is the
+    one that moves you; the other comes along with it, so they never tug
+    against each other.
+  * Off the ground, or holding on with your other hand, a hand squeezed
+    already takes hold as it gets there - no need to let go and squeeze
+    again. (On the ground, holding on to nothing, squeeze at the surface:
+    a grip held there keeps doing its own job - your Force, say.)
   * On the ground too (grab the top of a crate or a ledge in front of you
     and pull yourself up), in mid-air, and in water (climb out of a pool).
   * You don't fall while you hold on, and the stick doesn't move you.
@@ -667,11 +676,12 @@ long as you hold the grip your hands move you - anyone, Force or not:
   * No stamina - but getting hurt, Force pushed or pulled, gripped or
     knocked down knocks you off: let go of the grip and squeeze it again
     to take hold again. A hand pulled away from where it holds (your body
-    stopped by something) slips along with you, and one that's nowhere
-    near anything for about a second loses its hold.
+    stopped by something) slips along with you. A hand keeps its hold as
+    long as it's within about half a metre of something; one that's
+    further than that from anything for about a second loses its hold.
   * Not the sky, nor invisible walls. Your hand has to be empty (a hand on
     your saber's hilt or your gun takes hold of that instead) and your VR
-    body drawn - the server checks your hand's at something.
+    body drawn - the server checks your hand's near something.
   * Everyone sees you climbing: the game's wall hold in mid-air, or,
     running this build, your VR body with its hands where they hold on.
   * Climbing (Setup > Controls > VR Movement, cg_vrClimb) turns it off for

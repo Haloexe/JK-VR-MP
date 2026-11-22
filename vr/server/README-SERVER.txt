@@ -473,8 +473,10 @@ GOOD TO KNOW
   by it, so it's predicted. No falling meanwhile; letting go mid-pull
   flings them on, Force Jump adding half as fast again a level (5 Force a
   level); jump pushes off. The server takes the grip only from a player
-  whose avatar has an empty hand at something as they take hold, and lets
-  go of them if no hand of theirs is at anything for 1.5 s. Getting hurt
+  whose avatar has an empty hand within about 35 cm of something solid as
+  they take hold (any height, any side - their game takes hold within
+  about 20 cm), and lets go of them if no hand of theirs is within about
+  60 cm of anything for 1.5 s. Getting hurt
   or Force pushed or pulled knocks them off, as hanging on. Players can
   turn it off for themselves (their cg_vrClimb: they hang on instead), as
   can older builds' players (they hang on). g_vrClimb 0: hanging on only.

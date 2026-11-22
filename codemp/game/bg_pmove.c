@@ -1810,6 +1810,50 @@ qboolean BG_VRWallFind( void (*trace)( trace_t *results, const vec3_t start, con
 	return qtrue;
 }
 
+// Climbing: whether a hand at hand is at something it could climb - anything
+// solid within reach of it (a box reach every way round it: however high or
+// low, whichever way the hand's turned), so long as what's nearest it isn't
+// the sky nor anything you can't see (the nearest face the hand meets going
+// straight out from it: each of the six ways, and reachDir's if any - the way
+// it reached). Your game takes hold by it and keeps hold by it; the server
+// too, with more reach (VR_CLIMB_*: seeing your hand a moment apart).
+qboolean BG_VRClimbHandAt( void (*trace)( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
+	int passEntityNum, int contentMask ), const vec3_t hand, const vec3_t reachDir, float reach, int passEntityNum ) {
+	static const vec3_t ways[6] = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+	const vec3_t zero = { 0.0f, 0.0f, 0.0f };
+	vec3_t mins, maxs, end;
+	trace_t tr;
+	float nearest = 2.0f;
+	int flags = 0, i;
+
+	if ( !( reach > 0.0f ) ) {
+		return qfalse;
+	}
+	VectorSet( mins, -reach, -reach, -reach );
+	VectorSet( maxs, reach, reach, reach );
+	trace( &tr, hand, mins, maxs, hand, passEntityNum, VR_WALLGRIP_MASK );
+	if ( !tr.startsolid && !tr.allsolid ) {
+		return qfalse;	// (nothing solid within reach)
+	}
+	for ( i = 0; i < 7; i++ ) {
+		const float *way = ( i < 6 ) ? ways[i] : reachDir;
+
+		if ( !way || VectorLengthSquared( way ) < 0.25f ) {
+			continue;
+		}
+		VectorMA( hand, reach * 1.75f, way, end );	// (as far as the box's corners)
+		trace( &tr, hand, zero, zero, end, passEntityNum, VR_WALLGRIP_MASK );
+		if ( tr.startsolid || tr.allsolid ) {
+			return qtrue;	// (the hand in it: at it)
+		}
+		if ( tr.fraction < nearest ) {
+			nearest = tr.fraction;
+			flags = tr.surfaceFlags;
+		}
+	}
+	return (qboolean)!( flags & ( SURF_SKY | SURF_NODRAW ) );	// (none met going straight out: something solid off its corner)
+}
+
 // Whether they're hanging on to a wall they grip (not the game's own wall
 // jump, its grip held since letting go: PM_CheckJump's).
 static qboolean PM_VRWallHolding( void ) {

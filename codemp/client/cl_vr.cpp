@@ -636,6 +636,7 @@ typedef struct vrState_s {
 	int						wheelPressTime;	// ...pressed then (ms)
 	int						grabZones;		// hands the cgame says could grab now (bit per hand)...
 	int						grabZoneTime;	// ...as of this cls.realtime
+	int						grabCatch;		// ...of them, those that catch hold squeezed already (VR_GRAB_CATCH: climbing)
 	int						gunHoldHand;	// your other hand on the gun in your gun hand, as the cgame says...
 	int						gunHoldHow;		// ...how (VR_GUN_HOLD_*)...
 	float					gunHoldBore[2];	// ...the line it's held along from the gun hand's grip, to its left and up
@@ -1809,6 +1810,12 @@ static qboolean VR_GrabZone( int h ) {
 		cls.realtime - vr.grabZoneTime >= 0 && cls.realtime - vr.grabZoneTime < 200 );
 }
 
+// Whether hand h, its grip squeezed already, takes hold as it gets there (a
+// climbing zone: VR_GRAB_CATCH) - whatever its squeeze was doing let go of.
+static qboolean VR_GrabCatch( int h ) {
+	return (qboolean)( VR_GrabZone( h ) && ( vr.grabCatch & VR_GRAB_CATCH( h ) ) );
+}
+
 static void VR_SetKey( int key, qboolean down ) {
 	const int gripHand = VR_GripHand( key );
 
@@ -2653,15 +2660,32 @@ static float VR_GripPress( void ) {
 
 static qboolean VR_ForceTakesTrigger( int h );
 
+// What hand h's grip squeeze is doing let go of - its key, the Force reaching
+// out (not a quick squeeze: no Use Force), a cockpit's way out - the grip
+// itself as though open (VR_HandControl: catching hold of a wall).
+static void VR_GripLetGo( int h ) {
+	const int key = vr.ctlKey[VR_CTL_GRIP][h] - 1;
+
+	if ( vr.forceGrip && !vr.forceByX && vr.forceGripHand == h ) {
+		VR_ForceDrop();
+	}
+	if ( key >= 0 ) {
+		VR_SetKey( key, qfalse );
+		vr.ctlKey[VR_CTL_GRIP][h] = 0;
+	}
+	vr.ctlDown[VR_CTL_GRIP][h] = qfalse;
+}
+
 // Hand h's trigger or grip, read as value (0..1): pressed past VR_TRIGGER_PRESS
 // - a grip past vr_gripPress, unless it's squeezed afresh where it can take
-// hold of something (VR_GrabZone: it grabs, VR_SetKey) - let go under 0.4 (a
-// grip held as a grab that holds, under VR_GRAB_LET_GO). Pressed, it presses
+// hold of something (VR_GrabZone: it grabs, VR_SetKey), or squeezed already
+// as it gets where it catches hold (VR_GrabCatch: climbing) - let go under 0.4
+// (a grip held as a grab that holds, under VR_GRAB_LET_GO). Pressed, it presses
 // the key for what it does then (the other one if the other hand's is
 // pressing that already); let go, that key goes up. (The Force hand's trigger
 // pressed while its Force grip's held is the gestures', and presses nothing.)
 static void VR_HandControl( int control, int h, float value ) {
-	const qboolean was = vr.ctlDown[control][h];
+	qboolean was = vr.ctlDown[control][h];
 	const float letGo = ( control == VR_CTL_GRIP && vr.grabbing[h] && vr.grabHolds ) ? VR_GRAB_LET_GO : 0.4f;
 	float pressAt = VR_TRIGGER_PRESS;
 	int key;
@@ -2669,6 +2693,16 @@ static void VR_HandControl( int control, int h, float value ) {
 	if ( control == VR_CTL_GRIP ) {
 		if ( value <= 0.4f ) {
 			vr.gripFresh[h] = qtrue;	// (let go: the next squeeze is a fresh one)
+		}
+		if ( !vr.grabbing[h] && value > VR_TRIGGER_PRESS && VR_GrabCatch( h ) ) {
+			// squeezed already as it gets where it catches hold (climbing: a
+			// wall reached with your hand closed) - whatever the squeeze was
+			// doing let go of, it takes hold now, as though squeezed afresh there
+			if ( was ) {
+				VR_GripLetGo( h );
+				was = qfalse;
+			}
+			vr.gripFresh[h] = qtrue;
 		}
 		if ( !was ) {
 			if ( !vr.gripFresh[h] || !VR_GrabZone( h ) ) {
@@ -5393,6 +5427,7 @@ void VR_Haptic( int hand, float seconds, float amplitude ) {
 void VR_SetGrabZones( int handMask ) {
 	vr.grabZones = handMask & ( ( 1 << VR_HAND_LEFT ) | ( 1 << VR_HAND_RIGHT ) );
 	vr.grabHolds = ( handMask & VR_GRAB_HOLDS ) ? qtrue : qfalse;
+	vr.grabCatch = handMask & ( VR_GRAB_CATCH( VR_HAND_LEFT ) | VR_GRAB_CATCH( VR_HAND_RIGHT ) );
 	vr.grabZoneTime = cls.realtime;
 }
 

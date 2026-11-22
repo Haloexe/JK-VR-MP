@@ -7712,7 +7712,7 @@ void CG_VR_BodyEndFrame( void ) {
 	CG_VR_WalkerFrame( vr );	// (an AT-ST's cockpit: its yoke, what's drawn of it - cg_vrwalker.c)
 	if ( CG_VR_Engine() && trap->ext.VR_SetGrabZones ) {
 		trap->ext.VR_SetGrabZones( ( ( vr && vrb.twoHandTime == cg.time ) ? vrb.grabZones : 0 ) | CG_VRH_Zones() | CG_VR_GunZones() |
-			CG_VR_WallZones() | CG_VR_SaberDropZones() | CG_VR_WalkerZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
+			CG_VR_WallZones() | CG_VR_WallCatch() | CG_VR_SaberDropZones() | CG_VR_WalkerZones() | ( CG_VRH_GripHolds() ? VR_GRAB_HOLDS : 0 ) );
 	}
 	// (holsters: the rules your commands go by, and their markers - cg_vrholster.c)
 	CG_VRH_SayButtons();

@@ -19,7 +19,7 @@ General Public License version 2, like the rest of OpenJK.
 
 #pragma once
 
-#define VR_ENGINE_TAG			"openjkvr-27"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
+#define VR_ENGINE_TAG			"openjkvr-28"	// -3: ext.VR_G2SetModelHidden, -4: ext.VR_G2SetBoneTransform,
 												// -5: ext.VR_SetUserPose, ext.VR_Haptic,
 												// -6: ext.VR_SetGrabZones, vrClientState_t.grabbing,
 												// -7: vrUserPose_t.avatar, ext.VR_SetAvatar (game),
@@ -81,6 +81,8 @@ General Public License version 2, like the rest of OpenJK.
 												// -27: ext.VR_SetClimb (climbing: how your hands
 												//     move you, into each command's moves -
 												//     VR_CLIMB_*)
+												// -28: VR_GRAB_CATCH (climbing: a hand catches
+												//     hold squeezed already as it gets there)
 
 // ext.VR_SetCockpit( cockpit ): you sit in a cockpit (an AT-ST's, driving it:
 // cg_vrwalker.c) - said every frame; NULL, or unsaid a moment, you don't.
@@ -162,6 +164,9 @@ typedef struct vrCockpitScreens_s {
 // taken hold of (holsters, Saber Grip: Hold) - a grab is let go of only once
 // the hand's mostly open
 #define VR_GRAB_HOLDS			( 1 << 2 )
+// ...and hand h, squeezed already (whatever its squeeze was doing let go of),
+// takes hold as it gets there - its zone a climbing one: VR_GRAB_CATCH( h )
+#define VR_GRAB_CATCH( h )		( 1 << ( 3 + ( h ) ) )
 
 // The HUD on your wrist (vrClientState_t.hudWrist): its picture is this many
 // times as wide as it's tall - all the width of the 640x480 screen, and the

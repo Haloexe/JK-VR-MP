@@ -17,12 +17,14 @@ player's game's: cg_vrwall.c).
   from anyone else - bots, desktop players (+button15), a server with it
   off: the grip's taken out of the command.
 - Climbing (a server saying 2, a player whose userinfo says cg_vrClimb 1:
-  G_VRClimbs - pmove.vrClimb), the hand that takes hold is at anything
-  solid they can see (not the sky, not the invisible), on the ground or
-  off it; the grip's commands' moves are how fast their hands move them
-  (vr_public.h VR_CLIMB_*), taken out with the grip when it is. Holding
-  on, a hand of theirs must be at something every so often
-  (VRW_CLIMB_GRACE), or they're let go of as though knocked off.
+  G_VRClimbs - pmove.vrClimb), the hand that takes hold is within reach of
+  anything solid they can see (not the sky, not the invisible: bg_pmove.c
+  BG_VRClimbHandAt, the same as their game's with more reach), on the
+  ground or off it, however high or low; the grip's commands' moves are how
+  fast their hands move them (vr_public.h VR_CLIMB_*), taken out with the
+  grip when it is. Holding on, a hand of theirs must be within reach of
+  something every so often (VRW_CLIMB_GRACE), or they're let go of as
+  though knocked off.
 - Hanging on, getting hurt or Force pushed or pulled knocks them off, as
   the game's own debug melee wall hold (g_debugMelee): g_combat.c, w_force.c.
 - Riding something, the same bit's a VR driver's yoke: g_vrwalker.c.
@@ -94,10 +96,8 @@ void G_VRWallShutdown( void ) {
 }
 
 // Whether one of a VR player's empty hands is at a wall, as their avatar
-// that came with this command has it (its hands from where they are) -
-// climbing, at anything they could climb: not the sky, nor anything they
-// can't see (as their game has it: cg_vrwall.c CG_VRW_At).
-static qboolean G_VRWallHandAt( gentity_t *ent, qboolean climbing ) {
+// that came with this command has it (its hands from where they are).
+static qboolean G_VRWallHandAt( gentity_t *ent ) {
 	const gclient_t *cl = ent->client;
 	vrAvatar_t a;
 	vec3_t eye, hand, dir, end;
@@ -120,7 +120,40 @@ static qboolean G_VRWallHandAt( gentity_t *ent, qboolean climbing ) {
 		}
 		VectorMA( hand, VRW_TOUCH, dir, end );
 		trap->Trace( &tr, eye, NULL, NULL, end, ent->s.number, VR_WALLGRIP_MASK, qfalse, 0, 0 );
-		if ( tr.fraction < 1.0f && !tr.startsolid && !( climbing && ( tr.surfaceFlags & ( SURF_SKY | SURF_NODRAW ) ) ) ) {
+		if ( tr.fraction < 1.0f && !tr.startsolid ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+// (the game's traces, as the rules shared with your game take them: bg_pmove.c BG_VRClimbHandAt)
+static void G_VRWallTrace( trace_t *tr, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int pass, int mask ) {
+	trap->Trace( tr, start, mins, maxs, end, pass, mask, qfalse, 0, 0 );
+}
+
+// Climbing: whether one of a VR player's empty hands, as their avatar that came
+// with this command has it, is within reach of something they could climb
+// (BG_VRClimbHandAt: anything solid they can see, however high or low the hand).
+static qboolean G_VRClimbHandAt( gentity_t *ent, float reach ) {
+	const gclient_t *cl = ent->client;
+	vrAvatar_t a;
+	vec3_t eye, hand, dir;
+	int h;
+
+	if ( !G_VRSaberAvatar( ent->s.number, &a ) ) {
+		return qfalse;
+	}
+	VectorCopy( cl->ps.origin, eye );
+	eye[2] += cl->ps.viewheight;
+	for ( h = 0; h < 2; h++ ) {
+		if ( a.hand[h].grip != VR_GRIP_FREE ) {
+			continue;
+		}
+		VectorAdd( cl->ps.origin, a.hand[h].origin, hand );
+		VectorSubtract( hand, eye, dir );
+		VectorNormalize( dir );
+		if ( BG_VRClimbHandAt( G_VRWallTrace, hand, dir, reach, ent->s.number ) ) {
 			return qtrue;
 		}
 	}
@@ -162,10 +195,15 @@ void G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd ) {
 		return;
 	}
 	if ( G_VRClimbs( ent ) ) {
-		if ( G_VRWallHandAt( ent, qtrue ) ) {
+		if ( !( ent->client->ps.pm_flags & PMF_VR_WALLGRIP ) ) {
+			// taking hold: a hand at something they could climb
+			if ( G_VRClimbHandAt( ent, VR_CLIMB_TOUCH_SERVER ) ) {
+				vrClimbTouch[n] = level.time;
+			} else {
+				G_VRWallStrip( ent, ucmd );	// (taking hold of nothing)
+			}
+		} else if ( G_VRClimbHandAt( ent, VR_CLIMB_HOLD_SERVER ) ) {
 			vrClimbTouch[n] = level.time;
-		} else if ( !( ent->client->ps.pm_flags & PMF_VR_WALLGRIP ) ) {
-			G_VRWallStrip( ent, ucmd );	// (taking hold of nothing)
 		} else if ( ( ent->client->ps.pm_flags & PMF_STUCK_TO_WALL ) && level.time - vrClimbTouch[n] > VRW_CLIMB_GRACE ) {
 			G_LetGoOfWall( ent );	// (holding on to nothing a while)
 		}
@@ -174,7 +212,7 @@ void G_VRWallCmd( gentity_t *ent, usercmd_t *ucmd ) {
 	if ( ent->client->ps.pm_flags & PMF_VR_WALLGRIP ) {
 		return;
 	}
-	if ( !G_VRWallHandAt( ent, qfalse ) ) {
+	if ( !G_VRWallHandAt( ent ) ) {
 		G_VRWallStrip( ent, ucmd );
 	}
 }

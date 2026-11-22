@@ -1938,6 +1938,7 @@ qboolean CG_VR_AvatarFreeHand( int h, vec3_t at );	// (cg_vrbody.c: ...that hand
 // cg_vrwall.c (hanging on to a wall)
 void		CG_VR_WallFrame( const vrClientState_t *vr );
 int			CG_VR_WallZones( void );
+int			CG_VR_WallCatch( void );
 int			CG_VR_WallButtons( void );
 const vrClimb_t	*CG_VR_WallClimb( void );
 qboolean	CG_VR_Climbs( void );

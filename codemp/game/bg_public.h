@@ -1800,6 +1800,15 @@ qboolean	BG_VRAirCrouch( int groundEntityNum, qboolean crouched, int legsAnim );
 qboolean	BG_VRWallFind( void (*trace)( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 				int passEntityNum, int contentMask ), const vec3_t origin, const vec3_t boxMins, const vec3_t boxMaxs, int passEntityNum,
 				vec3_t normal );
+// OpenJK VR: climbing - a hand within this of something it can climb takes
+// hold (a box this far every way round it: your game's; the server's, more,
+// seeing it a moment apart), and keeps hold within this (BG_VRClimbHandAt)
+#define VR_CLIMB_TOUCH			7.0f
+#define VR_CLIMB_TOUCH_SERVER	12.0f
+#define VR_CLIMB_HOLD			16.0f
+#define VR_CLIMB_HOLD_SERVER	20.0f
+qboolean	BG_VRClimbHandAt( void (*trace)( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
+				int passEntityNum, int contentMask ), const vec3_t hand, const vec3_t reachDir, float reach, int passEntityNum );
 
 qboolean BG_InSpecialJump( int anim );
 qboolean BG_InSaberStandAnim( int anim );

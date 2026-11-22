@@ -17,20 +17,26 @@ server's: g_vrwall.c).
 
 Climbing (a server saying "vrWallGrip 2", cg_vrClimb on - CG_VR_Climbs):
 
-- An empty hand at anything solid you can see (not the sky, not the
-  invisible: CG_VRW_At), on the ground or off it, in water or out, takes
-  hold of it with a squeeze - where it is then (its hold: vrw.anchor).
+- An empty hand within reach of anything solid you can see (VR_CLIMB_TOUCH
+  every way round it, however high or low, whichever way it's turned - not
+  the sky, not the invisible: bg_pmove.c BG_VRClimbHandAt), on the ground or
+  off it, in water or out, takes hold of it with a squeeze - or, off the
+  ground or your other hand holding on, squeezed already as it gets there
+  (the engine catches hold: VR_GRAB_CATCH) - where it is then (its hold:
+  vrw.anchor). A light tick in the hand as it comes within reach: a squeeze
+  there takes hold.
 - While a hand holds on, your body moves to keep it there: pull down and
   you go up, push away and you go back, along and you shimmy - each frame,
   how fast your hands move you (the hand's own movement, and what's left to
   catch up: VRW_TAU) goes to the engine (VR_SetClimb), which sends it in
   your commands' moves with the grip (vr_public.h VR_CLIMB_*); the game
   moves you by it, as the server does (no falling meanwhile, nor the sticks
-  moving you). Hand over hand: each hand holds on where it took hold.
+  moving you). Hand over hand: the hand that took hold last leads, the
+  other one (still holding on) following along - no tug between them.
 - A hand pulled further than VRW_SLACK from its hold (your body stopped by
   something, your view turned) slips: its hold comes along with it. A hand
-  at nothing a while (VRW_LOSE_MS) loses its hold - the server lets go of
-  you a little later, holding on to nothing.
+  nowhere near anything (VR_CLIMB_HOLD) a while (VRW_LOSE_MS) loses its hold
+  - the server lets go of you a little later, holding on to nothing.
 - Pushing on into a low wall (its top no higher than VRW_LEDGE over your
   feet, somewhere to stand there): you're lifted up on to it - your holds
   coming up with you meanwhile, not pulling you back down.
@@ -50,8 +56,9 @@ General Public License version 2, like the rest of OpenJK.
 #define VRW_TOUCH		8.0f	// a hand this near a wall (units past it, reaching from your eyes) is at it
 #define VRW_WORD_MS		100		// zones said this lately are still offered
 
-#define VRW_HOLD_TOUCH	16.0f	// climbing, holding on: a hand this near something is still at it (the server's own: g_vrwall.c)
-#define VRW_LOSE_MS		1000	// ...at nothing this long, it loses its hold (the server lets go of you at 1500)
+#define VRW_LOSE_MS		1000	// climbing, holding on: a hand nowhere near anything this long loses its hold (VR_CLIMB_HOLD;
+								// the server lets go of you at 1500, VR_CLIMB_HOLD_SERVER)
+#define VRW_TICK_MS		300		// a hand's tick as it comes within reach of something: no more often than this
 #define VRW_SLACK		6.0f	// climbing: a hand kept this near its hold - pulled further, the hold slips with it
 #define VRW_TAU			0.08f	// seconds: your body catches up with your hands' holds this quickly (what's left of it)
 #define VRW_LEDGE		48.0f	// a ledge's top no higher than this over your feet: pushing on into it lifts you on to it...
@@ -71,8 +78,10 @@ static struct {
 	// climbing
 	qboolean	climbs;			// climbing this frame (CG_VRW_Climbs)
 	qboolean	spent[2];		// held, but its hold lost since (knocked off, jumped off, at nothing): none till squeezed afresh
-	vec3_t		anchor[2];		// where the hand holds on (world) - your body keeps it there
+	vec3_t		anchor[2];		// where the hand holds on (world) - your body keeps it there (the leading hand's)
+	int			grabTime[2];	// when it took hold (cg.time): the last to take hold leads
 	int			touchTime[2];	// the hand last at something (cg.time)
+	int			tickTime[2];	// its tick, coming within reach of something, last (cg.time)
 	vec3_t		gripWas[2];		// the hand as tracked last frame (render space)...
 	int			gripTime[2];	// ...as of then (cg.time; 0: none)
 	vrClimb_t	climb;			// how fast your hands move you, said with your buttons (VR_SetClimb)
@@ -139,20 +148,15 @@ static qboolean CG_VRW_HandAt( const vec3_t hand, const vec3_t normal ) {
 	return (qboolean)( tr.fraction < 1.0f && !tr.startsolid && DotProduct( tr.plane.normal, normal ) > 0.7f );
 }
 
-// Climbing: whether a hand at hand (world) is at something you could climb -
-// reached from your eyes, something solid at the hand or within touch past it,
-// not the sky nor anything you can't see (as the server has it: g_vrwall.c).
-static qboolean CG_VRW_At( const vec3_t hand, float touch ) {
-	vec3_t dir, end;
-	trace_t tr;
+// Climbing: whether a hand at hand (world) is within reach of something you
+// could climb (bg_pmove.c BG_VRClimbHandAt - as the server has it, with more
+// reach: g_vrwall.c) - reach VR_CLIMB_TOUCH taking hold, VR_CLIMB_HOLD holding on.
+static qboolean CG_VRW_At( const vec3_t hand, float reach ) {
+	vec3_t dir;
 
 	VectorSubtract( hand, cg.refdef.vieworg, dir );
-	if ( VectorNormalize( dir ) < 1.0f ) {
-		return qfalse;
-	}
-	VectorMA( hand, touch, dir, end );
-	CG_Trace( &tr, cg.refdef.vieworg, NULL, NULL, end, cg.clientNum, VR_WALLGRIP_MASK );
-	return (qboolean)( tr.fraction < 1.0f && !tr.startsolid && !( tr.surfaceFlags & ( SURF_SKY | SURF_NODRAW ) ) );
+	VectorNormalize( dir );
+	return BG_VRClimbHandAt( CG_Trace, hand, dir, reach, cg.clientNum );
 }
 
 // Whether a hand of yours holds on, climbing.
@@ -217,23 +221,23 @@ static float CG_VRW_Lift( const vec3_t vel ) {
 }
 
 // Climbing, once a frame (CG_VR_WallFrame): how fast your hands move you
-// (vrw.climb) - to keep each hand that holds on at its hold. The hand's own
-// movement (as tracked, since last frame: your view turning doesn't count)
-// and what's left to catch up (VRW_TAU) - a hand pulled further than
-// VRW_SLACK from its hold slipping, its hold coming with it.
+// (vrw.climb) - to keep the hand that took hold last at its hold (any other
+// holding on follows along, its hold coming with it: no tug between them).
+// The hand's own movement (as tracked, since last frame: your view turning
+// doesn't count) and what's left to catch up (VRW_TAU) - a hand pulled
+// further than VRW_SLACK from its hold slipping, its hold coming with it.
+// Each hand holding on has to be near something now and then, or it loses
+// its hold.
 static void CG_VRW_Climb( const vrClientState_t *vr ) {
 	const float turn = vr ? DEG2RAD( VR_AxisYaw( cg.refdef.viewaxis ) - vr->referenceYaw ) : 0.0f;
 	const float c = cosf( turn ), s = sinf( turn );
-	vec3_t hand[2], err[2], ff, vel, at;
+	vec3_t hand[2], err, ff, vel, at;
 	qboolean holds[2] = { qfalse, qfalse };
-	float lift, speed;
-	int h, n = 0;
+	float lift, speed, len;
+	int h, lead = -1;
 
 	VectorClear( vrw.climb.vel );
-	VectorClear( ff );
 	for ( h = 0; h < 2; h++ ) {
-		float len;
-
 		if ( !vrw.held[h] || vrw.spent[h] ) {
 			vrw.gripTime[h] = 0;
 			continue;
@@ -242,51 +246,55 @@ static void CG_VRW_Climb( const vrClientState_t *vr ) {
 			vrw.gripTime[h] = 0;	// (not tracked a moment: holding on as it was)
 			continue;
 		}
-		// still at something now and then (the server's word too)
-		if ( CG_VR_AvatarFreeHand( h, at ) && CG_VRW_At( at, VRW_HOLD_TOUCH ) ) {
+		// still near something now and then (the server's word too)
+		if ( CG_VR_AvatarFreeHand( h, at ) && CG_VRW_At( at, VR_CLIMB_HOLD ) ) {
 			vrw.touchTime[h] = cg.time;
 		} else if ( cg.time - vrw.touchTime[h] > VRW_LOSE_MS || cg.time - vrw.touchTime[h] < 0 ) {
 			CG_VRW_Lose( h, "at nothing" );
 			CG_VR_Feel( h, 0.3f, 30, 0.1f, 80 );
 			continue;
 		}
-		VectorSubtract( vrw.anchor[h], hand[h], err[h] );
-		len = VectorLength( err[h] );
-		if ( len > VRW_SLACK ) {
-			VectorMA( vrw.anchor[h], -( 1.0f - VRW_SLACK / len ), err[h], vrw.anchor[h] );
-			VectorScale( err[h], VRW_SLACK / len, err[h] );
-		}
-		// the hand's own movement since last frame, as tracked (render space,
-		// metres: into the world's way round and units)
-		if ( vrw.gripTime[h] && cg.time - vrw.gripTime[h] > 0 && cg.time - vrw.gripTime[h] <= 100 ) {
-			const float k = vr->worldScale * 1000.0f / ( cg.time - vrw.gripTime[h] );
-			vec3_t d;
-
-			VectorSubtract( vr->gripOrigin[h], vrw.gripWas[h], d );
-			ff[0] -= ( d[0] * c - d[1] * s ) * k;
-			ff[1] -= ( d[0] * s + d[1] * c ) * k;
-			ff[2] -= d[2] * k;
-		}
-		VectorCopy( vr->gripOrigin[h], vrw.gripWas[h] );
-		vrw.gripTime[h] = cg.time;
 		holds[h] = qtrue;
-		n++;
+		if ( lead < 0 || vrw.grabTime[h] - vrw.grabTime[lead] > 0 ) {
+			lead = h;
+		}
 	}
 	vrw.lifting = qfalse;
-	if ( !n ) {
+	if ( lead < 0 ) {
 		vrw.liftTime = 0;
 		return;
 	}
-	VectorClear( vel );
 	for ( h = 0; h < 2; h++ ) {
-		if ( holds[h] ) {
-			VectorMA( vel, 1.0f / VRW_TAU, err[h], vel );
+		if ( holds[h] && h != lead ) {
+			// (following along: its hold where it is - leading next, from there)
+			VectorCopy( hand[h], vrw.anchor[h] );
+			VectorCopy( vr->gripOrigin[h], vrw.gripWas[h] );
+			vrw.gripTime[h] = 0;
 		}
 	}
-	VectorAdd( vel, ff, vel );
-	VectorScale( vel, 1.0f / n, vel );
+	VectorSubtract( vrw.anchor[lead], hand[lead], err );
+	len = VectorLength( err );
+	if ( len > VRW_SLACK ) {
+		VectorMA( vrw.anchor[lead], -( 1.0f - VRW_SLACK / len ), err, vrw.anchor[lead] );
+		VectorScale( err, VRW_SLACK / len, err );
+	}
+	// the hand's own movement since last frame, as tracked (render space,
+	// metres: into the world's way round and units)
+	VectorClear( ff );
+	if ( vrw.gripTime[lead] && cg.time - vrw.gripTime[lead] > 0 && cg.time - vrw.gripTime[lead] <= 100 ) {
+		const float k = vr->worldScale * 1000.0f / ( cg.time - vrw.gripTime[lead] );
+		vec3_t d;
 
-	// pushing on into a low wall: lifted on to it, your holds coming up with
+		VectorSubtract( vr->gripOrigin[lead], vrw.gripWas[lead], d );
+		ff[0] = -( d[0] * c - d[1] * s ) * k;
+		ff[1] = -( d[0] * s + d[1] * c ) * k;
+		ff[2] = -d[2] * k;
+	}
+	VectorCopy( vr->gripOrigin[lead], vrw.gripWas[lead] );
+	vrw.gripTime[lead] = cg.time;
+	VectorMA( ff, 1.0f / VRW_TAU, err, vel );
+
+	// pushing on into a low wall: lifted on to it, your hold coming up with
 	// you (not pulling you back down - nor a moment after: VRW_LIFT_HOLD)
 	lift = CG_VRW_Lift( vel );
 	if ( lift > 0.0f ) {
@@ -294,11 +302,9 @@ static void CG_VRW_Climb( const vrClientState_t *vr ) {
 	}
 	if ( vrw.liftTime && cg.time - vrw.liftTime >= 0 && cg.time - vrw.liftTime < VRW_LIFT_HOLD ) {
 		vrw.lifting = qtrue;
-		for ( h = 0; h < 2; h++ ) {
-			if ( holds[h] && err[h][2] < 0.0f ) {
-				vrw.anchor[h][2] -= err[h][2];
-				vel[2] -= err[h][2] / ( VRW_TAU * n );
-			}
+		if ( err[2] < 0.0f ) {
+			vrw.anchor[lead][2] -= err[2];
+			vel[2] -= err[2] / VRW_TAU;
 		}
 		vel[2] = Q_max( vel[2], lift );
 	} else {
@@ -329,7 +335,7 @@ void CG_VR_WallFrame( const vrClientState_t *vr ) {
 	const qboolean climbs = (qboolean)( on && CG_VRW_Climbs() );
 	vec3_t normal, hand;
 	qboolean wall = qfalse;
-	int h;
+	int h, wasZones;
 
 	if ( vrw.time == cg.time ) {
 		return;	// (the second eye: as worked out)
@@ -371,6 +377,7 @@ void CG_VR_WallFrame( const vrClientState_t *vr ) {
 			vrw.held[h] = qtrue;
 			vrw.spent[h] = qfalse;
 			vrw.gripTime[h] = 0;
+			vrw.grabTime[h] = cg.time;	// (climbing: it leads from now)
 			CG_VR_BlockGrab( h );
 			CG_VR_Feel( h, 0.6f, 40, 0.2f, 120 );
 			if ( climbs && CG_VR_HandGrip( h, vrw.anchor[h], NULL ) ) {
@@ -401,7 +408,9 @@ void CG_VR_WallFrame( const vrClientState_t *vr ) {
 	}
 
 	// where a squeeze takes hold now: an empty hand, in no other grab's zone,
-	// at a wall you could hang on to - climbing, at anything you can climb
+	// at a wall you could hang on to - climbing, within reach of anything you
+	// can climb (a light tick in the hand as it gets there)
+	wasZones = vrw.zones;
 	vrw.zones = 0;
 	if ( on && vr && !climbs ) {
 		wall = CG_VRW_Wall( normal );
@@ -410,8 +419,13 @@ void CG_VR_WallFrame( const vrClientState_t *vr ) {
 		if ( vrw.held[h] || !vr->handValid[h] || ( others & ( 1 << h ) ) || !CG_VR_AvatarFreeHand( h, hand ) ) {
 			continue;
 		}
-		if ( climbs ? CG_VRW_At( hand, VRW_TOUCH ) : ( wall && CG_VRW_HandAt( hand, normal ) ) ) {
+		if ( climbs ? CG_VRW_At( hand, VR_CLIMB_TOUCH ) : ( wall && CG_VRW_HandAt( hand, normal ) ) ) {
 			vrw.zones |= 1 << h;
+			if ( climbs && !( wasZones & ( 1 << h ) ) && ( !vrw.tickTime[h] || cg.time - vrw.tickTime[h] >= VRW_TICK_MS ||
+				cg.time - vrw.tickTime[h] < 0 ) ) {
+				CG_VR_Feel( h, 0.2f, 20, 0.0f, 0 );
+				vrw.tickTime[h] = cg.time ? cg.time : 1;
+			}
 		}
 	}
 	vrw.zoneTime = cg.time;
@@ -421,6 +435,26 @@ void CG_VR_WallFrame( const vrClientState_t *vr ) {
 // told (VR_SetGrabZones).
 int CG_VR_WallZones( void ) {
 	return ( cg.time - vrw.zoneTime >= 0 && cg.time - vrw.zoneTime <= VRW_WORD_MS ) ? vrw.zones : 0;
+}
+
+// ...climbing, those that catch hold squeezed already as they get there
+// (VR_GRAB_CATCH( h ): what the squeeze was doing let go of) - off the
+// ground, or your other hand holding on. (On the ground, holding on to
+// nothing, a grip held is busy with its own work - the Force reaching out,
+// Use held at a panel - and a hand near a wall doesn't take that away: a
+// squeeze there takes hold.) For the engine with them.
+int CG_VR_WallCatch( void ) {
+	const int zones = vrw.climbs ? CG_VR_WallZones() : 0;
+	const qboolean airborne = (qboolean)( cg.predictedPlayerState.groundEntityNum == ENTITYNUM_NONE );
+	int h, catches = 0;
+
+	for ( h = 0; h < 2; h++ ) {
+		const int other = ( h == VR_HAND_LEFT ) ? VR_HAND_RIGHT : VR_HAND_LEFT;
+		if ( ( zones & ( 1 << h ) ) && ( airborne || ( vrw.held[other] && !vrw.spent[other] ) ) ) {
+			catches |= VR_GRAB_CATCH( h );
+		}
+	}
+	return catches;
 }
 
 // What your commands say of it (VR_SetCmdButtons, with the holsters'):
