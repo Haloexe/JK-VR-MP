@@ -423,19 +423,21 @@ typedef struct vrSwapchain_s {
 	XrSwapchain					handle;
 	uint32_t					imageCount;
 	XrSwapchainImageOpenGLKHR	*images;
-	GLuint						*fbos;		// for the glBlitFramebuffer fallback (or drawn into: the wrist's)
+	GLuint						*fbos;		// for the glBlitFramebuffer fallback
 } vrSwapchain_t;
 
 // The HUD on your wrist (vr_hudWrist, VR_WristFrame): its picture (pixels:
 // VR_WRIST_ASPECT, vr_public.h) and how big it's shown (metres), on the back
 // of the wrist of the hand your guns aren't in - this far from that hand's
-// grip toward your elbow, and out toward the back of your hand
+// grip toward your elbow, and out toward the back of your hand. A corner of it
+// nearer an eye's plane than this (metres) isn't drawn in that eye's picture.
 #define VR_WRIST_W			512
 #define VR_WRIST_H			256
 #define VR_WRIST_WIDTH		0.12f
 #define VR_WRIST_HEIGHT		0.06f
 #define VR_WRIST_BACK		0.07f
 #define VR_WRIST_OUT		0.055f
+#define VR_WRIST_EYE_NEAR	0.01f
 
 // The cgame's tints across the whole view an eye keeps (VR_TintView): more said
 // than this, the rest aren't (the game has six at most)
@@ -477,11 +479,11 @@ typedef struct vrState_s {
 	int64_t					colorFormat;
 	vrSwapchain_t			swapchains[2];
 
-	// the HUD on your wrist (vr_hudWrist): its picture and its swapchain (made
-	// with the eyes'; qfalse: either couldn't be, the HUD stays in front of you)
+	// the HUD on your wrist (vr_hudWrist): its picture (made with the eyes';
+	// qfalse: it couldn't be, the HUD stays in front of you) - drawn into the
+	// eyes' pictures where your wrist is (VR_DrawWristInEye)
 	qboolean				wristReady;
 	vrTarget_t				wristTarget;
-	vrSwapchain_t			wristSwapchain;
 	int						screenFrame;	// VR_UpdateScreen's frames, counted
 	int						wristAsked;		// the cgame said the status is there to show in this one...
 	float					wristTop, wristBottom;	// ...in this strip of its screen (VR_SetWristHud)
@@ -1234,9 +1236,7 @@ static int64_t VR_ChooseColorFormat( void ) {
 	return chosen;
 }
 
-// drawn: framebuffers for its images always (else only for the
-// glBlitFramebuffer fallback, VR_CopyToSwapchain)
-static qboolean VR_CreateSwapchain( vrSwapchain_t *sc, int width, int height, qboolean drawn ) {
+static qboolean VR_CreateSwapchain( vrSwapchain_t *sc, int width, int height ) {
 	memset( sc, 0, sizeof( *sc ) );
 
 	XrSwapchainCreateInfo sci;
@@ -1266,24 +1266,15 @@ static qboolean VR_CreateSwapchain( vrSwapchain_t *sc, int width, int height, qb
 		return qfalse;
 	}
 
-	if ( !vglCopyImageSubData || drawn ) {
-		// fallback: blit into the swapchain images through framebuffers (or
-		// draw into them)
-		qboolean complete = qtrue;
+	if ( !vglCopyImageSubData ) {
+		// fallback: blit into the swapchain images through framebuffers
 		sc->fbos = (GLuint *)Z_Malloc( sizeof( GLuint ) * sc->imageCount, TAG_CLIENTS, qtrue );
 		vglGenFramebuffers( sc->imageCount, sc->fbos );
 		for ( uint32_t i = 0; i < sc->imageCount; i++ ) {
 			vglBindFramebuffer( VR_GL_FRAMEBUFFER, sc->fbos[i] );
 			vglFramebufferTexture2D( VR_GL_FRAMEBUFFER, VR_GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sc->images[i].image, 0 );
-			if ( drawn && vglCheckFramebufferStatus( VR_GL_FRAMEBUFFER ) != VR_GL_FRAMEBUFFER_COMPLETE ) {
-				complete = qfalse;
-			}
 		}
 		vglBindFramebuffer( VR_GL_FRAMEBUFFER, 0 );
-		if ( !complete ) {
-			Com_Printf( S_COLOR_YELLOW "VR: a swapchain image can't be drawn into\n" );
-			return qfalse;
-		}
 	}
 	return qtrue;
 }
@@ -3748,7 +3739,6 @@ static void VR_DestroyXrSession( void ) {
 	for ( int e = 0; e < 2; e++ ) {
 		VR_DestroySwapchain( &vr.swapchains[e] );
 	}
-	VR_DestroySwapchain( &vr.wristSwapchain );
 	vr.wristReady = qfalse;
 	if ( vr.viewSpace != XR_NULL_HANDLE ) {
 		xrDestroySpace( vr.viewSpace );
@@ -4007,7 +3997,7 @@ qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight ) {
 	vr.height = h;
 
 	for ( int e = 0; e < 2; e++ ) {
-		if ( !VR_CreateSwapchain( &vr.swapchains[e], w, h, qfalse ) || !VR_CreateTarget( &vr.targets[e], w, h ) ) {
+		if ( !VR_CreateSwapchain( &vr.swapchains[e], w, h ) || !VR_CreateTarget( &vr.targets[e], w, h ) ) {
 			vr.targetsReady = qtrue;	// so VR_DestroySession frees what was made
 			VR_DestroySession();
 			return qfalse;
@@ -4015,13 +4005,11 @@ qboolean VR_CreateSession( int *eyeWidth, int *eyeHeight ) {
 	}
 	vr.targetsReady = qtrue;
 
-	// the HUD on your wrist: its own picture, and swapchain to show it (without
-	// them, it's in front of you as ever)
-	vr.wristReady = (qboolean)( VR_CreateSwapchain( &vr.wristSwapchain, VR_WRIST_W, VR_WRIST_H, qtrue ) &&
-		VR_CreateTarget( &vr.wristTarget, VR_WRIST_W, VR_WRIST_H ) );
+	// the HUD on your wrist: its own picture, drawn into the eyes' (without it,
+	// it's in front of you as ever)
+	vr.wristReady = VR_CreateTarget( &vr.wristTarget, VR_WRIST_W, VR_WRIST_H );
 	if ( !vr.wristReady ) {
 		Com_Printf( S_COLOR_YELLOW "VR: the HUD can't go on your wrist (it stays in front of you)\n" );
-		VR_DestroySwapchain( &vr.wristSwapchain );
 		VR_DestroyTarget( &vr.wristTarget );
 	}
 	vr.wristFade = 0.0f;
@@ -5615,12 +5603,17 @@ The HUD on your wrist (vr_hudWrist: On Wrist)
 The cgame doesn't draw the HUD's status (health, armor, the Force, ammo or
 saber style, the score) in front of you then, but says as it would have that
 it's there to show, and in which strip of its 640x480 screen
-(VR_SetWristHud). Once the eyes are drawn, the frame is drawn once more for
-it: the cgame draws the status alone (vrClient.wristPass) into the wrist's
-own picture (vrRender.wristPass - that strip, all the screen's width, kept
-in proportion). It's shown on the back of the wrist of the hand your guns
-aren't in, over the eyes' picture, as you turn it to your face: it fades in
-as it turns to your eyes, near them, and out as it turns away.
+(VR_SetWristHud). Once the left eye is drawn, the frame is drawn once more
+for it: the cgame draws the status alone (vrClient.wristPass) into the
+wrist's own picture (vrRender.wristPass - that strip, all the screen's width,
+kept in proportion). It's shown on the back of the wrist of the hand your guns
+aren't in, as you turn it to your face: it fades in as it turns to your eyes,
+near them, and out as it turns away.
+
+It's drawn into each eye's picture, over all of it there (VR_DrawWristInEye),
+not handed to the compositor as a layer of its own: a quad layer beside the
+menus' floating screen (VR_EndFrame) is one some runtimes muddle - SteamVR on a
+Steam Frame showed on your wrist the last menu you'd had open instead.
 --------------------------------------------------------------------------------
 */
 
@@ -5702,43 +5695,57 @@ void VR_SetWristHud( float top, float bottom ) {
 	vr.wristBottom = bottom;
 }
 
-// The wrist's picture into its swapchain, faded as it shows - all of it,
-// its colour premultiplied by its alpha (OpenXR's way, the quad blended by
-// it: VR_EndFrame). Like VR_DrawComfort, everything of GL's this changes is
-// put back as it was.
-static qboolean VR_CopyWrist( void ) {
-	vrSwapchain_t *sc = &vr.wristSwapchain;
-	uint32_t index = 0;
+// Where the HUD on your wrist's corners fall in an eye's picture, as GL takes
+// them (x, y and w: -1..1 across and up once x and y are divided by w) - its
+// quad placed as a compositor would place it (wrist: as VR_WristShows has it),
+// seen from where the eye's picture is drawn from (eye: vr.submitPose) by that
+// eye's field of view (its tangents: vrRender.tanLeft...). Its corners in a
+// strip's order: bottom left, bottom right, top left, top right. qfalse: one
+// of them's by the eye or behind it (not drawn), or the eyes aren't located.
+static qboolean VR_WristClip( const XrPosef *wrist, const XrPosef *eye, float tl, float tr, float tu, float td, float clip[4][3] ) {
+	static const float corner[4][2] = { { -1.0f, -1.0f }, { 1.0f, -1.0f }, { -1.0f, 1.0f }, { 1.0f, 1.0f } };
+	const XrQuaternionf toEye = { -eye->orientation.x, -eye->orientation.y, -eye->orientation.z, eye->orientation.w };
 
-	XrSwapchainImageAcquireInfo ai;
-	memset( &ai, 0, sizeof( ai ) );
-	ai.type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO;
-	if ( !VR_Check( xrAcquireSwapchainImage( sc->handle, &ai, &index ), "xrAcquireSwapchainImage" ) ) {
+	if ( !( tr - tl > 0.001f ) || !( tu - td > 0.001f ) ) {
 		return qfalse;
 	}
-	XrSwapchainImageWaitInfo wi;
-	memset( &wi, 0, sizeof( wi ) );
-	wi.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO;
-	wi.timeout = XR_INFINITE_DURATION;
-	XrResult res = xrWaitSwapchainImage( sc->handle, &wi );
-	if ( res != XR_SUCCESS ) {
-		VR_Check( res, "xrWaitSwapchainImage" );
-		return qfalse;	// (can't be released; the session's being lost anyway)
+	for ( int i = 0; i < 4; i++ ) {
+		const float local[3] = { corner[i][0] * VR_WRIST_WIDTH * 0.5f, corner[i][1] * VR_WRIST_HEIGHT * 0.5f, 0.0f };
+		float d[3], e[3];
+
+		VR_XrRotate( &wrist->orientation, local, d );
+		d[0] += wrist->position.x - eye->position.x;
+		d[1] += wrist->position.y - eye->position.y;
+		d[2] += wrist->position.z - eye->position.z;
+		VR_XrRotate( &toEye, d, e );
+		const float w = -e[2];	// (how far ahead of the eye)
+		if ( !( w >= VR_WRIST_EYE_NEAR ) ) {
+			return qfalse;
+		}
+		clip[i][0] = ( 2.0f * e[0] - ( tr + tl ) * w ) / ( tr - tl );
+		clip[i][1] = ( 2.0f * e[1] - ( tu + td ) * w ) / ( tu - td );
+		clip[i][2] = w;
 	}
+	return qtrue;
+}
 
-	// an sRGB swapchain's colours are shown as they would be on a monitor:
-	// faded this much, they fade as its alpha does. (Its colours stay as the
-	// game blended them, premultiplied in its own colours: exact where it's
-	// opaque, or over dark. The compositor blends it over what's behind in
-	// light's terms, so what's half see-through comes out a little darker over
-	// bright than the HUD in front of you does - premultiplied in light's terms
-	// instead, it would be lighter, and added light, which covers nothing,
-	// would blow out.)
-	const float a = vr.wristFade;
-	const float c = ( vr.colorFormat == VR_GL_SRGB8_ALPHA8 ) ? powf( a, 1.0f / 2.2f ) : a;
+// The wrist's picture into an eye's where your wrist is from that eye
+// (VR_WristClip), over all of it there, faded as it shows - its colour
+// premultiplied by its alpha (VR_DrawWrist), blended so: in the game's own
+// colours, as the HUD in front of you is. Like VR_DrawComfort, everything of
+// GL's this changes is put back as it was, and the eye's picture's alpha
+// stays as it is.
+static void VR_DrawWristInEye( int eye ) {
+	static const float st[4][2] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 0.0f, 1.0f }, { 1.0f, 1.0f } };	// (VR_WristClip's corners)
+	const float f = vr.wristFade;
+	float clip[4][3];
 
+	if ( f < 0.01f || !VR_WristClip( &vr.wristPose, &vr.submitPose[eye], vrRender.tanLeft[eye], vrRender.tanRight[eye],
+			vrRender.tanUp[eye], vrRender.tanDown[eye], clip ) ) {
+		return;
+	}
 	VR_ComfortGL();
-	vglBindFramebuffer( VR_GL_FRAMEBUFFER, sc->fbos[index] );
+	vglBindFramebuffer( VR_GL_FRAMEBUFFER, vr.targets[eye].fbo );
 	glPushAttrib( GL_ALL_ATTRIB_BITS );	// (texture units' too, and which is active)
 	glMatrixMode( GL_PROJECTION );
 	glPushMatrix();
@@ -5789,18 +5796,21 @@ static qboolean VR_CopyWrist( void ) {
 	glDisable( GL_CLIP_PLANE0 );
 	glDisable( GL_COLOR_LOGIC_OP );
 	glDisable( GL_POLYGON_STIPPLE );
-	glDisable( GL_BLEND );
-	glDisable( VR_GL_FRAMEBUFFER_SRGB );
-	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE );
 	glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-	glViewport( 0, 0, VR_WRIST_W, VR_WRIST_H );
+	glShadeModel( GL_SMOOTH );
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_ONE, GL_ONE_MINUS_SRC_ALPHA );
+	glViewport( 0, 0, vr.width, vr.height );
 
-	glColor4f( c, c, c, a );
+	// (w as each corner's own: its picture's drawn as it lies in the world, not
+	// stretched flat across the eye's)
+	glColor4f( f, f, f, f );
 	glBegin( GL_TRIANGLE_STRIP );
-	glTexCoord2f( 0.0f, 0.0f );	glVertex2f( -1.0f, -1.0f );
-	glTexCoord2f( 1.0f, 0.0f );	glVertex2f( 1.0f, -1.0f );
-	glTexCoord2f( 0.0f, 1.0f );	glVertex2f( -1.0f, 1.0f );
-	glTexCoord2f( 1.0f, 1.0f );	glVertex2f( 1.0f, 1.0f );
+	for ( int i = 0; i < 4; i++ ) {
+		glTexCoord2f( st[i][0], st[i][1] );
+		glVertex4f( clip[i][0], clip[i][1], 0.0f, clip[i][2] );
+	}
 	glEnd();
 
 	glMatrixMode( GL_TEXTURE );
@@ -5810,17 +5820,11 @@ static qboolean VR_CopyWrist( void ) {
 	glMatrixMode( GL_MODELVIEW );
 	glPopMatrix();
 	glPopAttrib();
-	vglBindFramebuffer( VR_GL_FRAMEBUFFER, 0 );
-
-	XrSwapchainImageReleaseInfo ri;
-	memset( &ri, 0, sizeof( ri ) );
-	ri.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO;
-	xrReleaseSwapchainImage( sc->handle, &ri );
-	return qtrue;
 }
 
 // The frame drawn once more for the wrist - the cgame draws the status alone
-// - into its picture, cleared to nothing, then into its swapchain.
+// - into its picture, cleared to nothing (drawn into the eyes' pictures from
+// there: VR_DrawWristInEye).
 static qboolean VR_DrawWrist( void ) {
 	if ( !cls.cgameStarted ) {
 		return qfalse;
@@ -5838,12 +5842,12 @@ static qboolean VR_DrawWrist( void ) {
 	vrClient.wristPass = qfalse;
 	vrRender.wristPass = qfalse;
 	VR_UnbindTarget();
-	return VR_CopyWrist();
+	return qtrue;
 }
 
-// Once the eyes are drawn (and the game's own view): the status drawn for the
-// wrist, if it shows. qtrue: it's to go over the eyes this frame
-// (vr.wristPose).
+// Once the left eye is drawn (the cgame's said in drawing it what goes on your
+// wrist): the status drawn for the wrist, if it shows. qtrue: it's to go into
+// both eyes' pictures this frame (VR_DrawWristInEye, at vr.wristPose).
 static qboolean VR_WristFrame( void ) {
 	const int now = Sys_Milliseconds();
 	const float step = Com_Clamp( 0.0f, 0.1f, ( now - vr.wristFadeTime ) * 0.001f ) / VR_WRIST_FADE;
@@ -5863,9 +5867,9 @@ static qboolean VR_WristFrame( void ) {
 	return VR_DrawWrist();
 }
 
-// layer: 0 = none, 1 = stereo projection, 2 = menu quad; wrist: the HUD on
-// your wrist over the stereo projection (VR_WristFrame)
-static void VR_EndFrame( int layer, qboolean wrist ) {
+// layer: 0 = none, 1 = stereo projection, 2 = menu quad (one layer at most: the
+// HUD on your wrist is in the eyes' pictures, VR_DrawWristInEye)
+static void VR_EndFrame( int layer ) {
 	if ( !vr.frameBegun ) {
 		return;
 	}
@@ -5878,8 +5882,8 @@ static void VR_EndFrame( int layer, qboolean wrist ) {
 
 	XrCompositionLayerProjection proj;
 	XrCompositionLayerProjectionView projViews[2];
-	XrCompositionLayerQuad quad, wristQuad;
-	const XrCompositionLayerBaseHeader *layers[2];
+	XrCompositionLayerQuad quad;
+	const XrCompositionLayerBaseHeader *layers[1];
 
 	if ( layer == 1 ) {
 		memset( &proj, 0, sizeof( proj ) );
@@ -5899,23 +5903,6 @@ static void VR_EndFrame( int layer, qboolean wrist ) {
 		layers[0] = (const XrCompositionLayerBaseHeader *)&proj;
 		fei.layerCount = 1;
 		fei.layers = layers;
-		if ( wrist ) {
-			// the HUD on your wrist over it, blended by its alpha (its colour
-			// premultiplied by it: VR_CopyWrist)
-			memset( &wristQuad, 0, sizeof( wristQuad ) );
-			wristQuad.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
-			wristQuad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
-			wristQuad.space = vr.localSpace;
-			wristQuad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
-			wristQuad.subImage.swapchain = vr.wristSwapchain.handle;
-			wristQuad.subImage.imageRect.extent.width = VR_WRIST_W;
-			wristQuad.subImage.imageRect.extent.height = VR_WRIST_H;
-			wristQuad.pose = vr.wristPose;
-			wristQuad.size.width = VR_WRIST_WIDTH;
-			wristQuad.size.height = VR_WRIST_HEIGHT;
-			layers[1] = (const XrCompositionLayerBaseHeader *)&wristQuad;
-			fei.layerCount = 2;
-		}
 	} else if ( layer == 2 ) {
 		const float h = vr.quadHeight > 0.0f ? vr.quadHeight : VR_MenuHeight();
 		memset( &quad, 0, sizeof( quad ) );
@@ -5945,7 +5932,7 @@ static void VR_AbortFrame( void ) {
 	vrRender.offscreen = qfalse;
 	vrRender.wristPass = qfalse;
 	vrClient.wristPass = qfalse;
-	VR_EndFrame( 0, qfalse );
+	VR_EndFrame( 0 );
 	vr.inUpdateScreen = qfalse;
 }
 
@@ -6002,13 +5989,18 @@ qboolean VR_UpdateScreen( void ) {
 				VR_BindTarget( eye );
 				SCR_DrawScreenField( eye == 0 ? STEREO_LEFT : STEREO_RIGHT );
 				re->EndFrame( NULL, NULL );
+				if ( eye == 0 ) {
+					wrist = VR_WristFrame();	// (the HUD on your wrist's picture, if it shows - said of in drawing that eye)
+				}
+				if ( wrist ) {
+					VR_DrawWristInEye( eye );	// (over the eye's picture, where your wrist is)
+				}
 				VR_DrawComfort( eye );	// (the Comfort Vignette and Snap Fade, over it)
 				VR_UnbindTarget();
 				if ( !VR_CopyToSwapchain( eye ) ) {
 					copied = qfalse;
 				}
 			}
-			wrist = copied ? VR_WristFrame() : qfalse;	// (the HUD on your wrist, if it shows)
 			vrRender.active = qfalse;
 			if ( vr.snapTurn == VR_SNAP_TURN_TAKEN ) {
 				vr.snapTurn = VR_SNAP_TURN_DRAWN;	// (Snap Fade's turn drawn, black: it can lighten)
@@ -6040,7 +6032,7 @@ qboolean VR_UpdateScreen( void ) {
 	}
 	vr.inUpdateScreen = qfalse;
 
-	VR_EndFrame( layer, wrist );
+	VR_EndFrame( layer );
 
 	if ( vr_mirror->integer || !drawVR ) {
 		// vsync on the mirror would cap the headset at the monitor's rate

@@ -313,8 +313,11 @@ your Force hand's controller gone a while (switched off, its batteries
 flat) it comes back in front of you. The Force meter's warning sound (a
 move you hadn't the Force for) sounds whether you're looking or not. Any
 HUD goes on your wrist - the game's, a mod's, the simple one (cg_hudFiles
-1): its left part and its right part side by side. The desktop window
-doesn't show it.
+1): its left part and its right part side by side. The game draws it into
+what each eye sees, not as a panel of its own for the headset to lay over
+the view (one some headsets' software mixed up with the menu screen,
+showing the last menu you'd had open on your wrist instead), so the desktop
+window shows it too, as your left eye does.
 
 IN THE MENUS point a controller at the menu screen: the mouse cursor goes
 where it points. Your main hand points (the right; the left, left-handed);
@@ -2227,9 +2230,7 @@ KNOWN LIMITATIONS
   * Full-screen 2D effects (damage flash, fades, scope overlay) only cover
     the HUD rectangle.
   * The HUD on your wrist is drawn over everything in front of it - your
-    other hand can't cover it - and its see-through parts look a little
-    darker over bright scenery than in front of you (the headset blends it
-    in light's terms, the game in the screen's).
+    other hand can't cover it.
   * Things near the edge of your view can pop in (the game culls with its
     own, narrower field of view).
   * Name tags and the third-person dynamic crosshair are drawn at the
@@ -2281,10 +2282,11 @@ no client. Source files:
                                cg_vrbody.c CG_VR_AvatarGun - your avatar's
                                gun hand as the server's told it)
   codemp/cgame/cg_vrwrist.c    the HUD on your wrist: the status drawn for
-                               it, once more after the eyes (the engine
-                               shows it on your wrist: cl_vr.cpp
-                               VR_WristFrame; the renderer draws it into
-                               its own picture: vrRenderState_t.wristPass)
+                               it, once more after the left eye (the
+                               renderer draws it into its own picture:
+                               vrRenderState_t.wristPass; the engine draws
+                               that into both eyes' where your wrist is:
+                               cl_vr.cpp VR_WristFrame, VR_DrawWristInEye)
   codemp/cgame/cg_vrbody.c     your body: placement, facing, arm IK; the
                                blade's weight and solid blades; the blade
                                poses sent to the server, haptics

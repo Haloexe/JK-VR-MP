@@ -7,7 +7,7 @@ vrClientState_t.hudWrist), its status - your health, armor, the Force, ammo
 or saber style, the score: CG_DrawStats - isn't drawn in front of you. As it
 would have been (CG_VRW_Takes, from CG_Draw2D_HUD), the engine's told it's
 there to show, and in which strip of the 640x480 screen it is
-(ext.VR_SetWristHud). Once the eyes are drawn the engine draws the frame
+(ext.VR_SetWristHud). Once the left eye's drawn the engine draws the frame
 once more for it (vrClientState_t.wristPass), in which the status alone is
 drawn (CG_VRW_Pass, from CG_DrawActiveFrame) into the wrist's own picture:
 all the screen's width and that strip of its height, everything drawn
@@ -15,7 +15,7 @@ widened toward the edge (or the middle) its HUD menu's anchored at
 (CG_AnchorForMenu: r_aspectCorrect2D's squeeze the other way round), so the
 left HUD and the right meet on it in proportion. The engine shows it on the
 back of your Force hand's wrist (the hand without the gun) as you turn it to
-your face.
+your face, drawn into both eyes' pictures there.
 
 The strip (CG_VRW_Strip): the boxes of what the status draws - the HUD
 menus' items as the HUD files place them (any HUD's), the score's words, the
