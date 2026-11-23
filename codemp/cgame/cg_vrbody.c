@@ -7853,6 +7853,7 @@ as the first. cg_vrHaptics scales all of it (0 turns it off).
 #define VRB_FEEL_PULSE		0.03f	// s: each frame's buzz (the next frame's replaces it)
 #define VRB_CONTACT_GAP		120		// ms: out of someone this briefly and back in is the same cut
 #define VRB_CONFIRM_WINDOW	300		// ms: the game's word on a cut or a clash comes within this
+#define VRB_CUT_REPEAT		300		// ms: your blades cut the same one once in this (the game's VR_SABER_CUT_REPEAT)
 #define VRB_REACH			250.0f	// others' blades further than this from you can't meet yours
 #define VRB_BLADE_TOUCH		3.5f	// blades closer than this (their cores, and a little) meet
 #define VRB_OTHER_BLADES	16
@@ -7862,6 +7863,10 @@ as the first. cg_vrHaptics scales all of it (0 turns it off).
 // blade that feels heavier, a share of them: CG_VRB_CutScale)
 static const float	vrbCutFrom[3] = { 1.8f, 2.5f, 3.2f };
 static const float	vrbFullAt[3] = { 5.3f, 7.1f, 8.8f };
+// ...and, as the server has them too, the most a blow does (at full speed),
+// and how long (ms) a blade bounces back from a clash before it can cut
+static const float	vrbMaxDamage[3] = { 25.0f, 40.0f, 55.0f };
+static const int	vrbRecover[3] = { 150, 220, 300 };
 
 typedef struct {
 	int		start;			// cg.time it began (0: none)
@@ -7881,10 +7886,16 @@ static struct {
 	// your blade in someone, as you see it (per hand)
 	int			inEnt[2];					// who (-1: nobody)
 	int			inTime[2];					// cg.time it was last in them
+	qboolean	inTouch[2];					// ...only touching them so far (too slow to cut, or held: no blow yet)
 	int			blowEnt[2], blowTime[2];	// the last blow felt (the game's word folds into it)
+	qboolean	blowShown[2];				// ...its sound and sparks shown then too (the game's word only felt)
+	int			cutEnt[2], cutTime[2];		// the last cut (not a touch): whom, when
 	// your blade against another one, as you see it
 	qboolean	touching[2];				// this frame
 	int			knockTime[2];				// the last knock felt at once
+	qboolean	knockShown[2];				// ...its sound and sparks shown then too, there
+	vec3_t		knockPoint[2];
+	int			recoverUntil[2];			// bouncing back from that clash, as the game has it: your blades cut nobody till then
 	// where your blades were last frame (for their sweep)
 	int			prevTime, prevMask[VR_POSE_MAX_SABERS];
 	vec3_t		prevBase[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES], prevTip[VR_POSE_MAX_SABERS][VR_POSE_MAX_BLADES];
@@ -7899,6 +7910,7 @@ static void CG_VRB_HandsInit( void ) {
 		memset( &vrbHands, 0, sizeof( vrbHands ) );
 		vrbHands.inEnt[0] = vrbHands.inEnt[1] = -1;
 		vrbHands.blowEnt[0] = vrbHands.blowEnt[1] = -1;
+		vrbHands.cutEnt[0] = vrbHands.cutEnt[1] = -1;
 		vrbHands.init = qtrue;
 	}
 }
@@ -8060,10 +8072,11 @@ Your blade meeting someone, or someone's blade, as you see it
 --------------------------------------------------------------------------------
 */
 
-// The closest points of segments p1-q1 and p2-q2, and how far apart they are.
-static float CG_VRB_SegSegClosest( const vec3_t p1, const vec3_t q1, const vec3_t p2, const vec3_t q2 ) {
+// The closest points of segments p1-q1 and p2-q2 (c1 on the first, c2 on
+// the second), and how far apart they are.
+static float CG_VRB_SegSegPoints( const vec3_t p1, const vec3_t q1, const vec3_t p2, const vec3_t q2, vec3_t c1, vec3_t c2 ) {
 	const float eps = 0.0001f;
-	vec3_t d1, d2, r, c1, c2;
+	vec3_t d1, d2, r;
 	float a, e, f, s, t;
 
 	VectorSubtract( q1, p1, d1 );
@@ -8099,6 +8112,13 @@ static float CG_VRB_SegSegClosest( const vec3_t p1, const vec3_t q1, const vec3_
 	VectorMA( p1, s, d1, c1 );
 	VectorMA( p2, t, d2, c2 );
 	return Distance( c1, c2 );
+}
+
+// How far apart the closest points of segments p1-q1 and p2-q2 are.
+static float CG_VRB_SegSegClosest( const vec3_t p1, const vec3_t q1, const vec3_t p2, const vec3_t q2 ) {
+	vec3_t c1, c2;
+
+	return CG_VRB_SegSegPoints( p1, q1, p2, q2, c1, c2 );
 }
 
 // Does segment p-q pass through triangle v0 v1 v2?
@@ -8189,7 +8209,7 @@ static void CG_VRB_NoteOtherBlade( centity_t *cent, int saberNum, int bladeNum, 
 // Whom a blade from base to tip is in: a player's (or NPC's) model, as
 // drawn, the way the server tests it (their box, then their model's
 // triangles). -1: nobody.
-static int CG_VRB_BladeInBody( const vec3_t base, const vec3_t tip ) {
+static int CG_VRB_BladeInBody( const vec3_t base, const vec3_t tip, vec3_t point ) {
 	trace_t tr;
 	centity_t *c;
 
@@ -8204,7 +8224,39 @@ static int CG_VRB_BladeInBody( const vec3_t base, const vec3_t tip ) {
 	if ( c->ghoul2 && !CG_G2TraceCollide( &tr, NULL, NULL, base, tip ) ) {
 		return -1;	// (the box, but not the body)
 	}
+	VectorCopy( tr.endpos, point );	// (where it went in)
 	return c->currentState.number;
+}
+
+// A droid (as the game sees one: WP_SaberDoHit) - sparks, not blood.
+static qboolean CG_VRB_Droid( int ent ) {
+	const entityState_t *es;
+
+	if ( ent < 0 || ent >= MAX_GENTITIES ) {
+		return qfalse;
+	}
+	es = &cg_entities[ent].currentState;
+	if ( es->eType != ET_NPC ) {
+		return qfalse;
+	}
+	switch ( es->NPC_class ) {
+	case CLASS_SEEKER:
+	case CLASS_PROBE:
+	case CLASS_MOUSE:
+	case CLASS_REMOTE:
+	case CLASS_GONK:
+	case CLASS_R2D2:
+	case CLASS_R5D2:
+	case CLASS_PROTOCOL:
+	case CLASS_MARK1:
+	case CLASS_MARK2:
+	case CLASS_INTERROGATOR:
+	case CLASS_ATST:
+	case CLASS_SENTRY:
+		return qtrue;
+	default:
+		return qfalse;
+	}
 }
 
 // A friend in a team game (whom your blade only touches).
@@ -8422,40 +8474,87 @@ static qboolean CG_VRB_SolidFoe( const vrbOtherBlade_t *o ) {
 	return (qboolean)( o->ent >= MAX_CLIENTS || !c->currentState.bolt1 );	// (bolt1: they're in a duel)
 }
 
-// Would a blow of the blade in hand h go on through that one, as the game
-// reckons it (VRS_Breaks)? A heavy blade swung at full speed, two or more
-// stronger than the other (its weight, and one more if it moves as fast as
-// it hits hardest: a share of its weight's full-damage speed for a blade
-// that feels heavier, bg_vrsaber.h) - and the faster of the two.
-static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbOtherBlade_t *o ) {
-	const float speed = vrb.swing.handSpeed[h];
-	int mine, theirs, theirWeight;
+qboolean PM_SaberInParry( int move );			// (bg_panimate.c, bg_saber.c)
+qboolean PM_SaberInBrokenParry( int move );
+qboolean PM_SaberInDeflect( int move );
+qboolean PM_SaberInBounce( int move );
+qboolean PM_SaberInKnockaway( int move );
 
-	if ( CG_VRB_Weight( qtrue ) != VRB_HEAVY || speed < vrbFullAt[VRB_HEAVY] * CG_VRB_CutScale() ) {
+// Someone mid-attack, as the game reckons it of a player whose blade the
+// animations move (SaberAttacking, w_saber.c): their saber move an attack or
+// a special one - not a parry, a bounce, a knock.
+static qboolean CG_VRB_Attacking( const entityState_t *es ) {
+	const int move = es->saberMove;
+
+	if ( PM_SaberInParry( move ) || PM_SaberInBrokenParry( move ) || PM_SaberInDeflect( move ) ||
+		PM_SaberInBounce( move ) || PM_SaberInKnockaway( move ) ) {
 		return qfalse;
 	}
-	mine = VRB_HEAVY + 2;	// (heavy, and one for full speed)
-	if ( CG_VRB_Weight( qfalse ) == VRB_HEAVY && CG_VRB_TwoHanded() ) {
-		mine++;				// (heavy held with both hands)
+	return (qboolean)( BG_SaberInAttack( move ) || BG_SaberInSpecial( move ) );
+}
+
+// Your blow's strength in a clash, as the game reckons it (VRS_Strength):
+// your blade's weight - heavy held with both hands one more than heavy - and
+// one more if your hand moves as fast as the blade hits hardest (a share of
+// its weight's full-damage speed for a blade that feels heavier,
+// bg_vrsaber.h).
+static int CG_VRB_MyStrength( float handSpeed ) {
+	const int weight = CG_VRB_Weight( qtrue );
+	int strength = weight + 1;
+
+	if ( weight == VRB_HEAVY && CG_VRB_Weight( qfalse ) == VRB_HEAVY && CG_VRB_TwoHanded() ) {
+		strength++;	// (heavy held with both hands)
 	}
-	switch ( cg_entities[o->ent].currentState.fireflag ) {	// (their saber style)
+	if ( handSpeed >= vrbFullAt[weight] * CG_VRB_CutScale() ) {
+		strength++;
+	}
+	return strength;
+}
+
+// The other blade as the game weighs it against yours in a clash: its
+// strength - its owner's saber style's weight, one more held with both hands
+// in VR; and, a blade the animations move (VRS_MeetAnimated), one more mid
+// attack - a VR one (VRS_ClashReact), one more swung as fast as it hits
+// hardest. And a VR blade moving faster than yours (mySpeed, at your hand):
+// its owner's blow decides then.
+typedef struct {
+	int			strength;
+	qboolean	vr;				// a VR player's blade
+	qboolean	attacking;		// (animated) mid attack
+	qboolean	faster;			// (VR) faster than yours
+} vrbTheirs_t;
+
+static void CG_VRB_Theirs( float mySpeed, const vrClientState_t *vr, const vrbOtherBlade_t *o, vrbTheirs_t *t ) {
+	const entityState_t *es = &cg_entities[o->ent].currentState;
+	int weight;
+
+	memset( t, 0, sizeof( *t ) );
+	switch ( es->fireflag ) {	// (their saber style)
 	case SS_FAST:
 	case SS_TAVION:
-		theirWeight = VRB_LIGHT;
+		weight = VRB_LIGHT;
 		break;
 	case SS_STRONG:
 	case SS_DESANN:
-		theirWeight = VRB_HEAVY;
+		weight = VRB_HEAVY;
 		break;
 	default:
-		theirWeight = VRB_MEDIUM;
+		weight = VRB_MEDIUM;
 		break;
 	}
-	theirs = theirWeight + 1;
-	if ( o->ent >= 0 && o->ent < MAX_CLIENTS && vrbOthers[o->ent].avatarValid && cg.time - vrbOthers[o->ent].avatarTime < 100 &&
-		( vrbOthers[o->ent].avatar.hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ||
-		vrbOthers[o->ent].avatar.hand[VR_HAND_RIGHT].grip == VR_GRIP_HILT ) ) {
-		theirs++;	// (a VR player's held with both hands)
+	t->strength = weight + 1;
+	t->vr = (qboolean)( o->ent >= 0 && o->ent < MAX_CLIENTS && vrbOthers[o->ent].avatarValid &&
+		cg.time - vrbOthers[o->ent].avatarTime < 100 );
+	if ( !t->vr ) {
+		t->attacking = CG_VRB_Attacking( es );
+		if ( t->attacking ) {
+			t->strength++;
+		}
+		return;
+	}
+	if ( vrbOthers[o->ent].avatar.hand[VR_HAND_LEFT].grip == VR_GRIP_HILT ||
+		vrbOthers[o->ent].avatar.hand[VR_HAND_RIGHT].grip == VR_GRIP_HILT ) {
+		t->strength++;	// (a VR player's held with both hands)
 	}
 	if ( o->prevTime && o->time - o->prevTime > 0 && vr->worldScale > 0.0f ) {
 		vec3_t p0, p1, rel;
@@ -8465,14 +8564,57 @@ static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbO
 		VectorSubtract( o->prevTip, o->prevBase, rel );
 		VectorMA( o->prevBase, 0.66f, rel, p0 );
 		v = Distance( p0, p1 ) / ( ( o->time - o->prevTime ) * 0.001f ) / vr->worldScale;
-		if ( v >= speed ) {
-			return qfalse;	// (theirs is the faster: their blow decides)
-		}
-		if ( v >= vrbFullAt[theirWeight] * BG_VRFeelCutScale( BG_VRFeel( cg_entities[o->ent].currentState.fireflag ) ) ) {
-			theirs++;
+		t->faster = (qboolean)( v >= mySpeed );
+		if ( v >= vrbFullAt[weight] * BG_VRFeelCutScale( BG_VRFeel( es->fireflag ) ) ) {
+			t->strength++;
 		}
 	}
-	return (qboolean)( mine >= theirs + 2 );
+}
+
+// Would a blow of the blade in hand h go on through that one, as the game
+// reckons it (VRS_Breaks)? A heavy blade swung at full speed, two or more
+// stronger than the other (CG_VRB_MyStrength, CG_VRB_Theirs) - and the
+// faster of the two.
+static qboolean CG_VRB_SolidBreaks( int h, const vrClientState_t *vr, const vrbOtherBlade_t *o ) {
+	const float speed = vrb.swing.handSpeed[h];
+	vrbTheirs_t theirs;
+
+	if ( CG_VRB_Weight( qtrue ) != VRB_HEAVY || speed < vrbFullAt[VRB_HEAVY] * CG_VRB_CutScale() ) {
+		return qfalse;
+	}
+	CG_VRB_Theirs( speed, vr, o, &theirs );
+	if ( theirs.faster ) {
+		return qfalse;	// (theirs is the faster: their blow decides)
+	}
+	return (qboolean)( CG_VRB_MyStrength( speed ) >= theirs.strength + 2 );
+}
+
+// How long the blade in hand h bounces back after meeting that one, as the
+// game has it - it cuts nobody till then (VRS_Hit) - 0 if it goes on
+// through, or it only touched it. A swing into a guard is parried; one into
+// an attack knocks it away, or bounces off it, reeling twice as long if it
+// was the weaker blow (VRS_MeetAnimated); an attack much stronger than a
+// blade held still jars it. Two VR blades (VRS_Clash): about as long, the
+// weaker blow twice as long.
+static int CG_VRB_ClashRecover( int h, const vrClientState_t *vr, const vrbOtherBlade_t *o ) {
+	const int weight = CG_VRB_Weight( qtrue );
+	const float hand = vrb.swing.handSpeed[h];
+	const qboolean swing = (qboolean)( vrb.swing.speed >= vrbCutFrom[weight] * CG_VRB_CutScale() );
+	const int recover = vrbRecover[weight];
+	const int mine = CG_VRB_MyStrength( hand );
+	vrbTheirs_t theirs;
+
+	if ( swing && CG_VRB_SolidBreaks( h, vr, o ) ) {
+		return 0;
+	}
+	CG_VRB_Theirs( hand, vr, o, &theirs );
+	if ( theirs.vr || theirs.attacking ) {
+		if ( swing ) {
+			return ( mine < theirs.strength ) ? 2 * recover : recover;
+		}
+		return ( !theirs.vr && theirs.strength >= mine + 2 ) ? recover : 0;
+	}
+	return swing ? recover : 0;
 }
 
 // The blade in hand h, pointing out (world) as its weight lets it
@@ -8626,6 +8768,120 @@ static void CG_VRB_BladeSolid( int h, const vrClientState_t *vr, const vec3_t pi
 	vrb.blade[h].lastTime = cg.time;
 }
 
+// OpenJK VR (latency) - what your blade met a blade with, as the game will
+// see it: the other blade, and yours (which saber and blade, where, which way
+// it moved).
+typedef struct {
+	const vrbOtherBlade_t	*o;
+	int						saber, blade;
+	vec3_t					base, tip, dir;
+} vrbMeet_t;
+
+static void CG_VRB_NoteMeet( vrbMeet_t *m, const vrbOtherBlade_t *o, int s, int b, const vec3_t base, const vec3_t tip,
+	const vec3_t dir ) {
+	m->o = o;
+	m->saber = s;
+	m->blade = b;
+	VectorCopy( base, m->base );
+	VectorCopy( tip, m->tip );
+	VectorCopy( dir, m->dir );
+}
+
+// The game's word on a cut, or a clash, comes this long after it at most
+// (the game's frame, and the trip there and back): a little longer with a
+// slow connection - as far as half the ping again and a little more.
+static int CG_VRB_ConfirmWindow( void ) {
+	const int ping = cg.snap ? cg.snap->ping : 0;
+
+	return Com_Clampi( VRB_CONFIRM_WINDOW, 800, ping + ping / 2 + 100 );
+}
+
+// The sound and the blood (or sparks) the game's word on your cut brings
+// (EV_SABER_HIT: CG_SaberHitEffects), shown as your blade goes in instead
+// (cg_vrSaberShow) - the game's word on it then only felt. As hard as the
+// game will make it (WP_SaberDoHit - 1: 20 damage or more, 2: 5 or more, 3:
+// less; 0, a droid: sparks), from the damage the swing does (VRS_Hit: its
+// weight's most at full speed, a quarter of it as it starts to cut - f).
+// qtrue if shown.
+static qboolean CG_VRB_ShowCut( int ent, int saberNum, int bladeNum, const vec3_t point, const vec3_t dir, float f ) {
+	const float dmg = vrbMaxDamage[CG_VRB_Weight( qtrue )] * ( 0.25f + 0.75f * f );
+	entityState_t es;
+
+	if ( !cg_vrSaberShow.integer ) {
+		return qfalse;
+	}
+	memset( &es, 0, sizeof( es ) );
+	es.number = ENTITYNUM_WORLD;
+	es.otherEntityNum = ent;
+	es.otherEntityNum2 = cg.clientNum;
+	es.weapon = saberNum;
+	es.legsAnim = bladeNum;
+	VectorCopy( point, es.origin );
+	VectorScale( dir, -1.0f, es.angles );	// (back along the swing, as the game's)
+	if ( CG_VRB_Droid( ent ) ) {
+		es.eventParm = 0;
+	} else {
+		es.eventParm = ( dmg < 5.0f ) ? 3 : ( dmg < 20.0f ) ? 2 : 1;
+	}
+	CG_SaberHitEffects( &es, qtrue, qfalse );
+	return qtrue;
+}
+
+// The sound and sparks (and the flash) of the game's clash (EV_SABER_BLOCK:
+// CG_SaberBlockEffects) - in the swinging blade's look, as the game's: yours
+// if you swung, else theirs - shown as your blade meets the other one
+// (cg_vrSaberShow), between them (point). qtrue if shown.
+static qboolean CG_VRB_ShowClash( const vrbMeet_t *m, qboolean swing, vec3_t point ) {
+	entityState_t es;
+	vec3_t c1, c2;
+
+	if ( !cg_vrSaberShow.integer || !m->o ) {
+		return qfalse;
+	}
+	memset( &es, 0, sizeof( es ) );
+	es.number = ENTITYNUM_WORLD;
+	es.eventParm = 1;
+	es.otherEntityNum2 = swing ? cg.clientNum : m->o->ent;
+	es.weapon = swing ? m->saber : m->o->saber;
+	es.legsAnim = swing ? m->blade : m->o->blade;
+	CG_VRB_SegSegPoints( m->base, m->tip, m->o->base, m->o->tip, c1, c2 );
+	VectorAdd( c1, c2, es.origin );
+	VectorScale( es.origin, 0.5f, es.origin );
+	VectorCopy( es.origin, point );
+	VectorScale( m->dir, -1.0f, es.angles );	// (sparks fly back from the swing)
+	if ( VectorCompare( es.angles, vec3_origin ) ) {
+		es.angles[2] = 1.0f;
+	}
+	CG_SaberBlockEffects( &es, qtrue );
+	return qtrue;
+}
+
+// Can your blade cut them, as the game has it (VRS_Hit)? Not while you're
+// staggered (a broken parry); in a duel, only the one you're fighting; and
+// nobody in a duel of their own (bolt1).
+static qboolean CG_VRB_CutsThem( int ent ) {
+	if ( PM_SaberInBrokenParry( cg.predictedPlayerState.saberMove ) ) {
+		return qfalse;
+	}
+	if ( cg.predictedPlayerState.duelInProgress ) {
+		return (qboolean)( ent == cg.predictedPlayerState.duelIndex );
+	}
+	return (qboolean)( ent >= MAX_CLIENTS || !cg_entities[ent].currentState.bolt1 );
+}
+
+// Did a blade of yours cut them just now? The game lets your blades cut the
+// same one once in VRB_CUT_REPEAT: the same cut till then.
+static qboolean CG_VRB_RecentlyCut( int ent ) {
+	int h;
+
+	for ( h = 0; h < 2; h++ ) {
+		if ( vrbHands.cutEnt[h] == ent && cg.time - vrbHands.cutTime[h] >= 0 && cg.time - vrbHands.cutTime[h] < VRB_CUT_REPEAT ) {
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
 /*
 =================
 CG_VRB_TouchFeel
@@ -8633,9 +8889,19 @@ CG_VRB_TouchFeel
 Once a frame, after the scene is built (others where they're drawn): does
 a blade in your hands meet a body, or another blade? Felt at once, as you
 see it - the game's word on it comes a moment later (CG_VR_SaberEventFeel).
+
+The game judges your blade against the others where you saw them
+(g_vrSaberUnlag), so what it will say is known now, and shown now
+(cg_vrSaberShow): a cut's sound and blood, a clash's sound and sparks - its
+word on them, a moment later (a long one online), then only felt. And as
+the game has it, a blade stopped on another blade cuts nobody: one it met
+and doesn't break through (CG_VRB_SolidBreaks), one it rests on, or for a
+moment after a clash while it bounces back from it (CG_VRB_ClashRecover) -
+whoever it's in then, it only touches.
 =================
 */
 static void CG_VRB_TouchFeel( void ) {
+	const vrClientState_t *vr = CG_VR();
 	const int weight = CG_VRB_Weight( qtrue );
 	const float cutFrom = vrbCutFrom[weight] * CG_VRB_CutScale(), fullAt = vrbFullAt[weight] * CG_VRB_CutScale();
 	const float speed = vrb.swing.speed;	// (m/s, two thirds along the blade: about where it meets them)
@@ -8643,8 +8909,11 @@ static void CG_VRB_TouchFeel( void ) {
 	// (your blade only cuts where the server fights with it - "vrSaber 1" in
 	// its serverinfo; elsewhere the game's swing animations do)
 	const qboolean cuts = (qboolean)( atoi( Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), "vrSaber" ) ) > 0 );
-	int in[2] = { -1, -1 }, s, b, h, i;
+	int in[2] = { -1, -1 }, inSaber[2] = { 0, 0 }, inBlade[2] = { 0, 0 }, s, b, h, i;
 	qboolean met[2] = { qfalse, qfalse };
+	qboolean stopped[2] = { qfalse, qfalse };	// a foe's blade met that yours doesn't break through
+	vrbMeet_t foe[2];							// the foe's blade met (the one that stops yours, if one does)
+	vec3_t inPoint[2], inDir[2];
 
 	if ( cg.secondEye || vrbHands.prevTime == cg.time ) {
 		return;
@@ -8652,49 +8921,78 @@ static void CG_VRB_TouchFeel( void ) {
 	CG_VRB_HandsInit();
 	// (a saber in your VR hands, drawn there this frame - as the pose sent
 	// at the end of the frame will say: CG_VR_BodyEndFrame)
-	if ( !CG_VR() || vrbSaber.time != cg.time || !CG_VRB_SaberHands() ) {
+	if ( !vr || vrbSaber.time != cg.time || !CG_VRB_SaberHands() ) {
 		vrbHands.inEnt[0] = vrbHands.inEnt[1] = -1;
 		vrbHands.touching[0] = vrbHands.touching[1] = qfalse;
 		vrbHands.prevTime = 0;
 		return;
 	}
+	memset( foe, 0, sizeof( foe ) );
 
 	for ( s = 0; s < VR_POSE_MAX_SABERS; s++ ) {
 		for ( b = 0; b < VR_POSE_MAX_BLADES; b++ ) {
 			const float *base = vrbSaber.base[s][b], *tip = vrbSaber.tip[s][b];
 			const qboolean swept = (qboolean)( havePrev && ( vrbHands.prevMask[s] & ( 1 << b ) ) );
+			vec3_t moveDir;
 			h = CG_VRB_SaberHand( s );
 			if ( !( vrbSaber.pose.bladeMask[s] & ( 1 << b ) ) || h < 0 ) {
 				continue;
+			}
+			// (which way it moves: its tip since last frame)
+			VectorClear( moveDir );
+			if ( swept ) {
+				VectorSubtract( tip, vrbHands.prevTip[s][b], moveDir );
+				VectorNormalize( moveDir );
 			}
 
 			// a body: along the blade now (and halfway back to where it was,
 			// for an arm a fast swing could skip)
 			if ( in[h] < 0 && cuts ) {
-				in[h] = CG_VRB_BladeInBody( base, tip );
-			}
-			if ( in[h] < 0 && cuts && swept ) {
-				vec3_t midBase, midTip;
-				VectorAdd( base, vrbHands.prevBase[s][b], midBase );
-				VectorScale( midBase, 0.5f, midBase );
-				VectorAdd( tip, vrbHands.prevTip[s][b], midTip );
-				VectorScale( midTip, 0.5f, midTip );
-				in[h] = CG_VRB_BladeInBody( midBase, midTip );
+				int ent = CG_VRB_BladeInBody( base, tip, inPoint[h] );
+				if ( ent < 0 && swept ) {
+					vec3_t midBase, midTip;
+					VectorAdd( base, vrbHands.prevBase[s][b], midBase );
+					VectorScale( midBase, 0.5f, midBase );
+					VectorAdd( tip, vrbHands.prevTip[s][b], midTip );
+					VectorScale( midTip, 0.5f, midTip );
+					ent = CG_VRB_BladeInBody( midBase, midTip, inPoint[h] );
+				}
+				if ( ent >= 0 ) {
+					in[h] = ent;
+					inSaber[h] = s;
+					inBlade[h] = b;
+					VectorCopy( moveDir, inDir[h] );
+				}
 			}
 
-			// another blade: yours swept into it, or it into yours
-			for ( i = 0; i < VRB_OTHER_BLADES && !met[h]; i++ ) {
+			// another blade: yours swept into it, or it into yours - a foe's
+			// stops yours, as the game has it, unless yours breaks through
+			for ( i = 0; i < VRB_OTHER_BLADES; i++ ) {
 				const vrbOtherBlade_t *o = &vrbOtherBlades[i];
+				qboolean meets;
 				if ( o->time != cg.time ) {
 					continue;
 				}
 				if ( swept ) {
-					met[h] = CG_VRB_BladeSweepMeets( vrbHands.prevBase[s][b], vrbHands.prevTip[s][b], base, tip, o->base, o->tip );
+					meets = CG_VRB_BladeSweepMeets( vrbHands.prevBase[s][b], vrbHands.prevTip[s][b], base, tip, o->base, o->tip );
 				} else {
-					met[h] = (qboolean)( CG_VRB_SegSegClosest( base, tip, o->base, o->tip ) < VRB_BLADE_TOUCH );
+					meets = (qboolean)( CG_VRB_SegSegClosest( base, tip, o->base, o->tip ) < VRB_BLADE_TOUCH );
 				}
-				if ( !met[h] && o->prevTime ) {
-					met[h] = CG_VRB_BladeSweepMeets( o->prevBase, o->prevTip, o->base, o->tip, base, tip );
+				if ( !meets && o->prevTime ) {
+					meets = CG_VRB_BladeSweepMeets( o->prevBase, o->prevTip, o->base, o->tip, base, tip );
+				}
+				if ( !meets ) {
+					continue;
+				}
+				met[h] = qtrue;
+				if ( CG_VRB_SolidFoe( o ) ) {
+					const qboolean breaks = CG_VRB_SolidBreaks( h, vr, o );
+					if ( !foe[h].o || ( !breaks && !stopped[h] ) ) {
+						CG_VRB_NoteMeet( &foe[h], o, s, b, base, tip, moveDir );
+					}
+					if ( !breaks ) {
+						stopped[h] = qtrue;
+					}
 				}
 			}
 
@@ -8706,24 +9004,46 @@ static void CG_VRB_TouchFeel( void ) {
 	vrbHands.prevTime = cg.time;
 
 	for ( h = 0; h < 2; h++ ) {
+		const qboolean resting = (qboolean)( vrb.blade[h].heldTime == cg.time );
+		// (stopped on a blade, or bouncing back from a clash - any of your
+		// blades' clashes: the game's recovery is yours, not a hand's - it
+		// cuts nobody)
+		const qboolean held = (qboolean)( stopped[h] || resting || vrbHands.recoverUntil[VR_HAND_LEFT] - cg.time > 0 ||
+			vrbHands.recoverUntil[VR_HAND_RIGHT] - cg.time > 0 );
+
 		// in someone: a blow as you go in (as hard as the swing), then the
-		// drag of cutting through while the blade is in them
+		// drag of cutting through while the blade is in them - or a touch
+		// where the game won't cut (too slow, a teammate, held, cut just now,
+		// a duel, staggered); and if it's still in them as it's swung fast
+		// enough (or let go of), the blow then
 		if ( in[h] >= 0 ) {
 			const qboolean friendly = CG_VRB_Teammate( in[h] );
+			const qboolean recent = CG_VRB_RecentlyCut( in[h] );
+			const qboolean blow = (qboolean)( !friendly && speed >= cutFrom && !held && !recent && CG_VRB_CutsThem( in[h] ) );
 			const float f = Com_Clamp( 0.0f, 1.0f, ( speed - cutFrom ) / ( fullAt - cutFrom ) );
-			if ( in[h] != vrbHands.inEnt[h] || cg.time - vrbHands.inTime[h] > VRB_CONTACT_GAP ) {
-				if ( friendly || speed < cutFrom ) {
-					CG_VRB_FeelBlade( h, 0.4f, 25, 0.25f, 70, 0.0f );	// (a touch)
-				} else {
+			if ( in[h] != vrbHands.inEnt[h] || cg.time - vrbHands.inTime[h] > VRB_CONTACT_GAP || ( blow && vrbHands.inTouch[h] ) ) {
+				if ( blow ) {
 					static const int hold[3] = { 35, 47, 55 }, decay[3] = { 110, 145, 170 };
 					CG_VRB_FeelBlade( h, 0.75f + 0.25f * f, hold[weight] + (int)( 20.0f * f ), 0.5f + 0.3f * f,
 						decay[weight], 0.3f );
+					vrbHands.blowShown[h] = CG_VRB_ShowCut( in[h], inSaber[h], inBlade[h], inPoint[h], inDir[h], f );
+					vrbHands.cutEnt[h] = in[h];
+					vrbHands.cutTime[h] = cg.time;
+					CG_VRB_Log( "feel: your %s blade into %i at %.1f m/s\n", vrbWeightNames[weight], in[h], speed );
+				} else {
+					CG_VRB_FeelBlade( h, 0.4f, 25, 0.25f, 70, 0.0f );	// (a touch)
+					vrbHands.blowShown[h] = qfalse;
+					CG_VRB_Log( "feel: your %s blade touched %i at %.1f m/s (%s)\n", vrbWeightNames[weight], in[h], speed,
+						friendly ? "a teammate" : held ? "stopped on a blade: no cut" : recent ? "the same cut" :
+						( speed < cutFrom ) ? "too slow to cut" : "not to be cut: a duel, or staggered" );
 				}
 				vrbHands.blowEnt[h] = in[h];
 				vrbHands.blowTime[h] = cg.time;
-				CG_VRB_Log( "feel: your %s blade into %i at %.1f m/s\n", vrbWeightNames[weight], in[h], speed );
+				vrbHands.inTouch[h] = (qboolean)!blow;
 			}
-			CG_VRB_FeelSteady( h, friendly ? 0.2f : 0.3f + 0.4f * Com_Clamp( 0.0f, 1.0f, speed / fullAt ), 0.45f );
+			if ( !held ) {
+				CG_VRB_FeelSteady( h, friendly ? 0.2f : 0.3f + 0.4f * Com_Clamp( 0.0f, 1.0f, speed / fullAt ), 0.45f );
+			}
 			vrbHands.inEnt[h] = in[h];
 			vrbHands.inTime[h] = cg.time;
 		} else if ( cg.time - vrbHands.inTime[h] > VRB_CONTACT_GAP ) {
@@ -8732,27 +9052,34 @@ static void CG_VRB_TouchFeel( void ) {
 
 		// against another blade: a knock as they meet (harder the faster
 		// and the heavier yours), a grind while they're pressed together -
-		// resting on it (CG_VRB_BladeSolid), harder the harder you push
-		{
-			const qboolean resting = (qboolean)( vrb.blade[h].heldTime == cg.time );
-			if ( resting ) {
-				met[h] = qtrue;
-			}
-			if ( met[h] ) {
-				if ( !vrbHands.touching[h] && cg.time - vrbHands.knockTime[h] > 100 ) {
-					static const int knock[3] = { 60, 75, 90 }, decay[3] = { 85, 105, 130 };
-					const float hard = Com_Clamp( 0.0f, 1.0f, vrb.swing.handSpeed[h] / fullAt );
-					CG_VRB_FeelBlade( h, 0.45f + 0.55f * hard, knock[weight], 0.25f + 0.3f * hard, decay[weight], 0.0f );
-					vrbHands.knockTime[h] = cg.time;
-					CG_VRB_Log( "feel: your %s blade met another at %.1f m/s\n", vrbWeightNames[weight], vrb.swing.handSpeed[h] );
+		// resting on it (CG_VRB_BladeSolid), harder the harder you push. A
+		// foe's: the game's clash - its sound and sparks now, and your blade
+		// bouncing back from it as the game will have it
+		if ( resting ) {
+			met[h] = qtrue;
+		}
+		if ( met[h] ) {
+			if ( !vrbHands.touching[h] && cg.time - vrbHands.knockTime[h] > 100 ) {
+				static const int knock[3] = { 60, 75, 90 }, decay[3] = { 85, 105, 130 };
+				const float hard = Com_Clamp( 0.0f, 1.0f, vrb.swing.handSpeed[h] / fullAt );
+				CG_VRB_FeelBlade( h, 0.45f + 0.55f * hard, knock[weight], 0.25f + 0.3f * hard, decay[weight], 0.0f );
+				vrbHands.knockTime[h] = cg.time;
+				vrbHands.knockShown[h] = qfalse;
+				if ( foe[h].o ) {
+					const int recover = CG_VRB_ClashRecover( h, vr, foe[h].o );
+					vrbHands.knockShown[h] = CG_VRB_ShowClash( &foe[h], (qboolean)( speed >= cutFrom ), vrbHands.knockPoint[h] );
+					if ( recover > 0 ) {
+						vrbHands.recoverUntil[h] = cg.time + recover;
+					}
 				}
-				CG_VRB_FeelSteady( h, resting ? 0.3f + 0.5f * vrb.blade[h].press : 0.4f, 0.5f );
+				CG_VRB_Log( "feel: your %s blade met another at %.1f m/s\n", vrbWeightNames[weight], vrb.swing.handSpeed[h] );
 			}
-			if ( resting ) {
-				// and sparks where they touch, as a blade held to a wall throws
-				// (the game is quiet about blades held together: only you see these)
-				trap->FX_PlayEffectID( cgs.effects.mSparks, vrb.blade[h].heldPoint, vrb.blade[h].heldNormal, -1, -1, qfalse );
-			}
+			CG_VRB_FeelSteady( h, resting ? 0.3f + 0.5f * vrb.blade[h].press : 0.4f, 0.5f );
+		}
+		if ( resting ) {
+			// and sparks where they touch, as a blade held to a wall throws
+			// (the game is quiet about blades held together: only you see these)
+			trap->FX_PlayEffectID( cgs.effects.mSparks, vrb.blade[h].heldPoint, vrb.blade[h].heldNormal, -1, -1, qfalse );
 		}
 		vrbHands.touching[h] = met[h];
 	}
@@ -8864,6 +9191,57 @@ static int CG_VRB_EventHand( int saberNum ) {
 	return ( h >= 0 ) ? h : vrb.hold[0].hand;
 }
 
+// The hand a clash event of the game's is felt in (CG_VR_SaberEventFeel):
+// a clash of your blade names you and the saber (it arrives a moment after
+// the hit, so the blade may have moved on a little - it has to be near your
+// blade still); someone else's saber hitting yours is placed where it met
+// your saber's box, close to the blade. -1: neither.
+static int CG_VRB_ClashHand( const entityState_t *es ) {
+	if ( es->otherEntityNum2 == cg.clientNum && CG_VRB_SaberHandNear( es->origin, 64.0f ) >= 0 ) {
+		return CG_VRB_EventHand( es->weapon );
+	}
+	return CG_VRB_SaberHandNear( es->origin, 32.0f );
+}
+
+// Did your game show this event's sound and sparks already, as your blade
+// went in or met the other one (CG_VRB_ShowCut, CG_VRB_ShowClash)? Then
+// the game's word on it is only felt (cg_event.c) - once: a cut it names
+// whom you cut, with the saber that did; a clash where yours was shown (the
+// same two blades met there - wherever your blade is by the time its word
+// comes).
+#define VRB_CLASH_SAME	48.0f	// a clash of the game's this near the one shown is that one
+
+qboolean CG_VR_SaberEventShown( int event, const entityState_t *es ) {
+	int hand;
+
+	if ( !CG_VR() || !vrbHands.init ) {
+		return qfalse;
+	}
+	if ( event == EV_SABER_HIT ) {
+		if ( es->otherEntityNum2 != cg.clientNum || es->otherEntityNum == ENTITYNUM_NONE ) {
+			return qfalse;
+		}
+		hand = CG_VRB_EventHand( es->weapon );
+		if ( hand < 0 || !vrbHands.blowShown[hand] || vrbHands.blowEnt[hand] != es->otherEntityNum ||
+			cg.time - vrbHands.blowTime[hand] < 0 || cg.time - vrbHands.blowTime[hand] >= CG_VRB_ConfirmWindow() ) {
+			return qfalse;
+		}
+		vrbHands.blowShown[hand] = qfalse;
+		return qtrue;
+	}
+	if ( event == EV_SABER_BLOCK && es->eventParm ) {
+		for ( hand = 0; hand < 2; hand++ ) {
+			if ( vrbHands.knockShown[hand] && cg.time - vrbHands.knockTime[hand] >= 0 &&
+				cg.time - vrbHands.knockTime[hand] < CG_VRB_ConfirmWindow() &&
+				DistanceSquared( es->origin, vrbHands.knockPoint[hand] ) < Square( VRB_CLASH_SAME ) ) {
+				vrbHands.knockShown[hand] = qfalse;
+				return qtrue;
+			}
+		}
+	}
+	return qfalse;
+}
+
 // Feel what your saber does: cutting, clashing, being cut.
 void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 	if ( !CG_VR() ) {
@@ -8884,7 +9262,7 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 				return;	// (in neither hand - back in its holster as the game's word on it came)
 			}
 			felt = (qboolean)( vrbHands.blowEnt[hand] == es->otherEntityNum &&
-				cg.time - vrbHands.blowTime[hand] >= 0 && cg.time - vrbHands.blowTime[hand] < VRB_CONFIRM_WINDOW );
+				cg.time - vrbHands.blowTime[hand] >= 0 && cg.time - vrbHands.blowTime[hand] < CG_VRB_ConfirmWindow() );
 			if ( felt ) {
 				CG_VRB_FeelBlade( hand, 0.85f * strength, 20, 0.75f * strength, rumble[weight], 0.35f );
 			} else {
@@ -8909,19 +9287,15 @@ void CG_VR_SaberEventFeel( int event, const entityState_t *es ) {
 		// so the blade may have moved on a little; other events that don't
 		// name anyone say 0, so it has to be near your blade too). Someone
 		// else's saber hitting yours is placed where it met your saber's
-		// box, close to the blade.
-		int hand;
-		if ( es->otherEntityNum2 == cg.clientNum && CG_VRB_SaberHandNear( es->origin, 64.0f ) >= 0 ) {
-			hand = CG_VRB_EventHand( es->weapon );
-		} else {
-			hand = CG_VRB_SaberHandNear( es->origin, 32.0f );
-		}
+		// box, close to the blade (CG_VRB_ClashHand).
+		const int hand = CG_VRB_ClashHand( es );
 		if ( hand >= 0 ) {
 			// a hard knock, longer the heavier the blade; the blade stops. If
 			// the blades' meeting was felt as you saw it, just a little more.
 			static const int len[3] = { 75, 100, 130 };
 			const int weight = CG_VRB_Weight( qtrue );
-			const qboolean felt = (qboolean)( cg.time - vrbHands.knockTime[hand] >= 0 && cg.time - vrbHands.knockTime[hand] < VRB_CONFIRM_WINDOW );
+			const qboolean felt = (qboolean)( cg.time - vrbHands.knockTime[hand] >= 0 &&
+				cg.time - vrbHands.knockTime[hand] < CG_VRB_ConfirmWindow() );
 			if ( felt ) {
 				CG_VRB_FeelBlade( hand, 0.6f, 15, 0.4f, 60, 0.0f );
 			} else {

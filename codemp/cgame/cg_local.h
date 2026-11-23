@@ -2098,6 +2098,9 @@ const char	*CG_RP_CompLook( int entNum );
 qboolean	CG_RP_CompSounds( centity_t *cent, const char *drawnLook );
 void		CG_RegisterNPCSoundSet( clientInfo_t *ci, int setType, const char *dir );	// (cg_servercmds.c)
 void CG_VR_SaberEventFeel( int event, const entityState_t *es );
+qboolean CG_VR_SaberEventShown( int event, const entityState_t *es );
+void CG_SaberHitEffects( entityState_t *es, qboolean show, qboolean fromServer );	// (cg_event.c)
+void CG_SaberBlockEffects( entityState_t *es, qboolean show );
 void CG_VR_KillFeel( const entityState_t *es );
 void CG_VR_Shutdown( void );
 void CG_VR_SaberWallFeel( centity_t *cent, int saberNum );

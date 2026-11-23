@@ -1161,6 +1161,16 @@ server running this build: your real blade is the weapon.
         Holding the saber with both hands, both feel all of it, the second
         as strongly as the first. cg_vrHaptics sets how strong it all is
         (0 off, 1 normal, up to 2).
+      - your cuts and clashes also show and sound the moment they happen
+        as you see them (the blood, the sparks, the clash's flash), the
+        way the server will have them - online too, where its word on them
+        comes a moment later (a fifth of a second from a distant server)
+        and is then only felt, not shown again. Where the server won't
+        cut, your blade only touches: stopped on a blade it doesn't break
+        through (a bot mid attack blocks one stronger), resting on one, or
+        bouncing back from a clash; the same one again within 0.3 seconds
+        of a cut; someone in a duel that isn't yours; you staggered.
+        cg_vrSaberShow 0 waits for the server's word to show them
   * Setup has a VR page (the VR button under Video, Sound and the rest,
     in the main menu and in game) with Left-Handed (above), Finger
     Tracking and Grip Press (YOUR FINGERS, above), Body Bends (BODY BENDS,
@@ -2063,6 +2073,9 @@ MOVEMENT, VR VIEW AND VR FORCE, above.)
                          stays at the angle it lay at as you passed it)
   cg_vrSaberSolid 1      0 = blades pass through each other (the game
                          still stops them where they met)
+  cg_vrSaberShow 1       0 = your cuts' and clashes' sound and sparks wait
+                         for the server's word on them (a moment later
+                         online), as in the stock game
   cg_vrTwoHand 1         0 = the left grip never takes hold of the hilt
   cg_vrFingers 1         0 = your character's fingers as the animation
                          has them (Setup, VR: Finger Tracking)

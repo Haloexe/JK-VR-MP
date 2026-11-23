@@ -1286,6 +1286,251 @@ const char *CG_GetStringForVoiceSound(const char *s)
 
 /*
 ==============
+CG_SaberHitEffects
+
+A saber's hit (EV_SABER_HIT): its sound and sparks, the saber's own if it
+has them - OpenJK VR: not if show is qfalse (your game showed them as your
+blade went in: cg_vrbody.c) - and, the server's word on it (fromServer),
+whom the saber's owner hit, for the marks it leaves between server frames.
+==============
+*/
+void CG_SaberHitEffects( entityState_t *es, qboolean show, qboolean fromServer )
+{
+	int hitPersonFxID = cgs.effects.mSaberBloodSparks;
+	int hitPersonSmallFxID = cgs.effects.mSaberBloodSparksSmall;
+	int hitPersonMidFxID = cgs.effects.mSaberBloodSparksMid;
+	int hitOtherFxID = cgs.effects.mSaberCut;
+	int hitSound = trap->S_RegisterSound(va("sound/weapons/saber/saberhit%i.wav", Q_irand(1, 3)));
+
+	if ( es->otherEntityNum2 >= 0
+		&& es->otherEntityNum2 < ENTITYNUM_NONE )
+	{//we have a specific person who is causing this effect, see if we should override it with any custom saber effects/sounds
+		clientInfo_t *client = NULL;
+		if ( cg_entities[es->otherEntityNum2].currentState.eType == ET_NPC )
+		{
+			client = cg_entities[es->otherEntityNum2].npcClient;
+		}
+		else if ( es->otherEntityNum2 < MAX_CLIENTS )
+		{
+			client = &cgs.clientinfo[es->otherEntityNum2];
+		}
+		if ( client && client->infoValid )
+		{
+			int saberNum = es->weapon;
+			int bladeNum = es->legsAnim;
+			if ( WP_SaberBladeUseSecondBladeStyle( &client->saber[saberNum], bladeNum ) )
+			{//use second blade style values
+				if ( client->saber[saberNum].hitPersonEffect2 )
+				{//custom hit person effect
+					hitPersonFxID = hitPersonSmallFxID = hitPersonMidFxID = client->saber[saberNum].hitPersonEffect2;
+				}
+				if ( client->saber[saberNum].hitOtherEffect2 )
+				{//custom hit other effect
+					hitOtherFxID = client->saber[saberNum].hitOtherEffect2;
+				}
+				if ( client->saber[saberNum].hit2Sound[0] )
+				{//custom hit sound
+					hitSound = client->saber[saberNum].hit2Sound[Q_irand(0,2)];
+				}
+			}
+			else
+			{//use first blade style values
+				if ( client->saber[saberNum].hitPersonEffect )
+				{//custom hit person effect
+					hitPersonFxID = hitPersonSmallFxID = hitPersonMidFxID = client->saber[saberNum].hitPersonEffect;
+				}
+				if ( client->saber[saberNum].hitOtherEffect )
+				{//custom hit other effect
+					hitOtherFxID = client->saber[0].hitOtherEffect;
+				}
+				if ( client->saber[saberNum].hitSound[0] )
+				{//custom hit sound
+					hitSound = client->saber[saberNum].hitSound[Q_irand(0,2)];
+				}
+			}
+		}
+	}
+
+	if ( !show )
+	{ //OpenJK VR: shown already, as your blade went in (cg_vrbody.c)
+	}
+	else if (es->eventParm == 16)
+	{ //Make lots of sparks, something special happened
+		vec3_t fxDir;
+		VectorCopy(es->angles, fxDir);
+		if (!fxDir[0] && !fxDir[1] && !fxDir[2])
+		{
+			fxDir[1] = 1;
+		}
+		trap->S_StartSound(es->origin, es->number, CHAN_AUTO, hitSound );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+	}
+	else if (es->eventParm)
+	{ //hit a person
+		vec3_t fxDir;
+		VectorCopy(es->angles, fxDir);
+		if (!fxDir[0] && !fxDir[1] && !fxDir[2])
+		{
+			fxDir[1] = 1;
+		}
+		trap->S_StartSound(es->origin, es->number, CHAN_AUTO, hitSound );
+		if ( es->eventParm == 3 )
+		{	// moderate or big hits.
+			trap->FX_PlayEffectID( hitPersonSmallFxID, es->origin, fxDir, -1, -1, qfalse );
+		}
+		else if ( es->eventParm == 2 )
+		{	// this is for really big hits.
+			trap->FX_PlayEffectID( hitPersonMidFxID, es->origin, fxDir, -1, -1, qfalse );
+		}
+		else
+		{	// this should really just be done in the effect itself, no?
+			trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+			trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+			trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
+		}
+	}
+	else
+	{ //hit something else
+		vec3_t fxDir;
+		VectorCopy(es->angles, fxDir);
+		if (!fxDir[0] && !fxDir[1] && !fxDir[2])
+		{
+			fxDir[1] = 1;
+		}
+		//old jk2mp method
+		/*
+		trap->S_StartSound(es->origin, es->number, CHAN_AUTO, trap->S_RegisterSound("sound/weapons/saber/saberhit.wav"));
+		trap->FX_PlayEffectID( trap->FX_RegisterEffect("saber/spark.efx"), es->origin, fxDir, -1, -1, qfalse );
+		*/
+
+		trap->FX_PlayEffectID( hitOtherFxID, es->origin, fxDir, -1, -1, qfalse );
+	}
+
+	//rww - this means we have the number of the ent being hit and the ent that owns the saber doing
+	//the hit. This being the case, we can store these indecies and the current time in order to do
+	//some visual tricks on the client between frames to make it look like we're actually continuing
+	//to hit between server frames.
+	if (fromServer && es->otherEntityNum != ENTITYNUM_NONE && es->otherEntityNum2 != ENTITYNUM_NONE)
+	{
+		centity_t *saberOwner;
+
+		saberOwner = &cg_entities[es->otherEntityNum2];
+
+		saberOwner->serverSaberHitIndex = es->otherEntityNum;
+		saberOwner->serverSaberHitTime = cg.time;
+
+		if (es->eventParm)
+		{
+			saberOwner->serverSaberFleshImpact = qtrue;
+		}
+		else
+		{
+			saberOwner->serverSaberFleshImpact = qfalse;
+		}
+	}
+}
+
+/*
+==============
+CG_SaberBlockEffects
+
+A saber blocking (EV_SABER_BLOCK): a clash's sound, sparks and flare, the
+saber's own if it has them - OpenJK VR: not if show is qfalse (your game
+showed them as your blade met the other one: cg_vrbody.c) - or a bolt
+deflected.
+==============
+*/
+void CG_SaberBlockEffects( entityState_t *es, qboolean show )
+{
+	if (es->eventParm)
+	{ //saber block
+		int			blockFXID = cgs.effects.mSaberBlock;
+		qhandle_t	blockSound = trap->S_RegisterSound(va( "sound/weapons/saber/saberblock%d.wav", Q_irand(1, 9) ));
+		qboolean	noFlare = qfalse;
+
+		if ( es->otherEntityNum2 >= 0
+			&& es->otherEntityNum2 < ENTITYNUM_NONE )
+		{//we have a specific person who is causing this effect, see if we should override it with any custom saber effects/sounds
+			clientInfo_t *client = NULL;
+			if ( cg_entities[es->otherEntityNum2].currentState.eType == ET_NPC )
+			{
+				client = cg_entities[es->otherEntityNum2].npcClient;
+			}
+			else if ( es->otherEntityNum2 < MAX_CLIENTS )
+			{
+				client = &cgs.clientinfo[es->otherEntityNum2];
+			}
+			if ( client && client->infoValid )
+			{
+				int saberNum = es->weapon;
+				int bladeNum = es->legsAnim;
+				if ( WP_SaberBladeUseSecondBladeStyle( &client->saber[saberNum], bladeNum ) )
+				{//use second blade style values
+					if ( client->saber[saberNum].blockEffect2 )
+					{//custom saber block effect
+						blockFXID = client->saber[saberNum].blockEffect2;
+					}
+					if ( client->saber[saberNum].block2Sound[0] )
+					{//custom hit sound
+						blockSound = client->saber[saberNum].block2Sound[Q_irand(0,2)];
+					}
+				}
+				else
+				{
+					if ( client->saber[saberNum].blockEffect )
+					{//custom saber block effect
+						blockFXID = client->saber[saberNum].blockEffect;
+					}
+					if ( client->saber[saberNum].blockSound[0] )
+					{//custom hit sound
+						blockSound = client->saber[saberNum].blockSound[Q_irand(0,2)];
+					}
+				}
+				if ( (client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE) )
+				{
+					noFlare = qtrue;
+				}
+			}
+		}
+
+		if ( show )
+		{ //OpenJK VR: else shown already, as your blade met it (cg_vrbody.c)
+			vec3_t fxDir;
+
+			VectorCopy(es->angles, fxDir);
+			if (!fxDir[0] && !fxDir[1] && !fxDir[2])
+			{
+				fxDir[1] = 1;
+			}
+			trap->S_StartSound(es->origin, es->number, CHAN_AUTO, blockSound );
+			trap->FX_PlayEffectID( blockFXID, es->origin, fxDir, -1, -1, qfalse );
+
+			if ( !noFlare )
+			{
+				cg_saberFlashTime = cg.time-50;
+				VectorCopy( es->origin, cg_saberFlashPos );
+			}
+		}
+	}
+	else
+	{ //projectile block
+		vec3_t fxDir;
+		VectorCopy(es->angles, fxDir);
+		if (!fxDir[0] && !fxDir[1] && !fxDir[2])
+		{
+			fxDir[1] = 1;
+		}
+		trap->FX_PlayEffectID(cgs.effects.mBlasterDeflect, es->origin, fxDir, -1, -1, qfalse);
+	}
+}
+
+/*
+==============
 CG_EntityEvent
 
 An entity has an event value
@@ -2158,228 +2403,19 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 
 	case EV_SABER_HIT:
 		DEBUGNAME("EV_SABER_HIT");
-		CG_VR_SaberEventFeel( event, es );	// OpenJK VR
-		{
-			int hitPersonFxID = cgs.effects.mSaberBloodSparks;
-			int hitPersonSmallFxID = cgs.effects.mSaberBloodSparksSmall;
-			int hitPersonMidFxID = cgs.effects.mSaberBloodSparksMid;
-			int hitOtherFxID = cgs.effects.mSaberCut;
-			int hitSound = trap->S_RegisterSound(va("sound/weapons/saber/saberhit%i.wav", Q_irand(1, 3)));
-
-			if ( es->otherEntityNum2 >= 0
-				&& es->otherEntityNum2 < ENTITYNUM_NONE )
-			{//we have a specific person who is causing this effect, see if we should override it with any custom saber effects/sounds
-				clientInfo_t *client = NULL;
-				if ( cg_entities[es->otherEntityNum2].currentState.eType == ET_NPC )
-				{
-					client = cg_entities[es->otherEntityNum2].npcClient;
-				}
-				else if ( es->otherEntityNum2 < MAX_CLIENTS )
-				{
-					client = &cgs.clientinfo[es->otherEntityNum2];
-				}
-				if ( client && client->infoValid )
-				{
-					int saberNum = es->weapon;
-					int bladeNum = es->legsAnim;
-					if ( WP_SaberBladeUseSecondBladeStyle( &client->saber[saberNum], bladeNum ) )
-					{//use second blade style values
-						if ( client->saber[saberNum].hitPersonEffect2 )
-						{//custom hit person effect
-							hitPersonFxID = hitPersonSmallFxID = hitPersonMidFxID = client->saber[saberNum].hitPersonEffect2;
-						}
-						if ( client->saber[saberNum].hitOtherEffect2 )
-						{//custom hit other effect
-							hitOtherFxID = client->saber[saberNum].hitOtherEffect2;
-						}
-						if ( client->saber[saberNum].hit2Sound[0] )
-						{//custom hit sound
-							hitSound = client->saber[saberNum].hit2Sound[Q_irand(0,2)];
-						}
-					}
-					else
-					{//use first blade style values
-						if ( client->saber[saberNum].hitPersonEffect )
-						{//custom hit person effect
-							hitPersonFxID = hitPersonSmallFxID = hitPersonMidFxID = client->saber[saberNum].hitPersonEffect;
-						}
-						if ( client->saber[saberNum].hitOtherEffect )
-						{//custom hit other effect
-							hitOtherFxID = client->saber[0].hitOtherEffect;
-						}
-						if ( client->saber[saberNum].hitSound[0] )
-						{//custom hit sound
-							hitSound = client->saber[saberNum].hitSound[Q_irand(0,2)];
-						}
-					}
-				}
-			}
-
-			if (es->eventParm == 16)
-			{ //Make lots of sparks, something special happened
-				vec3_t fxDir;
-				VectorCopy(es->angles, fxDir);
-				if (!fxDir[0] && !fxDir[1] && !fxDir[2])
-				{
-					fxDir[1] = 1;
-				}
-				trap->S_StartSound(es->origin, es->number, CHAN_AUTO, hitSound );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-			}
-			else if (es->eventParm)
-			{ //hit a person
-				vec3_t fxDir;
-				VectorCopy(es->angles, fxDir);
-				if (!fxDir[0] && !fxDir[1] && !fxDir[2])
-				{
-					fxDir[1] = 1;
-				}
-				trap->S_StartSound(es->origin, es->number, CHAN_AUTO, hitSound );
-				if ( es->eventParm == 3 )
-				{	// moderate or big hits.
-					trap->FX_PlayEffectID( hitPersonSmallFxID, es->origin, fxDir, -1, -1, qfalse );
-				}
-				else if ( es->eventParm == 2 )
-				{	// this is for really big hits.
-					trap->FX_PlayEffectID( hitPersonMidFxID, es->origin, fxDir, -1, -1, qfalse );
-				}
-				else
-				{	// this should really just be done in the effect itself, no?
-					trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-					trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-					trap->FX_PlayEffectID( hitPersonFxID, es->origin, fxDir, -1, -1, qfalse );
-				}
-			}
-			else
-			{ //hit something else
-				vec3_t fxDir;
-				VectorCopy(es->angles, fxDir);
-				if (!fxDir[0] && !fxDir[1] && !fxDir[2])
-				{
-					fxDir[1] = 1;
-				}
-				//old jk2mp method
-				/*
-				trap->S_StartSound(es->origin, es->number, CHAN_AUTO, trap->S_RegisterSound("sound/weapons/saber/saberhit.wav"));
-				trap->FX_PlayEffectID( trap->FX_RegisterEffect("saber/spark.efx"), es->origin, fxDir, -1, -1, qfalse );
-				*/
-
-				trap->FX_PlayEffectID( hitOtherFxID, es->origin, fxDir, -1, -1, qfalse );
-			}
-
-			//rww - this means we have the number of the ent being hit and the ent that owns the saber doing
-			//the hit. This being the case, we can store these indecies and the current time in order to do
-			//some visual tricks on the client between frames to make it look like we're actually continuing
-			//to hit between server frames.
-			if (es->otherEntityNum != ENTITYNUM_NONE && es->otherEntityNum2 != ENTITYNUM_NONE)
-			{
-				centity_t *saberOwner;
-
-				saberOwner = &cg_entities[es->otherEntityNum2];
-
-				saberOwner->serverSaberHitIndex = es->otherEntityNum;
-				saberOwner->serverSaberHitTime = cg.time;
-
-				if (es->eventParm)
-				{
-					saberOwner->serverSaberFleshImpact = qtrue;
-				}
-				else
-				{
-					saberOwner->serverSaberFleshImpact = qfalse;
-				}
-			}
+		{	// OpenJK VR: a cut your game showed as your blade went in is only felt now
+			const qboolean shown = CG_VR_SaberEventShown( event, es );
+			CG_VR_SaberEventFeel( event, es );
+			CG_SaberHitEffects( es, (qboolean)!shown, qtrue );
 		}
 		break;
 
 	case EV_SABER_BLOCK:
 		DEBUGNAME("EV_SABER_BLOCK");
-		CG_VR_SaberEventFeel( event, es );	// OpenJK VR
-		{
-			if (es->eventParm)
-			{ //saber block
-				int			blockFXID = cgs.effects.mSaberBlock;
-				qhandle_t	blockSound = trap->S_RegisterSound(va( "sound/weapons/saber/saberblock%d.wav", Q_irand(1, 9) ));
-				qboolean	noFlare = qfalse;
-
-				if ( es->otherEntityNum2 >= 0
-					&& es->otherEntityNum2 < ENTITYNUM_NONE )
-				{//we have a specific person who is causing this effect, see if we should override it with any custom saber effects/sounds
-					clientInfo_t *client = NULL;
-					if ( cg_entities[es->otherEntityNum2].currentState.eType == ET_NPC )
-					{
-						client = cg_entities[es->otherEntityNum2].npcClient;
-					}
-					else if ( es->otherEntityNum2 < MAX_CLIENTS )
-					{
-						client = &cgs.clientinfo[es->otherEntityNum2];
-					}
-					if ( client && client->infoValid )
-					{
-						int saberNum = es->weapon;
-						int bladeNum = es->legsAnim;
-						if ( WP_SaberBladeUseSecondBladeStyle( &client->saber[saberNum], bladeNum ) )
-						{//use second blade style values
-							if ( client->saber[saberNum].blockEffect2 )
-							{//custom saber block effect
-								blockFXID = client->saber[saberNum].blockEffect2;
-							}
-							if ( client->saber[saberNum].block2Sound[0] )
-							{//custom hit sound
-								blockSound = client->saber[saberNum].block2Sound[Q_irand(0,2)];
-							}
-						}
-						else
-						{
-							if ( client->saber[saberNum].blockEffect )
-							{//custom saber block effect
-								blockFXID = client->saber[saberNum].blockEffect;
-							}
-							if ( client->saber[saberNum].blockSound[0] )
-							{//custom hit sound
-								blockSound = client->saber[saberNum].blockSound[Q_irand(0,2)];
-							}
-						}
-						if ( (client->saber[saberNum].saberFlags2&SFL2_NO_CLASH_FLARE) )
-						{
-							noFlare = qtrue;
-						}
-					}
-				}
-
-				{
-					vec3_t fxDir;
-
-					VectorCopy(es->angles, fxDir);
-					if (!fxDir[0] && !fxDir[1] && !fxDir[2])
-					{
-						fxDir[1] = 1;
-					}
-					trap->S_StartSound(es->origin, es->number, CHAN_AUTO, blockSound );
-					trap->FX_PlayEffectID( blockFXID, es->origin, fxDir, -1, -1, qfalse );
-
-					if ( !noFlare )
-					{
-						cg_saberFlashTime = cg.time-50;
-						VectorCopy( es->origin, cg_saberFlashPos );
-					}
-				}
-			}
-			else
-			{ //projectile block
-				vec3_t fxDir;
-				VectorCopy(es->angles, fxDir);
-				if (!fxDir[0] && !fxDir[1] && !fxDir[2])
-				{
-					fxDir[1] = 1;
-				}
-				trap->FX_PlayEffectID(cgs.effects.mBlasterDeflect, es->origin, fxDir, -1, -1, qfalse);
-			}
+		{	// OpenJK VR: (as a cut) a clash your game showed as your blade met the other one
+			const qboolean shown = CG_VR_SaberEventShown( event, es );
+			CG_VR_SaberEventFeel( event, es );
+			CG_SaberBlockEffects( es, (qboolean)!shown );
 		}
 		break;
 
