@@ -18,6 +18,34 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 >
 > It comes with no warranty of any kind (see the [licence](#licence)).
 
+## New since 0.1.6
+
+Not in a release yet: these come with the next one.
+
+- **Climb any wall or ledge:** squeeze the grip with an empty hand near a
+  wall, a ledge or anything else solid - within about 20 cm, high or low, in
+  front of you or out to your side; a light tick in your hand says it's close
+  enough - and your hands move you. Pull down to go up, push away to go back,
+  move sideways to shimmy, and climb hand over hand. Let go while you're
+  moving and you fling yourself on, further with Force Jump. Anyone can, Force
+  or not, on the ground or off it (servers can turn it off: `g_vrClimb 0`).
+- **Fingers joint by joint:** with Valve Index controllers or the Steam
+  Frame's, your character's fingers follow each of yours as it bends - one
+  finger lifted off the grip, a loose claw, a slow fist - not only what the
+  trigger and the grip say.
+- **Grip by Gaze:** with a headset that tracks your eyes (the Steam Frame),
+  your Force Grip catches whoever you look at, your hand held out their way.
+  Turn it off under VR Force.
+- **The HUD on your wrist** is drawn into what you see now, not handed to the
+  headset as a panel of its own, which some headsets' software mixed up with
+  the menu screen (a Steam Frame showed the last menu you'd had open on your
+  wrist instead). The desktop window shows it too.
+- **Also new:** a companion dressed as another character speaks with that
+  character's voice; the AT-ST's screens no longer vanish where there's grass
+  about; a saber taken up in your left hand sits in it as your right hand
+  would hold it; and a hilt drawn from its holster comes out reversed only
+  when your fist is clearly turned that way.
+
 ## New since 0.1.5
 
 - **Throw your saber:** let go of it lit in the middle of a swing and it flies
@@ -135,7 +163,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   glowing, and the controller thumps, tugs, strains and crackles with it.
   Whoever your Grip holds moves with your hand - swing them round, lift them,
   draw them in or push them away (level 3; level 2 lifts and lowers), and
-  fling them as you let go to throw them. Or push and pull with an open hand,
+  fling them as you let go to throw them. With a headset that tracks your eyes,
+  your Grip catches whoever you look at. Or push and pull with an open hand,
   or turn the gestures off, under VR Force in Setup > Controls.
 - **Saber colours:** any RGB colour for each of your sabers, and a black core
   inside the coloured glow, picked on the RGB Colors page (Profile >
@@ -149,11 +178,14 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   everyone's hilts on their belts.
 - **Your body in VR:** you see your character's body under you. Its arms,
   elbows and shoulders follow your controllers naturally, and its fingers
-  follow yours on the controllers, so you can point, give a thumbs up or make
-  a fist. Standing still, it leans, bows, turns and crouches the way you do,
-  its feet planted. It works with any player model on the standard skeleton,
-  custom models included. In mid-air, grab a wall with an empty hand and hang
-  on, then jump off it.
+  follow yours on the controllers (joint by joint on Valve Index and Steam
+  Frame controllers), so you can point, give a thumbs up or make a fist.
+  Standing still, it leans, bows, turns and crouches the way you do, its feet
+  planted. It works with any player model on the standard skeleton, custom
+  models included.
+- **Climbing:** grab any wall or ledge with an empty hand and climb it hand
+  over hand, your hands moving you; let go on the move to fling yourself on,
+  or press jump to push off.
 - **Multiplayer that shows it:** other players see you as you really move
   (head, body, arms, fingers and saber), and lag compensation judges blades as
   each player saw them. On a server running this build, players without VR
@@ -237,6 +269,23 @@ VR client still works, with the game's usual animated saber combat.
 
 Controls, settings and everything else are in
 [`vr/README-VR.txt`](vr/README-VR.txt), which is also in the download.
+
+## Update
+
+1. Close the game, and the server if you run one.
+2. If you've changed `OpenJK-VR/base/server.cfg` or one of the `.bat`
+   launchers, copy them somewhere safe: the download has its own.
+3. Download the new `OpenJK-VR.zip` from [Releases](../../releases) and
+   extract it into `GameData` as before, replacing the files already there.
+4. Put back the `server.cfg` and launchers you saved.
+
+Your settings and downloads (`Documents\My Games\OpenJK-VR`), the server's
+roleplay accounts (`Documents\My Games\OpenJK-VR-Server\base\rp`) and the
+logs (the `logs` folder in `OpenJK-VR`) aren't in the download, so updating
+leaves them as they are. Players need the same version as the server, so
+update both; the version shows in the bottom corner of the console (Console
+on the wheel). On Linux, extract the new `OpenJK-VR-Server-linux.tar.gz` over
+the old one the same way, keeping your `server.cfg`.
 
 ## Run a server
 
