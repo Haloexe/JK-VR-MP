@@ -20,8 +20,6 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 
 ## New since 0.1.6
 
-Not in a release yet: these come with the next one.
-
 - **Climb any wall or ledge:** squeeze the grip with an empty hand near a
   wall, a ledge or anything else solid - within about 20 cm, high or low, in
   front of you or out to your side; a light tick in your hand says it's close
@@ -29,6 +27,16 @@ Not in a release yet: these come with the next one.
   move sideways to shimmy, and climb hand over hand. Let go while you're
   moving and you fling yourself on, further with Force Jump. Anyone can, Force
   or not, on the ground or off it (servers can turn it off: `g_vrClimb 0`).
+- **Drive an AT-ST from its cockpit:** get into an AT-ST and you sit in its
+  head, looking out of its viewport, in a cockpit made for this mod. Take hold
+  of the yoke in front of you and push it to walk, pull it back to back up,
+  twist it to turn (or drive with the sticks); its guns aim where you look,
+  and its stride's sway is smoothed to a gentle rise and fall. Its six
+  screens show what's going on: its armour and legs, its guns' heat and
+  rockets, the ground going by under its feet, who's before its guns, chat
+  and the voices you hear, and its heading and speed. Only in VR:
+  players on a monitor drive AT-STs as the game has them (servers can turn
+  the cockpit off: `g_vrWalker 0`).
 - **Fingers joint by joint:** with Valve Index controllers or the Steam
   Frame's, your character's fingers follow each of yours as it bends - one
   finger lifted off the grip, a loose claw, a slow fist - not only what the
@@ -36,15 +44,21 @@ Not in a release yet: these come with the next one.
 - **Grip by Gaze:** with a headset that tracks your eyes (the Steam Frame),
   your Force Grip catches whoever you look at, your hand held out their way.
   Turn it off under VR Force.
+- **Fewer knockdowns:** a heavy saber blow knocks someone off their feet only
+  well past full speed (about 11 m/s with a red blade, both hands on it a
+  little less), and not again until they've been back up for 5 seconds
+  (servers can set how fast: `g_vrSaberKnockdown`).
 - **The HUD on your wrist** is drawn into what you see now, not handed to the
   headset as a panel of its own, which some headsets' software mixed up with
   the menu screen (a Steam Frame showed the last menu you'd had open on your
   wrist instead). The desktop window shows it too.
+- **Logs where you can find them:** `games.log` and `vrdebug.log` are in the
+  `logs` folder inside `OpenJK-VR`, next to the launchers (the server's in
+  `logs\Server`), so each copy of the game keeps its own.
 - **Also new:** a companion dressed as another character speaks with that
-  character's voice; the AT-ST's screens no longer vanish where there's grass
-  about; a saber taken up in your left hand sits in it as your right hand
-  would hold it; and a hilt drawn from its holster comes out reversed only
-  when your fist is clearly turned that way.
+  character's voice; a saber taken up in your left hand sits in it as your
+  right hand would hold it; and a hilt drawn from its holster comes out
+  reversed only when your fist is clearly turned that way.
 
 ## New since 0.1.5
 
@@ -75,16 +89,6 @@ Not in a release yet: these come with the next one.
 - **Hang on to walls:** in mid-air, squeeze the grip with an empty hand on a
   wall and you hang there until you let go; press jump to push off. Anyone
   can, Force or not (servers can turn it off: `g_vrWallGrip 0`).
-- **Drive an AT-ST from its cockpit:** get into an AT-ST and you sit in its
-  head, looking out of its viewport, in a cockpit made for this mod. Take hold
-  of the yoke in front of you and push it to walk, pull it back to back up,
-  twist it to turn (or drive with the sticks); its guns aim where you look,
-  and its stride's sway is smoothed to a gentle rise and fall. Its six
-  screens show what's going on: its armour and legs, its guns' heat and
-  rockets, the ground going by under its feet, who's before its guns, chat
-  and the voices you hear, and its heading and speed. Only in VR:
-  players on a monitor drive AT-STs as the game has them (servers can turn
-  the cockpit off: `g_vrWalker 0`).
 - **Rolls and crouch jumps:** in a roll your view goes down with your body,
   so your arms no longer stretch down to reach it; crouched in mid-air, your
   body crouches too, its head where your eyes are.
