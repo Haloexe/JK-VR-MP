@@ -1490,8 +1490,9 @@ so it has to meet your blade, and a feint gets past it. With the normal
 game they see VR players' animated characters.
 Blades are judged as you saw them (lag compensation): your game shows the
 others where the server had them a moment ago, and your moves reach it a
-moment later still (20-60 ms on a LAN), so your blade meets their blade and
-their body where they were when you saw them, and their cut on you waits
+moment later still (20-60 ms on a LAN, more online), so your blade meets
+their blade and their body - a player's, a bot's, an NPC's - where they
+were when you saw them, and their cut on you waits
 for your moves of that moment - if your blade met that swing of theirs
 first, or cut them down first, the cut never lands. Bolts too: your blade
 meets them where you saw them, and one that hits something near you

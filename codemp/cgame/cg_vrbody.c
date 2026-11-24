@@ -7853,7 +7853,8 @@ as the first. cg_vrHaptics scales all of it (0 turns it off).
 #define VRB_FEEL_PULSE		0.03f	// s: each frame's buzz (the next frame's replaces it)
 #define VRB_CONTACT_GAP		120		// ms: out of someone this briefly and back in is the same cut
 #define VRB_CONFIRM_WINDOW	300		// ms: the game's word on a cut or a clash comes within this
-#define VRB_CUT_REPEAT		300		// ms: your blades cut the same one once in this (the game's VR_SABER_CUT_REPEAT)
+#define VRB_CUT_REPEAT		350		// ms: your blades cut the same one once in this (the game's VR_SABER_CUT_REPEAT, 300 -
+										// and a little more: its frames, and the trip there, can stretch it)
 #define VRB_REACH			250.0f	// others' blades further than this from you can't meet yours
 #define VRB_BLADE_TOUCH		3.5f	// blades closer than this (their cores, and a little) meet
 #define VRB_OTHER_BLADES	16
@@ -8788,12 +8789,13 @@ static void CG_VRB_NoteMeet( vrbMeet_t *m, const vrbOtherBlade_t *o, int s, int 
 }
 
 // The game's word on a cut, or a clash, comes this long after it at most
-// (the game's frame, and the trip there and back): a little longer with a
-// slow connection - as far as half the ping again and a little more.
+// (the game's frame, and the trip there and back): longer with a slow
+// connection - half the ping again, and a fifth of a second more for the
+// trip taking longer than usual (up to 800 ms).
 static int CG_VRB_ConfirmWindow( void ) {
 	const int ping = cg.snap ? cg.snap->ping : 0;
 
-	return Com_Clampi( VRB_CONFIRM_WINDOW, 800, ping + ping / 2 + 100 );
+	return Com_Clampi( VRB_CONFIRM_WINDOW, 800, ping + ping / 2 + 200 );
 }
 
 // The sound and the blood (or sparks) the game's word on your cut brings

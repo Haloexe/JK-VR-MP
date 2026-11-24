@@ -263,6 +263,7 @@ static void VRS_RecordHistory( void );
 static void VRS_SettlePending( void );
 static void VRS_CancelPending( int attacker, int victim, int since, int swing );
 static int VRS_SwingId( int c );
+static int VRS_HistSlot( int n );
 static int VRS_HistBladeAt( int c, int s, int b, float t, const vec3_t nowBase, const vec3_t nowTip, int nowTime,
 	vec3_t base, vec3_t tip, int *attacking, int *swing );
 
@@ -1657,8 +1658,9 @@ typedef struct {
 	vec3_t		base, tip;			// now (time1)...
 	vec3_t		base0, tip0;		// ...and the frame before (time0): it's followed in between
 	int			time0, time1;		// (level times)
-	int			histClient;			// (lag compensation) an animated blade of this client, taken where
-									// it was when the swinging player saw it (-1: as it is now)
+	int			histClient;			// (lag compensation) an animated blade of the one kept in this history
+									// slot (VRS_HistSlot), taken where it was when the swinging player saw it
+									// (-1: as it is now)
 } vrsOtherBlade_t;
 
 // Where another blade was for the swinging player at their command time t:
@@ -1886,8 +1888,9 @@ static qboolean VRS_MeetAnimated( gentity_t *vr, int s, int b, gentity_t *other,
 	const qboolean attackingNow = WP_VR_SaberAttacking( other );
 	const qboolean attacking = ( attackingAt >= 0 ) ? (qboolean)( attackingAt > 0 ) : attackingNow;
 	// (still the same attack, or guard: knock it, bounce it, parry)
+	const int oc = VRS_HistSlot( other->s.number );
 	const qboolean react = (qboolean)( attacking == attackingNow &&
-		( swingAt < 0 || other->s.number < 0 || other->s.number >= MAX_CLIENTS || swingAt == VRS_SwingId( other->s.number ) ) );
+		( swingAt < 0 || oc < 0 || swingAt == VRS_SwingId( oc ) ) );
 	const int strength = VRS_Strength( vr->client, w, speed );
 	const int theirs = ow->strength + ( attacking ? 1 : 0 );
 	const char *result = "touched";
@@ -2537,7 +2540,8 @@ behind the newest) and its moves reach the server a moment later still:
 20-60 ms on a LAN, more online - and a swinging saber moves a long way in
 that time. So:
   - every server frame, where each player was and where their animated
-    blades were is kept (the frame's snapshot, as everyone sees it);
+    blades were is kept (the frame's snapshot, as everyone sees it) - each
+    player's and bot's, and each NPC's too (as many as VRS_HIST_NPCS);
   - a VR blade's sweep, pose by pose, meets the others' animated blades
     where they were at that pose's command time (the time of the world the
     player was looking at), and cuts their bodies where they were then;
@@ -2550,6 +2554,8 @@ VR blades against each other are judged as they are now.
 */
 
 #define VRS_HIST			48		// server frames kept per player (VR_UNLAG_MAX, at sv_fps up to 190)
+#define VRS_HIST_NPCS		32		// NPCs followed too (the first so many in the world: the rest as they are)
+#define VRS_HIST_SLOTS		( MAX_CLIENTS + VRS_HIST_NPCS )	// a player's history is theirs by number; an NPC's, one after
 #define VRS_HIST_BLADES		4		// animated blades per saber followed back
 #define VRS_HIST_JUMP		128.0f	// a player (or their blade) this much further from one frame to the next: teleported
 
@@ -2582,7 +2588,8 @@ static struct {
 	int				bladeSwing;		// ...and the one the blades placed then show (the animation is the
 	qboolean		bladeAttacking;	// placement's before: G_UpdateClientAnims comes after them)
 	qboolean		bladeOpen;
-} vrsHist[MAX_CLIENTS];
+} vrsHist[VRS_HIST_SLOTS];
+static int		vrsHistNpc[VRS_HIST_NPCS];	// the NPC each slot after the players' follows (its number + 1; 0: none)
 
 #define VRS_MAX_PENDING		( MAX_CLIENTS * 8 )
 
@@ -2607,7 +2614,7 @@ static struct {
 	qboolean	unlinked;			// (taken out of the world: not there to be cut then)
 	vec3_t		currentOrigin, psOrigin;
 	float		yaw;
-} vrsShifted[MAX_CLIENTS];
+} vrsShifted[VRS_HIST_SLOTS];
 static int		vrsNumShifted;
 static float	vrsShiftTime;
 
@@ -2620,6 +2627,7 @@ static void VRS_ResetUnlag( int clientNum ) {
 
 	if ( clientNum < 0 ) {
 		memset( vrsHist, 0, sizeof( vrsHist ) );
+		memset( vrsHistNpc, 0, sizeof( vrsHistNpc ) );
 		memset( vrsPending, 0, sizeof( vrsPending ) );
 		return;
 	}
@@ -2644,6 +2652,29 @@ static vrsHistSample_t *VRS_HistSample( int c, int i ) {
 	return &vrsHist[c].s[( vrsHist[c].head - i + VRS_HIST ) % VRS_HIST];
 }
 
+// Where entity n's history is kept: a player's (or bot's) under its number,
+// an NPC's in one of the slots after theirs while it's followed (-1: none).
+static int VRS_HistSlot( int n ) {
+	int i;
+
+	if ( n >= 0 && n < MAX_CLIENTS ) {
+		return n;
+	}
+	if ( n >= MAX_CLIENTS && n < MAX_GENTITIES ) {
+		for ( i = 0; i < VRS_HIST_NPCS; i++ ) {
+			if ( vrsHistNpc[i] == n + 1 ) {
+				return MAX_CLIENTS + i;
+			}
+		}
+	}
+	return -1;
+}
+
+// Whose history slot c is (a slot in use).
+static gentity_t *VRS_SlotEnt( int c ) {
+	return &g_entities[( c < MAX_CLIENTS ) ? c : vrsHistNpc[c - MAX_CLIENTS] - 1];
+}
+
 // Where clients draw this player at this frame's time (their snapshot).
 static void VRS_DrawnOrigin( gentity_t *ent, vec3_t out ) {
 	if ( ent->s.pos.trType == TR_LINEAR_STOP ) {
@@ -2653,8 +2684,8 @@ static void VRS_DrawnOrigin( gentity_t *ent, vec3_t out ) {
 	}
 }
 
-// Where client c really is now (wherever a sweep has moved their body to),
-// and facing.
+// Where entity c (a player, an NPC) really is now (wherever a sweep has
+// moved their body to), and facing.
 static void VRS_LiveOrigin( int c, vec3_t origin, float *yaw ) {
 	gentity_t *ent = &g_entities[c];
 	int i;
@@ -2670,11 +2701,11 @@ static void VRS_LiveOrigin( int c, vec3_t origin, float *yaw ) {
 	*yaw = ent->client ? ent->client->ps.viewangles[YAW] : 0.0f;
 }
 
-// Which attack client c is in now, or made last: each one that starts (or
-// follows on from another) gets a new number. (As G_VRSaberBladeOrigin
-// numbers them when the blades are placed.)
+// Which attack the one kept in history slot c (VRS_HistSlot) is in now, or
+// made last: each one that starts (or follows on from another) gets a new
+// number. (As G_VRSaberBladeOrigin numbers them when the blades are placed.)
 static int VRS_SwingId( int c ) {
-	gentity_t *ent = &g_entities[c];
+	gentity_t *ent = VRS_SlotEnt( c );
 
 	if ( ent->client && WP_VR_SaberAttacking( ent ) &&
 		( !vrsHist[c].attacking || vrsHist[c].move != ent->client->ps.saberMove ) ) {
@@ -2690,11 +2721,11 @@ static int VRS_SwingId( int c ) {
 // one under way at the placement before this (G_UpdateClientAnims gives the
 // server's model each new state after its blades are placed).
 void G_VRSaberBladeOrigin( gentity_t *ent, const vec3_t origin ) {
-	const int c = ent ? ent->s.number : -1;
+	const int c = ent ? VRS_HistSlot( ent->s.number ) : -1;
 	gclient_t *cl;
 
-	if ( c < 0 || c >= MAX_CLIENTS || !ent->client ) {
-		return;
+	if ( c < 0 || !ent->client ) {
+		return;	// (not kept: an NPC not followed yet - from the next frame)
 	}
 	cl = ent->client;
 	vrsHist[c].bladeSwing = vrsHist[c].swing;
@@ -2723,10 +2754,10 @@ static int VRS_BladeShownLag( gentity_t *ent ) {
 // How far a player's animated blade moves to go round where their body was
 // drawn when it was seen (body).
 static void VRS_BladeOffset( gentity_t *ent, const bladeInfo_t *blade, const vec3_t body, vec3_t ofs ) {
-	const int c = ent->s.number;
+	const int c = VRS_HistSlot( ent->s.number );
 
 	VectorClear( ofs );
-	if ( c >= 0 && c < MAX_CLIENTS && vrsHist[c].placedTime == blade->storageTime ) {
+	if ( c >= 0 && vrsHist[c].placedTime == blade->storageTime ) {
 		VectorSubtract( body, vrsHist[c].placedOrigin, ofs );
 		if ( VectorLengthSquared( ofs ) > Square( 100.0f ) ) {
 			VectorClear( ofs );	// (nonsense: as it is)
@@ -2746,77 +2777,117 @@ static qboolean VRS_AnyVR( void ) {
 	return qfalse;
 }
 
-// Once a frame, after everyone moved: where each player is and where their
-// animated blades are.
+// Where this one (history slot c: a player, a bot, an NPC) is now and where
+// their animated blades are.
+static void VRS_RecordOne( int c, gentity_t *ent ) {
+	gclient_t *cl = ent->client;
+	vrsHistSample_t *smp, *prev;
+	const float *body;
+	vec3_t tip, ofs;
+	int lagShown, s, b;
+
+	prev = vrsHist[c].count ? VRS_HistSample( c, 0 ) : NULL;
+	if ( prev && prev->time >= level.time ) {
+		vrsHist[c].count = 0;	// (the clock went back: start over)
+		prev = NULL;
+	}
+	vrsHist[c].head = ( vrsHist[c].head + 1 ) % VRS_HIST;
+	if ( vrsHist[c].count < VRS_HIST ) {
+		vrsHist[c].count++;
+	}
+	smp = VRS_HistSample( c, 0 );
+	memset( smp, 0, sizeof( *smp ) );
+	smp->time = level.time;
+	VRS_DrawnOrigin( ent, smp->origin );
+	smp->yaw = cl->ps.viewangles[YAW];
+	smp->teleport = cl->ps.eFlags & EF_TELEPORT_BIT;
+	smp->solid = (qboolean)( ent->r.linked && ent->health > 0 && !( cl->ps.eFlags & EF_DEAD ) &&
+		cl->sess.sessionTeam != TEAM_SPECTATOR && !( cl->ps.pm_flags & PMF_FOLLOW ) );
+	smp->jumped = (qboolean)( prev && ( prev->teleport != smp->teleport ||
+		Distance( prev->origin, smp->origin ) > VRS_HIST_JUMP ) );	// (teleported or respawned)
+	if ( vrsHist[c].placedTime == level.time ) {
+		smp->attacking = vrsHist[c].bladeAttacking ? 1 : 0;	// (as the blades placed now show)
+		smp->swing = vrsHist[c].bladeSwing;
+		smp->open = vrsHist[c].bladeOpen;
+	} else {
+		smp->attacking = WP_VR_SaberAttacking( ent ) ? 1 : 0;
+		smp->swing = VRS_SwingId( c );
+		smp->open = PM_SaberInBrokenParry( cl->ps.saberMove );
+	}
+	// the blades placed this frame were seen a moment before it (a bot's),
+	// round where the body was then
+	lagShown = VRS_BladeShownLag( ent );
+	smp->bladeTime = ( vrsHist[c].placedTime ? vrsHist[c].placedTime : level.time ) - lagShown;
+	body = ( lagShown && prev ) ? prev->origin : smp->origin;
+	if ( G_VRSaberClient( ent ) || !smp->solid ) {
+		return;	// (VR blades: their own poses; and nobody blocks with a blade when dead)
+	}
+	for ( s = 0; s < MAX_SABERS; s++ ) {
+		for ( b = 0; b < VRS_HIST_BLADES; b++ ) {
+			bladeInfo_t *blade;
+			if ( !VRS_BladeOn( cl, s, b ) ) {
+				continue;
+			}
+			blade = &cl->saber[s].blade[b];
+			if ( level.time - blade->storageTime > 100 ) {
+				continue;	// not kept up to date (not drawn)
+			}
+			VRS_BladeOffset( ent, blade, body, ofs );
+			VectorAdd( blade->muzzlePoint, ofs, smp->base[s][b] );
+			VectorMA( smp->base[s][b], blade->lengthMax, blade->muzzleDir, tip );
+			VRS_ClipBlade( ent->s.number, smp->base[s][b], tip, smp->tip[s][b] );	// (as far as it reaches before a wall)
+			smp->bladeMask[s] |= 1 << b;
+		}
+	}
+}
+
+// Once a frame, after everyone moved: where each player, bot and NPC is and
+// where their animated blades are. (The NPCs: the first VRS_HIST_NPCS in the
+// world are followed - the others meet a VR blade as they are - and each slot
+// is let go when its NPC is gone.)
 static void VRS_RecordHistory( void ) {
 	const qboolean keep = (qboolean)( VRS_Unlag() && G_VRSaberOn() && VRS_AnyVR() );
-	vec3_t tip, ofs;
-	int c, s, b;
+	int c, i, n;
 
 	for ( c = 0; c < level.maxclients && c < MAX_CLIENTS; c++ ) {
 		gentity_t *ent = &g_entities[c];
-		gclient_t *cl = ent->client;
-		vrsHistSample_t *smp, *prev;
-		const float *body;
-		int lagShown;
-
-		if ( !keep || !ent->inuse || !cl || cl->pers.connected != CON_CONNECTED ) {
+		if ( !keep || !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED ) {
 			vrsHist[c].count = 0;
 			continue;
 		}
-		prev = vrsHist[c].count ? VRS_HistSample( c, 0 ) : NULL;
-		if ( prev && prev->time >= level.time ) {
-			vrsHist[c].count = 0;	// (the clock went back: start over)
-			prev = NULL;
+		VRS_RecordOne( c, ent );
+	}
+	for ( i = 0; i < VRS_HIST_NPCS; i++ ) {
+		gentity_t *ent;
+		if ( !vrsHistNpc[i] ) {
+			continue;
 		}
-		vrsHist[c].head = ( vrsHist[c].head + 1 ) % VRS_HIST;
-		if ( vrsHist[c].count < VRS_HIST ) {
-			vrsHist[c].count++;
+		ent = &g_entities[vrsHistNpc[i] - 1];
+		if ( !keep || !ent->inuse || !ent->client || ent->s.eType != ET_NPC ) {
+			vrsHistNpc[i] = 0;
+			vrsHist[MAX_CLIENTS + i].count = 0;
 		}
-		smp = VRS_HistSample( c, 0 );
-		memset( smp, 0, sizeof( *smp ) );
-		smp->time = level.time;
-		VRS_DrawnOrigin( ent, smp->origin );
-		smp->yaw = cl->ps.viewangles[YAW];
-		smp->teleport = cl->ps.eFlags & EF_TELEPORT_BIT;
-		smp->solid = (qboolean)( ent->r.linked && ent->health > 0 && !( cl->ps.eFlags & EF_DEAD ) &&
-			cl->sess.sessionTeam != TEAM_SPECTATOR && !( cl->ps.pm_flags & PMF_FOLLOW ) );
-		smp->jumped = (qboolean)( prev && ( prev->teleport != smp->teleport ||
-			Distance( prev->origin, smp->origin ) > VRS_HIST_JUMP ) );	// (teleported or respawned)
-		if ( vrsHist[c].placedTime == level.time ) {
-			smp->attacking = vrsHist[c].bladeAttacking ? 1 : 0;	// (as the blades placed now show)
-			smp->swing = vrsHist[c].bladeSwing;
-			smp->open = vrsHist[c].bladeOpen;
-		} else {
-			smp->attacking = WP_VR_SaberAttacking( ent ) ? 1 : 0;
-			smp->swing = VRS_SwingId( c );
-			smp->open = PM_SaberInBrokenParry( cl->ps.saberMove );
+	}
+	if ( !keep ) {
+		return;
+	}
+	for ( n = MAX_CLIENTS; n < level.num_entities && n < MAX_GENTITIES; n++ ) {
+		gentity_t *ent = &g_entities[n];
+		if ( !ent->inuse || !ent->client || ent->s.eType != ET_NPC ) {
+			continue;
 		}
-		// the blades placed this frame were seen a moment before it (a bot's),
-		// round where the body was then
-		lagShown = VRS_BladeShownLag( ent );
-		smp->bladeTime = ( vrsHist[c].placedTime ? vrsHist[c].placedTime : level.time ) - lagShown;
-		body = ( lagShown && prev ) ? prev->origin : smp->origin;
-		if ( G_VRSaberClient( ent ) || !smp->solid ) {
-			continue;	// (VR blades: their own poses; and nobody blocks with a blade when dead)
-		}
-		for ( s = 0; s < MAX_SABERS; s++ ) {
-			for ( b = 0; b < VRS_HIST_BLADES; b++ ) {
-				bladeInfo_t *blade;
-				if ( !VRS_BladeOn( cl, s, b ) ) {
-					continue;
-				}
-				blade = &cl->saber[s].blade[b];
-				if ( level.time - blade->storageTime > 100 ) {
-					continue;	// not kept up to date (not drawn)
-				}
-				VRS_BladeOffset( ent, blade, body, ofs );
-				VectorAdd( blade->muzzlePoint, ofs, smp->base[s][b] );
-				VectorMA( smp->base[s][b], blade->lengthMax, blade->muzzleDir, tip );
-				VRS_ClipBlade( c, smp->base[s][b], tip, smp->tip[s][b] );	// (as far as it reaches before a wall)
-				smp->bladeMask[s] |= 1 << b;
+		c = VRS_HistSlot( n );
+		if ( c < 0 ) {
+			for ( i = 0; i < VRS_HIST_NPCS && vrsHistNpc[i]; i++ ) {
 			}
+			if ( i == VRS_HIST_NPCS ) {
+				continue;	// (no slot free: as it is)
+			}
+			vrsHistNpc[i] = n + 1;
+			c = MAX_CLIENTS + i;
+			memset( &vrsHist[c], 0, sizeof( vrsHist[c] ) );
 		}
+		VRS_RecordOne( c, ent );
 	}
 }
 
@@ -2857,7 +2928,7 @@ static int VRS_HistBladeAt( int c, int s, int b, float t, const vec3_t nowBase, 
 	const int bit = 1 << b;
 	float f;
 
-	if ( !VRS_Unlag() || c < 0 || c >= MAX_CLIENTS || s < 0 || s >= MAX_SABERS || b < 0 || b >= VRS_HIST_BLADES ||
+	if ( !VRS_Unlag() || c < 0 || c >= VRS_HIST_SLOTS || s < 0 || s >= MAX_SABERS || b < 0 || b >= VRS_HIST_BLADES ||
 		!vrsHist[c].count ) {
 		return 0;
 	}
@@ -2939,11 +3010,12 @@ static float VRS_HistBladeSpeed( int c, int s, int b, float t0, float t1 ) {
 	return best;
 }
 
-// Where client c's body was at time t, as everyone's snapshots had it (past
-// the last frame kept: toward where it is now). 1: there; 0: nothing kept;
-// -1: it wasn't there to be cut then (dead, spectating, not in yet).
+// Where the body kept in history slot c was at time t, as everyone's
+// snapshots had it (past the last frame kept: toward where it is now). 1:
+// there; 0: nothing kept; -1: it wasn't there to be cut then (dead,
+// spectating, not in yet).
 static int VRS_HistBodyAt( int c, float t, vec3_t origin, float *yaw ) {
-	gentity_t *ent = &g_entities[c];
+	gentity_t *ent = VRS_SlotEnt( c );
 	const vrsHistSample_t *older, *newer;
 	vec3_t now;
 	float f, span, nowYaw;
@@ -2979,7 +3051,7 @@ static int VRS_HistBodyAt( int c, float t, vec3_t origin, float *yaw ) {
 	// after the last frame kept: toward where it is now (mid-frame, where the
 	// snapshot to come will have it) - unless it teleported since: it was
 	// still where it was, as anyone saw it
-	VRS_LiveOrigin( c, now, &nowYaw );
+	VRS_LiveOrigin( ent->s.number, now, &nowYaw );
 	if ( ( ent->client->ps.eFlags & EF_TELEPORT_BIT ) != older->teleport || Distance( now, older->origin ) > VRS_HIST_JUMP ) {
 		VectorCopy( older->origin, origin );
 		*yaw = older->yaw;
@@ -2992,9 +3064,9 @@ static int VRS_HistBodyAt( int c, float t, vec3_t origin, float *yaw ) {
 	return 1;
 }
 
-// The other players near the blade a VR player swept this frame (mins-maxs)
-// moved back to where that player saw them at time t - out of the way if
-// they weren't there to be cut then - and back again.
+// The other players (and NPCs) near the blade a VR player swept this frame
+// (mins-maxs) moved back to where that player saw them at time t - out of
+// the way if they weren't there to be cut then - and back again.
 static void VRS_UnshiftBodies( void ) {
 	int i;
 
@@ -3013,8 +3085,47 @@ static void VRS_UnshiftBodies( void ) {
 #define VRS_SHIFT_NEAR		( 48.0f + 100.0f )	// a body this far out of a blade's sweep can't be in its way (its
 												// size, and how far it moves in VR_UNLAG_MAX)
 
+// (one of them: history slot c)
+static void VRS_ShiftOne( gentity_t *self, int c, float t, const vec3_t mins, const vec3_t maxs ) {
+	gentity_t *ent = VRS_SlotEnt( c );
+	vec3_t origin;
+	float yaw;
+	int found, k;
+
+	if ( ent == self || !ent->inuse || !ent->client || !ent->r.linked || ent->health < 1 || vrsNumShifted >= VRS_HIST_SLOTS ) {
+		return;
+	}
+	for ( k = 0; k < 3; k++ ) {
+		if ( ent->r.currentOrigin[k] < mins[k] - VRS_SHIFT_NEAR || ent->r.currentOrigin[k] > maxs[k] + VRS_SHIFT_NEAR ) {
+			return;	// (nowhere near the blade)
+		}
+	}
+	found = VRS_HistBodyAt( c, t, origin, &yaw );
+	if ( !found ) {
+		return;
+	}
+	if ( found > 0 && DistanceSquared( origin, ent->r.currentOrigin ) < 0.25f &&
+		fabsf( AngleSubtract( yaw, ent->client->ps.viewangles[YAW] ) ) < 1.0f ) {
+		return;	// (no different)
+	}
+	vrsShifted[vrsNumShifted].num = ent->s.number;
+	vrsShifted[vrsNumShifted].unlinked = (qboolean)( found < 0 );
+	VectorCopy( ent->r.currentOrigin, vrsShifted[vrsNumShifted].currentOrigin );
+	VectorCopy( ent->client->ps.origin, vrsShifted[vrsNumShifted].psOrigin );
+	vrsShifted[vrsNumShifted].yaw = ent->client->ps.viewangles[YAW];
+	vrsNumShifted++;
+	if ( found < 0 ) {
+		trap->UnlinkEntity( (sharedEntity_t *)ent );
+		return;
+	}
+	VectorCopy( origin, ent->r.currentOrigin );
+	VectorCopy( origin, ent->client->ps.origin );
+	ent->client->ps.viewangles[YAW] = yaw;
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
 static void VRS_ShiftBodies( gentity_t *self, float t, const vec3_t mins, const vec3_t maxs ) {
-	int c, k;
+	int c;
 
 	if ( !VRS_Unlag() ) {
 		return;
@@ -3026,44 +3137,12 @@ static void VRS_ShiftBodies( gentity_t *self, float t, const vec3_t mins, const 
 	VRS_UnshiftBodies();
 	vrsShiftTime = t;
 	for ( c = 0; c < level.maxclients && c < MAX_CLIENTS; c++ ) {
-		gentity_t *ent = &g_entities[c];
-		vec3_t origin;
-		float yaw;
-		int found;
-
-		if ( ent == self || !ent->inuse || !ent->client || !ent->r.linked || ent->health < 1 ) {
-			continue;
+		VRS_ShiftOne( self, c, t, mins, maxs );
+	}
+	for ( c = MAX_CLIENTS; c < VRS_HIST_SLOTS; c++ ) {
+		if ( vrsHistNpc[c - MAX_CLIENTS] ) {
+			VRS_ShiftOne( self, c, t, mins, maxs );	// (an NPC followed)
 		}
-		for ( k = 0; k < 3; k++ ) {
-			if ( ent->r.currentOrigin[k] < mins[k] - VRS_SHIFT_NEAR || ent->r.currentOrigin[k] > maxs[k] + VRS_SHIFT_NEAR ) {
-				break;
-			}
-		}
-		if ( k < 3 ) {
-			continue;	// (nowhere near the blade)
-		}
-		found = VRS_HistBodyAt( c, t, origin, &yaw );
-		if ( !found ) {
-			continue;
-		}
-		if ( found > 0 && DistanceSquared( origin, ent->r.currentOrigin ) < 0.25f &&
-			fabsf( AngleSubtract( yaw, ent->client->ps.viewangles[YAW] ) ) < 1.0f ) {
-			continue;	// (no different)
-		}
-		vrsShifted[vrsNumShifted].num = c;
-		vrsShifted[vrsNumShifted].unlinked = (qboolean)( found < 0 );
-		VectorCopy( ent->r.currentOrigin, vrsShifted[vrsNumShifted].currentOrigin );
-		VectorCopy( ent->client->ps.origin, vrsShifted[vrsNumShifted].psOrigin );
-		vrsShifted[vrsNumShifted].yaw = ent->client->ps.viewangles[YAW];
-		vrsNumShifted++;
-		if ( found < 0 ) {
-			trap->UnlinkEntity( (sharedEntity_t *)ent );
-			continue;
-		}
-		VectorCopy( origin, ent->r.currentOrigin );
-		VectorCopy( origin, ent->client->ps.origin );
-		ent->client->ps.viewangles[YAW] = yaw;
-		trap->LinkEntity( (sharedEntity_t *)ent );
 	}
 }
 
@@ -3077,7 +3156,7 @@ qboolean G_VRSaberDefersHit( gentity_t *attacker, gentity_t *victim, int saberNu
 		return qfalse;
 	}
 	if ( attacker->s.number < 0 || attacker->s.number >= MAX_CLIENTS || victim->s.number < 0 || victim->s.number >= MAX_CLIENTS ) {
-		return qfalse;	// (players and bots: their blades are kept; NPCs' meet the VR blades as they are)
+		return qfalse;	// (players and bots; an NPC's cut lands as it comes)
 	}
 	if ( G_VRSaberClient( attacker ) ) {
 		return qfalse;	// (a VR player's blade - even one whose poses lag - isn't kept)
@@ -3282,6 +3361,7 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 	for ( i = 0; i < n && num < max; i++ ) {
 		gentity_t *other = &g_entities[list[i]];
 		const int c = other->s.number;
+		const int hc = VRS_HistSlot( c );	// (where what's kept of them is)
 		qboolean nowOn, kept;
 		vec3_t body;
 		int s, b, lagShown;
@@ -3303,8 +3383,8 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 		// its blades as they are now (a broken guard lets swings through)...
 		nowOn = (qboolean)( other->health >= 1 && other->client->ps.weapon == WP_SABER && !BG_SabersOff( &other->client->ps ) &&
 			!PM_SaberInBrokenParry( other->client->ps.saberMove ) );
-		// ...or as they were (lag compensation: a player's or bot's)
-		kept = (qboolean)( unlag && c >= 0 && c < MAX_CLIENTS && !G_VRSaberClient( other ) && vrsHist[c].count );
+		// ...or as they were (lag compensation: a player's, a bot's, an NPC's)
+		kept = (qboolean)( unlag && hc >= 0 && !G_VRSaberClient( other ) && vrsHist[hc].count );
 		if ( !nowOn && !kept ) {
 			continue;
 		}
@@ -3313,7 +3393,7 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 		lagShown = kept ? VRS_BladeShownLag( other ) : 0;
 		if ( kept ) {
 			if ( lagShown ) {
-				VectorCopy( VRS_HistSample( c, 0 )->origin, body );
+				VectorCopy( VRS_HistSample( hc, 0 )->origin, body );
 			} else {
 				VectorCopy( other->r.currentOrigin, body );	// (mid-frame: where the snapshot to come will have them)
 			}
@@ -3326,14 +3406,14 @@ static int VRS_GatherBlades( gentity_t *self, const vec3_t mins, const vec3_t ma
 					level.time - blade->storageTime <= 200 );	// (else not updated lately)
 				vec3_t tip, ofs;
 
-				if ( !on && !( hist && VRS_HistLit( c, s, b, since ) ) ) {
+				if ( !on && !( hist && VRS_HistLit( hc, s, b, since ) ) ) {
 					continue;
 				}
 				memset( &out[num], 0, sizeof( out[num] ) );
 				out[num].ent = other;
 				out[num].saber = s;
 				out[num].blade = b;
-				out[num].histClient = hist ? c : -1;
+				out[num].histClient = hist ? hc : -1;
 				if ( on ) {
 					VectorClear( ofs );
 					if ( hist ) {

@@ -425,9 +425,11 @@ GOOD TO KNOW
   blow was and what it needed (g_vrSaberLog). g_vrSaberKnockdown sets how
   hard (1.5; higher: harder blows; 0: never).
 * A VR player's blade is judged as they saw the others (lag compensation,
-  g_vrSaberUnlag, up to a quarter of a second back), so players further
-  away still meet what they swing at; a server close to its players still
-  plays best.
+  g_vrSaberUnlag, up to a quarter of a second back) - players, bots and
+  NPCs (the first 32 NPCs in the world; any more are judged where they are)
+  - so players further away still meet what they swing at; a server close
+  to its players still plays best. It's the server's alone: nothing new is
+  sent, and players without VR (any client) play as ever.
 * VR players deflect blaster bolts with their real blade only - where it
   meets them, by its angle and their Saber Defense - and get no automatic
   block against them (g_vrSaberBolts; the disruptor's beam is still

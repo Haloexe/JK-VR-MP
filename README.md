@@ -50,6 +50,8 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
   game now follows the server's rules for what stops a blow - a bot mid
   attack blocks one stronger; a blade resting on another, or bouncing back
   from a clash, cuts nobody - so far fewer of the hits you feel go uncounted.
+  NPCs are judged where you saw them too, as bots and players already were
+  (lag compensation, on the server: nothing changes for players without VR).
 - **Fewer knockdowns:** a heavy saber blow knocks someone off their feet only
   well past full speed (about 11 m/s with a red blade, both hands on it a
   little less), and not again until they've been back up for 5 seconds
