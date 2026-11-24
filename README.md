@@ -18,6 +18,17 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 >
 > It comes with no warranty of any kind (see the [licence](#licence)).
 
+## New since 0.1.7
+
+- **Hits land when you see them, online too:** your saber's cuts and clashes
+  show and sound the moment your blade meets them, as the server will have
+  them, instead of a fifth of a second later from a distant server. And your
+  game now follows the server's rules for what stops a blow - a bot mid
+  attack blocks one stronger; a blade resting on another, or bouncing back
+  from a clash, cuts nobody - so far fewer of the hits you feel go uncounted.
+  NPCs are judged where you saw them too, as bots and players already were
+  (lag compensation, on the server: nothing changes for players without VR).
+
 ## New since 0.1.6
 
 - **Climb any wall or ledge:** squeeze the grip with an empty hand near a
@@ -44,14 +55,6 @@ lightsaber you really swing. Built on [OpenJK](https://github.com/JACoders/OpenJ
 - **Grip by Gaze:** with a headset that tracks your eyes (the Steam Frame),
   your Force Grip catches whoever you look at, your hand held out their way.
   Turn it off under VR Force.
-- **Hits land when you see them, online too:** your saber's cuts and clashes
-  show and sound the moment your blade meets them, as the server will have
-  them, instead of a fifth of a second later from a distant server. And your
-  game now follows the server's rules for what stops a blow - a bot mid
-  attack blocks one stronger; a blade resting on another, or bouncing back
-  from a clash, cuts nobody - so far fewer of the hits you feel go uncounted.
-  NPCs are judged where you saw them too, as bots and players already were
-  (lag compensation, on the server: nothing changes for players without VR).
 - **Fewer knockdowns:** a heavy saber blow knocks someone off their feet only
   well past full speed (about 11 m/s with a red blade, both hands on it a
   little less), and not again until they've been back up for 5 seconds
